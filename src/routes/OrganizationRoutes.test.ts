@@ -189,7 +189,9 @@ describe("OrganizationRoutes", () => {
 			});
 			expect(rs.statusCode).toBe(400);
 			expect(rs.json().status).toEqual(400);
-			expect(rs.json().detail).toEqual("params/orgId must match pattern \"^org_[0-9a-z]{26}$\"");
+			expect(rs.json().detail).toEqual(
+				'params/orgId must match pattern "^org_[0-9a-z]{26}$"',
+			);
 		});
 
 		it("should handle unauthorized request error", async () => {
@@ -296,7 +298,9 @@ describe("OrganizationRoutes", () => {
 			});
 			expect(rs.statusCode).toBe(400);
 			expect(rs.json().status).toEqual(400);
-			expect(rs.json().detail).toEqual("body must have required property 'name'");
+			expect(rs.json().detail).toEqual(
+				"body must have required property 'name'",
+			);
 		});
 
 		it("should handle unauthorized request error", async () => {
@@ -416,7 +420,9 @@ describe("OrganizationRoutes", () => {
 			});
 			expect(rs.statusCode).toBe(400);
 			expect(rs.json().status).toEqual(400);
-			expect(rs.json().detail).toEqual("params/orgId must match pattern \"^org_[0-9a-z]{26}$\"");
+			expect(rs.json().detail).toEqual(
+				'params/orgId must match pattern "^org_[0-9a-z]{26}$"',
+			);
 		});
 
 		it("should handle unauthorized request error", async () => {
@@ -547,7 +553,9 @@ describe("OrganizationRoutes", () => {
 			});
 			expect(rs.statusCode).toBe(400);
 			expect(rs.json().status).toEqual(400);
-			expect(rs.json().detail).toEqual("params/orgId must match pattern \"^org_[0-9a-z]{26}$\"");
+			expect(rs.json().detail).toEqual(
+				'params/orgId must match pattern "^org_[0-9a-z]{26}$"',
+			);
 		});
 
 		it("should handle unauthorized request error", async () => {

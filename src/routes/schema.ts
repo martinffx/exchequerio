@@ -114,8 +114,7 @@ type ServiceUnavailableErrorResponse = Static<
 
 const OrgId = Type.String({
 	description: "The organization's ID",
-	pattern:
-		"^org_[0-9a-z]{26}$",
+	pattern: "^org_[0-9a-z]{26}$",
 });
 type OrgId = Static<typeof OrgId>;
 const OrgIdParams = Type.Object({

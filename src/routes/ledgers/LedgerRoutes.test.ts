@@ -167,7 +167,7 @@ describe("LedgerRoutes", () => {
 			});
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(ledger.toResponse());
-		})
+		});
 
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
@@ -522,7 +522,7 @@ describe("LedgerRoutes", () => {
 			expect(rs.json().status).toEqual(500);
 			expect(rs.json().detail).toEqual("Internal Server Error");
 		});
-	})
+	});
 
 	describe("Delete Ledger", () => {
 		it("should delete a ledger", async () => {
@@ -645,5 +645,5 @@ describe("LedgerRoutes", () => {
 			expect(rs.json().status).toEqual(500);
 			expect(rs.json().detail).toEqual("Internal Server Error");
 		});
-	})
+	});
 });
