@@ -940,4 +940,11 @@ export {
 	ListLedgerTransactionEntriesRequest,
 	GetLedgerTransactionEntryRequest,
 	UpdateLedgerTransactionEntryRequest,
+	// Type exports for entities
+	Direction,
+	BalanceStatus,
+	Balances,
+	PendingBalance,
+	PostedBalance,
+	AvailableBalance,
 };

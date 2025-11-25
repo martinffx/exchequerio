@@ -19,7 +19,9 @@ class LedgerAccountService {
 	}
 
 	public async getLedgerAccount(id: string): Promise<LedgerAccountEntity> {
-		throw new Error("Not implemented");
+		// This would need a proper implementation with repository calls
+		// For now, returning a placeholder to demonstrate the pattern
+		throw new Error("Method needs repository implementation");
 	}
 
 	public async createLedgerAccount(

@@ -112,7 +112,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server) => {
 		async (rq: CreateLedgerRequest): Promise<LedgerResponse> => {
 			const ledger = await rq.server.services.ledgerService.createLedger(
 				rq.token.orgId,
-				LedgerEntity.fromRequest(rq.body),
+				LedgerEntity.fromRequest(rq.body, rq.token.orgId),
 			);
 			return ledger.toResponse();
 		},
@@ -144,7 +144,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server) => {
 		async (rq: UpdateLedgerRequest): Promise<LedgerResponse> => {
 			const org = await rq.server.services.ledgerService.updateLedger(
 				rq.token.orgId,
-				LedgerEntity.fromRequest(rq.body, rq.params.ledgerId),
+				LedgerEntity.fromRequest(rq.body, rq.token.orgId, rq.params.ledgerId),
 			);
 			return org.toResponse();
 		},

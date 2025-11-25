@@ -186,7 +186,7 @@ const globalErrorHandler = (
 		return;
 	}
 
-	request.server.log.error("Unknown Error", error);
+	request.server.log.error(error, "Unknown Error");
 	const ex = new InternalServerError(error.message);
 	reply.status(ex.status).send(ex.toResponse());
 };
