@@ -1,5 +1,5 @@
-import type { FastifyPluginAsync } from "fastify";
-import { Type } from "@sinclair/typebox";
+import type { FastifyPluginAsync } from "fastify"
+import { Type } from "@sinclair/typebox"
 
 import {
 	BadRequestErrorResponse,
@@ -11,7 +11,7 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema";
+} from "@/routes/schema"
 import {
 	type GetLedgerTransactionEntryRequest,
 	LedgerTransactionEntryIdParams,
@@ -19,10 +19,10 @@ import {
 	LedgerTransactionEntryResponse,
 	type ListLedgerTransactionEntriesRequest,
 	type UpdateLedgerTransactionEntryRequest,
-} from "./schema";
+} from "./schema"
 
-const TAGS = ["Ledger Transaction Entries"];
-const LedgerTransactionEntriesRoutes: FastifyPluginAsync = async (server) => {
+const TAGS = ["Ledger Transaction Entries"]
+const LedgerTransactionEntriesRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/",
 		{
@@ -43,17 +43,14 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = async (server) => {
 				},
 			},
 		},
-		async (
-			rq: ListLedgerTransactionEntriesRequest,
-		): Promise<LedgerTransactionEntryResponse[]> => {
-			const entries =
-				await rq.server.services.ledgerTransactionService.listLedgerTransactionEntries(
-					rq.query.offset,
-					rq.query.limit,
-				);
-			return entries.map((entry) => entry.toResponse());
-		},
-	);
+		async (rq: ListLedgerTransactionEntriesRequest): Promise<LedgerTransactionEntryResponse[]> => {
+			const entries = await rq.server.services.ledgerTransactionService.listLedgerTransactionEntries(
+				rq.query.offset,
+				rq.query.limit
+			)
+			return entries.map(entry => entry.toResponse())
+		}
+	)
 
 	server.get(
 		"/:ledgerTransactionEntryId",
@@ -76,16 +73,13 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = async (server) => {
 				},
 			},
 		},
-		async (
-			rq: GetLedgerTransactionEntryRequest,
-		): Promise<LedgerTransactionEntryResponse> => {
-			const ledger =
-				await rq.server.services.ledgerTransactionService.getLedgerTransactionEntry(
-					rq.params.ledgerTransactionEntryId,
-				);
-			return ledger.toResponse();
-		},
-	);
+		async (rq: GetLedgerTransactionEntryRequest): Promise<LedgerTransactionEntryResponse> => {
+			const ledger = await rq.server.services.ledgerTransactionService.getLedgerTransactionEntry(
+				rq.params.ledgerTransactionEntryId
+			)
+			return ledger.toResponse()
+		}
+	)
 
 	server.put(
 		"/:ledgerTransactionEntryId",
@@ -110,17 +104,14 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = async (server) => {
 				},
 			},
 		},
-		async (
-			rq: UpdateLedgerTransactionEntryRequest,
-		): Promise<LedgerTransactionEntryResponse> => {
-			const org =
-				await rq.server.services.ledgerTransactionService.updateLedgerTransactionEntry(
-					rq.params.ledgerTransactionEntryId,
-					LedgerTransactionEntryResponse.fromRequest(rq.body),
-				);
-			return org.toResponse();
-		},
-	);
-};
+		async (rq: UpdateLedgerTransactionEntryRequest): Promise<LedgerTransactionEntryResponse> => {
+			const org = await rq.server.services.ledgerTransactionService.updateLedgerTransactionEntry(
+				rq.params.ledgerTransactionEntryId,
+				LedgerTransactionEntryResponse.fromRequest(rq.body)
+			)
+			return org.toResponse()
+		}
+	)
+}
 
-export { LedgerTransactionEntriesRoutes };
+export { LedgerTransactionEntriesRoutes }

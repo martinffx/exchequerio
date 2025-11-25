@@ -1,10 +1,7 @@
-import { LedgerAccountRepo } from "./LedgerAccountRepo";
-import { LedgerAccountEntity } from "@/services/entities/LedgerAccountEntity";
-import { TypeID } from "typeid-js";
-import type {
-	LedgerAccountID,
-	LedgerID,
-} from "@/services/entities/LedgerAccountEntity";
+import { LedgerAccountRepo } from "./LedgerAccountRepo"
+import { LedgerAccountEntity } from "@/services/entities/LedgerAccountEntity"
+import { TypeID } from "typeid-js"
+import type { LedgerAccountID, LedgerID } from "@/services/entities/LedgerAccountEntity"
 
 // Mock DrizzleDB for unit testing
 const mockDb = {
@@ -22,23 +19,23 @@ const mockDb = {
 	set: jest.fn().mockReturnThis(),
 	delete: jest.fn().mockReturnThis(),
 	transaction: jest.fn(),
-} as any;
+} as any
 
 describe("LedgerAccountRepo Unit Tests", () => {
-	let ledgerAccountRepo: LedgerAccountRepo;
-	let testOrgId: string;
-	let testLedgerId: LedgerID;
-	let testAccountId: LedgerAccountID;
+	let ledgerAccountRepo: LedgerAccountRepo
+	let testOrgId: string
+	let testLedgerId: LedgerID
+	let testAccountId: LedgerAccountID
 
 	beforeEach(() => {
-		ledgerAccountRepo = new LedgerAccountRepo(mockDb);
-		testOrgId = new TypeID("org").toString();
-		testLedgerId = new TypeID("lgr") as LedgerID;
-		testAccountId = new TypeID("lat") as LedgerAccountID;
+		ledgerAccountRepo = new LedgerAccountRepo(mockDb)
+		testOrgId = new TypeID("org").toString()
+		testLedgerId = new TypeID("lgr") as LedgerID
+		testAccountId = new TypeID("lat") as LedgerAccountID
 
 		// Reset all mocks
-		jest.clearAllMocks();
-	});
+		jest.clearAllMocks()
+	})
 
 	describe("getLedgerAccount", () => {
 		it("should return account when found with organization tenancy", async () => {
@@ -54,7 +51,7 @@ describe("LedgerAccountRepo Unit Tests", () => {
 				metadata: null,
 				created: new Date(),
 				updated: new Date(),
-			};
+			}
 
 			mockDb.select.mockReturnValue({
 				from: jest.fn().mockReturnValue({
@@ -64,20 +61,16 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Act
-			const result = await ledgerAccountRepo.getLedgerAccount(
-				testOrgId,
-				testLedgerId,
-				testAccountId,
-			);
+			const result = await ledgerAccountRepo.getLedgerAccount(testOrgId, testLedgerId, testAccountId)
 
 			// Assert
-			expect(result).toBeInstanceOf(LedgerAccountEntity);
-			expect(result.id.toString()).toBe(testAccountId.toString());
-			expect(result.name).toBe("Test Account");
-		});
+			expect(result).toBeInstanceOf(LedgerAccountEntity)
+			expect(result.id.toString()).toBe(testAccountId.toString())
+			expect(result.name).toBe("Test Account")
+		})
 
 		it("should throw error when account not found", async () => {
 			// Arrange
@@ -89,18 +82,14 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Act & Assert
 			await expect(
-				ledgerAccountRepo.getLedgerAccount(
-					testOrgId,
-					testLedgerId,
-					testAccountId,
-				),
-			).rejects.toThrow(`Account not found: ${testAccountId.toString()}`);
-		});
-	});
+				ledgerAccountRepo.getLedgerAccount(testOrgId, testLedgerId, testAccountId)
+			).rejects.toThrow(`Account not found: ${testAccountId.toString()}`)
+		})
+	})
 
 	describe("listLedgerAccounts", () => {
 		it("should return empty array when no accounts exist", async () => {
@@ -117,19 +106,14 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Act
-			const result = await ledgerAccountRepo.listLedgerAccounts(
-				testOrgId,
-				testLedgerId,
-				0,
-				10,
-			);
+			const result = await ledgerAccountRepo.listLedgerAccounts(testOrgId, testLedgerId, 0, 10)
 
 			// Assert
-			expect(result).toEqual([]);
-		});
+			expect(result).toEqual([])
+		})
 
 		it("should return accounts when found", async () => {
 			// Arrange
@@ -146,7 +130,7 @@ describe("LedgerAccountRepo Unit Tests", () => {
 					created: new Date(),
 					updated: new Date(),
 				},
-			];
+			]
 
 			mockDb.select.mockReturnValue({
 				from: jest.fn().mockReturnValue({
@@ -160,22 +144,17 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Act
-			const result = await ledgerAccountRepo.listLedgerAccounts(
-				testOrgId,
-				testLedgerId,
-				0,
-				10,
-			);
+			const result = await ledgerAccountRepo.listLedgerAccounts(testOrgId, testLedgerId, 0, 10)
 
 			// Assert
-			expect(result).toHaveLength(1);
-			expect(result[0]).toBeInstanceOf(LedgerAccountEntity);
-			expect(result[0].name).toBe("Test Account");
-		});
-	});
+			expect(result).toHaveLength(1)
+			expect(result[0]).toBeInstanceOf(LedgerAccountEntity)
+			expect(result[0].name).toBe("Test Account")
+		})
+	})
 
 	describe("createLedgerAccount", () => {
 		it("should create account when ledger belongs to organization", async () => {
@@ -184,11 +163,11 @@ describe("LedgerAccountRepo Unit Tests", () => {
 				{ name: "New Account", description: "Test account" },
 				testLedgerId,
 				"debit",
-				testAccountId.toString(),
-			);
+				testAccountId.toString()
+			)
 
-			const mockLedgerValidation = [{ id: testLedgerId.toString() }];
-			const mockInsertResult = [entity.toRecord()];
+			const mockLedgerValidation = [{ id: testLedgerId.toString() }]
+			const mockInsertResult = [entity.toRecord()]
 
 			// Mock ledger validation query
 			mockDb.select.mockReturnValueOnce({
@@ -197,34 +176,27 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						limit: jest.fn().mockResolvedValue(mockLedgerValidation),
 					}),
 				}),
-			});
+			})
 
 			// Mock insert query
 			mockDb.insert.mockReturnValueOnce({
 				values: jest.fn().mockReturnValue({
 					returning: jest.fn().mockResolvedValue(mockInsertResult),
 				}),
-			});
+			})
 
 			// Act
-			const result = await ledgerAccountRepo.createLedgerAccount(
-				testOrgId,
-				entity,
-			);
+			const result = await ledgerAccountRepo.createLedgerAccount(testOrgId, entity)
 
 			// Assert
-			expect(result).toBeInstanceOf(LedgerAccountEntity);
-			expect(result.id.toString()).toBe(testAccountId.toString());
-			expect(result.name).toBe("New Account");
-		});
+			expect(result).toBeInstanceOf(LedgerAccountEntity)
+			expect(result.id.toString()).toBe(testAccountId.toString())
+			expect(result.name).toBe("New Account")
+		})
 
 		it("should throw error when ledger does not belong to organization", async () => {
 			// Arrange
-			const entity = LedgerAccountEntity.fromRequest(
-				{ name: "New Account" },
-				testLedgerId,
-				"debit",
-			);
+			const entity = LedgerAccountEntity.fromRequest({ name: "New Account" }, testLedgerId, "debit")
 
 			mockDb.select.mockReturnValue({
 				from: jest.fn().mockReturnValue({
@@ -232,16 +204,14 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						limit: jest.fn().mockResolvedValue([]),
 					}),
 				}),
-			});
+			})
 
 			// Act & Assert
-			await expect(
-				ledgerAccountRepo.createLedgerAccount(testOrgId, entity),
-			).rejects.toThrow(
-				`Ledger not found or does not belong to organization: ${testLedgerId.toString()}`,
-			);
-		});
-	});
+			await expect(ledgerAccountRepo.createLedgerAccount(testOrgId, entity)).rejects.toThrow(
+				`Ledger not found or does not belong to organization: ${testLedgerId.toString()}`
+			)
+		})
+	})
 
 	describe("updateLedgerAccount", () => {
 		it("should update account when found with organization tenancy", async () => {
@@ -250,11 +220,11 @@ describe("LedgerAccountRepo Unit Tests", () => {
 				{ name: "Updated Account", description: "Updated" },
 				testLedgerId,
 				"debit",
-				testAccountId.toString(),
-			);
+				testAccountId.toString()
+			)
 
-			const mockValidation = [{ id: testAccountId.toString() }];
-			const mockUpdateResult = [entity.toRecord()];
+			const mockValidation = [{ id: testAccountId.toString() }]
+			const mockUpdateResult = [entity.toRecord()]
 
 			// Mock validation query
 			mockDb.select.mockReturnValueOnce({
@@ -265,7 +235,7 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Mock update query
 			mockDb.update.mockReturnValueOnce({
@@ -274,19 +244,15 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						returning: jest.fn().mockResolvedValue(mockUpdateResult),
 					}),
 				}),
-			});
+			})
 
 			// Act
-			const result = await ledgerAccountRepo.updateLedgerAccount(
-				testOrgId,
-				testLedgerId,
-				entity,
-			);
+			const result = await ledgerAccountRepo.updateLedgerAccount(testOrgId, testLedgerId, entity)
 
 			// Assert
-			expect(result).toBeInstanceOf(LedgerAccountEntity);
-			expect(result.name).toBe("Updated Account");
-		});
+			expect(result).toBeInstanceOf(LedgerAccountEntity)
+			expect(result.name).toBe("Updated Account")
+		})
 
 		it("should throw error when account not found", async () => {
 			// Arrange
@@ -294,8 +260,8 @@ describe("LedgerAccountRepo Unit Tests", () => {
 				{ name: "Updated Account" },
 				testLedgerId,
 				"debit",
-				testAccountId.toString(),
-			);
+				testAccountId.toString()
+			)
 
 			mockDb.select.mockReturnValue({
 				from: jest.fn().mockReturnValue({
@@ -305,21 +271,21 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Act & Assert
 			await expect(
-				ledgerAccountRepo.updateLedgerAccount(testOrgId, testLedgerId, entity),
-			).rejects.toThrow(`Account not found: ${testAccountId.toString()}`);
-		});
-	});
+				ledgerAccountRepo.updateLedgerAccount(testOrgId, testLedgerId, entity)
+			).rejects.toThrow(`Account not found: ${testAccountId.toString()}`)
+		})
+	})
 
 	describe("deleteLedgerAccount", () => {
 		it("should delete account when found with no dependencies", async () => {
 			// Arrange
-			const mockValidation = [{ id: testAccountId.toString() }];
-			const mockEntryCheck: Array<{ id: string }> = [];
-			const mockDeleteResult = [{ id: testAccountId.toString() }];
+			const mockValidation = [{ id: testAccountId.toString() }]
+			const mockEntryCheck: { id: string }[] = []
+			const mockDeleteResult = [{ id: testAccountId.toString() }]
 
 			// Mock validation query
 			mockDb.select.mockReturnValueOnce({
@@ -330,7 +296,7 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Mock entry check query
 			mockDb.select.mockReturnValueOnce({
@@ -339,29 +305,25 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						limit: jest.fn().mockResolvedValue(mockEntryCheck),
 					}),
 				}),
-			});
+			})
 
 			// Mock delete query
 			mockDb.delete.mockReturnValueOnce({
 				where: jest.fn().mockReturnValue({
 					returning: jest.fn().mockResolvedValue(mockDeleteResult),
 				}),
-			});
+			})
 
 			// Act & Assert
 			await expect(
-				ledgerAccountRepo.deleteLedgerAccount(
-					testOrgId,
-					testLedgerId,
-					testAccountId,
-				),
-			).resolves.not.toThrow();
-		});
+				ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, testAccountId)
+			).resolves.not.toThrow()
+		})
 
 		it("should throw error when account has transaction entries", async () => {
 			// Arrange
-			const mockValidation = [{ id: testAccountId.toString() }];
-			const mockEntryCheck = [{ id: "entry-id" }];
+			const mockValidation = [{ id: testAccountId.toString() }]
+			const mockEntryCheck = [{ id: "entry-id" }]
 
 			// Mock validation query
 			mockDb.select.mockReturnValueOnce({
@@ -372,7 +334,7 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Mock entry check query
 			mockDb.select.mockReturnValueOnce({
@@ -381,18 +343,12 @@ describe("LedgerAccountRepo Unit Tests", () => {
 						limit: jest.fn().mockResolvedValue(mockEntryCheck),
 					}),
 				}),
-			});
+			})
 
 			// Act & Assert
 			await expect(
-				ledgerAccountRepo.deleteLedgerAccount(
-					testOrgId,
-					testLedgerId,
-					testAccountId,
-				),
-			).rejects.toThrow(
-				"Cannot delete account with existing transaction entries",
-			);
-		});
-	});
-});
+				ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, testAccountId)
+			).rejects.toThrow("Cannot delete account with existing transaction entries")
+		})
+	})
+})

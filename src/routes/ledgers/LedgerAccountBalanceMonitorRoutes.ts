@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync } from "fastify"
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -9,7 +9,7 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "../schema";
+} from "../schema"
 import {
 	type CreateLedgerAccountBalanceMonitorRequest,
 	type DeleteLedgerAccountBalanceMonitorRequest,
@@ -19,14 +19,12 @@ import {
 	LedgerAccountBalanceMonitorResponse,
 	type ListLedgerAccountBalanceMonitorsRequest,
 	type UpdateLedgerAccountBalanceMonitorRequest,
-} from "./schema";
-import { Type } from "@sinclair/typebox";
-import { LedgerAccountBalanceMonitorEntity } from "@/services";
+} from "./schema"
+import { Type } from "@sinclair/typebox"
+import { LedgerAccountBalanceMonitorEntity } from "@/services"
 
-const TAGS = ["Ledger Account Balance Monitors"];
-const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async (
-	server,
-) => {
+const TAGS = ["Ledger Account Balance Monitors"]
+const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/",
 		{
@@ -48,16 +46,15 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async (
 			},
 		},
 		async (
-			rq: ListLedgerAccountBalanceMonitorsRequest,
+			rq: ListLedgerAccountBalanceMonitorsRequest
 		): Promise<LedgerAccountBalanceMonitorResponse[]> => {
-			const monitors =
-				await rq.server.services.ledgerAccountService.listLedgerAccountBalanceMonitors(
-					rq.query.offset,
-					rq.query.limit,
-				);
-			return monitors.map((monitor) => monitor.toResponse());
-		},
-	);
+			const monitors = await rq.server.services.ledgerAccountService.listLedgerAccountBalanceMonitors(
+				rq.query.offset,
+				rq.query.limit
+			)
+			return monitors.map(monitor => monitor.toResponse())
+		}
+	)
 
 	server.get(
 		"/:ledgerAccountBalanceMonitorId",
@@ -81,15 +78,14 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async (
 			},
 		},
 		async (
-			rq: GetLedgerAccountBalanceMonitorRequest,
+			rq: GetLedgerAccountBalanceMonitorRequest
 		): Promise<LedgerAccountBalanceMonitorResponse> => {
-			const monitor =
-				await rq.server.services.ledgerAccountService.getLedgerAccountBalanceMonitor(
-					rq.params.ledgerAccountBalanceMonitorId,
-				);
-			return monitor.toResponse();
-		},
-	);
+			const monitor = await rq.server.services.ledgerAccountService.getLedgerAccountBalanceMonitor(
+				rq.params.ledgerAccountBalanceMonitorId
+			)
+			return monitor.toResponse()
+		}
+	)
 
 	server.post(
 		"/",
@@ -113,15 +109,14 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async (
 			},
 		},
 		async (
-			rq: CreateLedgerAccountBalanceMonitorRequest,
+			rq: CreateLedgerAccountBalanceMonitorRequest
 		): Promise<LedgerAccountBalanceMonitorResponse> => {
-			const ledger =
-				await rq.server.services.ledgerAccountService.createLedgerAccountBalanceMonitor(
-					LedgerAccountBalanceMonitorEntity.fromRequest(rq.body),
-				);
-			return ledger.toResponse();
-		},
-	);
+			const ledger = await rq.server.services.ledgerAccountService.createLedgerAccountBalanceMonitor(
+				LedgerAccountBalanceMonitorEntity.fromRequest(rq.body)
+			)
+			return ledger.toResponse()
+		}
+	)
 
 	server.put(
 		"/:ledgerAccountBalanceMonitorId",
@@ -147,16 +142,15 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async (
 			},
 		},
 		async (
-			rq: UpdateLedgerAccountBalanceMonitorRequest,
+			rq: UpdateLedgerAccountBalanceMonitorRequest
 		): Promise<LedgerAccountBalanceMonitorResponse> => {
-			const monitor =
-				await rq.server.services.ledgerAccountService.updateLedgerAccountBalanceMonitor(
-					rq.params.ledgerAccountBalanceMonitorId,
-					LedgerAccountBalanceMonitorEntity.fromRequest(rq.body),
-				);
-			return monitor.toResponse();
-		},
-	);
+			const monitor = await rq.server.services.ledgerAccountService.updateLedgerAccountBalanceMonitor(
+				rq.params.ledgerAccountBalanceMonitorId,
+				LedgerAccountBalanceMonitorEntity.fromRequest(rq.body)
+			)
+			return monitor.toResponse()
+		}
+	)
 
 	server.delete(
 		"/:ledgerAccountBalanceMonitorId",
@@ -182,10 +176,10 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async (
 		},
 		async (rq: DeleteLedgerAccountBalanceMonitorRequest): Promise<void> => {
 			await rq.server.services.ledgerAccountService.deleteLedgerAccountBalanceMonitor(
-				rq.params.ledgerAccountBalanceMonitorId,
-			);
-		},
-	);
-};
+				rq.params.ledgerAccountBalanceMonitorId
+			)
+		}
+	)
+}
 
-export { LedgerAccountBalanceMonitorRoutes };
+export { LedgerAccountBalanceMonitorRoutes }

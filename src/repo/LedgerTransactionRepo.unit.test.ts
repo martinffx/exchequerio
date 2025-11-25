@@ -1,13 +1,10 @@
-import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
-import {
-	LedgerTransactionEntity,
-	LedgerTransactionEntryEntity,
-} from "@/services/entities";
-import { TypeID } from "typeid-js";
+import { LedgerTransactionRepo } from "./LedgerTransactionRepo"
+import { LedgerTransactionEntity, LedgerTransactionEntryEntity } from "@/services/entities"
+import { TypeID } from "typeid-js"
 
 // Define types locally since they're not exported
-type LedgerTransactionID = TypeID<"ltr">;
-type LedgerID = TypeID<"lgr">;
+type LedgerTransactionID = TypeID<"ltr">
+type LedgerID = TypeID<"lgr">
 
 // Mock DrizzleDB for unit testing
 const mockDb = {
@@ -25,51 +22,50 @@ const mockDb = {
 	update: jest.fn().mockReturnThis(),
 	set: jest.fn().mockReturnThis(),
 	delete: jest.fn().mockReturnThis(),
-} as any;
+} as any
 
 describe("LedgerTransactionRepo Unit Tests", () => {
-	let ledgerTransactionRepo: LedgerTransactionRepo;
-	let testOrgId: string;
-	let testLedgerId: LedgerID;
-	let testTransactionId: LedgerTransactionID;
+	let ledgerTransactionRepo: LedgerTransactionRepo
+	let testOrgId: string
+	let testLedgerId: LedgerID
+	let testTransactionId: LedgerTransactionID
 
 	beforeEach(() => {
-		ledgerTransactionRepo = new LedgerTransactionRepo(mockDb);
-		testOrgId = new TypeID("org").toString();
-		testLedgerId = new TypeID("lgr") as LedgerID;
-		testTransactionId = new TypeID("ltr") as LedgerTransactionID;
+		ledgerTransactionRepo = new LedgerTransactionRepo(mockDb)
+		testOrgId = new TypeID("org").toString()
+		testLedgerId = new TypeID("lgr") as LedgerID
+		testTransactionId = new TypeID("ltr") as LedgerTransactionID
 
 		// Reset all mocks
-		jest.clearAllMocks();
-	});
+		jest.clearAllMocks()
+	})
 
 	describe("withTransaction", () => {
 		it("should execute function within database transaction", async () => {
 			// Arrange
-			const mockTransactionFn = jest.fn().mockResolvedValue("result");
-			mockDb.transaction.mockResolvedValue("result");
+			const mockTransactionFn = jest.fn().mockResolvedValue("result")
+			mockDb.transaction.mockResolvedValue("result")
 
 			// Act
-			const result =
-				await ledgerTransactionRepo.withTransaction(mockTransactionFn);
+			const result = await ledgerTransactionRepo.withTransaction(mockTransactionFn)
 
 			// Assert
-			expect(mockDb.transaction).toHaveBeenCalledWith(mockTransactionFn);
-			expect(result).toBe("result");
-		});
+			expect(mockDb.transaction).toHaveBeenCalledWith(mockTransactionFn)
+			expect(result).toBe("result")
+		})
 
 		it("should propagate transaction errors", async () => {
 			// Arrange
-			const mockError = new Error("Transaction failed");
-			const mockTransactionFn = jest.fn().mockRejectedValue(mockError);
-			mockDb.transaction.mockRejectedValue(mockError);
+			const mockError = new Error("Transaction failed")
+			const mockTransactionFn = jest.fn().mockRejectedValue(mockError)
+			mockDb.transaction.mockRejectedValue(mockError)
 
 			// Act & Assert
-			await expect(
-				ledgerTransactionRepo.withTransaction(mockTransactionFn),
-			).rejects.toThrow("Transaction failed");
-		});
-	});
+			await expect(ledgerTransactionRepo.withTransaction(mockTransactionFn)).rejects.toThrow(
+				"Transaction failed"
+			)
+		})
+	})
 
 	describe("getLedgerTransaction", () => {
 		it("should return transaction when found with organization tenancy", async () => {
@@ -82,7 +78,7 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 				metadata: null,
 				created: new Date(),
 				updated: new Date(),
-			};
+			}
 
 			mockDb.select.mockReturnValue({
 				from: jest.fn().mockReturnValue({
@@ -92,20 +88,20 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Act
 			const result = await ledgerTransactionRepo.getLedgerTransaction(
 				testOrgId,
 				testLedgerId.toString(),
-				testTransactionId.toString(),
-			);
+				testTransactionId.toString()
+			)
 
 			// Assert
-			expect(result).toBeInstanceOf(LedgerTransactionEntity);
-			expect(result.id.toString()).toBe(testTransactionId.toString());
-			expect(result.description).toBe("Test Transaction");
-		});
+			expect(result).toBeInstanceOf(LedgerTransactionEntity)
+			expect(result.id.toString()).toBe(testTransactionId.toString())
+			expect(result.description).toBe("Test Transaction")
+		})
 
 		it("should throw error when transaction not found", async () => {
 			// Arrange
@@ -117,20 +113,18 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Act & Assert
 			await expect(
 				ledgerTransactionRepo.getLedgerTransaction(
 					testOrgId,
 					testLedgerId.toString(),
-					testTransactionId.toString(),
-				),
-			).rejects.toThrow(
-				`Transaction not found: ${testTransactionId.toString()}`,
-			);
-		});
-	});
+					testTransactionId.toString()
+				)
+			).rejects.toThrow(`Transaction not found: ${testTransactionId.toString()}`)
+		})
+	})
 
 	describe("listLedgerTransactions", () => {
 		it("should return empty array when no transactions exist", async () => {
@@ -147,19 +141,19 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Act
 			const result = await ledgerTransactionRepo.listLedgerTransactions(
 				testOrgId,
 				testLedgerId.toString(),
 				0,
-				10,
-			);
+				10
+			)
 
 			// Assert
-			expect(result).toEqual([]);
-		});
+			expect(result).toEqual([])
+		})
 
 		it("should return transactions when found", async () => {
 			// Arrange
@@ -173,7 +167,7 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 					created: new Date(),
 					updated: new Date(),
 				},
-			];
+			]
 
 			mockDb.select.mockReturnValue({
 				from: jest.fn().mockReturnValue({
@@ -187,22 +181,22 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			});
+			})
 
 			// Act
 			const result = await ledgerTransactionRepo.listLedgerTransactions(
 				testOrgId,
 				testLedgerId.toString(),
 				0,
-				10,
-			);
+				10
+			)
 
 			// Assert
-			expect(result).toHaveLength(1);
-			expect(result[0]).toBeInstanceOf(LedgerTransactionEntity);
-			expect(result[0].description).toBe("Test Transaction");
-		});
-	});
+			expect(result).toHaveLength(1)
+			expect(result[0]).toBeInstanceOf(LedgerTransactionEntity)
+			expect(result[0].description).toBe("Test Transaction")
+		})
+	})
 
 	describe("createTransactionWithEntries", () => {
 		it("should create transaction with entries when double-entry validation passes", async () => {
@@ -215,7 +209,7 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 				metadata: null,
 				created: new Date(),
 				updated: new Date(),
-			});
+			})
 
 			const entryEntities = [
 				new LedgerTransactionEntryEntity({
@@ -240,10 +234,10 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 					created: new Date(),
 					updated: new Date(),
 				}),
-			];
+			]
 
-			const mockLedgerValidation = [{ id: testLedgerId.toString() }];
-			const mockTransactionResult = [transactionEntity.toRecord()];
+			const mockLedgerValidation = [{ id: testLedgerId.toString() }]
+			const mockTransactionResult = [transactionEntity.toRecord()]
 
 			// Mock transaction execution
 			const mockTx = {
@@ -259,23 +253,23 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			};
+			}
 
-			mockDb.transaction.mockImplementation(async (fn) => {
-				return await fn(mockTx as any);
-			});
+			mockDb.transaction.mockImplementation(async fn => {
+				return await fn(mockTx as any)
+			})
 
 			// Act
 			const result = await ledgerTransactionRepo.createTransactionWithEntries(
 				testOrgId,
 				transactionEntity,
-				entryEntities,
-			);
+				entryEntities
+			)
 
 			// Assert
-			expect(result).toBeInstanceOf(LedgerTransactionEntity);
-			expect(result.id.toString()).toBe(testTransactionId.toString());
-		});
+			expect(result).toBeInstanceOf(LedgerTransactionEntity)
+			expect(result.id.toString()).toBe(testTransactionId.toString())
+		})
 
 		it("should throw error when double-entry validation fails", async () => {
 			// Arrange
@@ -287,7 +281,7 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 				metadata: undefined,
 				created: new Date(),
 				updated: new Date(),
-			});
+			})
 
 			// Invalid entries - debits don't equal credits
 			const entryEntities = [
@@ -313,19 +307,13 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 					created: new Date(),
 					updated: new Date(),
 				}),
-			];
+			]
 
 			// Act & Assert
 			await expect(
-				ledgerTransactionRepo.createTransactionWithEntries(
-					testOrgId,
-					transactionEntity,
-					entryEntities,
-				),
-			).rejects.toThrow(
-				"Double-entry validation failed: total debits must equal total credits",
-			);
-		});
+				ledgerTransactionRepo.createTransactionWithEntries(testOrgId, transactionEntity, entryEntities)
+			).rejects.toThrow("Double-entry validation failed: total debits must equal total credits")
+		})
 
 		it("should throw error when ledger does not belong to organization", async () => {
 			// Arrange
@@ -337,7 +325,7 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 				metadata: null,
 				created: new Date(),
 				updated: new Date(),
-			});
+			})
 
 			const entryEntities = [
 				new LedgerTransactionEntryEntity({
@@ -362,7 +350,7 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 					created: new Date(),
 					updated: new Date(),
 				}),
-			];
+			]
 
 			// Mock transaction that returns empty validation
 			const mockTx = {
@@ -373,22 +361,18 @@ describe("LedgerTransactionRepo Unit Tests", () => {
 						}),
 					}),
 				}),
-			};
+			}
 
-			mockDb.transaction.mockImplementation(async (fn) => {
-				return await fn(mockTx as any);
-			});
+			mockDb.transaction.mockImplementation(async fn => {
+				return await fn(mockTx as any)
+			})
 
 			// Act & Assert
 			await expect(
-				ledgerTransactionRepo.createTransactionWithEntries(
-					testOrgId,
-					transactionEntity,
-					entryEntities,
-				),
+				ledgerTransactionRepo.createTransactionWithEntries(testOrgId, transactionEntity, entryEntities)
 			).rejects.toThrow(
-				`Ledger not found or does not belong to organization: ${testLedgerId.toString()}`,
-			);
-		});
-	});
-});
+				`Ledger not found or does not belong to organization: ${testLedgerId.toString()}`
+			)
+		})
+	})
+})

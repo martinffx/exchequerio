@@ -1,8 +1,8 @@
-import { LedgerRepo } from "@/repo/LedgerRepo";
-import type { DrizzleDB } from "@/repo/types";
-import { LedgerTransactionService } from "./LedgerTransactionService";
-import { LedgerEntity } from "./entities";
-import { TypeID } from "typeid-js";
+import { LedgerRepo } from "@/repo/LedgerRepo"
+import type { DrizzleDB } from "@/repo/types"
+import { LedgerTransactionService } from "./LedgerTransactionService"
+import { LedgerEntity } from "./entities"
+import { TypeID } from "typeid-js"
 
 // Mock database for testing
 const mockDb = {
@@ -30,17 +30,17 @@ const mockDb = {
 	prepare: jest.fn(),
 	placeholder: jest.fn(),
 	refresh: jest.fn(),
-} as unknown;
+} as unknown
 
 describe("Ledger Transaction Service - Unit Tests", () => {
-	let ledgerRepo: LedgerRepo;
-	let ledgerTransactionService: LedgerTransactionService;
+	let ledgerRepo: LedgerRepo
+	let ledgerTransactionService: LedgerTransactionService
 
 	beforeEach(() => {
-		jest.clearAllMocks();
-		ledgerRepo = new LedgerRepo(mockDb as DrizzleDB);
-		ledgerTransactionService = new LedgerTransactionService(ledgerRepo);
-	});
+		jest.clearAllMocks()
+		ledgerRepo = new LedgerRepo(mockDb as DrizzleDB)
+		ledgerTransactionService = new LedgerTransactionService(ledgerRepo)
+	})
 
 	describe("Double-Entry Validation", () => {
 		it("should validate double-entry compliance for valid entries", async () => {
@@ -51,7 +51,7 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 				normalBalance: "debit",
 				balanceAmount: "100.00",
 				lockVersion: 1,
-			});
+			})
 
 			jest.spyOn(ledgerRepo, "createTransactionWithEntries").mockResolvedValue({
 				id: "test-transaction",
@@ -65,7 +65,7 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 				metadata: null,
 				created: new Date(),
 				updated: new Date(),
-			});
+			})
 
 			const validEntries = [
 				{
@@ -78,18 +78,17 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					direction: "credit" as const,
 					amount: "100.00",
 				},
-			];
+			]
 
-			const result =
-				await ledgerTransactionService.createTransactionWithEntries({
-					ledgerId: "test-ledger",
-					description: "Test transaction",
-					entries: validEntries,
-				});
+			const result = await ledgerTransactionService.createTransactionWithEntries({
+				ledgerId: "test-ledger",
+				description: "Test transaction",
+				entries: validEntries,
+			})
 
-			expect(result).toBeDefined();
-			expect((result as { status: string }).status).toBe("pending");
-		});
+			expect(result).toBeDefined()
+			expect((result as { status: string }).status).toBe("pending")
+		})
 
 		it("should reject transactions with unbalanced entries", async () => {
 			const unbalancedEntries = [
@@ -103,16 +102,16 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					direction: "credit" as const,
 					amount: "50.00",
 				},
-			];
+			]
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries: unbalancedEntries,
-				}),
-			).rejects.toThrow("Double-entry validation failed");
-		});
+				})
+			).rejects.toThrow("Double-entry validation failed")
+		})
 
 		it("should reject transactions with less than 2 entries", async () => {
 			const singleEntry = [
@@ -121,16 +120,16 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					direction: "debit" as const,
 					amount: "100.00",
 				},
-			];
+			]
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries: singleEntry,
-				}),
-			).rejects.toThrow("Transaction must have at least 2 entries");
-		});
+				})
+			).rejects.toThrow("Transaction must have at least 2 entries")
+		})
 
 		it("should reject transactions with invalid amounts", async () => {
 			const invalidEntries = [
@@ -144,16 +143,16 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					direction: "credit" as const,
 					amount: "50.00",
 				},
-			];
+			]
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries: invalidEntries,
-				}),
-			).rejects.toThrow("Invalid amount");
-		});
+				})
+			).rejects.toThrow("Invalid amount")
+		})
 
 		it("should reject transactions with invalid directions", async () => {
 			const invalidEntries = [
@@ -167,17 +166,17 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					direction: "credit" as const,
 					amount: "50.00",
 				},
-			];
+			]
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries: invalidEntries,
-				}),
-			).rejects.toThrow("Invalid direction");
-		});
-	});
+				})
+			).rejects.toThrow("Invalid direction")
+		})
+	})
 
 	describe("Settlement Workflow (US2)", () => {
 		it("should create settlement transactions correctly", async () => {
@@ -197,7 +196,7 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					normalBalance: "credit",
 					balanceAmount: "0.00",
 					lockVersion: 1,
-				});
+				})
 
 			jest.spyOn(ledgerRepo, "createTransactionWithEntries").mockResolvedValue({
 				id: "settlement-transaction",
@@ -211,17 +210,17 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 				metadata: null,
 				created: new Date(),
 				updated: new Date(),
-			});
+			})
 
 			const result = await ledgerTransactionService.createSettlement(
 				"merchant-account",
 				"settlement-account",
 				"500.00",
-				"Daily settlement",
-			);
+				"Daily settlement"
+			)
 
-			expect(result).toBeDefined();
-			expect((result as { status: string }).status).toBe("pending");
+			expect(result).toBeDefined()
+			expect((result as { status: string }).status).toBe("pending")
 			expect(ledgerRepo.createTransactionWithEntries).toHaveBeenCalledWith(
 				"",
 				"Daily settlement",
@@ -237,10 +236,10 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 						amount: "500.00",
 					},
 				],
-				expect.stringMatching(/settlement-merchant-account-\d+/),
-			);
-		});
-	});
+				expect.stringMatching(/settlement-merchant-account-\d+/)
+			)
+		})
+	})
 
 	describe("Balance Calculations (US1)", () => {
 		it("should delegate balance queries to repository", async () => {
@@ -250,23 +249,15 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 				available: { amount: 120, credits: 150, debits: 30 },
 				currency: "USD",
 				currencyExponent: 2,
-			};
+			}
 
-			jest
-				.spyOn(ledgerRepo, "getAccountBalances")
-				.mockResolvedValue(mockBalances);
+			jest.spyOn(ledgerRepo, "getAccountBalances").mockResolvedValue(mockBalances)
 
-			const result = await ledgerTransactionService.getAccountBalances(
-				"account1",
-				"ledger1",
-			);
+			const result = await ledgerTransactionService.getAccountBalances("account1", "ledger1")
 
-			expect(result).toEqual(mockBalances);
-			expect(ledgerRepo.getAccountBalances).toHaveBeenCalledWith(
-				"account1",
-				"ledger1",
-			);
-		});
+			expect(result).toEqual(mockBalances)
+			expect(ledgerRepo.getAccountBalances).toHaveBeenCalledWith("account1", "ledger1")
+		})
 
 		it("should provide fast balance queries for p99 performance", async () => {
 			const mockFastBalances = {
@@ -275,24 +266,16 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 				available: { amount: 100, credits: 0, debits: 0 },
 				currency: "USD",
 				currencyExponent: 2,
-			};
+			}
 
-			jest
-				.spyOn(ledgerRepo, "getAccountBalancesFast")
-				.mockResolvedValue(mockFastBalances);
+			jest.spyOn(ledgerRepo, "getAccountBalancesFast").mockResolvedValue(mockFastBalances)
 
-			const result = await ledgerTransactionService.getAccountBalancesFast(
-				"account1",
-				"ledger1",
-			);
+			const result = await ledgerTransactionService.getAccountBalancesFast("account1", "ledger1")
 
-			expect(result).toEqual(mockFastBalances);
-			expect(ledgerRepo.getAccountBalancesFast).toHaveBeenCalledWith(
-				"account1",
-				"ledger1",
-			);
-		});
-	});
+			expect(result).toEqual(mockFastBalances)
+			expect(ledgerRepo.getAccountBalancesFast).toHaveBeenCalledWith("account1", "ledger1")
+		})
+	})
 
 	describe("Idempotency Key Handling", () => {
 		it("should handle idempotency key conflicts gracefully", async () => {
@@ -303,14 +286,12 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 				normalBalance: "debit",
 				balanceAmount: "100.00",
 				lockVersion: 1,
-			});
+			})
 
 			// Mock duplicate key error
 			jest
 				.spyOn(ledgerRepo, "createTransactionWithEntries")
-				.mockRejectedValue(
-					new Error("duplicate key value violates unique constraint"),
-				);
+				.mockRejectedValue(new Error("duplicate key value violates unique constraint"))
 
 			const entries = [
 				{
@@ -323,7 +304,7 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					direction: "credit" as const,
 					amount: "100.00",
 				},
-			];
+			]
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
@@ -331,12 +312,10 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					description: "Test transaction",
 					entries,
 					idempotencyKey: "duplicate-key",
-				}),
-			).rejects.toThrow(
-				"Transaction with idempotency key 'duplicate-key' already exists",
-			);
-		});
-	});
+				})
+			).rejects.toThrow("Transaction with idempotency key 'duplicate-key' already exists")
+		})
+	})
 
 	describe("Account Validation", () => {
 		it("should validate that all accounts exist", async () => {
@@ -350,7 +329,7 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					balanceAmount: "100.00",
 					lockVersion: 1,
 				})
-				.mockRejectedValueOnce(new Error("Account not found"));
+				.mockRejectedValueOnce(new Error("Account not found"))
 
 			const entries = [
 				{
@@ -363,15 +342,15 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 					direction: "credit" as const,
 					amount: "100.00",
 				},
-			];
+			]
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries,
-				}),
-			).rejects.toThrow("Account not found: nonexistent-account");
-		});
-	});
-});
+				})
+			).rejects.toThrow("Account not found: nonexistent-account")
+		})
+	})
+})

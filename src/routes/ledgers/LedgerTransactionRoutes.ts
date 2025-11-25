@@ -1,5 +1,5 @@
-import type { FastifyPluginAsync } from "fastify";
-import { Type } from "@sinclair/typebox";
+import type { FastifyPluginAsync } from "fastify"
+import { Type } from "@sinclair/typebox"
 
 import {
 	BadRequestErrorResponse,
@@ -11,7 +11,7 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema";
+} from "@/routes/schema"
 
 import {
 	type CreateLedgerTransactionRequest,
@@ -22,10 +22,10 @@ import {
 	LedgerTransactionResponse,
 	type ListLedgerTransactionsRequest,
 	type UpdateLedgerTransactionRequest,
-} from "./schema";
+} from "./schema"
 
-const TAGS = ["Ledger Transactions"];
-const LedgerTransactionRoutes: FastifyPluginAsync = async (server) => {
+const TAGS = ["Ledger Transactions"]
+const LedgerTransactionRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/",
 		{
@@ -46,17 +46,14 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async (server) => {
 				},
 			},
 		},
-		async (
-			rq: ListLedgerTransactionsRequest,
-		): Promise<LedgerTransactionResponse[]> => {
-			const transactions =
-				await rq.server.services.ledgerTransactionService.listLedgerTransactions(
-					rq.query.offset,
-					rq.query.limit,
-				);
-			return transactions.map((transaction) => transaction.toResponse());
-		},
-	);
+		async (rq: ListLedgerTransactionsRequest): Promise<LedgerTransactionResponse[]> => {
+			const transactions = await rq.server.services.ledgerTransactionService.listLedgerTransactions(
+				rq.query.offset,
+				rq.query.limit
+			)
+			return transactions.map(transaction => transaction.toResponse())
+		}
+	)
 
 	server.get(
 		"/:id",
@@ -79,16 +76,13 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async (server) => {
 				},
 			},
 		},
-		async (
-			rq: GetLedgerTransactionRequest,
-		): Promise<LedgerTransactionResponse> => {
-			const ledger =
-				await rq.server.services.ledgerTransactionService.getLedgerTransaction(
-					rq.params.ledgerTransactionId,
-				);
-			return ledger.toResponse();
-		},
-	);
+		async (rq: GetLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
+			const ledger = await rq.server.services.ledgerTransactionService.getLedgerTransaction(
+				rq.params.ledgerTransactionId
+			)
+			return ledger.toResponse()
+		}
+	)
 
 	server.post(
 		"/",
@@ -111,16 +105,13 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async (server) => {
 				},
 			},
 		},
-		async (
-			rq: CreateLedgerTransactionRequest,
-		): Promise<LedgerTransactionResponse> => {
-			const ledger =
-				await rq.server.services.ledgerTransactionService.createLedgerTransaction(
-					LedgerTransactionResponse.fromRequest(rq.body),
-				);
-			return ledger.toResponse();
-		},
-	);
+		async (rq: CreateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
+			const ledger = await rq.server.services.ledgerTransactionService.createLedgerTransaction(
+				LedgerTransactionResponse.fromRequest(rq.body)
+			)
+			return ledger.toResponse()
+		}
+	)
 
 	server.put(
 		"/:id",
@@ -145,17 +136,14 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async (server) => {
 				},
 			},
 		},
-		async (
-			rq: UpdateLedgerTransactionRequest,
-		): Promise<LedgerTransactionResponse> => {
-			const org =
-				await rq.server.services.ledgerTransactionService.updateLedgerTransaction(
-					rq.params.ledgerTransactionId,
-					LedgerTransactionResponse.fromRequest(rq.body),
-				);
-			return org.toResponse();
-		},
-	);
+		async (rq: UpdateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
+			const org = await rq.server.services.ledgerTransactionService.updateLedgerTransaction(
+				rq.params.ledgerTransactionId,
+				LedgerTransactionResponse.fromRequest(rq.body)
+			)
+			return org.toResponse()
+		}
+	)
 
 	server.delete(
 		"/:id",
@@ -181,10 +169,10 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async (server) => {
 		},
 		async (rq: DeleteLedgerTransactionRequest): Promise<void> => {
 			await rq.server.services.ledgerTransactionService.deleteLedgerTransaction(
-				rq.params.ledgerTransactionId,
-			);
-		},
-	);
-};
+				rq.params.ledgerTransactionId
+			)
+		}
+	)
+}
 
-export { LedgerTransactionRoutes };
+export { LedgerTransactionRoutes }

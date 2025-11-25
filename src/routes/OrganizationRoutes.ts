@@ -1,5 +1,5 @@
-import { Type } from "@sinclair/typebox";
-import type { FastifyPluginAsync } from "fastify";
+import { Type } from "@sinclair/typebox"
+import type { FastifyPluginAsync } from "fastify"
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -18,10 +18,10 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 	type UpdateOrganizationRequest,
-} from "./schema";
-import { OrganizationEntity } from "@/services";
+} from "./schema"
+import { OrganizationEntity } from "@/services"
 
-const OrganizationRoutes: FastifyPluginAsync = async (server) => {
+const OrganizationRoutes: FastifyPluginAsync = async server => {
 	server.get<{ Querystring: PaginationQuery }>(
 		"/",
 		{
@@ -41,20 +41,16 @@ const OrganizationRoutes: FastifyPluginAsync = async (server) => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions([
-				"my:organization:read",
-				"organization:read",
-			]),
+			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]),
 		},
 		async (rq: ListOrganizationsRequest): Promise<OrganizationResponse[]> => {
-			const orgs =
-				await rq.server.services.organizationService.listOrganizations(
-					rq.query.offset,
-					rq.query.limit,
-				);
-			return orgs.map((org) => org.toResponse());
-		},
-	);
+			const orgs = await rq.server.services.organizationService.listOrganizations(
+				rq.query.offset,
+				rq.query.limit
+			)
+			return orgs.map(org => org.toResponse())
+		}
+	)
 
 	server.get<{ Params: OrgIdParams }>(
 		"/:orgId",
@@ -76,18 +72,13 @@ const OrganizationRoutes: FastifyPluginAsync = async (server) => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions([
-				"my:organization:read",
-				"organization:read",
-			]),
+			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]),
 		},
 		async (rq: GetOrganizationRequest): Promise<OrganizationResponse> => {
-			const org = await rq.server.services.organizationService.getOrganization(
-				rq.params.orgId,
-			);
-			return org.toResponse();
-		},
-	);
+			const org = await rq.server.services.organizationService.getOrganization(rq.params.orgId)
+			return org.toResponse()
+		}
+	)
 
 	server.post<{ Body: OrganizationRequest }>(
 		"/",
@@ -109,18 +100,15 @@ const OrganizationRoutes: FastifyPluginAsync = async (server) => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions([
-				"my:organization:write",
-				"organization:write",
-			]),
+			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]),
 		},
 		async (rq: CreateOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await server.services.organizationService.createOrganization(
-				OrganizationEntity.fromRequest(rq.body),
-			);
-			return org.toResponse();
-		},
-	);
+				OrganizationEntity.fromRequest(rq.body)
+			)
+			return org.toResponse()
+		}
+	)
 
 	server.put<{ Body: OrganizationRequest; Params: OrgIdParams }>(
 		"/:orgId",
@@ -144,20 +132,16 @@ const OrganizationRoutes: FastifyPluginAsync = async (server) => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions([
-				"my:organization:write",
-				"organization:write",
-			]),
+			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]),
 		},
 		async (rq: UpdateOrganizationRequest): Promise<OrganizationResponse> => {
-			const org =
-				await rq.server.services.organizationService.updateOrganization(
-					rq.params.orgId,
-					OrganizationEntity.fromRequest(rq.body, rq.params.orgId),
-				);
-			return org.toResponse();
-		},
-	);
+			const org = await rq.server.services.organizationService.updateOrganization(
+				rq.params.orgId,
+				OrganizationEntity.fromRequest(rq.body, rq.params.orgId)
+			)
+			return org.toResponse()
+		}
+	)
 
 	server.delete<{ Params: OrgIdParams }>(
 		"/:orgId",
@@ -180,17 +164,12 @@ const OrganizationRoutes: FastifyPluginAsync = async (server) => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions([
-				"my:organization:delete",
-				"organization:delete",
-			]),
+			preHandler: server.hasPermissions(["my:organization:delete", "organization:delete"]),
 		},
 		async (rq: DeleteOrganizationRequest): Promise<void> => {
-			await rq.server.services.organizationService.deleteOrganization(
-				rq.params.orgId,
-			);
-		},
-	);
-};
+			await rq.server.services.organizationService.deleteOrganization(rq.params.orgId)
+		}
+	)
+}
 
-export { OrganizationRoutes };
+export { OrganizationRoutes }

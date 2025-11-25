@@ -1,17 +1,14 @@
-import { TypeID } from "typeid-js";
+import { TypeID } from "typeid-js"
 import {
 	LedgerTransactionsTable,
 	LedgerTransactionEntriesTable,
 	LedgerAccountsTable,
 	LedgersTable,
-} from "./schema";
-import { eq, and, desc } from "drizzle-orm";
-import {
-	LedgerTransactionEntity,
-	LedgerTransactionEntryEntity,
-} from "@/services/entities";
-import { NotFoundError, ConflictError } from "@/errors";
-import type { DrizzleDB } from "./types";
+} from "./schema"
+import { eq, and, desc } from "drizzle-orm"
+import { LedgerTransactionEntity, LedgerTransactionEntryEntity } from "@/services/entities"
+import { NotFoundError, ConflictError } from "@/errors"
+import type { DrizzleDB } from "./types"
 
 class LedgerTransactionRepo {
 	constructor(private readonly db: DrizzleDB) {}
@@ -20,9 +17,9 @@ class LedgerTransactionRepo {
 	 * Database transaction wrapper for ACID operations
 	 */
 	public async withTransaction<T>(
-		fn: (tx: Parameters<DrizzleDB["transaction"]>[0]) => Promise<T>,
+		fn: (tx: Parameters<DrizzleDB["transaction"]>[0]) => Promise<T>
 	): Promise<T> {
-		return await this.db.transaction(fn);
+		return await this.db.transaction(fn)
 	}
 
 	/**
@@ -31,30 +28,27 @@ class LedgerTransactionRepo {
 	public async getLedgerTransaction(
 		organizationId: string,
 		ledgerId: string,
-		transactionId: string,
+		transactionId: string
 	): Promise<LedgerTransactionEntity> {
 		const records = await this.db
 			.select()
 			.from(LedgerTransactionsTable)
-			.innerJoin(
-				LedgersTable,
-				eq(LedgerTransactionsTable.ledgerId, LedgersTable.id),
-			)
+			.innerJoin(LedgersTable, eq(LedgerTransactionsTable.ledgerId, LedgersTable.id))
 			.where(
 				and(
 					eq(LedgersTable.organizationId, organizationId),
 					eq(LedgerTransactionsTable.ledgerId, ledgerId),
-					eq(LedgerTransactionsTable.id, transactionId),
-				),
+					eq(LedgerTransactionsTable.id, transactionId)
+				)
 			)
-			.limit(1);
+			.limit(1)
 
 		if (records.length === 0) {
-			throw new NotFoundError(`Transaction not found: ${transactionId}`);
+			throw new NotFoundError(`Transaction not found: ${transactionId}`)
 		}
 
-		const record = records[0];
-		return LedgerTransactionEntity.fromRecord(record.ledger_transactions);
+		const record = records[0]
+		return LedgerTransactionEntity.fromRecord(record.ledger_transactions)
 	}
 
 	/**
@@ -64,28 +58,23 @@ class LedgerTransactionRepo {
 		organizationId: string,
 		ledgerId: string,
 		offset: number,
-		limit: number,
+		limit: number
 	): Promise<LedgerTransactionEntity[]> {
 		const records = await this.db
 			.select()
 			.from(LedgerTransactionsTable)
-			.innerJoin(
-				LedgersTable,
-				eq(LedgerTransactionsTable.ledgerId, LedgersTable.id),
-			)
+			.innerJoin(LedgersTable, eq(LedgerTransactionsTable.ledgerId, LedgersTable.id))
 			.where(
 				and(
 					eq(LedgersTable.organizationId, organizationId),
-					eq(LedgerTransactionsTable.ledgerId, ledgerId),
-				),
+					eq(LedgerTransactionsTable.ledgerId, ledgerId)
+				)
 			)
 			.orderBy(desc(LedgerTransactionsTable.created))
 			.limit(limit)
-			.offset(offset);
+			.offset(offset)
 
-		return records.map((record) =>
-			LedgerTransactionEntity.fromRecord(record.ledger_transactions),
-		);
+		return records.map(record => LedgerTransactionEntity.fromRecord(record.ledger_transactions))
 	}
 
 	/**
@@ -94,9 +83,9 @@ class LedgerTransactionRepo {
 	public async createTransactionWithEntries(
 		organizationId: string,
 		transactionEntity: LedgerTransactionEntity,
-		entryEntities: LedgerTransactionEntryEntity[],
+		entryEntities: LedgerTransactionEntryEntity[]
 	): Promise<LedgerTransactionEntity> {
-		return await this.withTransaction(async (tx) => {
+		return await this.withTransaction(async tx => {
 			// 1. Validate ledger belongs to organization
 			const ledgerValidation = await tx
 				.select()
@@ -104,70 +93,65 @@ class LedgerTransactionRepo {
 				.where(
 					and(
 						eq(LedgersTable.id, transactionEntity.ledgerId.toString()),
-						eq(LedgersTable.organizationId, organizationId),
-					),
+						eq(LedgersTable.organizationId, organizationId)
+					)
 				)
-				.limit(1);
+				.limit(1)
 
 			if (ledgerValidation.length === 0) {
 				throw new NotFoundError(
-					`Ledger not found or does not belong to organization: ${transactionEntity.ledgerId.toString()}`,
-				);
+					`Ledger not found or does not belong to organization: ${transactionEntity.ledgerId.toString()}`
+				)
 			}
 
 			// 2. Validate double-entry rule: debits must equal credits
-			let totalDebits = 0;
-			let totalCredits = 0;
+			let totalDebits = 0
+			let totalCredits = 0
 
 			for (const entry of entryEntities) {
-				const amount = Number.parseFloat(entry.amount);
+				const amount = Number.parseFloat(entry.amount)
 				if (entry.direction === "debit") {
-					totalDebits += amount;
+					totalDebits += amount
 				} else {
-					totalCredits += amount;
+					totalCredits += amount
 				}
 			}
 
 			if (Math.abs(totalDebits - totalCredits) > 0.0001) {
-				throw new ConflictError(
-					"Double-entry validation failed: total debits must equal total credits",
-				);
+				throw new ConflictError("Double-entry validation failed: total debits must equal total credits")
 			}
 
 			// 3. Create the transaction record
-			const transactionRecord = transactionEntity.toRecord();
+			const transactionRecord = transactionEntity.toRecord()
 			const transactionResult = await tx
 				.insert(LedgerTransactionsTable)
 				.values(transactionRecord)
-				.returning();
+				.returning()
 
-			const createdTransaction = transactionResult[0];
+			const createdTransaction = transactionResult[0]
 
 			// 4. Create entries and update account balances atomically
 			for (const entryEntity of entryEntities) {
 				// Lock account for update to prevent race conditions
-				const account = await this.getAccountWithLock(
-					entryEntity.accountId.toString(),
-					tx,
-				);
+				const account = await this.getAccountWithLock(entryEntity.accountId.toString(), tx)
 
 				// Calculate new balance based on normal balance and entry direction
-				const currentBalance = Number.parseFloat(account.balanceAmount);
-				const entryAmount = Number.parseFloat(entryEntity.amount);
-				let newBalance: number;
+				const currentBalance = Number.parseFloat(account.balanceAmount)
+				const entryAmount = Number.parseFloat(entryEntity.amount)
+				let newBalance: number
 
 				// Apply double-entry accounting rules
 				if (account.normalBalance === "debit") {
 					newBalance =
 						entryEntity.direction === "debit"
 							? currentBalance + entryAmount
-							: currentBalance - entryAmount;
+							: currentBalance - entryAmount
 				} else {
 					// credit normal balance
 					newBalance =
 						entryEntity.direction === "credit"
 							? currentBalance + entryAmount
-							: currentBalance - entryAmount;
+							: currentBalance - entryAmount
 				}
 
 				// Update account balance with optimistic locking
@@ -175,18 +159,18 @@ class LedgerTransactionRepo {
 					entryEntity.accountId.toString(),
 					newBalance.toFixed(4),
 					account.lockVersion,
-					tx,
-				);
+					tx
+				)
 
 				// Create transaction entry record
-				const entryRecord = entryEntity.toRecord();
-				entryRecord.transactionId = createdTransaction.id;
-				await tx.insert(LedgerTransactionEntriesTable).values(entryRecord);
+				const entryRecord = entryEntity.toRecord()
+				entryRecord.transactionId = createdTransaction.id
+				await tx.insert(LedgerTransactionEntriesTable).values(entryRecord)
 			}
 
 			// 5. Return the created transaction as entity
-			return LedgerTransactionEntity.fromRecord(createdTransaction);
-		});
+			return LedgerTransactionEntity.fromRecord(createdTransaction)
+		})
 	}
 
 	/**
@@ -197,13 +181,13 @@ class LedgerTransactionRepo {
 			.select()
 			.from(LedgerAccountsTable)
 			.where(eq(LedgerAccountsTable.id, accountId))
-			.for("update");
+			.for("update")
 
 		if (accounts.length === 0) {
-			throw new NotFoundError(`Account ${accountId} not found`);
+			throw new NotFoundError(`Account ${accountId} not found`)
 		}
 
-		return accounts[0];
+		return accounts[0]
 	}
 
 	/**
@@ -213,7 +197,7 @@ class LedgerTransactionRepo {
 		accountId: string,
 		balance: string,
 		expectedVersion: number,
-		tx: DrizzleDB,
+		tx: DrizzleDB
 	): Promise<void> {
 		const result = await tx
 			.update(LedgerAccountsTable)
@@ -223,19 +207,16 @@ class LedgerTransactionRepo {
 				updated: new Date(),
 			})
 			.where(
-				and(
-					eq(LedgerAccountsTable.id, accountId),
-					eq(LedgerAccountsTable.lockVersion, expectedVersion),
-				),
-			);
+				and(eq(LedgerAccountsTable.id, accountId), eq(LedgerAccountsTable.lockVersion, expectedVersion))
+			)
 
 		// Check if update was successful (optimistic lock check)
 		if (result.rowCount === 0) {
 			throw new ConflictError(
-				`Account ${accountId} was modified by another transaction (version mismatch)`,
-			);
+				`Account ${accountId} was modified by another transaction (version mismatch)`
+			)
 		}
 	}
 }
 
-export { LedgerTransactionRepo };
+export { LedgerTransactionRepo }

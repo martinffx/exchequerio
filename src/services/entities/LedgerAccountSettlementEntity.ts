@@ -1,8 +1,8 @@
 import type {
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
-} from "@/routes/ledgers/schema";
-import { typeid } from "typeid-js";
+} from "@/routes/ledgers/schema"
+import { typeid } from "typeid-js"
 
 class LedgerAccountSettlementEntity {
 	constructor(
@@ -22,14 +22,14 @@ class LedgerAccountSettlementEntity {
 		public readonly normalBalance: "debit" | "credit",
 		public readonly metadata: Record<string, unknown> | undefined,
 		public readonly created: Date,
-		public readonly updated: Date,
+		public readonly updated: Date
 	) {}
 
 	public static fromRequest(
 		rq: LedgerAccountSettlementRequest,
-		id?: string,
+		id?: string
 	): LedgerAccountSettlementEntity {
-		const now = new Date();
+		const now = new Date()
 		return new LedgerAccountSettlementEntity(
 			id ?? typeid("las").toString(),
 			rq.ledgerTransactionId,
@@ -41,8 +41,8 @@ class LedgerAccountSettlementEntity {
 			"debit", // Default normal balance
 			rq.metadata,
 			now,
-			now,
-		);
+			now
+		)
 	}
 
 	public toResponse(): LedgerAccountSettlementResponse {
@@ -60,8 +60,8 @@ class LedgerAccountSettlementEntity {
 			metadata: this.metadata,
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
-		};
+		}
 	}
 }
 
-export { LedgerAccountSettlementEntity };
+export { LedgerAccountSettlementEntity }

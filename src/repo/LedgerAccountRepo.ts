@@ -1,18 +1,14 @@
-import { TypeID } from "typeid-js";
-import {
-	LedgerAccountsTable,
-	LedgersTable,
-	LedgerTransactionEntriesTable,
-} from "./schema";
-import { eq, and, desc, like, count } from "drizzle-orm";
-import type { DrizzleDB } from "./types";
-import { LedgerAccountEntity } from "@/services/entities/LedgerAccountEntity";
+import { TypeID } from "typeid-js"
+import { LedgerAccountsTable, LedgersTable, LedgerTransactionEntriesTable } from "./schema"
+import { eq, and, desc, like, count } from "drizzle-orm"
+import type { DrizzleDB } from "./types"
+import { LedgerAccountEntity } from "@/services/entities/LedgerAccountEntity"
 import type {
 	LedgerAccountID,
 	LedgerID,
 	BalanceData,
-} from "@/services/entities/LedgerAccountEntity";
-import { NotFoundError, ConflictError, BadRequestError } from "@/errors";
+} from "@/services/entities/LedgerAccountEntity"
+import { NotFoundError, ConflictError, BadRequestError } from "@/errors"
 
 class LedgerAccountRepo {
 	constructor(private readonly db: DrizzleDB) {}
@@ -24,15 +20,13 @@ class LedgerAccountRepo {
 		ledgerId: LedgerID,
 		offset: number,
 		limit: number,
-		nameFilter?: string,
+		nameFilter?: string
 	): Promise<LedgerAccountEntity[]> {
 		// Build where conditions
-		let whereConditions = [
-			eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-		];
+		const whereConditions = [eq(LedgerAccountsTable.ledgerId, ledgerId.toString())]
 
 		if (nameFilter) {
-			whereConditions.push(like(LedgerAccountsTable.name, nameFilter));
+			whereConditions.push(like(LedgerAccountsTable.name, nameFilter))
 		}
 
 		const results = await this.db
@@ -41,9 +35,9 @@ class LedgerAccountRepo {
 			.where(and(...whereConditions))
 			.orderBy(desc(LedgerAccountsTable.created))
 			.limit(limit)
-			.offset(offset);
+			.offset(offset)
 
-		return results.map((record) => LedgerAccountEntity.fromRecord(record));
+		return results.map(record => LedgerAccountEntity.fromRecord(record))
 	}
 
 	/**
@@ -52,7 +46,7 @@ class LedgerAccountRepo {
 	public async getAccount(
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID,
-		includeBalance = false,
+		includeBalance = false
 	): Promise<LedgerAccountEntity> {
 		const result = await this.db
 			.select()
@@ -60,39 +54,34 @@ class LedgerAccountRepo {
 			.where(
 				and(
 					eq(LedgerAccountsTable.id, accountId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-				),
+					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+				)
 			)
-			.limit(1);
+			.limit(1)
 
 		if (result.length === 0) {
-			throw new Error(`Account not found: ${accountId.toString()}`);
+			throw new Error(`Account not found: ${accountId.toString()}`)
 		}
 
-		const record = result[0];
+		const record = result[0]
 
 		if (includeBalance) {
-			const balanceData = await this.calculateBalance(ledgerId, accountId);
-			return LedgerAccountEntity.fromRecordWithBalances(record, balanceData);
+			const balanceData = await this.calculateBalance(ledgerId, accountId)
+			return LedgerAccountEntity.fromRecordWithBalances(record, balanceData)
 		}
 
-		return LedgerAccountEntity.fromRecord(record);
+		return LedgerAccountEntity.fromRecord(record)
 	}
 
 	/**
 	 * Create new account with validation
 	 */
-	public async createAccount(
-		entity: LedgerAccountEntity,
-	): Promise<LedgerAccountEntity> {
-		const record = entity.toRecord();
+	public async createAccount(entity: LedgerAccountEntity): Promise<LedgerAccountEntity> {
+		const record = entity.toRecord()
 
-		const insertResult = await this.db
-			.insert(LedgerAccountsTable)
-			.values(record)
-			.returning();
+		const insertResult = await this.db.insert(LedgerAccountsTable).values(record).returning()
 
-		return LedgerAccountEntity.fromRecord(insertResult[0]);
+		return LedgerAccountEntity.fromRecord(insertResult[0])
 	}
 
 	/**
@@ -100,10 +89,10 @@ class LedgerAccountRepo {
 	 */
 	public async updateAccount(
 		ledgerId: LedgerID,
-		entity: LedgerAccountEntity,
+		entity: LedgerAccountEntity
 	): Promise<LedgerAccountEntity> {
-		const record = entity.toRecord();
-		const now = new Date();
+		const record = entity.toRecord()
+		const now = new Date()
 
 		const updateResult = await this.db
 			.update(LedgerAccountsTable)
@@ -119,10 +108,10 @@ class LedgerAccountRepo {
 				and(
 					eq(LedgerAccountsTable.id, entity.id.toString()),
 					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountsTable.lockVersion, entity.lockVersion),
-				),
+					eq(LedgerAccountsTable.lockVersion, entity.lockVersion)
+				)
 			)
-			.returning();
+			.returning()
 
 		if (updateResult.length === 0) {
 			// Check if account exists
@@ -132,41 +121,34 @@ class LedgerAccountRepo {
 				.where(
 					and(
 						eq(LedgerAccountsTable.id, entity.id.toString()),
-						eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					),
+						eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+					)
 				)
-				.limit(1);
+				.limit(1)
 
 			if (existsResult.length === 0) {
-				throw new Error(`Account not found: ${entity.id.toString()}`);
+				throw new Error(`Account not found: ${entity.id.toString()}`)
 			} else {
-				throw new Error(
-					"Optimistic locking failure - account was modified by another transaction",
-				);
+				throw new Error("Optimistic locking failure - account was modified by another transaction")
 			}
 		}
 
-		return LedgerAccountEntity.fromRecord(updateResult[0]);
+		return LedgerAccountEntity.fromRecord(updateResult[0])
 	}
 
 	/**
 	 * Delete account with dependency checks
 	 */
-	public async deleteAccount(
-		ledgerId: LedgerID,
-		accountId: LedgerAccountID,
-	): Promise<void> {
+	public async deleteAccount(ledgerId: LedgerID, accountId: LedgerAccountID): Promise<void> {
 		// Check if account has transaction entries - prevent deletion if it has data
 		const entryCount = await this.db
 			.select({ id: LedgerTransactionEntriesTable.id })
 			.from(LedgerTransactionEntriesTable)
 			.where(eq(LedgerTransactionEntriesTable.accountId, accountId.toString()))
-			.limit(1);
+			.limit(1)
 
 		if (entryCount.length > 0) {
-			throw new Error(
-				"Cannot delete account with existing transaction entries",
-			);
+			throw new Error("Cannot delete account with existing transaction entries")
 		}
 
 		const deleteResult = await this.db
@@ -174,13 +156,13 @@ class LedgerAccountRepo {
 			.where(
 				and(
 					eq(LedgerAccountsTable.id, accountId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-				),
+					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+				)
 			)
-			.returning({ id: LedgerAccountsTable.id });
+			.returning({ id: LedgerAccountsTable.id })
 
 		if (deleteResult.length === 0) {
-			throw new Error(`Account not found: ${accountId.toString()}`);
+			throw new Error(`Account not found: ${accountId.toString()}`)
 		}
 	}
 
@@ -189,7 +171,7 @@ class LedgerAccountRepo {
 	 */
 	public async calculateBalance(
 		ledgerId: LedgerID,
-		accountId: LedgerAccountID,
+		accountId: LedgerAccountID
 	): Promise<BalanceData> {
 		// Get account info for normal balance type
 		const accountResult = await this.db
@@ -200,16 +182,16 @@ class LedgerAccountRepo {
 			.where(
 				and(
 					eq(LedgerAccountsTable.id, accountId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-				),
+					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+				)
 			)
-			.limit(1);
+			.limit(1)
 
 		if (accountResult.length === 0) {
-			throw new Error(`Account not found: ${accountId.toString()}`);
+			throw new Error(`Account not found: ${accountId.toString()}`)
 		}
 
-		const account = accountResult[0];
+		const account = accountResult[0]
 
 		// Get ledger for currency info
 		const ledgerResult = await this.db
@@ -219,13 +201,13 @@ class LedgerAccountRepo {
 			})
 			.from(LedgersTable)
 			.where(eq(LedgersTable.id, ledgerId.toString()))
-			.limit(1);
+			.limit(1)
 
 		if (ledgerResult.length === 0) {
-			throw new Error(`Ledger not found: ${ledgerId.toString()}`);
+			throw new Error(`Ledger not found: ${ledgerId.toString()}`)
 		}
 
-		const ledger = ledgerResult[0];
+		const ledger = ledgerResult[0]
 
 		// Calculate balances by aggregating transaction entries
 		const entries = await this.db
@@ -235,52 +217,48 @@ class LedgerAccountRepo {
 				status: LedgerTransactionEntriesTable.status,
 			})
 			.from(LedgerTransactionEntriesTable)
-			.where(eq(LedgerTransactionEntriesTable.accountId, accountId.toString()));
+			.where(eq(LedgerTransactionEntriesTable.accountId, accountId.toString()))
 
-		let postedCredits = 0;
-		let postedDebits = 0;
-		let pendingCredits = 0;
-		let pendingDebits = 0;
+		let postedCredits = 0
+		let postedDebits = 0
+		let pendingCredits = 0
+		let pendingDebits = 0
 
 		for (const entry of entries) {
-			const amount = Number.parseFloat(entry.amount);
+			const amount = Number.parseFloat(entry.amount)
 
 			if (entry.status === "posted") {
 				if (entry.direction === "credit") {
-					postedCredits += amount;
+					postedCredits += amount
 				} else {
-					postedDebits += amount;
+					postedDebits += amount
 				}
 			} else if (entry.status === "pending") {
 				if (entry.direction === "credit") {
-					pendingCredits += amount;
+					pendingCredits += amount
 				} else {
-					pendingDebits += amount;
+					pendingDebits += amount
 				}
 			}
 		}
 
 		// Calculate balances based on normal balance type
-		const isDebitNormal = account.normalBalance === "debit";
+		const isDebitNormal = account.normalBalance === "debit"
 
 		// Posted balance (confirmed transactions only)
-		const postedAmount = isDebitNormal
-			? postedDebits - postedCredits
-			: postedCredits - postedDebits;
+		const postedAmount = isDebitNormal ? postedDebits - postedCredits : postedCredits - postedDebits
 
 		// Pending balance (all transactions including pending)
-		const totalCredits = postedCredits + pendingCredits;
-		const totalDebits = postedDebits + pendingDebits;
-		const pendingAmount = isDebitNormal
-			? totalDebits - totalCredits
-			: totalCredits - totalDebits;
+		const totalCredits = postedCredits + pendingCredits
+		const totalDebits = postedDebits + pendingDebits
+		const pendingAmount = isDebitNormal ? totalDebits - totalCredits : totalCredits - totalDebits
 
 		// Available balance (posted + pending inbound - pending outbound)
 		// For debit accounts: available = posted + pending debits - pending credits
 		// For credit accounts: available = posted + pending credits - pending debits
 		const availableAmount = isDebitNormal
 			? postedAmount + pendingDebits - pendingCredits
-			: postedAmount + pendingCredits - pendingDebits;
+			: postedAmount + pendingCredits - pendingDebits
 
 		return {
 			pendingAmount,
@@ -290,15 +268,11 @@ class LedgerAccountRepo {
 			pendingDebits,
 			postedCredits,
 			postedDebits,
-			availableCredits: isDebitNormal
-				? postedCredits
-				: postedCredits + pendingCredits,
-			availableDebits: isDebitNormal
-				? postedDebits + pendingDebits
-				: postedDebits,
+			availableCredits: isDebitNormal ? postedCredits : postedCredits + pendingCredits,
+			availableDebits: isDebitNormal ? postedDebits + pendingDebits : postedDebits,
 			currency: ledger.currency,
 			currencyExponent: ledger.currencyExponent,
-		};
+		}
 	}
 
 	// Legacy methods for backward compatibility with existing transaction processing
@@ -313,13 +287,13 @@ class LedgerAccountRepo {
 			.from(LedgerAccountsTable)
 			.where(eq(LedgerAccountsTable.id, accountId))
 			.for("update")
-			.limit(1);
+			.limit(1)
 
 		if (result.length === 0) {
-			throw new Error(`Account not found: ${accountId}`);
+			throw new Error(`Account not found: ${accountId}`)
 		}
 
-		return result[0];
+		return result[0]
 	}
 
 	/**
@@ -329,7 +303,7 @@ class LedgerAccountRepo {
 		accountId: string,
 		newBalance: string,
 		lockVersion: number,
-		tx: DrizzleDB,
+		tx: DrizzleDB
 	) {
 		const updateResult = await tx
 			.update(LedgerAccountsTable)
@@ -339,20 +313,15 @@ class LedgerAccountRepo {
 				updated: new Date(),
 			})
 			.where(
-				and(
-					eq(LedgerAccountsTable.id, accountId),
-					eq(LedgerAccountsTable.lockVersion, lockVersion),
-				),
+				and(eq(LedgerAccountsTable.id, accountId), eq(LedgerAccountsTable.lockVersion, lockVersion))
 			)
-			.returning();
+			.returning()
 
 		if (updateResult.length === 0) {
-			throw new Error(
-				"Optimistic locking failure - account was modified by another transaction",
-			);
+			throw new Error("Optimistic locking failure - account was modified by another transaction")
 		}
 
-		return updateResult[0];
+		return updateResult[0]
 	}
 
 	/**
@@ -369,13 +338,13 @@ class LedgerAccountRepo {
 			})
 			.from(LedgerAccountsTable)
 			.where(eq(LedgerAccountsTable.id, accountId))
-			.limit(1);
+			.limit(1)
 
 		if (result.length === 0) {
-			throw new Error(`Account not found: ${accountId}`);
+			throw new Error(`Account not found: ${accountId}`)
 		}
 
-		return result[0];
+		return result[0]
 	}
 
 	/**
@@ -383,18 +352,18 @@ class LedgerAccountRepo {
 	 */
 	public async getAccountBalances(
 		accountId: string,
-		ledgerId: string,
+		ledgerId: string
 	): Promise<{
-		pending: { amount: number; credits: number; debits: number };
-		posted: { amount: number; credits: number; debits: number };
-		available: { amount: number; credits: number; debits: number };
-		currency: string;
-		currencyExponent: number;
+		pending: { amount: number; credits: number; debits: number }
+		posted: { amount: number; credits: number; debits: number }
+		available: { amount: number; credits: number; debits: number }
+		currency: string
+		currencyExponent: number
 	}> {
 		const balanceData = await this.calculateBalance(
 			TypeID.fromString<"lgr">(ledgerId) as LedgerID,
-			TypeID.fromString<"lat">(accountId) as LedgerAccountID,
-		);
+			TypeID.fromString<"lat">(accountId) as LedgerAccountID
+		)
 
 		return {
 			pending: {
@@ -414,7 +383,7 @@ class LedgerAccountRepo {
 			},
 			currency: balanceData.currency,
 			currencyExponent: balanceData.currencyExponent,
-		};
+		}
 	}
 
 	// NEW CRUD METHODS WITH ORGANIZATION TENANCY
@@ -425,7 +394,7 @@ class LedgerAccountRepo {
 	public async getLedgerAccount(
 		organizationId: string,
 		ledgerId: LedgerID,
-		accountId: LedgerAccountID,
+		accountId: LedgerAccountID
 	): Promise<LedgerAccountEntity> {
 		// Join with LedgersTable to validate organization tenancy
 		const result = await this.db
@@ -442,24 +411,21 @@ class LedgerAccountRepo {
 				updated: LedgerAccountsTable.updated,
 			})
 			.from(LedgerAccountsTable)
-			.innerJoin(
-				LedgersTable,
-				eq(LedgerAccountsTable.ledgerId, LedgersTable.id),
-			)
+			.innerJoin(LedgersTable, eq(LedgerAccountsTable.ledgerId, LedgersTable.id))
 			.where(
 				and(
 					eq(LedgerAccountsTable.id, accountId.toString()),
 					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId),
-				),
+					eq(LedgersTable.organizationId, organizationId)
+				)
 			)
-			.limit(1);
+			.limit(1)
 
 		if (result.length === 0) {
-			throw new NotFoundError(`Account not found: ${accountId.toString()}`);
+			throw new NotFoundError(`Account not found: ${accountId.toString()}`)
 		}
 
-		return LedgerAccountEntity.fromRecord(result[0]);
+		return LedgerAccountEntity.fromRecord(result[0])
 	}
 
 	/**
@@ -470,34 +436,31 @@ class LedgerAccountRepo {
 		ledgerId: LedgerID,
 		offset: number,
 		limit: number,
-		nameFilter?: string,
+		nameFilter?: string
 	): Promise<LedgerAccountEntity[]> {
 		// First validate that the ledger belongs to the organization
 		const ledgerValidation = await this.db
 			.select({ id: LedgersTable.id })
 			.from(LedgersTable)
 			.where(
-				and(
-					eq(LedgersTable.id, ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId),
-				),
+				and(eq(LedgersTable.id, ledgerId.toString()), eq(LedgersTable.organizationId, organizationId))
 			)
-			.limit(1);
+			.limit(1)
 
 		if (ledgerValidation.length === 0) {
 			throw new NotFoundError(
-				`Ledger not found or does not belong to organization: ${ledgerId.toString()}`,
-			);
+				`Ledger not found or does not belong to organization: ${ledgerId.toString()}`
+			)
 		}
 
 		// Build where conditions with organization tenancy
-		let whereConditions = [
+		const whereConditions = [
 			eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
 			eq(LedgersTable.organizationId, organizationId),
-		];
+		]
 
 		if (nameFilter) {
-			whereConditions.push(like(LedgerAccountsTable.name, nameFilter));
+			whereConditions.push(like(LedgerAccountsTable.name, nameFilter))
 		}
 
 		const results = await this.db
@@ -514,16 +477,13 @@ class LedgerAccountRepo {
 				updated: LedgerAccountsTable.updated,
 			})
 			.from(LedgerAccountsTable)
-			.innerJoin(
-				LedgersTable,
-				eq(LedgerAccountsTable.ledgerId, LedgersTable.id),
-			)
+			.innerJoin(LedgersTable, eq(LedgerAccountsTable.ledgerId, LedgersTable.id))
 			.where(and(...whereConditions))
 			.orderBy(desc(LedgerAccountsTable.created))
 			.limit(limit)
-			.offset(offset);
+			.offset(offset)
 
-		return results.map((record) => LedgerAccountEntity.fromRecord(record));
+		return results.map(record => LedgerAccountEntity.fromRecord(record))
 	}
 
 	/**
@@ -531,7 +491,7 @@ class LedgerAccountRepo {
 	 */
 	public async createLedgerAccount(
 		organizationId: string,
-		entity: LedgerAccountEntity,
+		entity: LedgerAccountEntity
 	): Promise<LedgerAccountEntity> {
 		// Validate that the ledger belongs to the organization
 		const ledgerValidation = await this.db
@@ -540,25 +500,22 @@ class LedgerAccountRepo {
 			.where(
 				and(
 					eq(LedgersTable.id, entity.ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId),
-				),
+					eq(LedgersTable.organizationId, organizationId)
+				)
 			)
-			.limit(1);
+			.limit(1)
 
 		if (ledgerValidation.length === 0) {
 			throw new NotFoundError(
-				`Ledger not found or does not belong to organization: ${entity.ledgerId.toString()}`,
-			);
+				`Ledger not found or does not belong to organization: ${entity.ledgerId.toString()}`
+			)
 		}
 
-		const record = entity.toRecord();
+		const record = entity.toRecord()
 
-		const insertResult = await this.db
-			.insert(LedgerAccountsTable)
-			.values(record)
-			.returning();
+		const insertResult = await this.db.insert(LedgerAccountsTable).values(record).returning()
 
-		return LedgerAccountEntity.fromRecord(insertResult[0]);
+		return LedgerAccountEntity.fromRecord(insertResult[0])
 	}
 
 	/**
@@ -567,31 +524,28 @@ class LedgerAccountRepo {
 	public async updateLedgerAccount(
 		organizationId: string,
 		ledgerId: LedgerID,
-		entity: LedgerAccountEntity,
+		entity: LedgerAccountEntity
 	): Promise<LedgerAccountEntity> {
 		// Validate organization tenancy first
 		const validation = await this.db
 			.select({ id: LedgerAccountsTable.id })
 			.from(LedgerAccountsTable)
-			.innerJoin(
-				LedgersTable,
-				eq(LedgerAccountsTable.ledgerId, LedgersTable.id),
-			)
+			.innerJoin(LedgersTable, eq(LedgerAccountsTable.ledgerId, LedgersTable.id))
 			.where(
 				and(
 					eq(LedgerAccountsTable.id, entity.id.toString()),
 					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId),
-				),
+					eq(LedgersTable.organizationId, organizationId)
+				)
 			)
-			.limit(1);
+			.limit(1)
 
 		if (validation.length === 0) {
-			throw new Error(`Account not found: ${entity.id.toString()}`);
+			throw new Error(`Account not found: ${entity.id.toString()}`)
 		}
 
-		const record = entity.toRecord();
-		const now = new Date();
+		const record = entity.toRecord()
+		const now = new Date()
 
 		const updateResult = await this.db
 			.update(LedgerAccountsTable)
@@ -607,18 +561,16 @@ class LedgerAccountRepo {
 				and(
 					eq(LedgerAccountsTable.id, entity.id.toString()),
 					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountsTable.lockVersion, entity.lockVersion),
-				),
+					eq(LedgerAccountsTable.lockVersion, entity.lockVersion)
+				)
 			)
-			.returning();
+			.returning()
 
 		if (updateResult.length === 0) {
-			throw new Error(
-				"Optimistic locking failure - account was modified by another transaction",
-			);
+			throw new Error("Optimistic locking failure - account was modified by another transaction")
 		}
 
-		return LedgerAccountEntity.fromRecord(updateResult[0]);
+		return LedgerAccountEntity.fromRecord(updateResult[0])
 	}
 
 	/**
@@ -627,27 +579,24 @@ class LedgerAccountRepo {
 	public async deleteLedgerAccount(
 		organizationId: string,
 		ledgerId: LedgerID,
-		accountId: LedgerAccountID,
+		accountId: LedgerAccountID
 	): Promise<void> {
 		// Validate organization tenancy first
 		const validation = await this.db
 			.select({ id: LedgerAccountsTable.id })
 			.from(LedgerAccountsTable)
-			.innerJoin(
-				LedgersTable,
-				eq(LedgerAccountsTable.ledgerId, LedgersTable.id),
-			)
+			.innerJoin(LedgersTable, eq(LedgerAccountsTable.ledgerId, LedgersTable.id))
 			.where(
 				and(
 					eq(LedgerAccountsTable.id, accountId.toString()),
 					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId),
-				),
+					eq(LedgersTable.organizationId, organizationId)
+				)
 			)
-			.limit(1);
+			.limit(1)
 
 		if (validation.length === 0) {
-			throw new Error(`Account not found: ${accountId.toString()}`);
+			throw new Error(`Account not found: ${accountId.toString()}`)
 		}
 
 		// Check if account has transaction entries - prevent deletion if it has data
@@ -655,12 +604,10 @@ class LedgerAccountRepo {
 			.select({ id: LedgerTransactionEntriesTable.id })
 			.from(LedgerTransactionEntriesTable)
 			.where(eq(LedgerTransactionEntriesTable.accountId, accountId.toString()))
-			.limit(1);
+			.limit(1)
 
 		if (entryCount.length > 0) {
-			throw new Error(
-				"Cannot delete account with existing transaction entries",
-			);
+			throw new Error("Cannot delete account with existing transaction entries")
 		}
 
 		const deleteResult = await this.db
@@ -668,15 +615,15 @@ class LedgerAccountRepo {
 			.where(
 				and(
 					eq(LedgerAccountsTable.id, accountId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-				),
+					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+				)
 			)
-			.returning({ id: LedgerAccountsTable.id });
+			.returning({ id: LedgerAccountsTable.id })
 
 		if (deleteResult.length === 0) {
-			throw new Error(`Account not found: ${accountId.toString()}`);
+			throw new Error(`Account not found: ${accountId.toString()}`)
 		}
 	}
 }
 
-export { LedgerAccountRepo };
+export { LedgerAccountRepo }

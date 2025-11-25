@@ -1,8 +1,8 @@
 import type {
 	LedgerAccountCategoryRequest,
 	LedgerAccountCategoryResponse,
-} from "@/routes/ledgers/schema";
-import { typeid } from "typeid-js";
+} from "@/routes/ledgers/schema"
+import { typeid } from "typeid-js"
 
 class LedgerAccountCategoryEntity {
 	constructor(
@@ -14,14 +14,14 @@ class LedgerAccountCategoryEntity {
 		public readonly parentCategoryId: string | undefined,
 		public readonly metadata: Record<string, unknown> | undefined,
 		public readonly created: Date,
-		public readonly updated: Date,
+		public readonly updated: Date
 	) {}
 
 	public static fromRequest(
 		rq: LedgerAccountCategoryRequest,
-		id?: string,
+		id?: string
 	): LedgerAccountCategoryEntity {
-		const now = new Date();
+		const now = new Date()
 		return new LedgerAccountCategoryEntity(
 			id ?? typeid("lac").toString(),
 			rq.ledgerId,
@@ -31,8 +31,8 @@ class LedgerAccountCategoryEntity {
 			rq.parentAccountCategoryIds?.[0], // Take first parent for now
 			rq.metadata,
 			now,
-			now,
-		);
+			now
+		)
 	}
 
 	public toResponse(): LedgerAccountCategoryResponse {
@@ -71,8 +71,8 @@ class LedgerAccountCategoryEntity {
 			metadata: this.metadata,
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
-		};
+		}
 	}
 }
 
-export { LedgerAccountCategoryEntity };
+export { LedgerAccountCategoryEntity }

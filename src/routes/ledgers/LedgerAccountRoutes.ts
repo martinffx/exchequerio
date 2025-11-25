@@ -1,5 +1,5 @@
-import type { FastifyPluginAsync } from "fastify";
-import { Type } from "@sinclair/typebox";
+import type { FastifyPluginAsync } from "fastify"
+import { Type } from "@sinclair/typebox"
 
 import {
 	BadRequestErrorResponse,
@@ -11,7 +11,7 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema";
+} from "@/routes/schema"
 import {
 	type CreateLedgerAccountRequest,
 	type DeleteLedgerAccountRequest,
@@ -21,10 +21,10 @@ import {
 	LedgerAccountResponse,
 	type UpdateLedgerAccountRequest,
 	type ListLedgerAccountsRequest,
-} from "./schema";
+} from "./schema"
 
-const TAGS = ["Ledger Accounts"];
-const LedgerAccountRoutes: FastifyPluginAsync = async (server) => {
+const TAGS = ["Ledger Accounts"]
+const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/",
 		{
@@ -46,14 +46,13 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server) => {
 			},
 		},
 		async (rq: ListLedgerAccountsRequest): Promise<LedgerAccountResponse[]> => {
-			const accounts =
-				await rq.server.services.ledgerAccountService.listLedgerAccounts(
-					rq.query.offset,
-					rq.query.limit,
-				);
-			return accounts.map((account) => account.toResponse());
-		},
-	);
+			const accounts = await rq.server.services.ledgerAccountService.listLedgerAccounts(
+				rq.query.offset,
+				rq.query.limit
+			)
+			return accounts.map(account => account.toResponse())
+		}
+	)
 
 	server.get(
 		"/:ledgerAccountId",
@@ -77,13 +76,12 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server) => {
 			},
 		},
 		async (rq: GetLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			const ledger =
-				await rq.server.services.ledgerAccountService.getLedgerAccount(
-					rq.params.ledgerAccountId,
-				);
-			return ledger.toResponse();
-		},
-	);
+			const ledger = await rq.server.services.ledgerAccountService.getLedgerAccount(
+				rq.params.ledgerAccountId
+			)
+			return ledger.toResponse()
+		}
+	)
 
 	server.post(
 		"/",
@@ -107,13 +105,12 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server) => {
 			},
 		},
 		async (rq: CreateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			const ledger =
-				await rq.server.services.ledgerAccountService.createLedgerAccount(
-					LedgerAccountResponse.fromRequest(rq.body),
-				);
-			return ledger.toResponse();
-		},
-	);
+			const ledger = await rq.server.services.ledgerAccountService.createLedgerAccount(
+				LedgerAccountResponse.fromRequest(rq.body)
+			)
+			return ledger.toResponse()
+		}
+	)
 
 	server.put(
 		"/:ledgerAccountId",
@@ -139,14 +136,13 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server) => {
 			},
 		},
 		async (rq: UpdateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			const org =
-				await rq.server.services.ledgerAccountService.updateLedgerAccount(
-					rq.params.ledgerAccountId,
-					LedgerAccountResponse.fromRequest(rq.body),
-				);
-			return org.toResponse();
-		},
-	);
+			const org = await rq.server.services.ledgerAccountService.updateLedgerAccount(
+				rq.params.ledgerAccountId,
+				LedgerAccountResponse.fromRequest(rq.body)
+			)
+			return org.toResponse()
+		}
+	)
 
 	server.delete(
 		"/:ledgerAccountId",
@@ -171,11 +167,9 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server) => {
 			},
 		},
 		async (rq: DeleteLedgerAccountRequest): Promise<void> => {
-			await rq.server.services.ledgerAccountService.deleteLedgerAccount(
-				rq.params.ledgerAccountId,
-			);
-		},
-	);
-};
+			await rq.server.services.ledgerAccountService.deleteLedgerAccount(rq.params.ledgerAccountId)
+		}
+	)
+}
 
-export { LedgerAccountRoutes };
+export { LedgerAccountRoutes }

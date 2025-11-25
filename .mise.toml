@@ -1,0 +1,56 @@
+[tools]
+node = "24"
+bun = "latest"
+
+[env]
+NODE_ENV = "development"
+
+[tasks]
+
+# Database Operations
+[tasks.docker_up]
+description = "Start PostgreSQL database"
+run = "docker-compose up -d db"
+
+[tasks.docker_down]
+description = "Stop PostgreSQL database"
+run = "docker-compose down"
+
+[tasks.docker_logs]
+description = "View database logs"
+run = "docker-compose logs -f db"
+
+# Development Tasks
+[tasks.dev]
+description = "Start development server with hot reload"
+depends = ["docker_up"]
+run = "bun run dev"
+
+[tasks.test]
+description = "Run all tests with verbose output"
+depends = ["docker_up"]
+run = "bun run test"
+
+# Code Quality Tasks
+[tasks.lint]
+description = "Type-aware linting with ESLint + architectural boundaries"
+run = "bunx eslint ./src --max-warnings 0 --quiet"
+
+[tasks.format]
+description = "Format code with Prettier + oxc plugin"
+run = "bunx prettier --write ./src || true"
+
+[tasks.types]
+description = "Type check without emitting"
+run = "bun run types"
+
+# Composite Tasks
+[tasks.check]
+description = "Run all code quality checks (format + lint + types)"
+depends = ["format", "lint", "types"]
+run = "echo 'All checks completed'"
+
+[tasks.ci]
+description = "Complete CI pipeline (docker_up + format + lint + types + test)"
+depends = ["docker_up", "format", "lint", "types", "test"]
+run = "echo 'CI pipeline completed'"

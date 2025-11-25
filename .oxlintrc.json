@@ -1,0 +1,14 @@
+{
+	"categories": {
+		"correctness": "deny",
+		"suspicious": "deny",
+		"perf": "warn"
+	},
+	"plugins": ["typescript", "import", "jest"],
+	"settings": {
+		"typescript": {
+			"tsconfig": "./tsconfig.json"
+		}
+	},
+	"ignore": ["node_modules/", "dist/", "coverage/", "*.js"]
+}
