@@ -1,6 +1,6 @@
 import { TypeID } from "typeid-js"
 import { LedgerAccountsTable, LedgersTable, LedgerTransactionEntriesTable } from "./schema"
-import { eq, and, desc, like, count } from "drizzle-orm"
+import { eq, and, desc, like, count, sum } from "drizzle-orm"
 import type { DrizzleDB } from "./types"
 import { LedgerAccountEntity } from "@/services/entities/LedgerAccountEntity"
 import type {
@@ -8,6 +8,7 @@ import type {
 	LedgerID,
 	BalanceData,
 } from "@/services/entities/LedgerAccountEntity"
+import type { OrgID } from "@/services/entities/types"
 import { NotFoundError, ConflictError, BadRequestError } from "@/errors"
 
 class LedgerAccountRepo {
@@ -60,7 +61,7 @@ class LedgerAccountRepo {
 			.limit(1)
 
 		if (result.length === 0) {
-			throw new Error(`Account not found: ${accountId.toString()}`)
+			throw new NotFoundError(`Account not found: ${accountId.toString()}`)
 		}
 
 		const record = result[0]
@@ -127,9 +128,11 @@ class LedgerAccountRepo {
 				.limit(1)
 
 			if (existsResult.length === 0) {
-				throw new Error(`Account not found: ${entity.id.toString()}`)
+				throw new NotFoundError(`Account not found: ${entity.id.toString()}`)
 			} else {
-				throw new Error("Optimistic locking failure - account was modified by another transaction")
+				throw new ConflictError(
+					"Optimistic locking failure - account was modified by another transaction"
+				)
 			}
 		}
 
@@ -148,7 +151,7 @@ class LedgerAccountRepo {
 			.limit(1)
 
 		if (entryCount.length > 0) {
-			throw new Error("Cannot delete account with existing transaction entries")
+			throw new ConflictError("Cannot delete account with existing transaction entries")
 		}
 
 		const deleteResult = await this.db
@@ -188,7 +191,7 @@ class LedgerAccountRepo {
 			.limit(1)
 
 		if (accountResult.length === 0) {
-			throw new Error(`Account not found: ${accountId.toString()}`)
+			throw new NotFoundError(`Account not found: ${accountId.toString()}`)
 		}
 
 		const account = accountResult[0]
@@ -204,7 +207,7 @@ class LedgerAccountRepo {
 			.limit(1)
 
 		if (ledgerResult.length === 0) {
-			throw new Error(`Ledger not found: ${ledgerId.toString()}`)
+			throw new NotFoundError(`Ledger not found: ${ledgerId.toString()}`)
 		}
 
 		const ledger = ledgerResult[0]
@@ -290,7 +293,7 @@ class LedgerAccountRepo {
 			.limit(1)
 
 		if (result.length === 0) {
-			throw new Error(`Account not found: ${accountId}`)
+			throw new NotFoundError(`Account not found: ${accountId}`)
 		}
 
 		return result[0]
@@ -341,7 +344,7 @@ class LedgerAccountRepo {
 			.limit(1)
 
 		if (result.length === 0) {
-			throw new Error(`Account not found: ${accountId}`)
+			throw new NotFoundError(`Account not found: ${accountId}`)
 		}
 
 		return result[0]
@@ -541,7 +544,7 @@ class LedgerAccountRepo {
 			.limit(1)
 
 		if (validation.length === 0) {
-			throw new Error(`Account not found: ${entity.id.toString()}`)
+			throw new NotFoundError(`Account not found: ${entity.id.toString()}`)
 		}
 
 		const record = entity.toRecord()
@@ -567,7 +570,9 @@ class LedgerAccountRepo {
 			.returning()
 
 		if (updateResult.length === 0) {
-			throw new Error("Optimistic locking failure - account was modified by another transaction")
+			throw new ConflictError(
+				"Optimistic locking failure - account was modified by another transaction"
+			)
 		}
 
 		return LedgerAccountEntity.fromRecord(updateResult[0])
@@ -596,7 +601,7 @@ class LedgerAccountRepo {
 			.limit(1)
 
 		if (validation.length === 0) {
-			throw new Error(`Account not found: ${accountId.toString()}`)
+			throw new NotFoundError(`Account not found: ${accountId.toString()}`)
 		}
 
 		// Check if account has transaction entries - prevent deletion if it has data
@@ -621,7 +626,7 @@ class LedgerAccountRepo {
 			.returning({ id: LedgerAccountsTable.id })
 
 		if (deleteResult.length === 0) {
-			throw new Error(`Account not found: ${accountId.toString()}`)
+			throw new NotFoundError(`Account not found: ${accountId.toString()}`)
 		}
 	}
 }

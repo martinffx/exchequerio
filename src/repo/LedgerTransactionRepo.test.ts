@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals"
-import { drizzle } from "drizzle-orm/postgres-js"
-import postgres from "postgres"
-import { migrate } from "drizzle-orm/postgres-js/migrator"
+import { drizzle } from "drizzle-orm/node-postgres"
+import { Pool } from "pg"
+import { migrate } from "drizzle-orm/node-postgres/migrator"
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo"
 import {
 	LedgerAccountsTable,
@@ -10,31 +10,32 @@ import {
 } from "./schema"
 import { eq } from "drizzle-orm"
 import { TypeID } from "typeid-js"
+import { LedgerTransactionEntity } from "@/services/entities"
 import type { DrizzleDB } from "./types"
 
 describe("LedgerTransactionRepo - Import and Method Validation", () => {
 	let db: DrizzleDB
-	let client: ReturnType<typeof postgres>
+	let pool: Pool
 	let repo: LedgerTransactionRepo
 
 	beforeEach(async () => {
 		// Setup test database connection
-		client = postgres({
+		pool = new Pool({
 			host: "localhost",
 			port: 5432,
 			database: "ledger_test",
-			username: "postgres",
+			user: "postgres",
 			password: "postgres",
 		})
 
-		db = drizzle(client) as DrizzleDB
+		db = drizzle(pool) as DrizzleDB
 
 		// Skip migration for unit tests - focus on import/method validation
 		repo = new LedgerTransactionRepo(db)
 	})
 
 	afterEach(async () => {
-		await client.end()
+		await pool.end()
 	})
 
 	describe("Import Validation", () => {
@@ -103,7 +104,7 @@ describe("LedgerTransactionRepo - Import and Method Validation", () => {
 			}
 
 			expect(async () => {
-				await repo.getAccountWithLock("test-id", mockTx as any)
+				await repo.getAccountWithLock("test-id")
 			}).not.toThrow()
 		})
 
@@ -116,7 +117,9 @@ describe("LedgerTransactionRepo - Import and Method Validation", () => {
 			}
 
 			expect(async () => {
-				await repo.updateAccountBalance("test-id", "100.00", 1, mockTx as any)
+				await repo.withTransaction(async tx => {
+					return await repo.updateAccountBalance("test-id", "100.00", "debit")
+				})
 			}).not.toThrow()
 		})
 	})
@@ -167,7 +170,16 @@ describe("LedgerTransactionRepo - Import and Method Validation", () => {
 
 			// Should not throw compilation/import errors when calling
 			expect(() => {
-				repo.createTransactionWithEntries(ledgerId, "Test transaction", entries)
+				const transactionEntity = LedgerTransactionEntity.createWithEntries(
+					TypeID.fromString<"lgr">(ledgerId),
+					entries,
+					"Test transaction"
+				)
+				repo.createTransactionWithEntries(
+					"test-org",
+					transactionEntity,
+					transactionEntity.entries || []
+				)
 			}).not.toThrow()
 		})
 	})

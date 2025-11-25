@@ -1,9 +1,11 @@
-import type { SelectOrganization } from "@/repo/schema"
+import type { OrganizationsTable } from "@/repo/schema"
+import type { InferSelectModel } from "drizzle-orm"
 import type { OrganizationRequest, OrganizationResponse } from "@/routes/schema"
 import { DateTime } from "luxon"
 import { TypeID } from "typeid-js"
+import type { OrgID } from "./types"
 
-type OrgID = TypeID<"org">
+type OrgRecord = InferSelectModel<typeof OrganizationsTable>
 interface OrgEntityOpts {
 	id?: OrgID
 	name: string
@@ -27,7 +29,7 @@ class OrganizationEntity {
 		this.updated = updated
 	}
 
-	public static fromRow(row: SelectOrganization): OrganizationEntity {
+	public static fromRow(row: OrgRecord): OrganizationEntity {
 		const created = DateTime.fromJSDate(row.created, { zone: "utc" })
 		if (!created.isValid) {
 			throw new Error(`Invalid created date: ${created}`)

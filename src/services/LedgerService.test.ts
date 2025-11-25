@@ -1,4 +1,5 @@
 import { LedgerRepo } from "@/repo/LedgerRepo"
+import { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo"
 import type { DrizzleDB } from "@/repo/types"
 import { LedgerTransactionService } from "./LedgerTransactionService"
 import { LedgerEntity } from "./entities"
@@ -39,7 +40,8 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 	beforeEach(() => {
 		jest.clearAllMocks()
 		ledgerRepo = new LedgerRepo(mockDb as DrizzleDB)
-		ledgerTransactionService = new LedgerTransactionService(ledgerRepo)
+		const mockLedgerTransactionRepo = {} as LedgerTransactionRepo
+		ledgerTransactionService = new LedgerTransactionService(mockLedgerTransactionRepo, ledgerRepo)
 	})
 
 	describe("Double-Entry Validation", () => {

@@ -2,16 +2,17 @@
 
 ## Code Style & Formatting
 
-### Biome Configuration
-- **Primary tool:** Biome for both formatting and linting (not Prettier/ESLint)
+### ESLint + Prettier Configuration
+- **Primary tools:** ESLint for type-aware linting, Prettier for formatting
 - **Indentation:** Tab characters (not spaces)
 - **Quotes:** Double quotes for strings
-- **Semicolons:** No semicolons in TypeScript (Biome default)
+- **Semicolons:** Required semicolons in TypeScript (Prettier default)
 - **Line endings:** LF (Unix-style)
 
 ### Commands
-- `pnpm lint` - Run Biome linter
-- `pnpm format` - Run Biome formatter
+- `mise run lint` - Run ESLint with type-aware linting and architectural boundaries
+- `mise run format` - Format code with Prettier + oxc plugin
+- `mise run check` - Run all code quality checks (format + lint + types)
 - Both commands should be run before committing
 
 ## TypeScript Conventions
@@ -339,8 +340,8 @@ pnpm dev                # Start development server with hot reload
 # 3. Validate changes
 pnpm test               # Run all tests
 pnpm typecheck          # Type check without emitting files
-pnpm lint              # Run Biome linter
-pnpm format            # Format code with Biome
+mise run lint          # Type-aware linting with ESLint + architectural boundaries
+mise run format         # Format code with Prettier + oxc plugin
 
 # 4. Database changes (if needed)
 drizzle-kit generate   # Generate migration from schema changes

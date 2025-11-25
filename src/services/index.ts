@@ -21,8 +21,14 @@ declare module "fastify" {
 const ServicePlugin: FastifyPluginAsync = fp(async server => {
 	const organizationService = new OrganizationService(server.repo.organizationRepo)
 	const ledgerService = new LedgerService(server.repo.ledgerRepo)
-	const ledgerAccountService = new LedgerAccountService(server.repo.ledgerRepo)
-	const ledgerTransactionService = new LedgerTransactionService(server.repo.ledgerRepo)
+	const ledgerAccountService = new LedgerAccountService(
+		server.repo.ledgerAccountRepo,
+		server.repo.ledgerRepo
+	)
+	const ledgerTransactionService = new LedgerTransactionService(
+		server.repo.ledgerTransactionRepo,
+		server.repo.ledgerRepo
+	)
 	server.decorate("services", {
 		organizationService,
 		ledgerService,

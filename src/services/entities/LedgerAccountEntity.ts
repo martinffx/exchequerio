@@ -9,13 +9,11 @@ import type {
 import type { LedgerAccountsTable } from "@/repo/schema"
 import type { InferSelectModel, InferInsertModel } from "drizzle-orm"
 import { TypeID } from "typeid-js"
+import type { LedgerAccountID, LedgerID } from "./types"
 
 // Infer types from Drizzle schema
 type LedgerAccountRecord = InferSelectModel<typeof LedgerAccountsTable>
 type LedgerAccountInsert = InferInsertModel<typeof LedgerAccountsTable>
-
-type LedgerAccountID = TypeID<"lat">
-type LedgerID = TypeID<"lgr">
 type NormalBalance = "debit" | "credit"
 
 // Balance calculation structure

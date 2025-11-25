@@ -2,13 +2,11 @@ import type { LedgerRequest, LedgerResponse } from "@/routes/ledgers/schema"
 import type { LedgersTable } from "@/repo/schema"
 import type { InferSelectModel, InferInsertModel } from "drizzle-orm"
 import { TypeID } from "typeid-js"
+import type { LedgerID, OrgID } from "./types"
 
 // Infer types from Drizzle schema
 type LedgerRecord = InferSelectModel<typeof LedgersTable>
 type LedgerInsert = InferInsertModel<typeof LedgersTable>
-
-type LedgerID = TypeID<"lgr">
-type OrgID = TypeID<"org">
 
 interface LedgerEntityOpts {
 	id: LedgerID

@@ -168,6 +168,25 @@ class ServiceUnavailableError extends LedgerError {
 	}
 }
 
+class NotImplementedError extends LedgerError {
+	public readonly status = 501
+	constructor(message: string) {
+		super(message)
+		this.name = "NotImplementedError"
+	}
+
+	public toResponse(): any {
+		return {
+			type: "NOT_IMPLEMENTED",
+			status: 500, // Use 500 since we don't have 501 response type defined
+			title: "Not Implemented",
+			detail: this.message,
+			instance: `/instance/${uuid()}`,
+			traceId: uuid(),
+		}
+	}
+}
+
 const globalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
 	console.log("error", error)
 
@@ -198,4 +217,5 @@ export {
 	TooManyRequestsError,
 	InternalServerError,
 	ServiceUnavailableError,
+	NotImplementedError,
 }

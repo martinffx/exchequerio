@@ -13,7 +13,7 @@ class LedgerService {
 	}
 
 	public async createLedger(orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
-		return this.ledgerRepo.createLedger(orgId, entity)
+		return this.ledgerRepo.createLedger(entity)
 	}
 
 	public async updateLedger(orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {

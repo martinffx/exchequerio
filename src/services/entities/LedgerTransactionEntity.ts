@@ -8,13 +8,11 @@ import type { LedgerTransactionsTable } from "@/repo/schema"
 import type { InferSelectModel, InferInsertModel } from "drizzle-orm"
 import { TypeID } from "typeid-js"
 import { LedgerTransactionEntryEntity } from "./LedgerTransactionEntryEntity"
+import type { LedgerTransactionID, LedgerID } from "./types"
 
 // Infer types from Drizzle schema
 type LedgerTransactionRecord = InferSelectModel<typeof LedgerTransactionsTable>
 type LedgerTransactionInsert = InferInsertModel<typeof LedgerTransactionsTable>
-
-type LedgerTransactionID = TypeID<"ltr">
-type LedgerID = TypeID<"lgr">
 
 // Input for creating transaction entries (simplified for service layer use)
 interface TransactionEntryInput {
@@ -29,9 +27,6 @@ interface LedgerTransactionEntityOpts {
 	idempotencyKey?: string
 	description?: string
 	status: BalanceStatus
-	postedAt?: Date
-	effectiveAt?: Date
-	reversesTransactionId?: LedgerTransactionID
 	metadata?: Record<string, unknown>
 	created: Date
 	updated: Date
@@ -45,9 +40,6 @@ class LedgerTransactionEntity {
 	public readonly idempotencyKey?: string
 	public readonly description?: string
 	public readonly status: BalanceStatus
-	public readonly postedAt?: Date
-	public readonly effectiveAt?: Date
-	public readonly reversesTransactionId?: LedgerTransactionID
 	public readonly metadata?: Record<string, unknown>
 	public readonly created: Date
 	public readonly updated: Date
@@ -59,9 +51,6 @@ class LedgerTransactionEntity {
 		this.idempotencyKey = opts.idempotencyKey
 		this.description = opts.description
 		this.status = opts.status
-		this.postedAt = opts.postedAt
-		this.effectiveAt = opts.effectiveAt
-		this.reversesTransactionId = opts.reversesTransactionId
 		this.metadata = opts.metadata
 		this.created = opts.created
 		this.updated = opts.updated
@@ -74,7 +63,6 @@ class LedgerTransactionEntity {
 		entryInputs: TransactionEntryInput[],
 		description?: string,
 		idempotencyKey?: string,
-		effectiveAt?: Date,
 		id?: string
 	): LedgerTransactionEntity {
 		const now = new Date()
@@ -99,7 +87,6 @@ class LedgerTransactionEntity {
 			idempotencyKey,
 			description,
 			status: "pending", // New transactions start as pending
-			effectiveAt,
 			created: now,
 			updated: now,
 			entries,
@@ -130,7 +117,6 @@ class LedgerTransactionEntity {
 			ledgerId,
 			description: rq.description,
 			status: rq.status,
-			effectiveAt: rq.effectiveAt ? new Date(rq.effectiveAt) : undefined,
 			metadata: rq.metadata,
 			created: now,
 			updated: now,
@@ -146,11 +132,6 @@ class LedgerTransactionEntity {
 			idempotencyKey: record.idempotencyKey ?? undefined,
 			description: record.description ?? undefined,
 			status: record.status,
-			postedAt: record.postedAt ?? undefined,
-			effectiveAt: record.effectiveAt ?? undefined,
-			reversesTransactionId: record.reversesTransactionId
-				? TypeID.fromString<"ltr">(record.reversesTransactionId)
-				: undefined,
 			metadata: record.metadata as Record<string, unknown> | undefined,
 			created: record.created,
 			updated: record.updated,
@@ -164,7 +145,14 @@ class LedgerTransactionEntity {
 	): LedgerTransactionEntity {
 		const entity = LedgerTransactionEntity.fromRecord(record)
 		return new LedgerTransactionEntity({
-			...entity,
+			id: entity.id,
+			ledgerId: entity.ledgerId,
+			idempotencyKey: entity.idempotencyKey,
+			description: entity.description,
+			status: entity.status,
+			metadata: entity.metadata,
+			created: entity.created,
+			updated: entity.updated,
 			entries,
 		})
 	}
@@ -177,9 +165,6 @@ class LedgerTransactionEntity {
 			idempotencyKey: this.idempotencyKey ?? null,
 			description: this.description ?? null,
 			status: this.status,
-			postedAt: this.postedAt ?? null,
-			effectiveAt: this.effectiveAt ?? null,
-			reversesTransactionId: this.reversesTransactionId?.toString() ?? null,
 			metadata: this.metadata,
 			created: this.created,
 			updated: this.updated,
@@ -201,26 +186,26 @@ class LedgerTransactionEntity {
 			status: this.status,
 			metadata: this.metadata,
 			ledgerEntries: this.entries.map(entry => entry.toResponse()),
-			postedAt: this.postedAt?.toISOString(),
-			effectiveAt: this.effectiveAt?.toISOString(),
-			reversedByLedgerTransactionId: undefined, // TODO: Add reverse lookup
-			reversesLedgerTransactionId: this.reversesTransactionId?.toString(),
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
 		}
 	}
 
-	// Helper method to post a transaction (change status and set postedAt)
-	public withPostedStatus(postedAt?: Date): LedgerTransactionEntity {
-		const postDate = postedAt ?? new Date()
+	// Helper method to post a transaction (change status)
+	public withPostedStatus(): LedgerTransactionEntity {
+		const postDate = new Date()
 
 		// Post all entries as well
 		const postedEntries = this.entries?.map(entry => entry.withPostedStatus(postDate))
 
 		return new LedgerTransactionEntity({
-			...this,
+			id: this.id,
+			ledgerId: this.ledgerId,
+			idempotencyKey: this.idempotencyKey,
+			description: this.description,
 			status: "posted",
-			postedAt: postDate,
+			metadata: this.metadata,
+			created: this.created,
 			updated: postDate,
 			entries: postedEntries,
 		})

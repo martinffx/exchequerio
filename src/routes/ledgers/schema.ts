@@ -233,7 +233,10 @@ const LedgerAccountRequest = Type.Object(
 type LedgerAccountRequest = Static<typeof LedgerAccountRequest>
 
 type ListLedgerAccountsRequest = FastifyRequest<{
-	Querystring: PaginationQuery
+	Querystring: PaginationQuery & {
+		orgId: string
+		ledgerId: string
+	}
 }>
 type GetLedgerAccountRequest = FastifyRequest<{
 	Params: LedgerAccountIdParams

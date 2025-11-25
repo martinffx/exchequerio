@@ -5,10 +5,13 @@ import {
 	LedgerAccountsTable,
 	LedgersTable,
 } from "./schema"
-import { eq, and, desc } from "drizzle-orm"
+import { eq, and, desc, inArray } from "drizzle-orm"
 import { LedgerTransactionEntity, LedgerTransactionEntryEntity } from "@/services/entities"
-import { NotFoundError, ConflictError } from "@/errors"
+import type { LedgerTransactionID, LedgerID, OrgID } from "@/services/entities/types"
+import { NotFoundError, ConflictError, BadRequestError } from "@/errors"
 import type { DrizzleDB } from "./types"
+import type { ExtractTablesWithRelations } from "drizzle-orm"
+import type * as schema from "./schema"
 
 class LedgerTransactionRepo {
 	constructor(private readonly db: DrizzleDB) {}
@@ -16,9 +19,7 @@ class LedgerTransactionRepo {
 	/**
 	 * Database transaction wrapper for ACID operations
 	 */
-	public async withTransaction<T>(
-		fn: (tx: Parameters<DrizzleDB["transaction"]>[0]) => Promise<T>
-	): Promise<T> {
+	public async withTransaction<T>(fn: (tx: DrizzleDB) => Promise<T>): Promise<T> {
 		return await this.db.transaction(fn)
 	}
 
@@ -133,7 +134,7 @@ class LedgerTransactionRepo {
 			// 4. Create entries and update account balances atomically
 			for (const entryEntity of entryEntities) {
 				// Lock account for update to prevent race conditions
-				const account = await this.getAccountWithLock(entryEntity.accountId.toString(), tx)
+				const account = await this.getAccountWithLockInternal(entryEntity.accountId.toString(), tx)
 
 				// Calculate new balance based on normal balance and entry direction
 				const currentBalance = Number.parseFloat(account.balanceAmount)
@@ -155,7 +156,7 @@ class LedgerTransactionRepo {
 				}
 
 				// Update account balance with optimistic locking
-				await this.updateAccountBalance(
+				await this.updateAccountBalanceInternal(
 					entryEntity.accountId.toString(),
 					newBalance.toFixed(4),
 					account.lockVersion,
@@ -174,9 +175,9 @@ class LedgerTransactionRepo {
 	}
 
 	/**
-	 * Get account with SELECT FOR UPDATE lock to prevent race conditions
+	 * Get account with row-level lock for atomic operations
 	 */
-	private async getAccountWithLock(accountId: string, tx: DrizzleDB) {
+	private async getAccountWithLockInternal(accountId: string, tx: DrizzleDB) {
 		const accounts = await tx
 			.select()
 			.from(LedgerAccountsTable)
@@ -193,7 +194,7 @@ class LedgerTransactionRepo {
 	/**
 	 * Update account balance with optimistic locking
 	 */
-	private async updateAccountBalance(
+	private async updateAccountBalanceInternal(
 		accountId: string,
 		balance: string,
 		expectedVersion: number,
@@ -216,6 +217,50 @@ class LedgerTransactionRepo {
 				`Account ${accountId} was modified by another transaction (version mismatch)`
 			)
 		}
+	}
+
+	// Public method for creating transactions with callback (for test compatibility)
+	public async createTransaction<T>(callback: (tx: DrizzleDB) => Promise<T>): Promise<T> {
+		return await this.db.transaction(callback)
+	}
+
+	// Public wrapper for getAccountWithLock (for test compatibility)
+	public async getAccountWithLock(accountId: string): Promise<any> {
+		return await this.withTransaction(async tx => {
+			return await this.getAccountWithLockInternal(accountId, tx)
+		})
+	}
+
+	// Public wrapper for updateAccountBalance (for test compatibility)
+	public async updateAccountBalance(
+		accountId: string,
+		amount: string,
+		direction: "debit" | "credit"
+	): Promise<void> {
+		return await this.withTransaction(async tx => {
+			// Get current account state
+			const account = await this.getAccountWithLockInternal(accountId, tx)
+
+			// Calculate new balance
+			const currentBalance = Number.parseFloat(account.balanceAmount)
+			const amountNum = Number.parseFloat(amount)
+			let newBalance: number
+
+			if (account.normalBalance === "debit") {
+				newBalance = direction === "debit" ? currentBalance + amountNum : currentBalance - amountNum
+			} else {
+				// credit normal balance
+				newBalance = direction === "credit" ? currentBalance + amountNum : currentBalance - amountNum
+			}
+
+			// Update the balance
+			await this.updateAccountBalanceInternal(
+				accountId,
+				newBalance.toFixed(4),
+				account.lockVersion,
+				tx
+			)
+		})
 	}
 }
 

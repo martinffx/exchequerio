@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify"
 import { Type } from "@sinclair/typebox"
+import { TypeID } from "typeid-js"
 
 import {
 	BadRequestErrorResponse,
@@ -12,6 +13,7 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/routes/schema"
+import { LedgerAccountEntity } from "@/services/entities"
 import {
 	type CreateLedgerAccountRequest,
 	type DeleteLedgerAccountRequest,
@@ -47,6 +49,8 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: ListLedgerAccountsRequest): Promise<LedgerAccountResponse[]> => {
 			const accounts = await rq.server.services.ledgerAccountService.listLedgerAccounts(
+				TypeID.fromString<"org">(rq.query.orgId),
+				TypeID.fromString<"lgr">(rq.query.ledgerId),
 				rq.query.offset,
 				rq.query.limit
 			)
@@ -76,8 +80,14 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: GetLedgerAccountRequest): Promise<LedgerAccountResponse> => {
+			// TODO: Get orgId and ledgerId from request context or params
+			// For now, using placeholder values - this needs to be fixed based on route structure
+			const orgId = TypeID.fromString<"org">("placeholder")
+			const ledgerId = TypeID.fromString<"lgr">("placeholder")
 			const ledger = await rq.server.services.ledgerAccountService.getLedgerAccount(
-				rq.params.ledgerAccountId
+				orgId,
+				ledgerId,
+				TypeID.fromString<"lat">(rq.params.ledgerAccountId)
 			)
 			return ledger.toResponse()
 		}
@@ -105,9 +115,11 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: CreateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			const ledger = await rq.server.services.ledgerAccountService.createLedgerAccount(
-				LedgerAccountResponse.fromRequest(rq.body)
-			)
+			// TODO: Get orgId from request context or auth
+			const orgId = TypeID.fromString<"org">("placeholder")
+			const ledgerId = TypeID.fromString<"lgr">("placeholder")
+			const entity = LedgerAccountEntity.fromRequest(rq.body, ledgerId, "debit")
+			const ledger = await rq.server.services.ledgerAccountService.createLedgerAccount(orgId, entity)
 			return ledger.toResponse()
 		}
 	)
@@ -136,9 +148,19 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: UpdateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
+			// TODO: Get orgId and ledgerId from request context
+			const orgId = TypeID.fromString<"org">("placeholder")
+			const ledgerId = TypeID.fromString<"lgr">("placeholder")
+			const entity = LedgerAccountEntity.fromRequest(
+				rq.body,
+				ledgerId,
+				"debit", // Default normal balance - should come from existing account
+				rq.params.ledgerAccountId
+			)
 			const org = await rq.server.services.ledgerAccountService.updateLedgerAccount(
-				rq.params.ledgerAccountId,
-				LedgerAccountResponse.fromRequest(rq.body)
+				orgId,
+				ledgerId,
+				entity
 			)
 			return org.toResponse()
 		}
@@ -167,7 +189,14 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: DeleteLedgerAccountRequest): Promise<void> => {
-			await rq.server.services.ledgerAccountService.deleteLedgerAccount(rq.params.ledgerAccountId)
+			// TODO: Get orgId and ledgerId from request context
+			const orgId = TypeID.fromString<"org">("placeholder")
+			const ledgerId = TypeID.fromString<"lgr">("placeholder")
+			await rq.server.services.ledgerAccountService.deleteLedgerAccount(
+				orgId,
+				ledgerId,
+				TypeID.fromString<"lat">(rq.params.ledgerAccountId)
+			)
 		}
 	)
 }
