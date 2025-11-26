@@ -1,5 +1,6 @@
-import type { FastifyPluginAsync } from "fastify"
 import { Type } from "@sinclair/typebox"
+import type { FastifyPluginAsync } from "fastify"
+import { NotImplementedError } from "@/errors"
 
 import {
 	BadRequestErrorResponse,
@@ -17,7 +18,7 @@ import {
 	type CreateLedgerTransactionRequest,
 	type DeleteLedgerTransactionRequest,
 	type GetLedgerTransactionRequest,
-	LedgerTransactionIdParams,
+	LedgerTransactionIdParams as LedgerTransactionIdParameters,
 	LedgerTransactionRequest,
 	LedgerTransactionResponse,
 	type ListLedgerTransactionsRequest,
@@ -25,7 +26,7 @@ import {
 } from "./schema"
 
 const TAGS = ["Ledger Transactions"]
-const LedgerTransactionRoutes: FastifyPluginAsync = async server => {
+const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 	server.get(
 		"/",
 		{
@@ -63,7 +64,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Get Ledger Transaction",
 				description: "Get ledger transaction",
-				params: LedgerTransactionIdParams,
+				params: LedgerTransactionIdParameters,
 				response: {
 					200: LedgerTransactionResponse,
 					400: BadRequestErrorResponse,
@@ -105,11 +106,9 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async server => {
 				},
 			},
 		},
-		async (rq: CreateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
-			const ledger = await rq.server.services.ledgerTransactionService.createLedgerTransaction(
-				LedgerTransactionResponse.fromRequest(rq.body)
-			)
-			return ledger.toResponse()
+		async (_rq: CreateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
+			// TODO: Implement proper entity creation from request body
+			throw new NotImplementedError("Feature not yet implemented")
 		}
 	)
 
@@ -121,7 +120,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Update Ledger Transaction",
 				description: "Update ledger transaction",
-				params: LedgerTransactionIdParams,
+				params: LedgerTransactionIdParameters,
 				body: LedgerTransactionRequest,
 				response: {
 					200: LedgerTransactionResponse,
@@ -136,12 +135,9 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async server => {
 				},
 			},
 		},
-		async (rq: UpdateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
-			const org = await rq.server.services.ledgerTransactionService.updateLedgerTransaction(
-				rq.params.ledgerTransactionId,
-				LedgerTransactionResponse.fromRequest(rq.body)
-			)
-			return org.toResponse()
+		async (_rq: UpdateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
+			// TODO: Implement proper entity creation from request body
+			throw new NotImplementedError("Feature not yet implemented")
 		}
 	)
 
@@ -153,7 +149,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Delete Ledger Transaction",
 				description: "Delete ledger transaction",
-				params: LedgerTransactionIdParams,
+				params: LedgerTransactionIdParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -173,6 +169,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = async server => {
 			)
 		}
 	)
+	return Promise.resolve()
 }
 
 export { LedgerTransactionRoutes }

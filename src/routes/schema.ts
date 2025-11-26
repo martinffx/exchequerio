@@ -1,4 +1,4 @@
-import { Type, type Static } from "@sinclair/typebox"
+import { type Static, Type } from "@sinclair/typebox"
 import type { FastifyRequest } from "fastify"
 
 const PaginationQuery = Type.Object({
@@ -11,7 +11,7 @@ const ProblemDetailError = Type.Object({
 	message: Type.String(),
 	stackTrace: Type.Optional(Type.Array(Type.String())),
 })
-type ProblemDetailError = Static<typeof ProblemDetailError>
+type _ProblemDetailError = Static<typeof ProblemDetailError>
 const ProblemDetail = Type.Object({
 	title: Type.String(),
 	detail: Type.String(),
@@ -19,7 +19,7 @@ const ProblemDetail = Type.Object({
 	traceId: Type.String(),
 	errors: Type.Optional(Type.Array(ProblemDetailError)),
 })
-type ProblemDetail = Static<typeof ProblemDetail>
+type _ProblemDetail = Static<typeof ProblemDetail>
 
 const BadRequestErrorResponse = Type.Composite(
 	[
@@ -115,10 +115,10 @@ const OrgId = Type.String({
 	pattern: "^org_[0-9a-z]{26}$",
 })
 type OrgId = Static<typeof OrgId>
-const OrgIdParams = Type.Object({
+const OrgIdParameters = Type.Object({
 	orgId: OrgId,
 })
-type OrgIdParams = Static<typeof OrgIdParams>
+type OrgIdParameters = Static<typeof OrgIdParameters>
 const OrganizationResponse = Type.Object({
 	id: OrgId,
 	name: Type.String({ description: "The organization's name" }),
@@ -136,21 +136,20 @@ type OrganizationRequest = Static<typeof OrganizationRequest>
 type ListOrganizationsRequest = FastifyRequest<{
 	Querystring: PaginationQuery
 }>
-type GetOrganizationRequest = FastifyRequest<{ Params: OrgIdParams }>
+type GetOrganizationRequest = FastifyRequest<{ Params: OrgIdParameters }>
 type CreateOrganizationRequest = FastifyRequest<{
 	Body: OrganizationRequest
 }>
 type UpdateOrganizationRequest = FastifyRequest<{
-	Params: OrgIdParams
+	Params: OrgIdParameters
 	Body: OrganizationRequest
 }>
-type DeleteOrganizationRequest = FastifyRequest<{ Params: OrgIdParams }>
+type DeleteOrganizationRequest = FastifyRequest<{ Params: OrgIdParameters }>
 
-// biome-ignore lint/style/useExportType: false positive
 export {
 	PaginationQuery,
 	OrgId,
-	OrgIdParams,
+	OrgIdParameters as OrgIdParams,
 	BadRequestErrorResponse,
 	UnauthorizedErrorResponse,
 	ForbiddenErrorResponse,

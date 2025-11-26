@@ -1,9 +1,9 @@
-import { LedgerEntity } from "@/services"
-import type { LedgerID, OrgID } from "@/services"
-import type { DrizzleDB } from "./types"
-import { LedgersTable, LedgerAccountsTable } from "./schema"
-import { eq, and, desc } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { TypeID } from "typeid-js"
+import type { LedgerID, OrgID } from "@/services"
+import { LedgerEntity } from "@/services"
+import { LedgerAccountsTable, LedgersTable } from "./schema"
+import type { DrizzleDB } from "./types"
 
 class LedgerRepo {
 	constructor(private readonly db: DrizzleDB) {}
@@ -91,16 +91,15 @@ class LedgerRepo {
 	}
 
 	// Wrapper methods for transaction operations (simplified implementations for now)
-	public async createTransactionWithEntries(
+	public createTransactionWithEntries(
 		ledgerId: string,
 		description: string | null,
-		entries: Array<{
+		entries: {
 			accountId: string
 			direction: "debit" | "credit"
 			amount: string
-		}>,
-		idempotencyKey?: string
-	): Promise<any> {
+		}[]
+	) {
 		// TODO: Implement proper delegation to LedgerTransactionRepo
 		// For now, return a mock response to satisfy type checking
 		return {
@@ -117,7 +116,7 @@ class LedgerRepo {
 	}
 
 	// Post transaction method
-	public async postTransaction(transactionId: string): Promise<any> {
+	public postTransaction(transactionId: string) {
 		// TODO: Implement proper delegation to LedgerTransactionRepo
 		return {
 			id: transactionId,
@@ -127,17 +126,18 @@ class LedgerRepo {
 	}
 
 	// Wrapper methods for account balance operations (simplified implementations for now)
-	public async getAccountBalance(accountId: string): Promise<any> {
+	public getAccountBalance(accountId: string) {
 		// TODO: Implement proper delegation to LedgerAccountRepo
 		return {
 			accountId,
 			balanceAmount: "0",
 			normalBalance: "debit",
 			availableBalance: "0",
+			lockVersion: 1,
 		}
 	}
 
-	public async getAccountBalances(accountId: string, ledgerId: string): Promise<any> {
+	public getAccountBalances(accountId: string, ledgerId: string) {
 		// TODO: Implement proper delegation to LedgerAccountRepo
 		return {
 			accountId,
@@ -147,15 +147,6 @@ class LedgerRepo {
 				posted: "0",
 				available: "0",
 			},
-		}
-	}
-
-	public async getAccountBalancesFast(accountId: string, ledgerId: string): Promise<any> {
-		// TODO: Implement proper delegation to LedgerAccountRepo
-		return {
-			accountId,
-			ledgerId,
-			balance: "0",
 		}
 	}
 }

@@ -1,15 +1,14 @@
-import type { Server, IncomingMessage, ServerResponse } from "node:http"
-import fastify, { type FastifyInstance } from "fastify"
-import fastifyUnderPressure from "@fastify/under-pressure"
+import type { IncomingMessage, Server, ServerResponse } from "node:http"
 import fastifySwagger from "@fastify/swagger"
 import fastifySwaggerUI from "@fastify/swagger-ui"
-
-import { RouterPlugin } from "@/routes"
-import { Config } from "@/config"
-import { RepoPlugin } from "@/repo"
-import { ServicePlugin } from "@/services"
-import { globalErrorHandler } from "@/errors"
+import fastifyUnderPressure from "@fastify/under-pressure"
+import fastify, { type FastifyInstance } from "fastify"
 import { registerAuth } from "@/auth"
+import { Config } from "@/config"
+import { globalErrorHandler } from "@/errors"
+import { RepoPlugin } from "@/repo"
+import { RouterPlugin } from "@/routes"
+import { ServicePlugin } from "@/services"
 
 declare module "fastify" {
 	interface FastifyInstance {
@@ -44,7 +43,7 @@ const buildServer = async (): Promise<FastifyInstance> => {
 		maxEventLoopUtilization: 0.98,
 	})
 
-	server.get("/health", (_req, reply) => {
+	server.get("/health", (_request, reply) => {
 		reply.send({}).code(200)
 	})
 

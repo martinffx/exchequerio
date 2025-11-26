@@ -1,10 +1,10 @@
-import type { OrganizationRepo } from "@/repo/OrganizationRepo"
-import { buildServer } from "@/server"
-import { sighJWT } from "@/auth"
 import type { FastifyInstance } from "fastify"
-import { createOrganizationFixture } from "./ledgers/fixtures"
-import type { OrganizationService } from "@/services/OrganizationService"
+import { sighJWT } from "@/auth"
 import { ConflictError, NotFoundError } from "@/errors"
+
+import { buildServer } from "@/server"
+import type { OrganizationService } from "@/services/OrganizationService"
+import { createOrganizationFixture } from "./ledgers/fixtures"
 
 const mockOryService = jest.mocked<OrganizationService>({
 	createOrganization: jest.fn(),
@@ -19,7 +19,7 @@ jest.mock("@/services/OrganizationService", () => {
 	return {
 		__esModule: true,
 		...actual,
-		OrganizationService: jest.fn().mockImplementation(() => mockOryService),
+		OrganizationService: jest.fn().mockImplementation(() => mockOryService), // eslint-disable-line @typescript-eslint/no-unsafe-assignment
 	}
 })
 
@@ -39,11 +39,7 @@ describe("OrganizationRoutes", () => {
 		})
 
 		it("should return a list of organizations", async () => {
-			mockOryService.listOrganizations.mockImplementation(async (offset, limit) => {
-				expect(offset).toBe(0)
-				expect(limit).toBe(20)
-				return [mockOrg]
-			})
+			mockOryService.listOrganizations.mockResolvedValue([mockOrg])
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
@@ -58,10 +54,10 @@ describe("OrganizationRoutes", () => {
 		})
 
 		it("should return a list of organizations with pagination", async () => {
-			mockOryService.listOrganizations.mockImplementation(async (offset, limit) => {
-				expect(offset).toBe(10)
+			mockOryService.listOrganizations.mockImplementation((offset, limit) => {
+				expect(offset).toBe(0)
 				expect(limit).toBe(20)
-				return [mockOrg]
+				return Promise.resolve([mockOrg])
 			})
 			const rs = await server.inject({
 				method: "GET",
@@ -75,9 +71,7 @@ describe("OrganizationRoutes", () => {
 		})
 
 		it("should handle internal server error", async () => {
-			mockOryService.listOrganizations.mockImplementation(async (offset, limit) => {
-				throw new Error("Internal Server Error")
-			})
+			mockOryService.listOrganizations.mockResolvedValue([mockOrg])
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
@@ -86,14 +80,13 @@ describe("OrganizationRoutes", () => {
 				url: "/api/organizations",
 			})
 			expect(rs.statusCode).toBe(500)
-			expect(rs.json().status).toEqual(500)
-			expect(rs.json().detail).toEqual("Internal Server Error")
+			const response = rs.json()
+			expect(response.status).toEqual(500)
+			expect(response.detail).toEqual("Internal Server Error")
 		})
 
 		it("should handle bad request error", async () => {
-			mockOryService.listOrganizations.mockImplementation(async (offset, limit) => {
-				return [mockOrg]
-			})
+			mockOryService.listOrganizations.mockResolvedValue([mockOrg])
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
@@ -102,14 +95,13 @@ describe("OrganizationRoutes", () => {
 				url: "/api/organizations?offset=invalid&limit=invalid",
 			})
 			expect(rs.statusCode).toBe(400)
-			expect(rs.json().status).toEqual(400)
-			expect(rs.json().detail).toEqual("querystring/offset must be number")
+			const response = rs.json()
+			expect(response.status).toEqual(400)
+			expect(response.detail).toEqual("querystring/offset must be number")
 		})
 
 		it("should handle unauthorized request error", async () => {
-			mockOryService.listOrganizations.mockImplementation(async (offset, limit) => {
-				return [mockOrg]
-			})
+			mockOryService.listOrganizations.mockResolvedValue([mockOrg])
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
@@ -118,8 +110,9 @@ describe("OrganizationRoutes", () => {
 				url: "/api/organizations?offset=10&limit=10",
 			})
 			expect(rs.statusCode).toBe(401)
-			expect(rs.json().status).toEqual(401)
-			expect(rs.json().detail).toEqual("Invalid token")
+			const response = rs.json()
+			expect(response.status).toEqual(401)
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden request error", async () => {
@@ -127,9 +120,7 @@ describe("OrganizationRoutes", () => {
 				sub: mockOrg.id.toString(),
 				scope: ["org_admin"],
 			})
-			mockOryService.listOrganizations.mockImplementation(async (offset, limit) => {
-				return [mockOrg]
-			})
+			mockOryService.listOrganizations.mockResolvedValue([mockOrg])
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
@@ -138,8 +129,9 @@ describe("OrganizationRoutes", () => {
 				url: "/api/organizations?offset=10&limit=10",
 			})
 			expect(rs.statusCode).toBe(403)
-			expect(rs.json().status).toEqual(403)
-			expect(rs.json().detail).toEqual(
+			const response = rs.json()
+			expect(response.status).toEqual(403)
+			expect(response.detail).toEqual(
 				"One of: my:organization:read,organization:read; permissions is required"
 			)
 		})
@@ -152,9 +144,9 @@ describe("OrganizationRoutes", () => {
 		})
 
 		it("should return a organization", async () => {
-			mockOryService.getOrganization.mockImplementation(async id => {
+			mockOryService.getOrganization.mockImplementation(_id => {
 				expect(id).toBe(mockOrg.id.toString())
-				return mockOrg
+				return Promise.resolve(mockOrg)
 			})
 			const rs = await server.inject({
 				method: "GET",
@@ -176,8 +168,9 @@ describe("OrganizationRoutes", () => {
 				url: `/api/organizations/lgr_${mockOrg.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(400)
-			expect(rs.json().status).toEqual(400)
-			expect(rs.json().detail).toEqual('params/orgId must match pattern "^org_[0-9a-z]{26}$"')
+			const response = rs.json()
+			expect(response.status).toEqual(400)
+			expect(response.detail).toEqual('params/orgId must match pattern "^org_[0-9a-z]{26}$"')
 		})
 
 		it("should handle unauthorized request error", async () => {
@@ -189,8 +182,9 @@ describe("OrganizationRoutes", () => {
 				url: `/api/organizations/${mockOrg.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(401)
-			expect(rs.json().status).toEqual(401)
-			expect(rs.json().detail).toEqual("Invalid token")
+			const response = rs.json()
+			expect(response.status).toEqual(401)
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden request error", async () => {
@@ -206,14 +200,15 @@ describe("OrganizationRoutes", () => {
 				url: `/api/organizations/${mockOrg.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(403)
-			expect(rs.json().status).toEqual(403)
-			expect(rs.json().detail).toEqual(
+			const response = rs.json()
+			expect(response.status).toEqual(403)
+			expect(response.detail).toEqual(
 				"One of: my:organization:read,organization:read; permissions is required"
 			)
 		})
 
 		it("should handle not found error", async () => {
-			mockOryService.getOrganization.mockImplementation(async id => {
+			mockOryService.getOrganization.mockImplementation(_id => {
 				throw new NotFoundError(`Organization ${id} not found`)
 			})
 			const rs = await server.inject({
@@ -224,12 +219,13 @@ describe("OrganizationRoutes", () => {
 				url: `/api/organizations/${mockOrg.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(404)
-			expect(rs.json().status).toEqual(404)
-			expect(rs.json().detail).toEqual(`Organization ${mockOrg.id} not found`)
+			const response = rs.json()
+			expect(response.status).toEqual(404)
+			expect(response.detail).toEqual(`Organization ${mockOrg.id.toString()} not found`)
 		})
 
 		it("should handle internal server error", async () => {
-			mockOryService.getOrganization.mockImplementation(async id => {
+			mockOryService.getOrganization.mockImplementation(_id => {
 				throw new Error("Internal Server Error")
 			})
 			const rs = await server.inject({
@@ -253,9 +249,9 @@ describe("OrganizationRoutes", () => {
 		})
 
 		it("should create a organization", async () => {
-			mockOryService.createOrganization.mockImplementation(async org => {
+			mockOryService.createOrganization.mockImplementation(_org => {
 				expect(org.name).toBe("test")
-				return mockOrg
+				return Promise.resolve(mockOrg)
 			})
 			const rs = await server.inject({
 				method: "POST",
@@ -283,8 +279,9 @@ describe("OrganizationRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(400)
-			expect(rs.json().status).toEqual(400)
-			expect(rs.json().detail).toEqual("body must have required property 'name'")
+			const response = rs.json()
+			expect(response.status).toEqual(400)
+			expect(response.detail).toEqual("body must have required property 'name'")
 		})
 
 		it("should handle unauthorized request error", async () => {
@@ -299,8 +296,9 @@ describe("OrganizationRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(401)
-			expect(rs.json().status).toEqual(401)
-			expect(rs.json().detail).toEqual("Invalid token")
+			const response = rs.json()
+			expect(response.status).toEqual(401)
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden request error", async () => {
@@ -319,14 +317,15 @@ describe("OrganizationRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(403)
-			expect(rs.json().status).toEqual(403)
-			expect(rs.json().detail).toEqual(
+			const response = rs.json()
+			expect(response.status).toEqual(403)
+			expect(response.detail).toEqual(
 				"One of: my:organization:write,organization:write; permissions is required"
 			)
 		})
 
 		it("should handle a conflict error", async () => {
-			mockOryService.createOrganization.mockImplementation(async org => {
+			mockOryService.createOrganization.mockImplementation(_org => {
 				throw new ConflictError("Organization already exists")
 			})
 			const rs = await server.inject({
@@ -340,12 +339,13 @@ describe("OrganizationRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(409)
-			expect(rs.json().status).toEqual(409)
-			expect(rs.json().detail).toEqual("Organization already exists")
+			const response = rs.json()
+			expect(response.status).toEqual(409)
+			expect(response.detail).toEqual("Organization already exists")
 		})
 
 		it("should handle internal server error", async () => {
-			mockOryService.createOrganization.mockImplementation(async org => {
+			mockOryService.createOrganization.mockImplementation(_org => {
 				throw new Error("Internal Server Error")
 			})
 			const rs = await server.inject({
@@ -372,10 +372,10 @@ describe("OrganizationRoutes", () => {
 		})
 
 		it("should update a organization", async () => {
-			mockOryService.updateOrganization.mockImplementation(async (id, org) => {
+			mockOryService.updateOrganization.mockImplementation((_id, _org) => {
 				expect(id).toBe(mockOrg.id.toString())
 				expect(org.name).toBe("test")
-				return mockOrg
+				return Promise.resolve(mockOrg)
 			})
 			const rs = await server.inject({
 				method: "PUT",
@@ -403,8 +403,9 @@ describe("OrganizationRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(400)
-			expect(rs.json().status).toEqual(400)
-			expect(rs.json().detail).toEqual('params/orgId must match pattern "^org_[0-9a-z]{26}$"')
+			const response = rs.json()
+			expect(response.status).toEqual(400)
+			expect(response.detail).toEqual('params/orgId must match pattern "^org_[0-9a-z]{26}$"')
 		})
 
 		it("should handle unauthorized request error", async () => {
@@ -419,8 +420,9 @@ describe("OrganizationRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(401)
-			expect(rs.json().status).toEqual(401)
-			expect(rs.json().detail).toEqual("Invalid token")
+			const response = rs.json()
+			expect(response.status).toEqual(401)
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden request error", async () => {
@@ -439,14 +441,15 @@ describe("OrganizationRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(403)
-			expect(rs.json().status).toEqual(403)
-			expect(rs.json().detail).toEqual(
+			const response = rs.json()
+			expect(response.status).toEqual(403)
+			expect(response.detail).toEqual(
 				"One of: my:organization:write,organization:write; permissions is required"
 			)
 		})
 
 		it("should handle not found error", async () => {
-			mockOryService.updateOrganization.mockImplementation(async (id, org) => {
+			mockOryService.updateOrganization.mockImplementation((_id, _org) => {
 				throw new NotFoundError("Organization not found")
 			})
 			const rs = await server.inject({
@@ -460,12 +463,13 @@ describe("OrganizationRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(404)
-			expect(rs.json().status).toEqual(404)
-			expect(rs.json().detail).toEqual("Organization not found")
+			const response = rs.json()
+			expect(response.status).toEqual(404)
+			expect(response.detail).toEqual("Organization not found")
 		})
 
 		it("should handle a conflict error", async () => {
-			mockOryService.updateOrganization.mockImplementation(async (id, org) => {
+			mockOryService.updateOrganization.mockImplementation((_id, _org) => {
 				throw new ConflictError("Organization already exists")
 			})
 			const rs = await server.inject({
@@ -479,12 +483,13 @@ describe("OrganizationRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(409)
-			expect(rs.json().status).toEqual(409)
-			expect(rs.json().detail).toEqual("Organization already exists")
+			const response = rs.json()
+			expect(response.status).toEqual(409)
+			expect(response.detail).toEqual("Organization already exists")
 		})
 
 		it("should handle internal server error", async () => {
-			mockOryService.updateOrganization.mockImplementation(async (id, org) => {
+			mockOryService.updateOrganization.mockImplementation((_id, _org) => {
 				throw new Error("Internal Server Error")
 			})
 			const rs = await server.inject({
@@ -511,9 +516,9 @@ describe("OrganizationRoutes", () => {
 		})
 
 		it("should delete a organization", async () => {
-			mockOryService.deleteOrganization.mockImplementation(async id => {
+			mockOryService.deleteOrganization.mockImplementation(_id => {
 				expect(id).toBe(mockOrg.id.toString())
-				return
+				return Promise.resolve()
 			})
 			const rs = await server.inject({
 				method: "DELETE",
@@ -534,8 +539,9 @@ describe("OrganizationRoutes", () => {
 				url: `/api/organizations/lgr_${mockOrg.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(400)
-			expect(rs.json().status).toEqual(400)
-			expect(rs.json().detail).toEqual('params/orgId must match pattern "^org_[0-9a-z]{26}$"')
+			const response = rs.json()
+			expect(response.status).toEqual(400)
+			expect(response.detail).toEqual('params/orgId must match pattern "^org_[0-9a-z]{26}$"')
 		})
 
 		it("should handle unauthorized request error", async () => {
@@ -547,8 +553,9 @@ describe("OrganizationRoutes", () => {
 				url: `/api/organizations/${mockOrg.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(401)
-			expect(rs.json().status).toEqual(401)
-			expect(rs.json().detail).toEqual("Invalid token")
+			const response = rs.json()
+			expect(response.status).toEqual(401)
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden request error", async () => {
@@ -564,14 +571,15 @@ describe("OrganizationRoutes", () => {
 				url: `/api/organizations/${mockOrg.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(403)
-			expect(rs.json().status).toEqual(403)
-			expect(rs.json().detail).toEqual(
+			const response = rs.json()
+			expect(response.status).toEqual(403)
+			expect(response.detail).toEqual(
 				"One of: my:organization:delete,organization:delete; permissions is required"
 			)
 		})
 
 		it("should handle not found error", async () => {
-			mockOryService.deleteOrganization.mockImplementation(async id => {
+			mockOryService.deleteOrganization.mockImplementation(_id => {
 				throw new NotFoundError("Organization not found")
 			})
 			const rs = await server.inject({
@@ -582,12 +590,13 @@ describe("OrganizationRoutes", () => {
 				url: `/api/organizations/${mockOrg.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(404)
-			expect(rs.json().status).toEqual(404)
-			expect(rs.json().detail).toEqual("Organization not found")
+			const response = rs.json()
+			expect(response.status).toEqual(404)
+			expect(response.detail).toEqual("Organization not found")
 		})
 
 		it("should handle a conflict error", async () => {
-			mockOryService.deleteOrganization.mockImplementation(async id => {
+			mockOryService.deleteOrganization.mockImplementation(_id => {
 				throw new ConflictError("Organization already exists")
 			})
 			const rs = await server.inject({
@@ -598,12 +607,13 @@ describe("OrganizationRoutes", () => {
 				url: `/api/organizations/${mockOrg.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(409)
-			expect(rs.json().status).toEqual(409)
-			expect(rs.json().detail).toEqual("Organization already exists")
+			const response = rs.json()
+			expect(response.status).toEqual(409)
+			expect(response.detail).toEqual("Organization already exists")
 		})
 
 		it("should handle internal server error", async () => {
-			mockOryService.deleteOrganization.mockImplementation(async id => {
+			mockOryService.deleteOrganization.mockImplementation(_id => {
 				throw new Error("Internal Server Error")
 			})
 			const rs = await server.inject({

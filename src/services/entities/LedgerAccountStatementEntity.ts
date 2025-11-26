@@ -1,8 +1,8 @@
+import { typeid } from "typeid-js"
 import type {
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,
 } from "@/routes/ledgers/schema"
-import { typeid } from "typeid-js"
 
 class LedgerAccountStatementEntity {
 	constructor(

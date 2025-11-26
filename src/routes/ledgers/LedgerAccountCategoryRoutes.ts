@@ -1,5 +1,5 @@
-import type { FastifyPluginAsync } from "fastify"
 import { Type } from "@sinclair/typebox"
+import type { FastifyPluginAsync } from "fastify"
 
 import {
 	BadRequestErrorResponse,
@@ -12,15 +12,16 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/routes/schema"
+import { LedgerAccountCategoryEntity } from "@/services"
 import {
 	type CreateLedgerAccountCategoryRequest,
 	type DeleteLedgerAccountCategoryRequest,
 	type GetLedgerAccountCategoryRequest,
-	LedgerAccountCategoryIdParams,
+	LedgerAccountCategoryIdParams as LedgerAccountCategoryIdParameters,
 	LedgerAccountCategoryRequest,
 	LedgerAccountCategoryResponse,
-	LinkAccountToCategoryParams,
-	LinkCategoryToCategoryParams,
+	LinkAccountToCategoryParams as LinkAccountToCategoryParameters,
+	LinkCategoryToCategoryParams as LinkCategoryToCategoryParameters,
 	type LinkLedgerAccountCategoryToCategoryRequest,
 	type LinkLedgerAccountToCategoryRequest,
 	type ListLedgerAccountCategoriesRequest,
@@ -28,10 +29,9 @@ import {
 	type UnlinkLedgerAccountToCategoryRequest,
 	type UpdateLedgerAccountCategoryRequest,
 } from "./schema"
-import { LedgerAccountCategoryEntity } from "@/services"
 
 const TAGS = ["Ledger Account Categories"]
-const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
+const LedgerAccountCategoryRoutes: FastifyPluginAsync = server => {
 	server.get(
 		"/",
 		{
@@ -69,7 +69,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Get Ledger Account Category",
 				description: "Get Ledger Account Category",
-				params: LedgerAccountCategoryIdParams,
+				params: LedgerAccountCategoryIdParameters,
 				response: {
 					200: LedgerAccountCategoryResponse,
 					400: BadRequestErrorResponse,
@@ -127,7 +127,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Update Ledger Account Category",
 				description: "Update Ledger Account Category",
-				params: LedgerAccountCategoryIdParams,
+				params: LedgerAccountCategoryIdParameters,
 				body: LedgerAccountCategoryRequest,
 				response: {
 					200: LedgerAccountCategoryResponse,
@@ -159,7 +159,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Delete Ledger Account Category",
 				description: "Delete Ledger Account Category",
-				params: LedgerAccountCategoryIdParams,
+				params: LedgerAccountCategoryIdParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -188,7 +188,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Link Ledger Account to Category",
 				description: "Add a Ledger Account to a Ledger Account Category.",
-				params: LinkAccountToCategoryParams,
+				params: LinkAccountToCategoryParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -218,7 +218,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Unlink Ledger Account to Category",
 				description: "Remove a Ledger Account from a Ledger Account Category",
-				params: LinkAccountToCategoryParams,
+				params: LinkAccountToCategoryParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -248,7 +248,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Link Ledger Account Category to Category",
 				description: "Nest a Ledger Account Category within a higher-level Ledger Account Category.",
-				params: LinkCategoryToCategoryParams,
+				params: LinkCategoryToCategoryParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -278,7 +278,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Unlink Ledger Account Category to Category",
 				description: "Remove a Ledger Account Category from a higher-level Ledger Account Category",
-				params: LinkCategoryToCategoryParams,
+				params: LinkCategoryToCategoryParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,

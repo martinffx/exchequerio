@@ -1,38 +1,38 @@
+import { TypeID } from "typeid-js"
 import { LedgerAccountEntity, LedgerEntity } from "@/services/entities"
 import type { LedgerAccountEntityOpts } from "@/services/entities/LedgerAccountEntity"
 import type { LedgerEntityOpts } from "@/services/entities/LedgerEntity"
-import { TypeID } from "typeid-js"
 
-function createLedgerEntity(opts: Partial<LedgerEntityOpts> = {}): LedgerEntity {
+function createLedgerEntity(options: Partial<LedgerEntityOpts> = {}): LedgerEntity {
 	const now = new Date()
 	return new LedgerEntity({
-		id: opts.id ?? new TypeID("lgr"),
-		organizationId: opts.organizationId ?? new TypeID("org"),
-		name: opts.name ?? "Ledger",
-		description: opts.description,
-		currency: opts.currency ?? "EUR",
-		currencyExponent: opts.currencyExponent ?? 2,
-		metadata: opts.metadata,
-		created: opts.created ?? now,
-		updated: opts.updated ?? now,
+		id: options.id ?? new TypeID("lgr"),
+		organizationId: options.organizationId ?? new TypeID("org"),
+		name: options.name ?? "Ledger",
+		description: options.description,
+		currency: options.currency ?? "EUR",
+		currencyExponent: options.currencyExponent ?? 2,
+		metadata: options.metadata,
+		created: options.created ?? now,
+		updated: options.updated ?? now,
 	})
 }
 
-function createLedgerAccountEntity(
-	opts: Partial<LedgerAccountEntityOpts> = {}
+function _createLedgerAccountEntity(
+	options: Partial<LedgerAccountEntityOpts> = {}
 ): LedgerAccountEntity {
 	const now = new Date()
 	return new LedgerAccountEntity({
-		id: opts.id ?? new TypeID("lat"),
-		ledgerId: opts.ledgerId ?? new TypeID("lgr"),
-		name: opts.name ?? "Ledger Account",
-		description: opts.description,
-		normalBalance: opts.normalBalance ?? "credit",
-		balanceAmount: opts.balanceAmount ?? "0",
-		lockVersion: opts.lockVersion ?? 0,
-		metadata: opts.metadata,
-		created: opts.created ?? now,
-		updated: opts.updated ?? now,
+		id: options.id ?? new TypeID("lat"),
+		ledgerId: options.ledgerId ?? new TypeID("lgr"),
+		name: options.name ?? "Ledger Account",
+		description: options.description,
+		normalBalance: options.normalBalance ?? "credit",
+		balanceAmount: options.balanceAmount ?? "0",
+		lockVersion: options.lockVersion ?? 0,
+		metadata: options.metadata,
+		created: options.created ?? now,
+		updated: options.updated ?? now,
 	})
 }
 

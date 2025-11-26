@@ -1,11 +1,11 @@
 import { join } from "node:path"
-import type { DrizzleDB } from "./types"
 import { migrate } from "drizzle-orm/node-postgres/migrator"
+import type { DrizzleDB } from "./types"
 
-const runMigrations = async (db: DrizzleDB) => {
+const runMigrations = async (database: DrizzleDB) => {
 	try {
 		// Path to your migrations folder
-		await migrate(db, {
+		await migrate(database, {
 			migrationsFolder: join(__dirname, "../../", "migrations"),
 		})
 

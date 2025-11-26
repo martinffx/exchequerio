@@ -12,7 +12,7 @@ class LedgerService {
 		return this.ledgerRepo.listLedgers(orgId, offset, limit)
 	}
 
-	public async createLedger(orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
+	public async createLedger(_orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
 		return this.ledgerRepo.createLedger(entity)
 	}
 

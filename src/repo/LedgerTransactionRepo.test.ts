@@ -1,24 +1,24 @@
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals"
+import { afterEach, beforeEach, describe, expect, it } from "@jest/globals"
+import { eq } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
+
 import { Pool } from "pg"
-import { migrate } from "drizzle-orm/node-postgres/migrator"
+import { TypeID } from "typeid-js"
+import { LedgerTransactionEntity } from "@/services/entities"
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo"
 import {
 	LedgerAccountsTable,
-	LedgerTransactionsTable,
 	LedgerTransactionEntriesTable,
+	LedgerTransactionsTable,
 } from "./schema"
-import { eq } from "drizzle-orm"
-import { TypeID } from "typeid-js"
-import { LedgerTransactionEntity } from "@/services/entities"
 import type { DrizzleDB } from "./types"
 
 describe("LedgerTransactionRepo - Import and Method Validation", () => {
-	let db: DrizzleDB
+	let database: DrizzleDB
 	let pool: Pool
 	let repo: LedgerTransactionRepo
 
-	beforeEach(async () => {
+	beforeEach(() => {
 		// Setup test database connection
 		pool = new Pool({
 			host: "localhost",
@@ -28,10 +28,10 @@ describe("LedgerTransactionRepo - Import and Method Validation", () => {
 			password: "postgres",
 		})
 
-		db = drizzle(pool) as DrizzleDB
+		database = drizzle(pool) as DrizzleDB
 
 		// Skip migration for unit tests - focus on import/method validation
-		repo = new LedgerTransactionRepo(db)
+		repo = new LedgerTransactionRepo(database)
 	})
 
 	afterEach(async () => {
@@ -47,10 +47,10 @@ describe("LedgerTransactionRepo - Import and Method Validation", () => {
 
 		it("should have access to all required database operations", () => {
 			// Verify db instance has required methods
-			expect(typeof db.select).toBe("function")
-			expect(typeof db.insert).toBe("function")
-			expect(typeof db.update).toBe("function")
-			expect(typeof db.transaction).toBe("function")
+			expect(typeof database.select).toBe("function")
+			expect(typeof database.insert).toBe("function")
+			expect(typeof database.update).toBe("function")
+			expect(typeof database.transaction).toBe("function")
 		})
 	})
 
@@ -77,8 +77,8 @@ describe("LedgerTransactionRepo - Import and Method Validation", () => {
 			const testCallback = jest.fn().mockResolvedValue("test-result")
 
 			// Mock db.transaction to call the callback immediately
-			jest.spyOn(db, "transaction").mockImplementation(async fn => {
-				return await fn(db as any)
+			jest.spyOn(database, "transaction").mockImplementation(async function_ => {
+				return await function_(database as unknown)
 			})
 
 			const result = await repo.createTransaction(testCallback)
@@ -89,7 +89,7 @@ describe("LedgerTransactionRepo - Import and Method Validation", () => {
 
 		it("getAccountWithLock should have correct method signature", () => {
 			// Verify the method exists and is callable (doesn't test database interaction)
-			const mockTx = {
+			const _mockTx = {
 				select: jest.fn().mockReturnThis(),
 				from: jest.fn().mockReturnThis(),
 				where: jest.fn().mockReturnThis(),
@@ -110,14 +110,14 @@ describe("LedgerTransactionRepo - Import and Method Validation", () => {
 
 		it("updateAccountBalance should have correct method signature", () => {
 			// Verify the method exists and is callable (doesn't test database interaction)
-			const mockTx = {
+			const _mockTx = {
 				update: jest.fn().mockReturnThis(),
 				set: jest.fn().mockReturnThis(),
 				where: jest.fn().mockResolvedValue({ rowCount: 1 }),
 			}
 
 			expect(async () => {
-				await repo.withTransaction(async tx => {
+				await repo.withTransaction(async _tx => {
 					return await repo.updateAccountBalance("test-id", "100.00", "debit")
 				})
 			}).not.toThrow()
@@ -175,10 +175,10 @@ describe("LedgerTransactionRepo - Import and Method Validation", () => {
 					entries,
 					"Test transaction"
 				)
-				repo.createTransactionWithEntries(
+				void repo.createTransactionWithEntries(
 					"test-org",
 					transactionEntity,
-					transactionEntity.entries || []
+					transactionEntity.entries ?? []
 				)
 			}).not.toThrow()
 		})

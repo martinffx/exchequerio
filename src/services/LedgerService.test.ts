@@ -1,12 +1,11 @@
 import { LedgerRepo } from "@/repo/LedgerRepo"
-import { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo"
+import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo"
 import type { DrizzleDB } from "@/repo/types"
+
 import { LedgerTransactionService } from "./LedgerTransactionService"
-import { LedgerEntity } from "./entities"
-import { TypeID } from "typeid-js"
 
 // Mock database for testing
-const mockDb = {
+const mockDatabase = {
 	transaction: jest.fn(),
 	select: jest.fn(),
 	insert: jest.fn(),
@@ -39,7 +38,7 @@ describe("Ledger Transaction Service - Unit Tests", () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks()
-		ledgerRepo = new LedgerRepo(mockDb as DrizzleDB)
+		ledgerRepo = new LedgerRepo(mockDatabase as DrizzleDB)
 		const mockLedgerTransactionRepo = {} as LedgerTransactionRepo
 		ledgerTransactionService = new LedgerTransactionService(mockLedgerTransactionRepo, ledgerRepo)
 	})

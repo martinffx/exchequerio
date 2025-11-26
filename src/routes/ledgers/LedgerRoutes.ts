@@ -1,31 +1,31 @@
 import { Type } from "@sinclair/typebox"
 import type { FastifyPluginAsync } from "fastify"
+import { TypeID } from "typeid-js"
 import {
-	type CreateLedgerRequest,
-	type DeleteLedgerRequest,
-	type GetLedgerRequest,
-	LedgerIdParams,
-	LedgerRequest,
-	LedgerResponse,
-	type ListLedgersRequest,
-	type UpdateLedgerRequest,
-} from "./schema"
-import {
-	PaginationQuery,
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
 	ForbiddenErrorResponse,
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
+	PaginationQuery,
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/routes/schema"
 import { LedgerEntity } from "@/services"
-import { TypeID } from "typeid-js"
+import {
+	type CreateLedgerRequest,
+	type DeleteLedgerRequest,
+	type GetLedgerRequest,
+	LedgerIdParams as LedgerIdParameters,
+	LedgerRequest,
+	LedgerResponse,
+	type ListLedgersRequest,
+	type UpdateLedgerRequest,
+} from "./schema"
 
 const TAGS = ["Ledgers"]
-const LedgerRoutes: FastifyPluginAsync = async server => {
+const LedgerRoutes: FastifyPluginAsync = server => {
 	server.get(
 		"/",
 		{
@@ -64,7 +64,7 @@ const LedgerRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Get ledger",
 				description: "Get ledger",
-				params: LedgerIdParams,
+				params: LedgerIdParameters,
 				response: {
 					200: LedgerResponse,
 					400: BadRequestErrorResponse,
@@ -123,7 +123,7 @@ const LedgerRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Update ledger",
 				description: "Update ledger",
-				params: LedgerIdParams,
+				params: LedgerIdParameters,
 				body: LedgerRequest,
 				response: {
 					200: LedgerResponse,
@@ -155,7 +155,7 @@ const LedgerRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Delete ledger",
 				description: "Delete ledger",
-				params: LedgerIdParams,
+				params: LedgerIdParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,

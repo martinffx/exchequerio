@@ -5,9 +5,9 @@ const start = async () => {
 	try {
 		server.ready(() => console.log(server.printRoutes()))
 		await server.listen({ port: 3000, host: "0.0.0.0" })
-	} catch (err) {
-		server.log.error(err)
+	} catch (error) {
+		server.log.error(error)
 		process.exit(1)
 	}
 }
-start()
+void start()

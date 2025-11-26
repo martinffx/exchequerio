@@ -1,5 +1,6 @@
 import { Type } from "@sinclair/typebox"
-import type { FastifyPluginAsync } from "fastify"
+import type { FastifyPluginAsync, FastifyRequest } from "fastify"
+import { OrganizationEntity } from "@/services"
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -12,14 +13,13 @@ import {
 	NotFoundErrorResponse,
 	OrganizationRequest,
 	OrganizationResponse,
-	OrgIdParams,
+	OrgIdParams as OrgIdParameters,
 	PaginationQuery,
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 	type UpdateOrganizationRequest,
 } from "./schema"
-import { OrganizationEntity } from "@/services"
 
 const OrganizationRoutes: FastifyPluginAsync = async server => {
 	server.get<{ Querystring: PaginationQuery }>(
@@ -41,7 +41,9 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]),
+			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]) as (
+				request: FastifyRequest
+			) => void,
 		},
 		async (rq: ListOrganizationsRequest): Promise<OrganizationResponse[]> => {
 			const orgs = await rq.server.services.organizationService.listOrganizations(
@@ -52,7 +54,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 		}
 	)
 
-	server.get<{ Params: OrgIdParams }>(
+	server.get<{ Params: OrgIdParameters }>(
 		"/:orgId",
 		{
 			schema: {
@@ -60,7 +62,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 				tags: ["Organizations"],
 				summary: "Get organization",
 				description: "Get organization",
-				params: OrgIdParams,
+				params: OrgIdParameters,
 				response: {
 					200: OrganizationResponse,
 					400: BadRequestErrorResponse,
@@ -110,7 +112,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 		}
 	)
 
-	server.put<{ Body: OrganizationRequest; Params: OrgIdParams }>(
+	server.put<{ Body: OrganizationRequest; Params: OrgIdParameters }>(
 		"/:orgId",
 		{
 			schema: {
@@ -118,7 +120,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 				tags: ["Organizations"],
 				summary: "Update organization",
 				description: "Update organization",
-				params: OrgIdParams,
+				params: OrgIdParameters,
 				body: OrganizationRequest,
 				response: {
 					200: OrganizationResponse,
@@ -132,7 +134,9 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]),
+			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]) as (
+				request: FastifyRequest
+			) => void,
 		},
 		async (rq: UpdateOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await rq.server.services.organizationService.updateOrganization(
@@ -143,7 +147,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 		}
 	)
 
-	server.delete<{ Params: OrgIdParams }>(
+	server.delete<{ Params: OrgIdParameters }>(
 		"/:orgId",
 		{
 			schema: {
@@ -151,7 +155,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 				tags: ["Organizations"],
 				summary: "Delete organization",
 				description: "Delete organization",
-				params: OrgIdParams,
+				params: OrgIdParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,

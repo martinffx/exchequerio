@@ -1,17 +1,13 @@
-import { TypeID } from "typeid-js"
+import { and, desc, eq } from "drizzle-orm"
+import { ConflictError, NotFoundError } from "@/errors"
+import { LedgerTransactionEntity, type LedgerTransactionEntryEntity } from "@/services/entities"
 import {
-	LedgerTransactionsTable,
-	LedgerTransactionEntriesTable,
 	LedgerAccountsTable,
 	LedgersTable,
+	LedgerTransactionEntriesTable,
+	LedgerTransactionsTable,
 } from "./schema"
-import { eq, and, desc, inArray } from "drizzle-orm"
-import { LedgerTransactionEntity, LedgerTransactionEntryEntity } from "@/services/entities"
-import type { LedgerTransactionID, LedgerID, OrgID } from "@/services/entities/types"
-import { NotFoundError, ConflictError, BadRequestError } from "@/errors"
 import type { DrizzleDB } from "./types"
-import type { ExtractTablesWithRelations } from "drizzle-orm"
-import type * as schema from "./schema"
 
 class LedgerTransactionRepo {
 	constructor(private readonly db: DrizzleDB) {}
@@ -19,8 +15,8 @@ class LedgerTransactionRepo {
 	/**
 	 * Database transaction wrapper for ACID operations
 	 */
-	public async withTransaction<T>(fn: (tx: DrizzleDB) => Promise<T>): Promise<T> {
-		return await this.db.transaction(fn)
+	public async withTransaction<T>(function_: (tx: DrizzleDB) => Promise<T>): Promise<T> {
+		return await this.db.transaction(function_)
 	}
 
 	/**
@@ -225,7 +221,7 @@ class LedgerTransactionRepo {
 	}
 
 	// Public wrapper for getAccountWithLock (for test compatibility)
-	public async getAccountWithLock(accountId: string): Promise<any> {
+	public async getAccountWithLock(accountId: string): Promise<Record<string, unknown>> {
 		return await this.withTransaction(async tx => {
 			return await this.getAccountWithLockInternal(accountId, tx)
 		})
@@ -243,14 +239,16 @@ class LedgerTransactionRepo {
 
 			// Calculate new balance
 			const currentBalance = Number.parseFloat(account.balanceAmount)
-			const amountNum = Number.parseFloat(amount)
+			const amountNumber = Number.parseFloat(amount)
 			let newBalance: number
 
 			if (account.normalBalance === "debit") {
-				newBalance = direction === "debit" ? currentBalance + amountNum : currentBalance - amountNum
+				newBalance =
+					direction === "debit" ? currentBalance + amountNumber : currentBalance - amountNumber
 			} else {
 				// credit normal balance
-				newBalance = direction === "credit" ? currentBalance + amountNum : currentBalance - amountNum
+				newBalance =
+					direction === "credit" ? currentBalance + amountNumber : currentBalance - amountNumber
 			}
 
 			// Update the balance

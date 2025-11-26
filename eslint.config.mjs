@@ -1,18 +1,13 @@
 // @ts-check
-import js from "@eslint/js";
 import tseslint from "typescript-eslint";
-import oxlint from "eslint-plugin-oxlint";
 import boundaries from "eslint-plugin-boundaries";
+import unicorn from "eslint-plugin-unicorn";
 
 export default [
-	// Base JavaScript rules
-	js.configs.recommended,
-
-	// TypeScript rules with type-aware linting
+	// TypeScript base (type-aware only)
 	...tseslint.configs.recommendedTypeChecked,
-	...tseslint.configs.stylisticTypeChecked,
 
-	// Global TypeScript configuration
+	// Global TypeScript config
 	{
 		files: ["**/*.ts", "**/*.tsx"],
 		languageOptions: {
@@ -24,10 +19,33 @@ export default [
 		},
 	},
 
-	// oxlint integration (turns off overlapping rules)
-	...oxlint.configs["flat/recommended"],
+	// Unicorn rules (high-value ones not in Biome)
+	{
+		plugins: { unicorn },
+		rules: {
+			// Critical unicorn rules missing from Biome
+			"unicorn/no-array-reduce": "error",
+			"unicorn/no-null": "error",
+			"unicorn/prefer-spread": "error",
+			"unicorn/prefer-module": "error",
+			"unicorn/prefer-set-has": "error",
+			"unicorn/prevent-abbreviations": "off",
+			"unicorn/catch-error-name": "error",
+			"unicorn/consistent-destructuring": "error",
+			"unicorn/no-array-callback-reference": "error",
+			"unicorn/prefer-export-from": "error",
+			"unicorn/no-for-loop": "error",
+			"unicorn/prefer-includes": "error",
+			"unicorn/better-regex": "error",
+			"unicorn/consistent-function-scoping": "error",
+			"unicorn/no-useless-spread": "error",
+			"unicorn/prefer-top-level-await": "error",
+			"unicorn/prefer-object-from-entries": "error",
+			"unicorn/prefer-array-find": "error",
+		},
+	},
 
-	// Architectural boundaries
+	// Architectural boundaries (preserve existing rules)
 	{
 		settings: {
 			"boundaries/elements": [
@@ -79,12 +97,31 @@ export default [
 		},
 	},
 
-	// Project-specific overrides
+	// TypeScript strictness (preserve existing)
+	{
+		files: ["**/*.ts", "**/*.tsx"],
+		rules: {
+			// Explicitly prohibit any type assertions
+			"@typescript-eslint/no-explicit-any": "error",
+			"@typescript-eslint/no-unsafe-assignment": "error",
+			"@typescript-eslint/no-unsafe-call": "error",
+			"@typescript-eslint/no-unsafe-member-access": "error",
+			"@typescript-eslint/no-unsafe-return": "error",
+			"@typescript-eslint/no-unsafe-argument": "error",
+		},
+	},
+
+	// Test files - allow any types but still prohibit unsafe operations
 	{
 		files: ["**/*.test.ts"],
 		rules: {
 			"@typescript-eslint/no-explicit-any": "off",
 			"boundaries/element-types": "off",
+			"@typescript-eslint/no-unsafe-assignment": "error",
+			"@typescript-eslint/no-unsafe-call": "error",
+			"@typescript-eslint/no-unsafe-member-access": "error",
+			"@typescript-eslint/no-unsafe-return": "error",
+			"@typescript-eslint/no-unsafe-argument": "error",
 		},
 	},
 

@@ -1,11 +1,11 @@
 import { type Static, Type } from "@sinclair/typebox"
-import type { PaginationQuery } from "../schema"
 import type { FastifyRequest } from "fastify"
+import type { PaginationQuery } from "../schema"
 
 /**
  * Common Types
  */
-const Metadata = Type.Mapped(Type.KeyOf(Type.String()), K => Type.String(), {
+const Metadata = Type.Mapped(Type.KeyOf(Type.String()), () => Type.String(), {
 	description:
 		"Additional data represented as key-value pairs. Both the key and value must be strings.",
 })
@@ -151,10 +151,10 @@ const LedgerId = Type.String({
 	pattern: "^lgr_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 })
 type LedgerId = Static<typeof LedgerId>
-const LedgerIdParams = Type.Object({
+const LedgerIdParameters = Type.Object({
 	ledgerId: LedgerId,
 })
-type LedgerIdParams = Static<typeof LedgerIdParams>
+type LedgerIdParameters = Static<typeof LedgerIdParameters>
 const LedgerResponse = Type.Object(
 	{
 		id: LedgerId,
@@ -180,13 +180,13 @@ type LedgerRequest = Static<typeof LedgerRequest>
 type ListLedgersRequest = FastifyRequest<{
 	Querystring: PaginationQuery
 }>
-type GetLedgerRequest = FastifyRequest<{ Params: LedgerIdParams }>
+type GetLedgerRequest = FastifyRequest<{ Params: LedgerIdParameters }>
 type CreateLedgerRequest = FastifyRequest<{ Body: LedgerRequest }>
 type UpdateLedgerRequest = FastifyRequest<{
-	Params: LedgerIdParams
+	Params: LedgerIdParameters
 	Body: LedgerRequest
 }>
-type DeleteLedgerRequest = FastifyRequest<{ Params: LedgerIdParams }>
+type DeleteLedgerRequest = FastifyRequest<{ Params: LedgerIdParameters }>
 
 /**
  * Ledger Accounts
@@ -196,10 +196,10 @@ const LedgerAccountId = Type.String({
 	pattern: "^lat_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 })
 type LedgerAccountId = Static<typeof LedgerAccountId>
-const LedgerAccountIdParams = Type.Object({
+const LedgerAccountIdParameters = Type.Object({
 	ledgerAccountId: LedgerAccountId,
 })
-type LedgerAccountIdParams = Static<typeof LedgerAccountIdParams>
+type LedgerAccountIdParameters = Static<typeof LedgerAccountIdParameters>
 const LedgerAccountResponse = Type.Object(
 	{
 		id: LedgerAccountId,
@@ -239,17 +239,17 @@ type ListLedgerAccountsRequest = FastifyRequest<{
 	}
 }>
 type GetLedgerAccountRequest = FastifyRequest<{
-	Params: LedgerAccountIdParams
+	Params: LedgerAccountIdParameters
 }>
 type CreateLedgerAccountRequest = FastifyRequest<{
 	Body: LedgerAccountRequest
 }>
 type UpdateLedgerAccountRequest = FastifyRequest<{
-	Params: LedgerAccountIdParams
+	Params: LedgerAccountIdParameters
 	Body: LedgerAccountRequest
 }>
 type DeleteLedgerAccountRequest = FastifyRequest<{
-	Params: LedgerAccountIdParams
+	Params: LedgerAccountIdParameters
 }>
 
 /**
@@ -260,22 +260,22 @@ const LedgerAccountCategoryId = Type.String({
 	pattern: "^lac_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 })
 type LedgerAccountCategoryId = Static<typeof LedgerAccountCategoryId>
-const LedgerAccountCategoryIdParams = Type.Object({
+const LedgerAccountCategoryIdParameters = Type.Object({
 	ledgerAccountCategoryId: LedgerAccountCategoryId,
 })
-type LedgerAccountCategoryIdParams = Static<typeof LedgerAccountCategoryIdParams>
+type LedgerAccountCategoryIdParameters = Static<typeof LedgerAccountCategoryIdParameters>
 
-const LinkAccountToCategoryParams = Type.Object({
+const LinkAccountToCategoryParameters = Type.Object({
 	ledgerAccountCategoryId: LedgerAccountCategoryId,
 	accountId: LedgerAccountId,
 })
-type LinkAccountToCategoryParams = Static<typeof LinkAccountToCategoryParams>
+type LinkAccountToCategoryParameters = Static<typeof LinkAccountToCategoryParameters>
 
-const LinkCategoryToCategoryParams = Type.Object({
+const LinkCategoryToCategoryParameters = Type.Object({
 	ledgerAccountCategoryId: LedgerAccountCategoryId,
 	categoryId: LedgerAccountCategoryId,
 })
-type LinkCategoryToCategoryParams = Static<typeof LinkCategoryToCategoryParams>
+type LinkCategoryToCategoryParameters = Static<typeof LinkCategoryToCategoryParameters>
 
 const LedgerAccountCategoryResponse = Type.Object(
 	{
@@ -334,29 +334,29 @@ type ListLedgerAccountCategoriesRequest = FastifyRequest<{
 	Querystring: PaginationQuery
 }>
 type GetLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerAccountCategoryIdParams
+	Params: LedgerAccountCategoryIdParameters
 }>
 type CreateLedgerAccountCategoryRequest = FastifyRequest<{
 	Body: LedgerAccountCategoryRequest
 }>
 type UpdateLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerAccountCategoryIdParams
+	Params: LedgerAccountCategoryIdParameters
 	Body: LedgerAccountCategoryRequest
 }>
 type DeleteLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerAccountCategoryIdParams
+	Params: LedgerAccountCategoryIdParameters
 }>
 type LinkLedgerAccountToCategoryRequest = FastifyRequest<{
-	Params: LinkAccountToCategoryParams
+	Params: LinkAccountToCategoryParameters
 }>
 type UnlinkLedgerAccountToCategoryRequest = FastifyRequest<{
-	Params: LinkAccountToCategoryParams
+	Params: LinkAccountToCategoryParameters
 }>
 type LinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
-	Params: LinkCategoryToCategoryParams
+	Params: LinkCategoryToCategoryParameters
 }>
 type UnlinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
-	Params: LinkCategoryToCategoryParams
+	Params: LinkCategoryToCategoryParameters
 }>
 
 /**
@@ -367,10 +367,10 @@ const LedgerTransactionEntryId = Type.String({
 	pattern: "^lte_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 })
 type LedgerTransactionEntryId = Static<typeof LedgerTransactionEntryId>
-const LedgerTransactionEntryIdParams = Type.Object({
+const LedgerTransactionEntryIdParameters = Type.Object({
 	ledgerTransactionEntryId: LedgerTransactionEntryId,
 })
-type LedgerTransactionEntryIdParams = Static<typeof LedgerTransactionEntryIdParams>
+type LedgerTransactionEntryIdParameters = Static<typeof LedgerTransactionEntryIdParameters>
 const LedgerTransactionEntry = Type.Object(
 	{
 		id: LedgerTransactionEntryId,
@@ -433,10 +433,10 @@ type ListLedgerTransactionEntriesRequest = FastifyRequest<{
 	Querystring: PaginationQuery
 }>
 type GetLedgerTransactionEntryRequest = FastifyRequest<{
-	Params: LedgerTransactionEntryIdParams
+	Params: LedgerTransactionEntryIdParameters
 }>
 type UpdateLedgerTransactionEntryRequest = FastifyRequest<{
-	Params: LedgerTransactionEntryIdParams
+	Params: LedgerTransactionEntryIdParameters
 	Body: LedgerTransactionEntryRequest
 }>
 
@@ -448,10 +448,10 @@ const LedgerTransactionId = Type.String({
 	pattern: "^ltr_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 })
 type LedgerTransactionId = Static<typeof LedgerTransactionId>
-const LedgerTransactionIdParams = Type.Object({
+const LedgerTransactionIdParameters = Type.Object({
 	ledgerTransactionId: LedgerTransactionId,
 })
-type LedgerTransactionIdParams = Static<typeof LedgerTransactionIdParams>
+type LedgerTransactionIdParameters = Static<typeof LedgerTransactionIdParameters>
 const LedgerTransactionResponse = Type.Object(
 	{
 		id: LedgerTransactionId,
@@ -531,17 +531,17 @@ type ListLedgerTransactionsRequest = FastifyRequest<{
 	Querystring: PaginationQuery
 }>
 type GetLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerTransactionIdParams
+	Params: LedgerTransactionIdParameters
 }>
 type CreateLedgerTransactionRequest = FastifyRequest<{
 	Body: LedgerTransactionRequest
 }>
 type UpdateLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerTransactionIdParams
+	Params: LedgerTransactionIdParameters
 	Body: LedgerTransactionRequest
 }>
 type DeleteLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerTransactionIdParams
+	Params: LedgerTransactionIdParameters
 }>
 
 /**
@@ -552,10 +552,10 @@ const LedgerAccountSettlementId = Type.String({
 	pattern: "^las_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 })
 type LedgerAccountSettlementId = Static<typeof LedgerAccountSettlementId>
-const LedgerAccountSettlementIdParams = Type.Object({
+const LedgerAccountSettlementIdParameters = Type.Object({
 	ledgerAccountSettlementId: LedgerAccountSettlementId,
 })
-type LedgerAccountSettlementIdParams = Static<typeof LedgerAccountSettlementIdParams>
+type LedgerAccountSettlementIdParameters = Static<typeof LedgerAccountSettlementIdParameters>
 const LedgerAccountSettlementResponse = Type.Object(
 	{
 		id: LedgerAccountSettlementId,
@@ -631,24 +631,24 @@ type ListLedgerAccountSettlementsRequest = FastifyRequest<{
 	Querystring: PaginationQuery
 }>
 type GetLedgerAccountSettlementRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParams
+	Params: LedgerAccountSettlementIdParameters
 }>
 type CreateLedgerAccountSettlementRequest = FastifyRequest<{
 	Body: LedgerAccountSettlementRequest
 }>
 type UpdateLedgerAccountSettlementRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParams
+	Params: LedgerAccountSettlementIdParameters
 	Body: LedgerAccountSettlementRequest
 }>
 type DeleteLedgerAccountSettlementRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParams
+	Params: LedgerAccountSettlementIdParameters
 }>
 type AddLedgerAccountSettlementEntryRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParams
+	Params: LedgerAccountSettlementIdParameters
 	Body: LedgerAccountSettlementEntriesRequest
 }>
 type RemoveLedgerAccountSettlementEntryRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParams
+	Params: LedgerAccountSettlementIdParameters
 	Body: LedgerAccountSettlementEntriesRequest
 }>
 
@@ -660,10 +660,10 @@ const LedgerAccountStatementId = Type.String({
 	pattern: "^lst_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 })
 type LedgerAccountStatementId = Static<typeof LedgerAccountStatementId>
-const LedgerAccountStatementIdParams = Type.Object({
+const LedgerAccountStatementIdParameters = Type.Object({
 	ledgerAccountStatmentId: LedgerAccountStatementId,
 })
-type LedgerAccountStatementIdParams = Static<typeof LedgerAccountStatementIdParams>
+type LedgerAccountStatementIdParameters = Static<typeof LedgerAccountStatementIdParameters>
 const LedgerAccountStatementResponse = Type.Object(
 	{
 		id: LedgerAccountStatementId,
@@ -733,7 +733,7 @@ const LedgerAccountStatementRequest = Type.Object(
 )
 type LedgerAccountStatementRequest = Static<typeof LedgerAccountStatementRequest>
 type GetLedgerAccountStatementRequest = FastifyRequest<{
-	Params: LedgerAccountStatementIdParams
+	Params: LedgerAccountStatementIdParameters
 }>
 type CreateLedgerAccountStatementRequest = FastifyRequest<{
 	Body: LedgerAccountStatementRequest
@@ -747,10 +747,12 @@ const LedgerAccountBalanceMonitorId = Type.String({
 	pattern: "^lbm_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 })
 type LedgerAccountBalanceMonitorId = Static<typeof LedgerAccountBalanceMonitorId>
-const LedgerAccountBalanceMonitorIdParams = Type.Object({
+const LedgerAccountBalanceMonitorIdParameters = Type.Object({
 	ledgerAccountBalanceMonitorId: LedgerAccountBalanceMonitorId,
 })
-type LedgerAccountBalanceMonitorIdParams = Static<typeof LedgerAccountBalanceMonitorIdParams>
+type LedgerAccountBalanceMonitorIdParameters = Static<
+	typeof LedgerAccountBalanceMonitorIdParameters
+>
 const LedgerAccountBalanceMonitorResponse = Type.Object(
 	{
 		id: LedgerAccountBalanceMonitorId,
@@ -797,47 +799,47 @@ type ListLedgerAccountBalanceMonitorsRequest = FastifyRequest<{
 	Querystring: PaginationQuery
 }>
 type GetLedgerAccountBalanceMonitorRequest = FastifyRequest<{
-	Params: LedgerAccountBalanceMonitorIdParams
+	Params: LedgerAccountBalanceMonitorIdParameters
 }>
 type CreateLedgerAccountBalanceMonitorRequest = FastifyRequest<{
 	Body: LedgerAccountBalanceMonitorRequest
 }>
 type UpdateLedgerAccountBalanceMonitorRequest = FastifyRequest<{
-	Params: LedgerAccountBalanceMonitorIdParams
+	Params: LedgerAccountBalanceMonitorIdParameters
 	Body: LedgerAccountBalanceMonitorRequest
 }>
 type DeleteLedgerAccountBalanceMonitorRequest = FastifyRequest<{
-	Params: LedgerAccountBalanceMonitorIdParams
+	Params: LedgerAccountBalanceMonitorIdParameters
 }>
 
 // biome-ignore lint/style/useExportType: false positive
 export {
-	LinkAccountToCategoryParams,
-	LinkCategoryToCategoryParams,
+	LinkAccountToCategoryParameters as LinkAccountToCategoryParams,
+	LinkCategoryToCategoryParameters as LinkCategoryToCategoryParams,
 	LedgerId,
-	LedgerIdParams,
+	LedgerIdParameters as LedgerIdParams,
 	LedgerResponse,
 	LedgerRequest,
-	LedgerAccountIdParams,
+	LedgerAccountIdParameters as LedgerAccountIdParams,
 	LedgerAccountResponse,
 	LedgerAccountRequest,
-	LedgerAccountCategoryIdParams,
+	LedgerAccountCategoryIdParameters as LedgerAccountCategoryIdParams,
 	LedgerAccountCategoryResponse,
 	LedgerAccountCategoryRequest,
-	LedgerAccountSettlementIdParams,
+	LedgerAccountSettlementIdParameters as LedgerAccountSettlementIdParams,
 	LedgerAccountSettlementResponse,
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementEntriesRequest,
-	LedgerAccountStatementIdParams,
+	LedgerAccountStatementIdParameters as LedgerAccountStatementIdParams,
 	LedgerAccountStatementResponse,
 	LedgerAccountStatementRequest,
-	LedgerAccountBalanceMonitorIdParams,
+	LedgerAccountBalanceMonitorIdParameters as LedgerAccountBalanceMonitorIdParams,
 	LedgerAccountBalanceMonitorRequest,
 	LedgerAccountBalanceMonitorResponse,
-	LedgerTransactionIdParams,
+	LedgerTransactionIdParameters as LedgerTransactionIdParams,
 	LedgerTransactionResponse,
 	LedgerTransactionRequest,
-	LedgerTransactionEntryIdParams,
+	LedgerTransactionEntryIdParameters as LedgerTransactionEntryIdParams,
 	LedgerTransactionEntryResponse,
 	LedgerTransactionEntryRequest,
 	ListLedgersRequest,
@@ -888,4 +890,19 @@ export {
 	PendingBalance,
 	PostedBalance,
 	AvailableBalance,
+	// Export unused types to silence Biome warnings
+	type Metadata,
+	type NormalBalance,
+	type Balance,
+	type SettlementStatus,
+	type AlertOperator,
+	type AlertField,
+	type AlertCondition,
+	type LedgerAccountId,
+	type LedgerAccountCategoryId,
+	type LedgerTransactionEntryId,
+	type LedgerTransactionId,
+	type LedgerAccountSettlementId,
+	type LedgerAccountStatementId,
+	type LedgerAccountBalanceMonitorId,
 }

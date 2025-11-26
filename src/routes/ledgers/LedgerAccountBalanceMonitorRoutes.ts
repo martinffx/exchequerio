@@ -1,4 +1,6 @@
+import { Type } from "@sinclair/typebox"
 import type { FastifyPluginAsync } from "fastify"
+import { LedgerAccountBalanceMonitorEntity } from "@/services"
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -14,17 +16,15 @@ import {
 	type CreateLedgerAccountBalanceMonitorRequest,
 	type DeleteLedgerAccountBalanceMonitorRequest,
 	type GetLedgerAccountBalanceMonitorRequest,
-	LedgerAccountBalanceMonitorIdParams,
+	LedgerAccountBalanceMonitorIdParams as LedgerAccountBalanceMonitorIdParameters,
 	LedgerAccountBalanceMonitorRequest,
 	LedgerAccountBalanceMonitorResponse,
 	type ListLedgerAccountBalanceMonitorsRequest,
 	type UpdateLedgerAccountBalanceMonitorRequest,
 } from "./schema"
-import { Type } from "@sinclair/typebox"
-import { LedgerAccountBalanceMonitorEntity } from "@/services"
 
 const TAGS = ["Ledger Account Balance Monitors"]
-const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
+const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = server => {
 	server.get(
 		"/",
 		{
@@ -64,7 +64,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Get Ledger Account Balance Monitor",
 				description: "Get Ledger Account Balance Monitor",
-				params: LedgerAccountBalanceMonitorIdParams,
+				params: LedgerAccountBalanceMonitorIdParameters,
 				response: {
 					200: LedgerAccountBalanceMonitorResponse,
 					400: BadRequestErrorResponse,
@@ -126,7 +126,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Update Ledger Account Balance Monitor",
 				description: "Update Ledger Account Balance Monitor",
-				params: LedgerAccountBalanceMonitorIdParams,
+				params: LedgerAccountBalanceMonitorIdParameters,
 				body: LedgerAccountBalanceMonitorRequest,
 				response: {
 					200: LedgerAccountBalanceMonitorResponse,
@@ -160,7 +160,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Delete Ledger Account Balance Monitor",
 				description: "Delete Ledger Account Balance Monitor",
-				params: LedgerAccountBalanceMonitorIdParams,
+				params: LedgerAccountBalanceMonitorIdParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,

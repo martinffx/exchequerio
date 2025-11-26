@@ -1,12 +1,11 @@
-import { Config } from "@/config"
 import { drizzle } from "drizzle-orm/node-postgres"
-import * as schema from "@/repo/schema"
-import { OrganizationEntity, OrganizationRepo } from "./OrganizationRepo"
-import { runMigrations } from "./migrations"
-import { DrizzleDB } from "./types"
 import { Pool } from "pg"
-import { ConflictError, NotFoundError } from "@/errors"
 import { range } from "radash"
+import { Config } from "@/config"
+import { ConflictError, NotFoundError } from "@/errors"
+import * as schema from "@/repo/schema"
+import { runMigrations } from "./migrations"
+import { OrganizationEntity, OrganizationRepo } from "./OrganizationRepo"
 
 describe("OrganizationRepo", () => {
 	let pool: Pool
@@ -17,9 +16,9 @@ describe("OrganizationRepo", () => {
 		pool = new Pool({
 			connectionString: config.databaseUrl,
 		})
-		const db = drizzle(pool, { schema })
-		repo = new OrganizationRepo(db)
-		await runMigrations(db)
+		const database = drizzle(pool, { schema })
+		repo = new OrganizationRepo(database)
+		await runMigrations(database)
 	})
 
 	afterAll(async () => {
@@ -47,8 +46,8 @@ describe("OrganizationRepo", () => {
 		const rs1 = await repo.getOrganization(rs.id)
 		expect(rs).toEqual(rs1)
 
-		await repo.deleteOrganization(rs.id)
-		expect(repo.getOrganization(rs.id)).rejects.toThrow(NotFoundError)
+		void repo.deleteOrganization(rs.id)
+		await expect(repo.getOrganization(rs.id)).rejects.toThrow(NotFoundError)
 	})
 
 	it("should not allow creating of duplicate records", async () => {
@@ -66,7 +65,7 @@ describe("OrganizationRepo", () => {
 			name: "Test Organization",
 			description: "Test description",
 		})
-		expect(repo.updateOrganization(record.id, record)).rejects.toThrow(NotFoundError)
+		await expect(repo.updateOrganization(record.id, record)).rejects.toThrow(NotFoundError)
 
 		const rs = await repo.createOrganization(record)
 		try {
@@ -87,10 +86,10 @@ describe("OrganizationRepo", () => {
 
 	it("should paginate records", async () => {
 		const records: Promise<OrganizationEntity>[] = []
-		for (const i of range(1, 50)) {
+		for (const index of range(1, 50)) {
 			const record = OrganizationEntity.fromRequest({
-				name: `Test Organization ${i}`,
-				description: `Test description ${i}`,
+				name: `Test Organization ${index}`,
+				description: `Test description ${index}`,
 			})
 			const rs = repo.createOrganization(record)
 			records.push(rs)

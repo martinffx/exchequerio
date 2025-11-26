@@ -1,4 +1,6 @@
+import { Type } from "@sinclair/typebox"
 import type { FastifyPluginAsync } from "fastify"
+import { LedgerAccountSettlementEntity } from "@/services"
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -10,24 +12,22 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "../schema"
-import { Type } from "@sinclair/typebox"
 import {
 	type AddLedgerAccountSettlementEntryRequest,
 	type CreateLedgerAccountSettlementRequest,
 	type DeleteLedgerAccountSettlementRequest,
 	type GetLedgerAccountSettlementRequest,
 	LedgerAccountSettlementEntriesRequest,
-	LedgerAccountSettlementIdParams,
+	LedgerAccountSettlementIdParams as LedgerAccountSettlementIdParameters,
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
 	type ListLedgerAccountSettlementsRequest,
 	type RemoveLedgerAccountSettlementEntryRequest,
 	type UpdateLedgerAccountSettlementRequest,
 } from "./schema"
-import { LedgerAccountSettlementEntity } from "@/services"
 
 const TAGS = ["Ledger Account Settlements"]
-const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
+const LedgerAccountSettlementRoutes: FastifyPluginAsync = server => {
 	server.get(
 		"/",
 		{
@@ -65,7 +65,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Get Ledger Account Settlement",
 				description: "Get Ledger Account Settlement",
-				params: LedgerAccountSettlementIdParams,
+				params: LedgerAccountSettlementIdParameters,
 				response: {
 					200: LedgerAccountSettlementResponse,
 					400: BadRequestErrorResponse,
@@ -123,7 +123,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Update Ledger Account Settlement",
 				description: "Update Ledger Account Settlement",
-				params: LedgerAccountSettlementIdParams,
+				params: LedgerAccountSettlementIdParameters,
 				body: LedgerAccountSettlementRequest,
 				response: {
 					200: LedgerAccountSettlementResponse,
@@ -155,7 +155,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Delete Ledger Account Settlement",
 				description: "Delete Ledger Account Settlement",
-				params: LedgerAccountSettlementIdParams,
+				params: LedgerAccountSettlementIdParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -185,7 +185,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				summary: "Add Ledger Account Settlement Entries",
 				description:
 					"This API allows attaching Ledger Entries to a drafting Ledger Account Settlement.",
-				params: LedgerAccountSettlementIdParams,
+				params: LedgerAccountSettlementIdParameters,
 				body: LedgerAccountSettlementEntriesRequest,
 				response: {
 					200: {},
@@ -217,7 +217,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				summary: "Remove Ledger Account Settlement Entries",
 				description:
 					"This API allows removing Ledger Entries from a drafting Ledger Account Settlement.",
-				params: LedgerAccountSettlementIdParams,
+				params: LedgerAccountSettlementIdParameters,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,

@@ -1,4 +1,4 @@
-import { TypeID } from "typeid-js"
+import type { TypeID } from "typeid-js"
 
 // Shared type definitions for all entities
 export type LedgerID = TypeID<"lgr">

@@ -1,12 +1,12 @@
-import type { OrganizationsTable } from "@/repo/schema"
 import type { InferSelectModel } from "drizzle-orm"
-import type { OrganizationRequest, OrganizationResponse } from "@/routes/schema"
 import { DateTime } from "luxon"
 import { TypeID } from "typeid-js"
+import type { OrganizationsTable } from "@/repo/schema"
+import type { OrganizationRequest, OrganizationResponse } from "@/routes/schema"
 import type { OrgID } from "./types"
 
 type OrgRecord = InferSelectModel<typeof OrganizationsTable>
-interface OrgEntityOpts {
+interface OrgEntityOptions {
 	id?: OrgID
 	name: string
 	description?: string
@@ -21,7 +21,7 @@ class OrganizationEntity {
 	public readonly created?: DateTime
 	public readonly updated?: DateTime
 
-	constructor({ id, name, description, created, updated }: OrgEntityOpts) {
+	constructor({ id, name, description, created, updated }: OrgEntityOptions) {
 		this.id = id ?? new TypeID("org")
 		this.name = name
 		this.description = description
@@ -32,11 +32,11 @@ class OrganizationEntity {
 	public static fromRow(row: OrgRecord): OrganizationEntity {
 		const created = DateTime.fromJSDate(row.created, { zone: "utc" })
 		if (!created.isValid) {
-			throw new Error(`Invalid created date: ${created}`)
+			throw new Error(`Invalid created date: ${created.toString()}`)
 		}
 		const updated = DateTime.fromJSDate(row.updated, { zone: "utc" })
 		if (!updated.isValid) {
-			throw new Error(`Invalid updated date: ${updated}`)
+			throw new Error(`Invalid updated date: ${updated.toString()}`)
 		}
 
 		const orgId = TypeID.fromUUID("org", row.id)
@@ -78,5 +78,7 @@ class OrganizationEntity {
 	}
 }
 
-export type { OrgID, OrgEntityOpts }
+export type { OrgEntityOptions as OrgEntityOpts }
 export { OrganizationEntity }
+
+export type { OrgID } from "./types"

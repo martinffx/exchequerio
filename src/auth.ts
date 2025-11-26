@@ -1,11 +1,11 @@
-import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify"
 import fastifyAuth from "@fastify/auth"
 import fastifyJwt from "@fastify/jwt"
 import { createSigner, type SignerSync } from "fast-jwt"
-import { Config } from "./config"
-import type { OrgID } from "./services"
+import type { FastifyInstance, FastifyRequest } from "fastify"
 import { TypeID } from "typeid-js"
+import { Config } from "./config"
 import { ForbiddenError, UnauthorizedError } from "./errors"
+import type { OrgID } from "./services"
 
 const Permissions = [
 	"ledger:read",
@@ -137,22 +137,24 @@ const registerAuth = async (server: FastifyInstance): Promise<void> => {
 		try {
 			const token = await request.jwtVerify<Token>()
 			request.token = new OrgToken(token)
-		} catch (ex: unknown) {
-			request.log.error(ex)
+		} catch (error: unknown) {
+			request.log.error(error)
 			throw new UnauthorizedError("Invalid token")
 		}
 	})
 	server.decorate("hasPermissions", (requiredPermissions: Permissions[]) => {
-		return async (request: FastifyRequest) => {
+		return (request: FastifyRequest) => {
 			const role = request.token.scope[0]
 			const permissions = RolePermissions[role]
 			if (!permissions) {
-				throw new ForbiddenError(`One of: ${Object.keys(RolePermissions)}; permissions is required`)
+				throw new ForbiddenError(
+					`One of: ${Object.keys(RolePermissions).join(", ")}; permissions is required`
+				)
 			}
 
 			for (const permission of requiredPermissions) {
 				if (!permissions.has(permission)) {
-					throw new ForbiddenError(`One of: ${requiredPermissions}; permissions is required`)
+					throw new ForbiddenError(`One of: ${requiredPermissions.join(", ")}; permissions is required`)
 				}
 			}
 		}

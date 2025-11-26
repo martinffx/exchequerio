@@ -1,14 +1,14 @@
-import type { LedgerRequest, LedgerResponse } from "@/routes/ledgers/schema"
-import type { LedgersTable } from "@/repo/schema"
-import type { InferSelectModel, InferInsertModel } from "drizzle-orm"
+import type { InferInsertModel, InferSelectModel } from "drizzle-orm"
 import { TypeID } from "typeid-js"
+import type { LedgersTable } from "@/repo/schema"
+import type { LedgerRequest, LedgerResponse } from "@/routes/ledgers/schema"
 import type { LedgerID, OrgID } from "./types"
 
 // Infer types from Drizzle schema
 type LedgerRecord = InferSelectModel<typeof LedgersTable>
 type LedgerInsert = InferInsertModel<typeof LedgersTable>
 
-interface LedgerEntityOpts {
+interface LedgerEntityOptions {
 	id: LedgerID
 	organizationId: OrgID
 	name: string
@@ -31,16 +31,16 @@ class LedgerEntity {
 	public readonly created: Date
 	public readonly updated: Date
 
-	constructor(opts: LedgerEntityOpts) {
-		this.id = opts.id
-		this.organizationId = opts.organizationId
-		this.name = opts.name
-		this.description = opts.description
-		this.currency = opts.currency
-		this.currencyExponent = opts.currencyExponent
-		this.metadata = opts.metadata
-		this.created = opts.created
-		this.updated = opts.updated
+	constructor(options: LedgerEntityOptions) {
+		this.id = options.id
+		this.organizationId = options.organizationId
+		this.name = options.name
+		this.description = options.description
+		this.currency = options.currency
+		this.currencyExponent = options.currencyExponent
+		this.metadata = options.metadata
+		this.created = options.created
+		this.updated = options.updated
 	}
 
 	// Create entity from API request
@@ -102,5 +102,7 @@ class LedgerEntity {
 	}
 }
 
-export type { LedgerID, LedgerEntityOpts, LedgerRecord, LedgerInsert }
+export type { LedgerEntityOptions as LedgerEntityOpts, LedgerRecord, LedgerInsert }
 export { LedgerEntity }
+
+export type { LedgerID } from "./types"

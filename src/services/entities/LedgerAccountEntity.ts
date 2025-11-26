@@ -1,14 +1,14 @@
+import type { InferInsertModel, InferSelectModel } from "drizzle-orm"
+import { TypeID } from "typeid-js"
+import type { LedgerAccountsTable } from "@/repo/schema"
 import type {
+	AvailableBalance,
+	Balances,
 	LedgerAccountRequest,
 	LedgerAccountResponse,
 	PendingBalance,
 	PostedBalance,
-	AvailableBalance,
-	Balances,
 } from "@/routes/ledgers/schema"
-import type { LedgerAccountsTable } from "@/repo/schema"
-import type { InferSelectModel, InferInsertModel } from "drizzle-orm"
-import { TypeID } from "typeid-js"
 import type { LedgerAccountID, LedgerID } from "./types"
 
 // Infer types from Drizzle schema
@@ -31,7 +31,7 @@ interface BalanceData {
 	currencyExponent: number
 }
 
-interface LedgerAccountEntityOpts {
+interface LedgerAccountEntityOptions {
 	id: LedgerAccountID
 	ledgerId: LedgerID
 	name: string
@@ -59,18 +59,18 @@ class LedgerAccountEntity {
 	public readonly updated: Date
 	public readonly balanceData?: BalanceData
 
-	constructor(opts: LedgerAccountEntityOpts) {
-		this.id = opts.id
-		this.ledgerId = opts.ledgerId
-		this.name = opts.name
-		this.description = opts.description
-		this.normalBalance = opts.normalBalance
-		this.balanceAmount = opts.balanceAmount
-		this.lockVersion = opts.lockVersion
-		this.metadata = opts.metadata
-		this.created = opts.created
-		this.updated = opts.updated
-		this.balanceData = opts.balanceData
+	constructor(options: LedgerAccountEntityOptions) {
+		this.id = options.id
+		this.ledgerId = options.ledgerId
+		this.name = options.name
+		this.description = options.description
+		this.normalBalance = options.normalBalance
+		this.balanceAmount = options.balanceAmount
+		this.lockVersion = options.lockVersion
+		this.metadata = options.metadata
+		this.created = options.created
+		this.updated = options.updated
+		this.balanceData = options.balanceData
 	}
 
 	// Create entity from API request - requires ledgerId and normalBalance to be set by service
@@ -198,12 +198,12 @@ class LedgerAccountEntity {
 }
 
 export type {
-	LedgerAccountID,
-	LedgerID,
-	LedgerAccountEntityOpts,
+	LedgerAccountEntityOptions as LedgerAccountEntityOpts,
 	LedgerAccountRecord,
 	LedgerAccountInsert,
 	BalanceData,
 	NormalBalance,
 }
 export { LedgerAccountEntity }
+
+export type { LedgerAccountID, LedgerID } from "./types"

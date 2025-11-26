@@ -1,6 +1,6 @@
-import { LedgerEntity, OrganizationEntity } from "@/services"
 import { faker } from "@faker-js/faker"
 import { TypeID } from "typeid-js"
+import { LedgerEntity, OrganizationEntity } from "@/services"
 
 function createOrganizationFixture(): OrganizationEntity {
 	return new OrganizationEntity({

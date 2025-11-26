@@ -1,14 +1,14 @@
+import type { InferInsertModel, InferSelectModel } from "drizzle-orm"
+import { TypeID } from "typeid-js"
+import type { LedgerTransactionEntriesTable } from "@/repo/schema"
 import type {
-	LedgerTransactionEntryResponse,
-	Direction,
+	AvailableBalance,
 	BalanceStatus,
+	Direction,
+	LedgerTransactionEntryResponse,
 	PendingBalance,
 	PostedBalance,
-	AvailableBalance,
 } from "@/routes/ledgers/schema"
-import type { LedgerTransactionEntriesTable } from "@/repo/schema"
-import type { InferSelectModel, InferInsertModel } from "drizzle-orm"
-import { TypeID } from "typeid-js"
 
 // Infer types from Drizzle schema
 type LedgerTransactionEntryRecord = InferSelectModel<typeof LedgerTransactionEntriesTable>
@@ -25,7 +25,7 @@ interface ResultingBalance {
 	availableBalance: AvailableBalance
 }
 
-interface LedgerTransactionEntryEntityOpts {
+interface LedgerTransactionEntryEntityOptions {
 	id: LedgerTransactionEntryID
 	transactionId: LedgerTransactionID
 	accountId: LedgerAccountID
@@ -56,19 +56,19 @@ class LedgerTransactionEntryEntity {
 	public readonly currencyExponent?: number
 	public readonly resultingBalance?: ResultingBalance
 
-	constructor(opts: LedgerTransactionEntryEntityOpts) {
-		this.id = opts.id
-		this.transactionId = opts.transactionId
-		this.accountId = opts.accountId
-		this.direction = opts.direction
-		this.amount = opts.amount
-		this.status = opts.status
-		this.metadata = opts.metadata
-		this.created = opts.created
-		this.updated = opts.updated
-		this.currency = opts.currency
-		this.currencyExponent = opts.currencyExponent
-		this.resultingBalance = opts.resultingBalance
+	constructor(options: LedgerTransactionEntryEntityOptions) {
+		this.id = options.id
+		this.transactionId = options.transactionId
+		this.accountId = options.accountId
+		this.direction = options.direction
+		this.amount = options.amount
+		this.status = options.status
+		this.metadata = options.metadata
+		this.created = options.created
+		this.updated = options.updated
+		this.currency = options.currency
+		this.currencyExponent = options.currencyExponent
+		this.resultingBalance = options.resultingBalance
 	}
 
 	// Create entry for transaction creation (used by service layer)
@@ -184,7 +184,7 @@ class LedgerTransactionEntryEntity {
 
 export type {
 	LedgerTransactionEntryID,
-	LedgerTransactionEntryEntityOpts,
+	LedgerTransactionEntryEntityOptions as LedgerTransactionEntryEntityOpts,
 	LedgerTransactionEntryRecord,
 	LedgerTransactionEntryInsert,
 	ResultingBalance,

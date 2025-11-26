@@ -1,14 +1,14 @@
+import type { InferInsertModel, InferSelectModel } from "drizzle-orm"
+import { TypeID } from "typeid-js"
+import type { LedgerTransactionsTable } from "@/repo/schema"
 import type {
-	LedgerTransactionRequest,
-	LedgerTransactionResponse,
 	BalanceStatus,
 	Direction,
+	LedgerTransactionRequest,
+	LedgerTransactionResponse,
 } from "@/routes/ledgers/schema"
-import type { LedgerTransactionsTable } from "@/repo/schema"
-import type { InferSelectModel, InferInsertModel } from "drizzle-orm"
-import { TypeID } from "typeid-js"
 import { LedgerTransactionEntryEntity } from "./LedgerTransactionEntryEntity"
-import type { LedgerTransactionID, LedgerID } from "./types"
+import type { LedgerID, LedgerTransactionID } from "./types"
 
 // Infer types from Drizzle schema
 type LedgerTransactionRecord = InferSelectModel<typeof LedgerTransactionsTable>
@@ -21,7 +21,7 @@ interface TransactionEntryInput {
 	amount: string
 }
 
-interface LedgerTransactionEntityOpts {
+interface LedgerTransactionEntityOptions {
 	id: LedgerTransactionID
 	ledgerId: LedgerID
 	idempotencyKey?: string
@@ -45,16 +45,16 @@ class LedgerTransactionEntity {
 	public readonly updated: Date
 	public readonly entries?: LedgerTransactionEntryEntity[]
 
-	constructor(opts: LedgerTransactionEntityOpts) {
-		this.id = opts.id
-		this.ledgerId = opts.ledgerId
-		this.idempotencyKey = opts.idempotencyKey
-		this.description = opts.description
-		this.status = opts.status
-		this.metadata = opts.metadata
-		this.created = opts.created
-		this.updated = opts.updated
-		this.entries = opts.entries
+	constructor(options: LedgerTransactionEntityOptions) {
+		this.id = options.id
+		this.ledgerId = options.ledgerId
+		this.idempotencyKey = options.idempotencyKey
+		this.description = options.description
+		this.status = options.status
+		this.metadata = options.metadata
+		this.created = options.created
+		this.updated = options.updated
+		this.entries = options.entries
 	}
 
 	// Create transaction from entry inputs (used by service layer)
@@ -232,7 +232,7 @@ class LedgerTransactionEntity {
 			} else if (entry.direction === "credit") {
 				totalCredits += amount
 			} else {
-				throw new Error(`Invalid direction: ${entry.direction}`)
+				throw new Error(`Invalid direction: ${entry.direction as string}`)
 			}
 		}
 
@@ -278,10 +278,11 @@ class LedgerTransactionEntity {
 }
 
 export type {
-	LedgerTransactionID,
-	LedgerTransactionEntityOpts,
+	LedgerTransactionEntityOptions as LedgerTransactionEntityOpts,
 	LedgerTransactionRecord,
 	LedgerTransactionInsert,
 	TransactionEntryInput,
 }
 export { LedgerTransactionEntity }
+
+export type { LedgerTransactionID } from "./types"

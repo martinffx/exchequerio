@@ -1,6 +1,6 @@
-import type { LedgerEntity, OrganizationEntity } from "./entities"
-import type { OrganizationRepo } from "@/repo/OrganizationRepo"
 import { TypeID } from "typeid-js"
+import type { OrganizationRepo } from "@/repo/OrganizationRepo"
+import type { OrganizationEntity } from "./entities"
 
 class OrganizationService {
 	constructor(private readonly orgRepo: OrganizationRepo) {}

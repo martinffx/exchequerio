@@ -1,5 +1,6 @@
-import type { LedgerRepo } from "@/repo/LedgerRepo"
+import { NotImplementedError } from "@/errors"
 import type { LedgerAccountRepo } from "@/repo/LedgerAccountRepo"
+import type { LedgerRepo } from "@/repo/LedgerRepo"
 import type {
 	LedgerAccountBalanceMonitorEntity,
 	LedgerAccountCategoryEntity,
@@ -7,8 +8,7 @@ import type {
 	LedgerAccountSettlementEntity,
 	LedgerAccountStatementEntity,
 } from "./entities"
-import type { OrgID, LedgerID, LedgerAccountID } from "./entities/types"
-import { NotImplementedError } from "@/errors"
+import type { LedgerAccountID, LedgerID, OrgID } from "./entities/types"
 
 class LedgerAccountService {
 	constructor(
@@ -20,8 +20,8 @@ class LedgerAccountService {
 	public async listLedgerAccounts(
 		orgId: OrgID,
 		ledgerId: LedgerID,
-		offset: number = 0,
-		limit: number = 50
+		offset = 0,
+		limit = 50
 	): Promise<LedgerAccountEntity[]> {
 		await this.ledgerRepo.getLedger(orgId, ledgerId) // Verify ledger exists
 		return this.ledgerAccountRepo.listLedgerAccounts(orgId.toString(), ledgerId, offset, limit)
@@ -60,150 +60,148 @@ class LedgerAccountService {
 	}
 
 	// Ledger Account Category
-	public async listLedgerAccountCategories(
-		offset: number,
-		limit: number
+	public listLedgerAccountCategories(
+		_offset: number,
+		_limit: number
 	): Promise<LedgerAccountCategoryEntity[]> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
 		)
 	}
 
-	public async getLedgerAccountCategory(id: string): Promise<LedgerAccountCategoryEntity> {
+	public getLedgerAccountCategory(_id: string): Promise<LedgerAccountCategoryEntity> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
 		)
 	}
 
-	public async createLedgerAccountCategory(
-		entity: LedgerAccountCategoryEntity
+	public createLedgerAccountCategory(
+		_entity: LedgerAccountCategoryEntity
 	): Promise<LedgerAccountCategoryEntity> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
 		)
 	}
 
-	public async updateLedgerAccountCategory(
-		id: string,
-		entity: LedgerAccountCategoryEntity
+	public updateLedgerAccountCategory(
+		_id: string,
+		_entity: LedgerAccountCategoryEntity
 	): Promise<LedgerAccountCategoryEntity> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
 		)
 	}
 
-	public async deleteLedgerAccountCategory(id: string): Promise<void> {
+	public deleteLedgerAccountCategory(_id: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
 		)
 	}
 
-	public async linkLedgerAccountToCategory(id: string, accountId: string): Promise<void> {
+	public linkLedgerAccountToCategory(_id: string, _accountId: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
 		)
 	}
 
-	public async unlinkLedgerAccountToCategory(id: string, accountId: string): Promise<void> {
+	public unlinkLedgerAccountToCategory(_id: string, _accountId: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
 		)
 	}
 
-	public async linkLedgerAccountCategoryToCategory(id: string, categoryId: string): Promise<void> {
+	public linkLedgerAccountCategoryToCategory(_id: string, _categoryId: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
 		)
 	}
 
-	public async unlinkLedgerAccountCategoryToCategory(id: string, categoryId: string): Promise<void> {
+	public unlinkLedgerAccountCategoryToCategory(_id: string, _categoryId: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
 		)
 	}
 
 	// Ledger Account Settlement
-	public async listLedgerAccountSettlements(
-		offset: number,
-		limit: number
+	public listLedgerAccountSettlements(
+		_offset: number,
+		_limit: number
 	): Promise<LedgerAccountSettlementEntity[]> {
 		throw new NotImplementedError(
 			"Account settlements require LedgerAccountSettlementsTable and LedgerAccountSettlementEntity implementation"
 		)
 	}
 
-	public async getLedgerAccountSettlement(id: string): Promise<LedgerAccountSettlementEntity> {
+	public getLedgerAccountSettlement(_id: string): Promise<LedgerAccountSettlementEntity> {
 		throw new NotImplementedError(
 			"Account settlements require LedgerAccountSettlementsTable and LedgerAccountSettlementEntity implementation"
 		)
 	}
 
-	public async createLedgerAccountSettlement(
-		entity: LedgerAccountSettlementEntity
+	public createLedgerAccountSettlement(
+		_entity: LedgerAccountSettlementEntity
 	): Promise<LedgerAccountSettlementEntity> {
 		throw new NotImplementedError(
 			"Account settlements require LedgerAccountSettlementsTable and LedgerAccountSettlementEntity implementation"
 		)
 	}
 
-	public async updateLedgerAccountSettlement(
-		id: string,
-		entity: LedgerAccountSettlementEntity
+	public updateLedgerAccountSettlement(
+		_id: string,
+		_entity: LedgerAccountSettlementEntity
 	): Promise<LedgerAccountSettlementEntity> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async deleteLedgerAccountSettlement(id: string): Promise<void> {
+	public deleteLedgerAccountSettlement(_id: string): Promise<void> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async addLedgerAccountSettlementEntries(id: string, entries: string[]): Promise<void> {
+	public addLedgerAccountSettlementEntries(_id: string, _entries: string[]): Promise<void> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async removeLedgerAccountSettlementEntries(id: string, entries: string[]): Promise<void> {
+	public removeLedgerAccountSettlementEntries(_id: string, _entries: string[]): Promise<void> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
 	// Ledger Account Statement
-	public async getLedgerAccountStatement(id: string): Promise<LedgerAccountStatementEntity> {
+	public getLedgerAccountStatement(_id: string): Promise<LedgerAccountStatementEntity> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async createLedgerAccountStatement(
-		entity: LedgerAccountStatementEntity
+	public createLedgerAccountStatement(
+		_entity: LedgerAccountStatementEntity
 	): Promise<LedgerAccountStatementEntity> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
 	// Ledger Account Balance Monitor§
-	public async listLedgerAccountBalanceMonitors(
-		offset: number,
-		limit: number
+	public listLedgerAccountBalanceMonitors(
+		_offset: number,
+		_limit: number
 	): Promise<LedgerAccountBalanceMonitorEntity[]> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async getLedgerAccountBalanceMonitor(
-		id: string
+	public getLedgerAccountBalanceMonitor(_id: string): Promise<LedgerAccountBalanceMonitorEntity> {
+		throw new NotImplementedError("Feature not yet implemented")
+	}
+
+	public createLedgerAccountBalanceMonitor(
+		_entity: LedgerAccountBalanceMonitorEntity
 	): Promise<LedgerAccountBalanceMonitorEntity> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async createLedgerAccountBalanceMonitor(
-		entity: LedgerAccountBalanceMonitorEntity
+	public updateLedgerAccountBalanceMonitor(
+		_id: string,
+		_entity: LedgerAccountBalanceMonitorEntity
 	): Promise<LedgerAccountBalanceMonitorEntity> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async updateLedgerAccountBalanceMonitor(
-		id: string,
-		entity: LedgerAccountBalanceMonitorEntity
-	): Promise<LedgerAccountBalanceMonitorEntity> {
-		throw new NotImplementedError("Feature not yet implemented")
-	}
-
-	public async deleteLedgerAccountBalanceMonitor(id: string): Promise<void> {
+	public deleteLedgerAccountBalanceMonitor(_id: string): Promise<void> {
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 }

@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify"
+import { LedgerAccountStatementEntity } from "@/services"
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -12,14 +13,13 @@ import {
 import {
 	type CreateLedgerAccountStatementRequest,
 	type GetLedgerAccountStatementRequest,
-	LedgerAccountStatementIdParams,
+	LedgerAccountStatementIdParams as LedgerAccountStatementIdParameters,
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,
 } from "./schema"
-import { LedgerAccountStatementEntity } from "@/services"
 
 const TAGS = ["Ledger Account Statements"]
-const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
+const LedgerAccountStatementRoutes: FastifyPluginAsync = server => {
 	server.get(
 		"/:ledgerAccountStatmentId",
 		{
@@ -28,7 +28,7 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Get Ledger Account Statement",
 				description: "Get Ledger Account Statement",
-				params: LedgerAccountStatementIdParams,
+				params: LedgerAccountStatementIdParameters,
 				response: {
 					200: LedgerAccountStatementResponse,
 					400: BadRequestErrorResponse,

@@ -1,12 +1,13 @@
-import { OrganizationsTable } from "./schema"
 import { eq } from "drizzle-orm"
-import type { DrizzleDB } from "./types"
 import { DateTime } from "luxon"
-import { ConflictError, InternalServerError, LedgerError, NotFoundError } from "@/errors"
 import { DatabaseError } from "pg"
 import { typeid } from "typeid-js"
+import { ConflictError, InternalServerError, LedgerError, NotFoundError } from "@/errors"
 import { OrganizationEntity, type OrgID } from "@/services"
-const tid = typeid("prefix")
+import { OrganizationsTable } from "./schema"
+import type { DrizzleDB } from "./types"
+
+const _tid = typeid("prefix")
 
 class OrganizationRepo {
 	constructor(private readonly db: DrizzleDB) {}
@@ -14,7 +15,7 @@ class OrganizationRepo {
 	public async listOrganizations(offset = 0, limit = 20): Promise<OrganizationEntity[]> {
 		const orgs = await this.db.select().from(OrganizationsTable).limit(limit).offset(offset)
 
-		return orgs.map(OrganizationEntity.fromRow)
+		return orgs.map(org => OrganizationEntity.fromRow(org))
 	}
 
 	public async getOrganization(id: OrgID): Promise<OrganizationEntity> {
@@ -24,7 +25,7 @@ class OrganizationRepo {
 			.where(eq(OrganizationsTable.id, id.toUUID()))
 			.limit(1)
 		if (!orgs.length) {
-			throw new NotFoundError(`Organization with id ${id} not found`)
+			throw new NotFoundError(`Organization with id ${id.toString()} not found`)
 		}
 		return OrganizationEntity.fromRow(orgs[0])
 	}
@@ -40,17 +41,17 @@ class OrganizationRepo {
 				})
 				.returning()
 			return OrganizationEntity.fromRow(organization)
-		} catch (ex: unknown) {
-			if (ex instanceof LedgerError) {
-				throw ex
+		} catch (error: unknown) {
+			if (error instanceof LedgerError) {
+				throw error
 			}
 
-			if (ex instanceof DatabaseError) {
-				throw new ConflictError(`Organization with id ${record.id} already exists`)
+			if (error instanceof DatabaseError) {
+				throw new ConflictError(`Organization with id ${record.id.toString()} already exists`)
 			}
 
-			if (ex instanceof Error) {
-				throw new InternalServerError(ex.message)
+			if (error instanceof Error) {
+				throw new InternalServerError(error.message)
 			}
 
 			throw new InternalServerError("Unknown error")
@@ -72,16 +73,16 @@ class OrganizationRepo {
 				.where(eq(OrganizationsTable.id, id.toUUID()))
 				.returning()
 			if (organization === undefined) {
-				throw new NotFoundError(`Organization with id ${id} not found`)
+				throw new NotFoundError(`Organization with id ${id.toString()} not found`)
 			}
 			return OrganizationEntity.fromRow(organization)
-		} catch (ex: unknown) {
-			if (ex instanceof LedgerError) {
-				throw ex
+		} catch (error: unknown) {
+			if (error instanceof LedgerError) {
+				throw error
 			}
 
-			if (ex instanceof Error) {
-				throw new InternalServerError(ex.message)
+			if (error instanceof Error) {
+				throw new InternalServerError(error.message)
 			}
 
 			throw new InternalServerError("Unknown error")
@@ -93,4 +94,6 @@ class OrganizationRepo {
 	}
 }
 
-export { OrganizationRepo, OrganizationEntity }
+export { OrganizationRepo }
+
+export { OrganizationEntity } from "@/services"

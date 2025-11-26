@@ -1,14 +1,9 @@
+import { TypeID } from "typeid-js"
+import { NotImplementedError } from "@/errors"
 import type { LedgerRepo } from "@/repo/LedgerRepo"
 import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo"
-import {
-	LedgerAccountEntity,
-	LedgerEntity,
-	LedgerTransactionEntity,
-	LedgerTransactionEntryEntity,
-} from "./entities"
-import { TypeID } from "typeid-js"
-import type { OrgID, LedgerID } from "./entities/types"
-import { NotImplementedError } from "@/errors"
+import { LedgerTransactionEntity, type LedgerTransactionEntryEntity } from "./entities"
+import type { LedgerID } from "./entities/types"
 
 // Transaction entry interface for creating transactions
 interface TransactionEntryInput {
@@ -29,7 +24,7 @@ interface CreateTransactionInput {
 class LedgerTransactionService {
 	constructor(
 		private readonly ledgerTransactionRepo: LedgerTransactionRepo,
-		private readonly ledgerRepo: LedgerRepo
+		readonly _ledgerRepo: LedgerRepo
 	) {}
 
 	// Core transaction operations with double-entry enforcement
@@ -53,7 +48,7 @@ class LedgerTransactionService {
 			)
 
 			// Create entry entities
-			const entryEntities = transactionEntity.entries || []
+			const entryEntities = transactionEntity.entries ?? []
 
 			const result = await this.ledgerTransactionRepo.createTransactionWithEntries(
 				"org123", // TODO: Get from context/auth
@@ -72,7 +67,7 @@ class LedgerTransactionService {
 	}
 
 	// Post (confirm) a pending transaction
-	public async postTransaction(transactionId: string): Promise<LedgerTransactionEntity> {
+	public postTransaction(_transactionId: string): Promise<LedgerTransactionEntity> {
 		// TODO: Implement post transaction logic
 		throw new NotImplementedError("Feature not yet implemented")
 	}
@@ -101,96 +96,102 @@ class LedgerTransactionService {
 
 		return this.createTransactionWithEntries({
 			ledgerId: "default", // TODO: Get from context
-			description: description || `Settlement: ${settledAccountId} -> ${contraAccountId}`,
+			description: description ?? `Settlement: ${settledAccountId} -> ${contraAccountId}`,
 			entries,
 		})
 	}
 
 	// Balance queries for account monitoring
-	public async getAccountBalances(accountId: string, ledgerId: string): Promise<any> {
+	public getAccountBalances(
+		_accountId: string,
+		_ledgerId: string
+	): Promise<Record<string, unknown>> {
 		// TODO: Implement balance calculation
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async getAccountBalancesFast(accountId: string, ledgerId: string): Promise<any> {
+	public getAccountBalancesFast(
+		_accountId: string,
+		_ledgerId: string
+	): Promise<Record<string, unknown>> {
 		// TODO: Implement fast balance calculation
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
 	// Transaction history and reporting
-	public async getTransactionHistory(
-		accountId: string,
-		limit: number,
-		offset: number
+	public getTransactionHistory(
+		_accountId: string,
+		_limit: number,
+		_offset: number
 	): Promise<LedgerTransactionEntity[]> {
 		// TODO: Implement transaction history
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
 	// CRUD operations for transactions
-	public async listLedgerTransactions(
-		offset: number,
-		limit: number
+	public listLedgerTransactions(
+		_offset: number,
+		_limit: number
 	): Promise<LedgerTransactionEntity[]> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async getLedgerTransaction(id: string): Promise<LedgerTransactionEntity> {
+	public getLedgerTransaction(_id: string): Promise<LedgerTransactionEntity> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async createLedgerTransaction(
-		entity: LedgerTransactionEntity
+	public createLedgerTransaction(
+		_entity: LedgerTransactionEntity
 	): Promise<LedgerTransactionEntity> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async updateLedgerTransaction(
-		id: string,
-		entity: LedgerTransactionEntity
+	public updateLedgerTransaction(
+		_id: string,
+		_entity: LedgerTransactionEntity
 	): Promise<LedgerTransactionEntity> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async deleteLedgerTransaction(id: string): Promise<void> {
+	public deleteLedgerTransaction(_id: string): Promise<void> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
 	// Transaction entry operations
-	public async listLedgerTransactionEntries(
-		offset: number,
-		limit: number
+	public listLedgerTransactionEntries(
+		_offset: number,
+		_limit: number
 	): Promise<LedgerTransactionEntryEntity[]> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async getLedgerTransactionEntry(id: string): Promise<LedgerTransactionEntryEntity> {
+	public getLedgerTransactionEntry(_id: string): Promise<LedgerTransactionEntryEntity> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async createLedgerTransactionEntry(
-		entity: LedgerTransactionEntryEntity
+	public createLedgerTransactionEntry(
+		_entity: LedgerTransactionEntryEntity
 	): Promise<LedgerTransactionEntryEntity> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async updateLedgerTransactionEntry(
-		id: string,
-		entity: LedgerTransactionEntryEntity
+	public updateLedgerTransactionEntry(
+		_id: string,
+		_entity: LedgerTransactionEntryEntity
 	): Promise<LedgerTransactionEntryEntity> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
 
-	public async deleteLedgerTransactionEntry(id: string): Promise<void> {
+	public deleteLedgerTransactionEntry(_id: string): Promise<void> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented")
 	}
@@ -214,7 +215,10 @@ class LedgerTransactionService {
 		}
 	}
 
-	private async validateAccounts(entries: TransactionEntryInput[], ledgerId: string): Promise<void> {
+	private async validateAccounts(
+		_entries: TransactionEntryInput[],
+		_ledgerId: string
+	): Promise<void> {
 		// TODO: Implement account validation
 		// For now, just pass validation
 	}

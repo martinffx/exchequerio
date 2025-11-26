@@ -32,13 +32,21 @@ depends = ["docker_up"]
 run = "bun run test"
 
 # Code Quality Tasks
+[tasks.lint_fast]
+description = "Fast linting with Biome only (formatting + syntax)"
+run = "bun run lint_fast"
+
+[tasks.lint_slow]
+description = "Slow linting with ESLint only (type-aware + boundaries + unicorn)"
+run = "bun run lint_slow"
+
 [tasks.lint]
-description = "Type-aware linting with ESLint + architectural boundaries"
-run = "bunx eslint ./src --max-warnings 0 --quiet"
+description = "Complete linting with Biome + ESLint"
+run = "bun run lint"
 
 [tasks.format]
-description = "Format code with Prettier + oxc plugin"
-run = "bunx prettier --write ./src || true"
+description = "Format code with Biome"
+run = "bun run format"
 
 [tasks.types]
 description = "Type check without emitting"

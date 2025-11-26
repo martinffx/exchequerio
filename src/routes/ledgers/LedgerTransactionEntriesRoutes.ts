@@ -1,5 +1,6 @@
-import type { FastifyPluginAsync } from "fastify"
 import { Type } from "@sinclair/typebox"
+import type { FastifyPluginAsync } from "fastify"
+import { NotImplementedError } from "@/errors"
 
 import {
 	BadRequestErrorResponse,
@@ -14,7 +15,7 @@ import {
 } from "@/routes/schema"
 import {
 	type GetLedgerTransactionEntryRequest,
-	LedgerTransactionEntryIdParams,
+	LedgerTransactionEntryIdParams as LedgerTransactionEntryIdParameters,
 	LedgerTransactionEntryRequest,
 	LedgerTransactionEntryResponse,
 	type ListLedgerTransactionEntriesRequest,
@@ -22,7 +23,7 @@ import {
 } from "./schema"
 
 const TAGS = ["Ledger Transaction Entries"]
-const LedgerTransactionEntriesRoutes: FastifyPluginAsync = async server => {
+const LedgerTransactionEntriesRoutes: FastifyPluginAsync = server => {
 	server.get(
 		"/",
 		{
@@ -60,7 +61,7 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Get Ledger Transaction Entry",
 				description: "Get Ledger Transaction Entry",
-				params: LedgerTransactionEntryIdParams,
+				params: LedgerTransactionEntryIdParameters,
 				response: {
 					200: LedgerTransactionEntryResponse,
 					400: BadRequestErrorResponse,
@@ -89,7 +90,7 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Update Ledger Transaction Entry",
 				description: "Update Ledger Transaction Entry",
-				params: LedgerTransactionEntryIdParams,
+				params: LedgerTransactionEntryIdParameters,
 				body: LedgerTransactionEntryRequest,
 				response: {
 					200: LedgerTransactionEntryResponse,
@@ -104,14 +105,12 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = async server => {
 				},
 			},
 		},
-		async (rq: UpdateLedgerTransactionEntryRequest): Promise<LedgerTransactionEntryResponse> => {
-			const org = await rq.server.services.ledgerTransactionService.updateLedgerTransactionEntry(
-				rq.params.ledgerTransactionEntryId,
-				LedgerTransactionEntryResponse.fromRequest(rq.body)
-			)
-			return org.toResponse()
+		async (_rq: UpdateLedgerTransactionEntryRequest): Promise<LedgerTransactionEntryResponse> => {
+			// TODO: Implement proper entity creation from request body
+			throw new NotImplementedError("Feature not yet implemented")
 		}
 	)
+	return Promise.resolve()
 }
 
 export { LedgerTransactionEntriesRoutes }

@@ -1,4 +1,5 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify"
+import { v7 as uuid } from "uuid"
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -9,7 +10,6 @@ import type {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/routes/schema"
-import { v7 as uuid } from "uuid"
 
 abstract class LedgerError extends Error {
 	abstract status: number
@@ -175,7 +175,7 @@ class NotImplementedError extends LedgerError {
 		this.name = "NotImplementedError"
 	}
 
-	public toResponse(): any {
+	public toResponse(): Record<string, unknown> {
 		return {
 			type: "NOT_IMPLEMENTED",
 			status: 500, // Use 500 since we don't have 501 response type defined

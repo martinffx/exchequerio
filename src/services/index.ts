@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify"
 import fp from "fastify-plugin"
-import { LedgerService } from "./LedgerService"
 import { LedgerAccountService } from "./LedgerAccountService"
+import { LedgerService } from "./LedgerService"
 import { LedgerTransactionService } from "./LedgerTransactionService"
 import { OrganizationService } from "./OrganizationService"
 
@@ -18,7 +18,7 @@ declare module "fastify" {
 	}
 }
 
-const ServicePlugin: FastifyPluginAsync = fp(async server => {
+const ServicePlugin: FastifyPluginAsync = fp(server => {
 	const organizationService = new OrganizationService(server.repo.organizationRepo)
 	const ledgerService = new LedgerService(server.repo.ledgerRepo)
 	const ledgerAccountService = new LedgerAccountService(

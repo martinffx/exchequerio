@@ -1,8 +1,8 @@
+import { typeid } from "typeid-js"
 import type {
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
 } from "@/routes/ledgers/schema"
-import { typeid } from "typeid-js"
 
 class LedgerAccountSettlementEntity {
 	constructor(
