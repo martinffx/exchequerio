@@ -1,5 +1,5 @@
-import { vi } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { vi } from "vitest";
 import { signJWT } from "@/auth";
 import type {
 	BadRequestErrorResponse,

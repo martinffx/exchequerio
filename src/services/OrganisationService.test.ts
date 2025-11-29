@@ -1,7 +1,9 @@
-import { vi } from "vitest";
 import { range } from "radash";
+import { vi } from "vitest";
+
 import { NotFoundError } from "@/errors";
 import { OrganizationEntity, type OrganizationRepo } from "@/repo/OrganizationRepo";
+
 import { OrganizationService } from "./OrganizationService";
 
 describe("OrganizationService", () => {
