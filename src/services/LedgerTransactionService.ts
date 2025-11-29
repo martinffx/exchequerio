@@ -1,6 +1,5 @@
 import { TypeID } from "typeid-js"
 import { NotImplementedError } from "@/errors"
-import type { LedgerRepo } from "@/repo/LedgerRepo"
 import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo"
 import { LedgerTransactionEntity, type LedgerTransactionEntryEntity } from "./entities"
 import type { LedgerID } from "./entities/types"
@@ -22,10 +21,7 @@ interface CreateTransactionInput {
 }
 
 class LedgerTransactionService {
-	constructor(
-		private readonly ledgerTransactionRepo: LedgerTransactionRepo,
-		readonly _ledgerRepo: LedgerRepo
-	) {}
+	constructor(private readonly ledgerTransactionRepo: LedgerTransactionRepo) {}
 
 	// Core transaction operations with double-entry enforcement
 	public async createTransactionWithEntries(

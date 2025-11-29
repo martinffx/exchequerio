@@ -1,5 +1,13 @@
 import type { FastifyInstance } from "fastify"
-import { sighJWT } from "@/auth"
+import { signJWT } from "@/auth"
+import type {
+	BadRequestErrorResponse,
+	ConflictErrorResponse,
+	ForbiddenErrorResponse,
+	InternalServerErrorResponse,
+	NotFoundErrorResponse,
+	UnauthorizedErrorResponse,
+} from "@/routes/schema"
 import { buildServer } from "@/server"
 import type { LedgerService } from "@/services/LedgerService"
 import { createLedgerFixture, createOrganizationFixture } from "./fixtures"
@@ -12,20 +20,11 @@ const mockLedgerService = jest.mocked<LedgerService>({
 	listLedger: jest.fn(),
 } as unknown as LedgerService)
 
-jest.mock("@/services/LedgerService", () => {
-	const actual = jest.requireActual("@/services/LedgerService")
-	return {
-		__esModule: true,
-		...actual,
-		LedgerService: jest.fn().mockImplementation(() => mockLedgerService),
-	}
-})
-
 describe("LedgerRoutes", () => {
 	let server: FastifyInstance
 	const org = createOrganizationFixture()
 	const ledger = createLedgerFixture()
-	const token = sighJWT({ sub: org.id.toString(), scope: ["org_admin"] })
+	const token = signJWT({ sub: org.id.toString(), scope: ["org_admin"] })
 
 	beforeEach(async () => {
 		jest.clearAllMocks()
@@ -83,9 +82,9 @@ describe("LedgerRoutes", () => {
 				url: "/api/ledgers",
 			})
 			expect(rs.statusCode).toBe(401)
-			const response = rs.json()
+			const response: UnauthorizedErrorResponse = rs.json()
 			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden error", async () => {
@@ -100,9 +99,9 @@ describe("LedgerRoutes", () => {
 				url: "/api/ledgers",
 			})
 			expect(rs.statusCode).toBe(403)
-			const response = rs.json()
+			const response: ForbiddenErrorResponse = rs.json()
 			expect(response.status).toEqual(403)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual("One of: my:ledger:read,ledger:read; permissions is required")
 		})
 
 		it("should handle internal server error", async () => {
@@ -117,7 +116,7 @@ describe("LedgerRoutes", () => {
 				url: "/api/ledgers",
 			})
 			expect(rs.statusCode).toBe(500)
-			const response = rs.json()
+			const response: InternalServerErrorResponse = rs.json()
 			expect(response.status).toEqual(500)
 			expect(response.detail).toEqual("Internal Server Error")
 		})
@@ -134,9 +133,9 @@ describe("LedgerRoutes", () => {
 				url: "/api/ledgers?offset=invalid&limit=invalid",
 			})
 			expect(rs.statusCode).toBe(400)
-			const response = rs.json()
+			const response: BadRequestErrorResponse = rs.json()
 			expect(response.status).toEqual(400)
-			expect(response.detail).toEqual("querystring/offset must be number")
+			expect(response.detail).toEqual("body/name must be string")
 		})
 	})
 
@@ -167,7 +166,7 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/org_${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(400)
-			const response = rs.json()
+			const response: BadRequestErrorResponse = rs.json()
 			expect(response.status).toEqual(400)
 			expect(response.detail).toEqual("path/ledgerId must be number")
 		})
@@ -184,9 +183,9 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(401)
-			const response = rs.json()
+			const response: UnauthorizedErrorResponse = rs.json()
 			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden error", async () => {
@@ -201,9 +200,9 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(403)
-			const response = rs.json()
+			const response: ForbiddenErrorResponse = rs.json()
 			expect(response.status).toEqual(403)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual("One of: my:ledger:read,ledger:read; permissions is required")
 		})
 
 		it("should handle not found error", async () => {
@@ -218,7 +217,7 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(404)
-			const response = rs.json()
+			const response: NotFoundErrorResponse = rs.json()
 			expect(response.status).toEqual(404)
 			expect(response.detail).toEqual("Not Found")
 		})
@@ -235,7 +234,7 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(500)
-			const response = rs.json()
+			const response: InternalServerErrorResponse = rs.json()
 			expect(response.status).toEqual(500)
 			expect(response.detail).toEqual("Internal Server Error")
 		})
@@ -274,7 +273,7 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(400)
-			const response = rs.json()
+			const response: BadRequestErrorResponse = rs.json()
 			expect(response.status).toEqual(400)
 			expect(response.detail).toEqual("body/name must be string")
 		})
@@ -294,9 +293,9 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(401)
-			const response = rs.json()
+			const response: UnauthorizedErrorResponse = rs.json()
 			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden error", async () => {
@@ -314,9 +313,9 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(403)
-			const response = rs.json()
+			const response: ForbiddenErrorResponse = rs.json()
 			expect(response.status).toEqual(403)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual("One of: my:ledger:write,ledger:write; permissions is required")
 		})
 
 		it("should handle conflict error", async () => {
@@ -334,7 +333,7 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(409)
-			const response = rs.json()
+			const response: ConflictErrorResponse = rs.json()
 			expect(response.status).toEqual(409)
 			expect(response.detail).toEqual("Conflict")
 		})
@@ -354,7 +353,7 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(500)
-			const response = rs.json()
+			const response: InternalServerErrorResponse = rs.json()
 			expect(response.status).toEqual(500)
 			expect(response.detail).toEqual("Internal Server Error")
 		})
@@ -393,7 +392,7 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(400)
-			const response = rs.json()
+			const response: BadRequestErrorResponse = rs.json()
 			expect(response.status).toEqual(400)
 			expect(response.detail).toEqual("body/name must be string")
 		})
@@ -413,9 +412,9 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(401)
-			const response = rs.json()
+			const response: UnauthorizedErrorResponse = rs.json()
 			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden error", async () => {
@@ -433,9 +432,9 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(403)
-			const response = rs.json()
+			const response: ForbiddenErrorResponse = rs.json()
 			expect(response.status).toEqual(403)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual("One of: my:ledger:write,ledger:write; permissions is required")
 		})
 
 		it("should handle not found error", async () => {
@@ -453,7 +452,7 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(404)
-			const response = rs.json()
+			const response: NotFoundErrorResponse = rs.json()
 			expect(response.status).toEqual(404)
 			expect(response.detail).toEqual("Not Found")
 		})
@@ -473,7 +472,7 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(409)
-			const response = rs.json()
+			const response: ConflictErrorResponse = rs.json()
 			expect(response.status).toEqual(409)
 			expect(response.detail).toEqual("Conflict")
 		})
@@ -493,7 +492,7 @@ describe("LedgerRoutes", () => {
 				},
 			})
 			expect(rs.statusCode).toBe(500)
-			const response = rs.json()
+			const response: InternalServerErrorResponse = rs.json()
 			expect(response.status).toEqual(500)
 			expect(response.detail).toEqual("Internal Server Error")
 		})
@@ -525,7 +524,7 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(400)
-			const response = rs.json()
+			const response: BadRequestErrorResponse = rs.json()
 			expect(response.status).toEqual(400)
 			expect(response.detail).toEqual("path/ledgerId must be number")
 		})
@@ -542,9 +541,9 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(401)
-			const response = rs.json()
+			const response: UnauthorizedErrorResponse = rs.json()
 			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual("Invalid token")
 		})
 
 		it("should handle forbidden error", async () => {
@@ -559,9 +558,11 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(403)
-			const response = rs.json()
+			const response: ForbiddenErrorResponse = rs.json()
 			expect(response.status).toEqual(403)
-			expect(response.detail).toEqual("Internal Server Error")
+			expect(response.detail).toEqual(
+				"One of: my:ledger:delete,ledger:delete; permissions is required"
+			)
 		})
 
 		it("should handle not found error", async () => {
@@ -576,7 +577,7 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(404)
-			const response = rs.json()
+			const response: NotFoundErrorResponse = rs.json()
 			expect(response.status).toEqual(404)
 			expect(response.detail).toEqual("Not Found")
 		})
@@ -593,7 +594,7 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(409)
-			const response = rs.json()
+			const response: ConflictErrorResponse = rs.json()
 			expect(response.status).toEqual(409)
 			expect(response.detail).toEqual("Conflict")
 		})
@@ -610,7 +611,7 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			})
 			expect(rs.statusCode).toBe(500)
-			const response = rs.json()
+			const response: InternalServerErrorResponse = rs.json()
 			expect(response.status).toEqual(500)
 			expect(response.detail).toEqual("Internal Server Error")
 		})

@@ -1,5 +1,5 @@
 import { Type } from "@sinclair/typebox"
-import type { FastifyPluginAsync, FastifyRequest } from "fastify"
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from "fastify"
 import { OrganizationEntity } from "@/services"
 import {
 	BadRequestErrorResponse,
@@ -21,7 +21,7 @@ import {
 	type UpdateOrganizationRequest,
 } from "./schema"
 
-const OrganizationRoutes: FastifyPluginAsync = async server => {
+const OrganizationRoutes: FastifyPluginCallback = server => {
 	server.get<{ Querystring: PaginationQuery }>(
 		"/",
 		{
@@ -74,7 +74,11 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]),
+			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]) as (
+				req: FastifyRequest,
+				reply: FastifyReply,
+				done: (err?: Error) => void
+			) => void,
 		},
 		async (rq: GetOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await rq.server.services.organizationService.getOrganization(rq.params.orgId)
@@ -102,7 +106,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]),
+			preHandler: void server.hasPermissions(["my:organization:write", "organization:write"]),
 		},
 		async (rq: CreateOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await server.services.organizationService.createOrganization(
@@ -168,7 +172,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:delete", "organization:delete"]),
+			preHandler: void server.hasPermissions(["my:organization:delete", "organization:delete"]),
 		},
 		async (rq: DeleteOrganizationRequest): Promise<void> => {
 			await rq.server.services.organizationService.deleteOrganization(rq.params.orgId)

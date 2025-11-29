@@ -25,7 +25,7 @@ import {
 } from "./schema"
 
 const TAGS = ["Ledgers"]
-const LedgerRoutes: FastifyPluginAsync = server => {
+const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 	server.get(
 		"/",
 		{

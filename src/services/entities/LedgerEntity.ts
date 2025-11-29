@@ -80,7 +80,7 @@ class LedgerEntity {
 			id: this.id.toString(),
 			organizationId: this.organizationId.toString(),
 			name: this.name,
-			description: this.description ?? null,
+			description: this.description ?? undefined,
 			currency: this.currency,
 			currencyExponent: this.currencyExponent,
 			metadata: this.metadata,

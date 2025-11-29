@@ -122,7 +122,7 @@ declare module "fastify" {
 }
 
 let jwtSigner: typeof SignerSync
-const sighJWT = (token: Token): string => {
+const signJWT = (token: Token): string => {
 	if (jwtSigner === undefined) {
 		const config = new Config()
 		jwtSigner = createSigner({ key: config.jwtSecret })
@@ -143,7 +143,7 @@ const registerAuth = async (server: FastifyInstance): Promise<void> => {
 		}
 	})
 	server.decorate("hasPermissions", (requiredPermissions: Permissions[]) => {
-		return (request: FastifyRequest) => {
+		return async (request: FastifyRequest): Promise<void> => {
 			const role = request.token.scope[0]
 			const permissions = RolePermissions[role]
 			if (!permissions) {
@@ -162,4 +162,4 @@ const registerAuth = async (server: FastifyInstance): Promise<void> => {
 	await server.register(fastifyAuth)
 }
 
-export { registerAuth, sighJWT }
+export { registerAuth, signJWT }

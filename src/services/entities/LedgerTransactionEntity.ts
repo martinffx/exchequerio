@@ -162,8 +162,8 @@ class LedgerTransactionEntity {
 		return {
 			id: this.id.toString(),
 			ledgerId: this.ledgerId.toString(),
-			idempotencyKey: this.idempotencyKey ?? null,
-			description: this.description ?? null,
+			idempotencyKey: this.idempotencyKey ?? undefined,
+			description: this.description ?? undefined,
 			status: this.status,
 			metadata: this.metadata,
 			created: this.created,

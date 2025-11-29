@@ -236,26 +236,16 @@ describe("LedgerRepo Integration Tests", () => {
 				},
 			]
 
-			const idempotencyKey = "test-idempotency-key"
+			const _idempotencyKey = "test-idempotency-key"
 
 			// First transaction should succeed
-			const tx1 = ledgerRepo.createTransactionWithEntries(
-				testLedgerId,
-				"First transaction",
-				entries,
-				idempotencyKey
-			)
+			const tx1 = ledgerRepo.createTransactionWithEntries(testLedgerId, "First transaction", entries)
 
 			expect(tx1).toBeDefined()
 
 			// Second transaction with same key should fail - TODO: Implement idempotency checking
 			expect(() =>
-				ledgerRepo.createTransactionWithEntries(
-					testLedgerId,
-					"Duplicate transaction",
-					entries,
-					idempotencyKey
-				)
+				ledgerRepo.createTransactionWithEntries(testLedgerId, "Duplicate transaction", entries)
 			).toThrow("duplicate key value violates unique constraint")
 
 			// Verify only one transaction was created
@@ -283,7 +273,7 @@ describe("LedgerRepo Integration Tests", () => {
 				])
 			)
 
-			transactionPromises
+			void _transactionPromises
 
 			// Test balance query performance
 			const startTime = performance.now()

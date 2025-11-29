@@ -6,9 +6,14 @@ import fastify, { type FastifyInstance } from "fastify"
 import { registerAuth } from "@/auth"
 import { Config } from "@/config"
 import { globalErrorHandler } from "@/errors"
-import { RepoPlugin } from "@/repo"
+import { RepoPlugin, type RepoPluginOptions } from "@/repo"
 import { RouterPlugin } from "@/routes"
-import { ServicePlugin } from "@/services"
+import { ServicePlugin, type ServicePluginOpts } from "@/services"
+
+type ServerOpts = {
+	repoPluginOpts?: RepoPluginOptions
+	servicePluginOpts?: ServicePluginOpts
+}
 
 declare module "fastify" {
 	interface FastifyInstance {
@@ -16,7 +21,10 @@ declare module "fastify" {
 	}
 }
 
-const buildServer = async (): Promise<FastifyInstance> => {
+const buildServer = async ({
+	repoPluginOpts,
+	servicePluginOpts,
+}: ServerOpts = {}): Promise<FastifyInstance> => {
 	const config = new Config()
 	const server = fastify<Server, IncomingMessage, ServerResponse>({
 		logger: {
@@ -91,8 +99,8 @@ const buildServer = async (): Promise<FastifyInstance> => {
 	})
 
 	await registerAuth(server)
-	await server.register(RepoPlugin)
-	await server.register(ServicePlugin)
+	await server.register(RepoPlugin, repoPluginOpts ?? {})
+	await server.register(ServicePlugin, servicePluginOpts ?? {})
 	await server.register(RouterPlugin, { prefix: "/api" })
 
 	return server

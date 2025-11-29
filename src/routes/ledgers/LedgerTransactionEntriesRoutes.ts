@@ -105,7 +105,7 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = server => {
 				},
 			},
 		},
-		async (_rq: UpdateLedgerTransactionEntryRequest): Promise<LedgerTransactionEntryResponse> => {
+		(_rq: UpdateLedgerTransactionEntryRequest): LedgerTransactionEntryResponse => {
 			// TODO: Implement proper entity creation from request body
 			throw new NotImplementedError("Feature not yet implemented")
 		}

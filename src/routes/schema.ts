@@ -11,7 +11,7 @@ const ProblemDetailError = Type.Object({
 	message: Type.String(),
 	stackTrace: Type.Optional(Type.Array(Type.String())),
 })
-type _ProblemDetailError = Static<typeof ProblemDetailError>
+type ProblemDetailError = Static<typeof ProblemDetailError>
 const ProblemDetail = Type.Object({
 	title: Type.String(),
 	detail: Type.String(),
@@ -19,7 +19,7 @@ const ProblemDetail = Type.Object({
 	traceId: Type.String(),
 	errors: Type.Optional(Type.Array(ProblemDetailError)),
 })
-type _ProblemDetail = Static<typeof ProblemDetail>
+type ProblemDetail = Static<typeof ProblemDetail>
 
 const BadRequestErrorResponse = Type.Composite(
 	[
@@ -110,6 +110,16 @@ const ServiceUnavailableErrorResponse = Type.Composite(
 )
 type ServiceUnavailableErrorResponse = Static<typeof ServiceUnavailableErrorResponse>
 
+type ErrorResponse =
+	| BadRequestErrorResponse
+	| UnauthorizedErrorResponse
+	| ForbiddenErrorResponse
+	| NotFoundErrorResponse
+	| ConflictErrorResponse
+	| TooManyRequestsErrorResponse
+	| InternalServerErrorResponse
+	| ServiceUnavailableErrorResponse
+
 const OrgId = Type.String({
 	description: "The organization's ID",
 	pattern: "^org_[0-9a-z]{26}$",
@@ -160,6 +170,9 @@ export {
 	ServiceUnavailableErrorResponse,
 	OrganizationResponse,
 	OrganizationRequest,
+	ProblemDetail,
+	ProblemDetailError,
+	type ErrorResponse,
 	type ListOrganizationsRequest,
 	type GetOrganizationRequest,
 	type CreateOrganizationRequest,

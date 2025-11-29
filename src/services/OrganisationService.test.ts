@@ -5,15 +5,15 @@ import { OrganizationService } from "./OrganizationService"
 
 describe("OrganizationService", () => {
 	const mockRepo = jest.mocked<OrganizationRepo>({
-		createOrganization: jest.fn(),
-		getOrganization: jest.fn(),
-		updateOrganization: jest.fn(),
-		deleteOrganization: jest.fn(),
-		listOrganizations: jest.fn(),
+		createOrganization: jest.fn().mockReturnThis(),
+		getOrganization: jest.fn().mockReturnThis(),
+		updateOrganization: jest.fn().mockReturnThis(),
+		deleteOrganization: jest.fn().mockReturnThis(),
+		listOrganizations: jest.fn().mockReturnThis(),
 	} as unknown as OrganizationRepo)
 	let organizationService: OrganizationService
 
-	beforeAll(async () => {
+	beforeAll(() => {
 		organizationService = new OrganizationService(mockRepo)
 	})
 
@@ -22,20 +22,24 @@ describe("OrganizationService", () => {
 	})
 
 	it("should list and paginate organizations ", async () => {
-		mockRepo.listOrganizations.mockImplementation(async (offset, limit) => {
-			const records = []
-			for (const index of range(offset ?? 0, (offset ?? 0) + (limit ?? 10) - 1)) {
-				if (index >= 50) {
+		mockRepo.listOrganizations.mockImplementation((offset, limit) => {
+			return Promise.resolve(
+				(() => {
+					const records = []
+					for (const index of range(offset ?? 0, (offset ?? 0) + (limit ?? 10) - 1)) {
+						if (index >= 50) {
+							return records
+						}
+						records.push(
+							OrganizationEntity.fromRequest({
+								name: `Test Organization ${index}`,
+								description: `Test description ${index}`,
+							})
+						)
+					}
 					return records
-				}
-				records.push(
-					OrganizationEntity.fromRequest({
-						name: `Test Organization ${index}`,
-						description: `Test description ${index}`,
-					})
-				)
-			}
-			return records
+				})()
+			)
 		})
 		const rs = await organizationService.listOrganizations(0, 20)
 		expect(rs.length).toEqual(20)
@@ -88,7 +92,7 @@ describe("OrganizationService", () => {
 		expect(rs2.id).toEqual(rs1.id)
 
 		void organizationService.deleteOrganization(rs.id.toString())
-		expect(organizationService.getOrganization(rs.id.toString())).rejects.toThrow(NotFoundError)
+		void expect(organizationService.getOrganization(rs.id.toString())).rejects.toThrow(NotFoundError)
 
 		expect(mockRepo.createOrganization).toHaveBeenCalledTimes(1)
 		expect(mockRepo.getOrganization).toHaveBeenCalledTimes(2)

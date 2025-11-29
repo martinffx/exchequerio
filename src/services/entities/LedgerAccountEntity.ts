@@ -129,7 +129,7 @@ class LedgerAccountEntity {
 			id: this.id.toString(),
 			ledgerId: this.ledgerId.toString(),
 			name: this.name,
-			description: this.description ?? null,
+			description: this.description ?? undefined,
 			normalBalance: this.normalBalance,
 			balanceAmount: this.balanceAmount,
 			lockVersion: this.lockVersion,
