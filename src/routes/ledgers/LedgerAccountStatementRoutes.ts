@@ -19,7 +19,7 @@ import {
 } from "./schema"
 
 const TAGS = ["Ledger Account Statements"]
-const LedgerAccountStatementRoutes: FastifyPluginAsync = server => {
+const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/:ledgerAccountStatmentId",
 		{

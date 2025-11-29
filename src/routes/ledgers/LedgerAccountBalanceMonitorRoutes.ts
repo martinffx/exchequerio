@@ -24,7 +24,7 @@ import {
 } from "./schema"
 
 const TAGS = ["Ledger Account Balance Monitors"]
-const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = server => {
+const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/",
 		{
