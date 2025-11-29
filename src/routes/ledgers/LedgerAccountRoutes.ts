@@ -1,6 +1,6 @@
-import { Type } from "@sinclair/typebox"
-import type { FastifyPluginAsync } from "fastify"
-import { TypeID } from "typeid-js"
+import { Type } from "@sinclair/typebox";
+import type { FastifyPluginAsync } from "fastify";
+import { TypeID } from "typeid-js";
 
 import {
 	BadRequestErrorResponse,
@@ -12,8 +12,8 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema"
-import { LedgerAccountEntity } from "@/services/entities"
+} from "@/routes/schema";
+import { LedgerAccountEntity } from "@/services/entities";
 import {
 	type CreateLedgerAccountRequest,
 	type DeleteLedgerAccountRequest,
@@ -23,9 +23,9 @@ import {
 	LedgerAccountResponse,
 	type ListLedgerAccountsRequest,
 	type UpdateLedgerAccountRequest,
-} from "./schema"
+} from "./schema";
 
-const TAGS = ["Ledger Accounts"]
+const TAGS = ["Ledger Accounts"];
 const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/",
@@ -53,10 +53,10 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 				TypeID.fromString<"lgr">(rq.query.ledgerId),
 				rq.query.offset,
 				rq.query.limit
-			)
-			return accounts.map(account => account.toResponse())
+			);
+			return accounts.map(account => account.toResponse());
 		}
-	)
+	);
 
 	server.get(
 		"/:ledgerAccountId",
@@ -82,16 +82,16 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 		async (rq: GetLedgerAccountRequest): Promise<LedgerAccountResponse> => {
 			// TODO: Get orgId and ledgerId from request context or params
 			// For now, using placeholder values - this needs to be fixed based on route structure
-			const orgId = TypeID.fromString<"org">("placeholder")
-			const ledgerId = TypeID.fromString<"lgr">("placeholder")
+			const orgId = TypeID.fromString<"org">("placeholder");
+			const ledgerId = TypeID.fromString<"lgr">("placeholder");
 			const ledger = await rq.server.services.ledgerAccountService.getLedgerAccount(
 				orgId,
 				ledgerId,
 				TypeID.fromString<"lat">(rq.params.ledgerAccountId)
-			)
-			return ledger.toResponse()
+			);
+			return ledger.toResponse();
 		}
-	)
+	);
 
 	server.post(
 		"/",
@@ -116,13 +116,13 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: CreateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
 			// TODO: Get orgId from request context or auth
-			const orgId = TypeID.fromString<"org">("placeholder")
-			const ledgerId = TypeID.fromString<"lgr">("placeholder")
-			const entity = LedgerAccountEntity.fromRequest(rq.body, ledgerId, "debit")
-			const ledger = await rq.server.services.ledgerAccountService.createLedgerAccount(orgId, entity)
-			return ledger.toResponse()
+			const orgId = TypeID.fromString<"org">("placeholder");
+			const ledgerId = TypeID.fromString<"lgr">("placeholder");
+			const entity = LedgerAccountEntity.fromRequest(rq.body, ledgerId, "debit");
+			const ledger = await rq.server.services.ledgerAccountService.createLedgerAccount(orgId, entity);
+			return ledger.toResponse();
 		}
-	)
+	);
 
 	server.put(
 		"/:ledgerAccountId",
@@ -149,22 +149,22 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: UpdateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
 			// TODO: Get orgId and ledgerId from request context
-			const orgId = TypeID.fromString<"org">("placeholder")
-			const ledgerId = TypeID.fromString<"lgr">("placeholder")
+			const orgId = TypeID.fromString<"org">("placeholder");
+			const ledgerId = TypeID.fromString<"lgr">("placeholder");
 			const entity = LedgerAccountEntity.fromRequest(
 				rq.body,
 				ledgerId,
 				"debit", // Default normal balance - should come from existing account
 				rq.params.ledgerAccountId
-			)
+			);
 			const org = await rq.server.services.ledgerAccountService.updateLedgerAccount(
 				orgId,
 				ledgerId,
 				entity
-			)
-			return org.toResponse()
+			);
+			return org.toResponse();
 		}
-	)
+	);
 
 	server.delete(
 		"/:ledgerAccountId",
@@ -190,15 +190,15 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: DeleteLedgerAccountRequest): Promise<void> => {
 			// TODO: Get orgId and ledgerId from request context
-			const orgId = TypeID.fromString<"org">("placeholder")
-			const ledgerId = TypeID.fromString<"lgr">("placeholder")
+			const orgId = TypeID.fromString<"org">("placeholder");
+			const ledgerId = TypeID.fromString<"lgr">("placeholder");
 			await rq.server.services.ledgerAccountService.deleteLedgerAccount(
 				orgId,
 				ledgerId,
 				TypeID.fromString<"lat">(rq.params.ledgerAccountId)
-			)
+			);
 		}
-	)
-}
+	);
+};
 
-export { LedgerAccountRoutes }
+export { LedgerAccountRoutes };

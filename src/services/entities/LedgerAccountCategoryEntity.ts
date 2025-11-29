@@ -1,8 +1,8 @@
-import { typeid } from "typeid-js"
+import { typeid } from "typeid-js";
 import type {
 	LedgerAccountCategoryRequest,
 	LedgerAccountCategoryResponse,
-} from "@/routes/ledgers/schema"
+} from "@/routes/ledgers/schema";
 
 class LedgerAccountCategoryEntity {
 	constructor(
@@ -21,7 +21,7 @@ class LedgerAccountCategoryEntity {
 		rq: LedgerAccountCategoryRequest,
 		id?: string
 	): LedgerAccountCategoryEntity {
-		const now = new Date()
+		const now = new Date();
 		return new LedgerAccountCategoryEntity(
 			id ?? typeid("lac").toString(),
 			rq.ledgerId,
@@ -32,7 +32,7 @@ class LedgerAccountCategoryEntity {
 			rq.metadata,
 			now,
 			now
-		)
+		);
 	}
 
 	public toResponse(): LedgerAccountCategoryResponse {
@@ -71,8 +71,8 @@ class LedgerAccountCategoryEntity {
 			metadata: this.metadata,
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
-		}
+		};
 	}
 }
 
-export { LedgerAccountCategoryEntity }
+export { LedgerAccountCategoryEntity };

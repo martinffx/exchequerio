@@ -1,5 +1,5 @@
-import type { FastifyError, FastifyReply, FastifyRequest } from "fastify"
-import { v7 as uuid } from "uuid"
+import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
+import { v7 as uuid } from "uuid";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -9,18 +9,18 @@ import type {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema"
+} from "@/routes/schema";
 
 abstract class LedgerError extends Error {
-	abstract status: number
-	abstract toResponse(): unknown
+	abstract status: number;
+	abstract toResponse(): unknown;
 }
 
 class BadRequestError extends LedgerError {
-	public readonly status = 400
+	public readonly status = 400;
 	constructor(message: string) {
-		super(message)
-		this.name = "BadRequestError"
+		super(message);
+		this.name = "BadRequestError";
 	}
 
 	public toResponse(): BadRequestErrorResponse {
@@ -31,15 +31,15 @@ class BadRequestError extends LedgerError {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-		}
+		};
 	}
 }
 
 class UnauthorizedError extends LedgerError {
-	public readonly status = 401
+	public readonly status = 401;
 	constructor(message: string) {
-		super(message)
-		this.name = "UnauthorizedError"
+		super(message);
+		this.name = "UnauthorizedError";
 	}
 
 	public toResponse(): UnauthorizedErrorResponse {
@@ -50,15 +50,15 @@ class UnauthorizedError extends LedgerError {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-		}
+		};
 	}
 }
 
 class ForbiddenError extends LedgerError {
-	public readonly status = 403
+	public readonly status = 403;
 	constructor(message: string) {
-		super(message)
-		this.name = "ForbiddenError"
+		super(message);
+		this.name = "ForbiddenError";
 	}
 
 	public toResponse(): ForbiddenErrorResponse {
@@ -69,15 +69,15 @@ class ForbiddenError extends LedgerError {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-		}
+		};
 	}
 }
 
 class NotFoundError extends LedgerError {
-	public readonly status = 404
+	public readonly status = 404;
 	constructor(message: string) {
-		super(message)
-		this.name = "NotFoundError"
+		super(message);
+		this.name = "NotFoundError";
 	}
 
 	public toResponse(): NotFoundErrorResponse {
@@ -88,15 +88,15 @@ class NotFoundError extends LedgerError {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-		}
+		};
 	}
 }
 
 class ConflictError extends LedgerError {
-	public readonly status = 409
+	public readonly status = 409;
 	constructor(message: string) {
-		super(message)
-		this.name = "ConflictError"
+		super(message);
+		this.name = "ConflictError";
 	}
 
 	public toResponse(): ConflictErrorResponse {
@@ -107,15 +107,15 @@ class ConflictError extends LedgerError {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-		}
+		};
 	}
 }
 
 class TooManyRequestsError extends LedgerError {
-	public readonly status = 429
+	public readonly status = 429;
 	constructor(message: string) {
-		super(message)
-		this.name = "TooManyRequestsError"
+		super(message);
+		this.name = "TooManyRequestsError";
 	}
 
 	public toResponse(): TooManyRequestsErrorResponse {
@@ -126,15 +126,15 @@ class TooManyRequestsError extends LedgerError {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-		}
+		};
 	}
 }
 
 class InternalServerError extends LedgerError {
-	public readonly status = 500
+	public readonly status = 500;
 	constructor(message: string) {
-		super(message)
-		this.name = "InternalServerError"
+		super(message);
+		this.name = "InternalServerError";
 	}
 
 	public toResponse(): InternalServerErrorResponse {
@@ -145,15 +145,15 @@ class InternalServerError extends LedgerError {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-		}
+		};
 	}
 }
 
 class ServiceUnavailableError extends LedgerError {
-	public readonly status = 503
+	public readonly status = 503;
 	constructor(message: string) {
-		super(message)
-		this.name = "ServiceUnavailableError"
+		super(message);
+		this.name = "ServiceUnavailableError";
 	}
 
 	public toResponse(): ServiceUnavailableErrorResponse {
@@ -164,15 +164,15 @@ class ServiceUnavailableError extends LedgerError {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-		}
+		};
 	}
 }
 
 class NotImplementedError extends LedgerError {
-	public readonly status = 501
+	public readonly status = 501;
 	constructor(message: string) {
-		super(message)
-		this.name = "NotImplementedError"
+		super(message);
+		this.name = "NotImplementedError";
 	}
 
 	public toResponse(): Record<string, unknown> {
@@ -183,28 +183,28 @@ class NotImplementedError extends LedgerError {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-		}
+		};
 	}
 }
 
 const globalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
-	console.log("error", error)
+	console.log("error", error);
 
 	if (error.code === "FST_ERR_VALIDATION") {
-		const ex = new BadRequestError(error.message)
-		reply.status(ex.status).send(ex.toResponse())
-		return
+		const ex = new BadRequestError(error.message);
+		reply.status(ex.status).send(ex.toResponse());
+		return;
 	}
 
 	if (error instanceof LedgerError) {
-		reply.status(error.status).send(error.toResponse())
-		return
+		reply.status(error.status).send(error.toResponse());
+		return;
 	}
 
-	request.server.log.error(error, "Unknown Error")
-	const ex = new InternalServerError(error.message)
-	reply.status(ex.status).send(ex.toResponse())
-}
+	request.server.log.error(error, "Unknown Error");
+	const ex = new InternalServerError(error.message);
+	reply.status(ex.status).send(ex.toResponse());
+};
 
 export {
 	globalErrorHandler,
@@ -218,4 +218,4 @@ export {
 	InternalServerError,
 	ServiceUnavailableError,
 	NotImplementedError,
-}
+};

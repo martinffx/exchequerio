@@ -1,8 +1,8 @@
-import { typeid } from "typeid-js"
+import { typeid } from "typeid-js";
 import type {
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
-} from "@/routes/ledgers/schema"
+} from "@/routes/ledgers/schema";
 
 class LedgerAccountSettlementEntity {
 	constructor(
@@ -29,7 +29,7 @@ class LedgerAccountSettlementEntity {
 		rq: LedgerAccountSettlementRequest,
 		id?: string
 	): LedgerAccountSettlementEntity {
-		const now = new Date()
+		const now = new Date();
 		return new LedgerAccountSettlementEntity(
 			id ?? typeid("las").toString(),
 			rq.ledgerTransactionId,
@@ -42,7 +42,7 @@ class LedgerAccountSettlementEntity {
 			rq.metadata,
 			now,
 			now
-		)
+		);
 	}
 
 	public toResponse(): LedgerAccountSettlementResponse {
@@ -60,8 +60,8 @@ class LedgerAccountSettlementEntity {
 			metadata: this.metadata,
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
-		}
+		};
 	}
 }
 
-export { LedgerAccountSettlementEntity }
+export { LedgerAccountSettlementEntity };

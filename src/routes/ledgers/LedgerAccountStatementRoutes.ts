@@ -1,5 +1,5 @@
-import type { FastifyPluginAsync } from "fastify"
-import { LedgerAccountStatementEntity } from "@/services"
+import type { FastifyPluginAsync } from "fastify";
+import { LedgerAccountStatementEntity } from "@/services";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -9,16 +9,16 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "../schema"
+} from "../schema";
 import {
 	type CreateLedgerAccountStatementRequest,
 	type GetLedgerAccountStatementRequest,
 	LedgerAccountStatementIdParams as LedgerAccountStatementIdParameters,
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,
-} from "./schema"
+} from "./schema";
 
-const TAGS = ["Ledger Account Statements"]
+const TAGS = ["Ledger Account Statements"];
 const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/:ledgerAccountStatmentId",
@@ -44,10 +44,10 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 		async (rq: GetLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
 			const category = await rq.server.services.ledgerAccountService.getLedgerAccountStatement(
 				rq.params.ledgerAccountStatmentId
-			)
-			return category.toResponse()
+			);
+			return category.toResponse();
 		}
-	)
+	);
 
 	server.post(
 		"/",
@@ -73,10 +73,10 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 		async (rq: CreateLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
 			const statement = await rq.server.services.ledgerAccountService.createLedgerAccountStatement(
 				LedgerAccountStatementEntity.fromRequest(rq.body)
-			)
-			return statement.toResponse()
+			);
+			return statement.toResponse();
 		}
-	)
-}
+	);
+};
 
-export { LedgerAccountStatementRoutes }
+export { LedgerAccountStatementRoutes };

@@ -1,6 +1,6 @@
-import { Type } from "@sinclair/typebox"
-import type { FastifyPluginAsync } from "fastify"
-import { LedgerAccountSettlementEntity } from "@/services"
+import { Type } from "@sinclair/typebox";
+import type { FastifyPluginAsync } from "fastify";
+import { LedgerAccountSettlementEntity } from "@/services";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -11,7 +11,7 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "../schema"
+} from "../schema";
 import {
 	type AddLedgerAccountSettlementEntryRequest,
 	type CreateLedgerAccountSettlementRequest,
@@ -24,9 +24,9 @@ import {
 	type ListLedgerAccountSettlementsRequest,
 	type RemoveLedgerAccountSettlementEntryRequest,
 	type UpdateLedgerAccountSettlementRequest,
-} from "./schema"
+} from "./schema";
 
-const TAGS = ["Ledger Account Settlements"]
+const TAGS = ["Ledger Account Settlements"];
 const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/",
@@ -52,10 +52,10 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			const settlements = await rq.server.services.ledgerAccountService.listLedgerAccountSettlements(
 				rq.query.offset,
 				rq.query.limit
-			)
-			return settlements.map(settlement => settlement.toResponse())
+			);
+			return settlements.map(settlement => settlement.toResponse());
 		}
-	)
+	);
 
 	server.get(
 		"/:ledgerAccountSettlementId",
@@ -81,10 +81,10 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		async (rq: GetLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
 			const category = await rq.server.services.ledgerAccountService.getLedgerAccountSettlement(
 				rq.params.ledgerAccountSettlementId
-			)
-			return category.toResponse()
+			);
+			return category.toResponse();
 		}
-	)
+	);
 
 	server.post(
 		"/",
@@ -110,10 +110,10 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		async (rq: CreateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
 			const category = await rq.server.services.ledgerAccountService.createLedgerAccountSettlement(
 				LedgerAccountSettlementEntity.fromRequest(rq.body)
-			)
-			return category.toResponse()
+			);
+			return category.toResponse();
 		}
-	)
+	);
 
 	server.put(
 		"/:ledgerAccountSettlementId",
@@ -142,10 +142,10 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			const org = await rq.server.services.ledgerAccountService.updateLedgerAccountSettlement(
 				rq.params.ledgerAccountSettlementId,
 				LedgerAccountSettlementEntity.fromRequest(rq.body)
-			)
-			return org.toResponse()
+			);
+			return org.toResponse();
 		}
-	)
+	);
 
 	server.delete(
 		"/:ledgerAccountSettlementId",
@@ -172,9 +172,9 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		async (rq: DeleteLedgerAccountSettlementRequest): Promise<void> => {
 			await rq.server.services.ledgerAccountService.deleteLedgerAccountSettlement(
 				rq.params.ledgerAccountSettlementId
-			)
+			);
 		}
-	)
+	);
 
 	server.patch(
 		"/:ledgerAccountSettlementId/entries",
@@ -204,9 +204,9 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			await rq.server.services.ledgerAccountService.addLedgerAccountSettlementEntries(
 				rq.params.ledgerAccountSettlementId,
 				rq.body.entries
-			)
+			);
 		}
-	)
+	);
 
 	server.delete(
 		"/:ledgerAccountSettlementId/entries",
@@ -235,9 +235,9 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			await rq.server.services.ledgerAccountService.removeLedgerAccountSettlementEntries(
 				rq.params.ledgerAccountSettlementId,
 				rq.body.entries
-			)
+			);
 		}
-	)
-}
+	);
+};
 
-export { LedgerAccountSettlementRoutes }
+export { LedgerAccountSettlementRoutes };

@@ -1,23 +1,23 @@
-import type { IncomingMessage, Server, ServerResponse } from "node:http"
-import fastifySwagger from "@fastify/swagger"
-import fastifySwaggerUI from "@fastify/swagger-ui"
-import fastifyUnderPressure from "@fastify/under-pressure"
-import fastify, { type FastifyInstance } from "fastify"
-import { registerAuth } from "@/auth"
-import { Config } from "@/config"
-import { globalErrorHandler } from "@/errors"
-import { RepoPlugin, type RepoPluginOptions } from "@/repo"
-import { RouterPlugin } from "@/routes"
-import { ServicePlugin, type ServicePluginOpts } from "@/services"
+import type { IncomingMessage, Server, ServerResponse } from "node:http";
+import fastifySwagger from "@fastify/swagger";
+import fastifySwaggerUI from "@fastify/swagger-ui";
+import fastifyUnderPressure from "@fastify/under-pressure";
+import fastify, { type FastifyInstance } from "fastify";
+import { registerAuth } from "@/auth";
+import { Config } from "@/config";
+import { globalErrorHandler } from "@/errors";
+import { RepoPlugin, type RepoPluginOptions } from "@/repo";
+import { RouterPlugin } from "@/routes";
+import { ServicePlugin, type ServicePluginOpts } from "@/services";
 
 type ServerOpts = {
-	repoPluginOpts?: RepoPluginOptions
-	servicePluginOpts?: ServicePluginOpts
-}
+	repoPluginOpts?: RepoPluginOptions;
+	servicePluginOpts?: ServicePluginOpts;
+};
 
 declare module "fastify" {
 	interface FastifyInstance {
-		config: Config
+		config: Config;
 	}
 }
 
@@ -25,7 +25,7 @@ const buildServer = async ({
 	repoPluginOpts,
 	servicePluginOpts,
 }: ServerOpts = {}): Promise<FastifyInstance> => {
-	const config = new Config()
+	const config = new Config();
 	const server = fastify<Server, IncomingMessage, ServerResponse>({
 		logger: {
 			transport: {
@@ -40,20 +40,20 @@ const buildServer = async ({
 				],
 			},
 		},
-	})
-	server.decorate("config", config)
-	server.setErrorHandler(globalErrorHandler)
+	});
+	server.decorate("config", config);
+	server.setErrorHandler(globalErrorHandler);
 
 	await server.register(fastifyUnderPressure, {
 		maxEventLoopDelay: 10000,
 		maxHeapUsedBytes: 1000000000,
 		maxRssBytes: 1000000000,
 		maxEventLoopUtilization: 0.98,
-	})
+	});
 
 	server.get("/health", (_request, reply) => {
-		reply.send({}).code(200)
-	})
+		reply.send({}).code(200);
+	});
 
 	await server.register(fastifySwagger, {
 		openapi: {
@@ -89,21 +89,21 @@ const buildServer = async ({
 				},
 			},
 		},
-	})
+	});
 	await server.register(fastifySwaggerUI, {
 		routePrefix: "/docs",
 		uiConfig: {
 			docExpansion: "list",
 			deepLinking: false,
 		},
-	})
+	});
 
-	await registerAuth(server)
-	await server.register(RepoPlugin, repoPluginOpts ?? {})
-	await server.register(ServicePlugin, servicePluginOpts ?? {})
-	await server.register(RouterPlugin, { prefix: "/api" })
+	await registerAuth(server);
+	await server.register(RepoPlugin, repoPluginOpts ?? {});
+	await server.register(ServicePlugin, servicePluginOpts ?? {});
+	await server.register(RouterPlugin, { prefix: "/api" });
 
-	return server
-}
+	return server;
+};
 
-export { buildServer }
+export { buildServer };

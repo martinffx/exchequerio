@@ -1,5 +1,5 @@
-import { Type } from "@sinclair/typebox"
-import type { FastifyPluginAsync } from "fastify"
+import { Type } from "@sinclair/typebox";
+import type { FastifyPluginAsync } from "fastify";
 
 import {
 	BadRequestErrorResponse,
@@ -11,8 +11,8 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema"
-import { LedgerAccountCategoryEntity } from "@/services"
+} from "@/routes/schema";
+import { LedgerAccountCategoryEntity } from "@/services";
 import {
 	type CreateLedgerAccountCategoryRequest,
 	type DeleteLedgerAccountCategoryRequest,
@@ -28,9 +28,9 @@ import {
 	type UnlinkLedgerAccountCategoryToCategoryRequest,
 	type UnlinkLedgerAccountToCategoryRequest,
 	type UpdateLedgerAccountCategoryRequest,
-} from "./schema"
+} from "./schema";
 
-const TAGS = ["Ledger Account Categories"]
+const TAGS = ["Ledger Account Categories"];
 const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 	server.get(
 		"/",
@@ -56,10 +56,10 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			const categories = await rq.server.services.ledgerAccountService.listLedgerAccountCategories(
 				rq.query.offset,
 				rq.query.limit
-			)
-			return categories.map(category => category.toResponse())
+			);
+			return categories.map(category => category.toResponse());
 		}
-	)
+	);
 
 	server.get(
 		"/:ledgerAccountCategoryId",
@@ -85,10 +85,10 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		async (rq: GetLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
 			const category = await rq.server.services.ledgerAccountService.getLedgerAccountCategory(
 				rq.params.ledgerAccountCategoryId
-			)
-			return category.toResponse()
+			);
+			return category.toResponse();
 		}
-	)
+	);
 
 	server.post(
 		"/",
@@ -114,10 +114,10 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		async (rq: CreateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
 			const category = await rq.server.services.ledgerAccountService.createLedgerAccountCategory(
 				LedgerAccountCategoryEntity.fromRequest(rq.body)
-			)
-			return category.toResponse()
+			);
+			return category.toResponse();
 		}
-	)
+	);
 
 	server.put(
 		"/:ledgerAccountCategoryId",
@@ -146,10 +146,10 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			const org = await rq.server.services.ledgerAccountService.updateLedgerAccountCategory(
 				rq.params.ledgerAccountCategoryId,
 				LedgerAccountCategoryEntity.fromRequest(rq.body)
-			)
-			return org.toResponse()
+			);
+			return org.toResponse();
 		}
-	)
+	);
 
 	server.delete(
 		"/:ledgerAccountCategoryId",
@@ -176,9 +176,9 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		async (rq: DeleteLedgerAccountCategoryRequest): Promise<void> => {
 			await rq.server.services.ledgerAccountService.deleteLedgerAccountCategory(
 				rq.params.ledgerAccountCategoryId
-			)
+			);
 		}
-	)
+	);
 
 	server.patch(
 		"/:ledgerAccountCategoryId/accounts/:accountId",
@@ -206,9 +206,9 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			await rq.server.services.ledgerAccountService.linkLedgerAccountToCategory(
 				rq.params.ledgerAccountCategoryId,
 				rq.params.accountId
-			)
+			);
 		}
-	)
+	);
 
 	server.delete(
 		"/:ledgerAccountCategoryId/accounts/:accountId",
@@ -236,9 +236,9 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			await rq.server.services.ledgerAccountService.unlinkLedgerAccountToCategory(
 				rq.params.ledgerAccountCategoryId,
 				rq.params.accountId
-			)
+			);
 		}
-	)
+	);
 
 	server.patch(
 		"/:ledgerAccountCategoryId/categories/:categoryId",
@@ -266,9 +266,9 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			await rq.server.services.ledgerAccountService.linkLedgerAccountCategoryToCategory(
 				rq.params.ledgerAccountCategoryId,
 				rq.params.categoryId
-			)
+			);
 		}
-	)
+	);
 
 	server.delete(
 		"/:ledgerAccountCategoryId/categories/:categoryId",
@@ -296,9 +296,9 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			await rq.server.services.ledgerAccountService.unlinkLedgerAccountCategoryToCategory(
 				rq.params.ledgerAccountCategoryId,
 				rq.params.categoryId
-			)
+			);
 		}
-	)
-}
+	);
+};
 
-export { LedgerAccountCategoryRoutes }
+export { LedgerAccountCategoryRoutes };

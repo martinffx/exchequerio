@@ -1,8 +1,8 @@
-import { typeid } from "typeid-js"
+import { typeid } from "typeid-js";
 import type {
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,
-} from "@/routes/ledgers/schema"
+} from "@/routes/ledgers/schema";
 
 class LedgerAccountStatementEntity {
 	constructor(
@@ -21,7 +21,7 @@ class LedgerAccountStatementEntity {
 		rq: LedgerAccountStatementRequest,
 		id?: string
 	): LedgerAccountStatementEntity {
-		const now = new Date()
+		const now = new Date();
 		return new LedgerAccountStatementEntity(
 			id ?? typeid("las").toString(),
 			rq.ledgerId,
@@ -32,7 +32,7 @@ class LedgerAccountStatementEntity {
 			undefined, // Metadata not in request
 			now,
 			now
-		)
+		);
 	}
 
 	public toResponse(): LedgerAccountStatementResponse {
@@ -61,7 +61,7 @@ class LedgerAccountStatementEntity {
 				credits: 0,
 				debits: 0,
 			},
-		]
+		];
 
 		return {
 			id: this.id,
@@ -79,8 +79,8 @@ class LedgerAccountStatementEntity {
 			metadata: this.metadata,
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
-		}
+		};
 	}
 }
 
-export { LedgerAccountStatementEntity }
+export { LedgerAccountStatementEntity };

@@ -1,9 +1,13 @@
-import { and, desc, eq } from "drizzle-orm"
-import { TypeID } from "typeid-js"
-import type { LedgerID, OrgID } from "@/services"
-import { LedgerEntity } from "@/services"
-import { LedgerAccountsTable, LedgersTable } from "./schema"
-import type { DrizzleDB } from "./types"
+import { and, desc, eq } from "drizzle-orm";
+import type { LedgerID, OrgID } from "@/services";
+import { LedgerEntity } from "@/services";
+import { LedgerAccountsTable, LedgersTable } from "./schema";
+import type { DrizzleDB } from "./types";
+
+// TODO: Transaction operations moved to LedgerTransactionRepo
+// TODO: Account balance operations moved to LedgerAccountRepo
+// TODO: Use LedgerTransactionRepo for createTransactionWithEntries() and postTransaction()
+// TODO: Use LedgerAccountRepo for getAccountBalance() and getAccountBalances()
 
 class LedgerRepo {
 	constructor(private readonly db: DrizzleDB) {}
@@ -15,13 +19,13 @@ class LedgerRepo {
 			.where(
 				and(eq(LedgersTable.id, id.toString()), eq(LedgersTable.organizationId, orgId.toString()))
 			)
-			.limit(1)
+			.limit(1);
 
 		if (result.length === 0) {
-			throw new Error(`Ledger not found: ${id.toString()}`)
+			throw new Error(`Ledger not found: ${id.toString()}`);
 		}
 
-		return LedgerEntity.fromRecord(result[0])
+		return LedgerEntity.fromRecord(result[0]);
 	}
 
 	public async listLedgers(orgId: OrgID, offset: number, limit: number): Promise<LedgerEntity[]> {
@@ -31,20 +35,20 @@ class LedgerRepo {
 			.where(eq(LedgersTable.organizationId, orgId.toString()))
 			.orderBy(desc(LedgersTable.created))
 			.limit(limit)
-			.offset(offset)
+			.offset(offset);
 
-		return results.map(row => LedgerEntity.fromRecord(row))
+		return results.map(row => LedgerEntity.fromRecord(row));
 	}
 
 	public async createLedger(entity: LedgerEntity): Promise<LedgerEntity> {
-		const insertResult = await this.db.insert(LedgersTable).values(entity.toRecord()).returning()
+		const insertResult = await this.db.insert(LedgersTable).values(entity.toRecord()).returning();
 
-		return LedgerEntity.fromRecord(insertResult[0])
+		return LedgerEntity.fromRecord(insertResult[0]);
 	}
 
 	public async updateLedger(orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
-		const record = entity.toRecord()
-		const now = new Date()
+		const record = entity.toRecord();
+		const now = new Date();
 
 		const updateResult = await this.db
 			.update(LedgersTable)
@@ -58,13 +62,13 @@ class LedgerRepo {
 					eq(LedgersTable.organizationId, orgId.toString())
 				)
 			)
-			.returning()
+			.returning();
 
 		if (updateResult.length === 0) {
-			throw new Error(`Ledger not found: ${entity.id.toString()}`)
+			throw new Error(`Ledger not found: ${entity.id.toString()}`);
 		}
 
-		return LedgerEntity.fromRecord(updateResult[0])
+		return LedgerEntity.fromRecord(updateResult[0]);
 	}
 
 	public async deleteLedger(orgId: OrgID, id: LedgerID): Promise<void> {
@@ -72,10 +76,10 @@ class LedgerRepo {
 		const accountCount = await this.db
 			.select({ count: LedgerAccountsTable.id })
 			.from(LedgerAccountsTable)
-			.where(eq(LedgerAccountsTable.ledgerId, id.toString()))
+			.where(eq(LedgerAccountsTable.ledgerId, id.toString()));
 
 		if (accountCount.length > 0) {
-			throw new Error("Cannot delete ledger with existing accounts")
+			throw new Error("Cannot delete ledger with existing accounts");
 		}
 
 		const deleteResult = await this.db
@@ -83,72 +87,12 @@ class LedgerRepo {
 			.where(
 				and(eq(LedgersTable.id, id.toString()), eq(LedgersTable.organizationId, orgId.toString()))
 			)
-			.returning({ id: LedgersTable.id })
+			.returning({ id: LedgersTable.id });
 
 		if (deleteResult.length === 0) {
-			throw new Error(`Ledger not found: ${id.toString()}`)
-		}
-	}
-
-	// Wrapper methods for transaction operations (simplified implementations for now)
-	public createTransactionWithEntries(
-		ledgerId: string,
-		description: string | null,
-		entries: {
-			accountId: string
-			direction: "debit" | "credit"
-			amount: string
-		}[]
-	) {
-		// TODO: Implement proper delegation to LedgerTransactionRepo
-		// For now, return a mock response to satisfy type checking
-		return {
-			id: new TypeID("ltr").toString(),
-			ledgerId,
-			description,
-			status: "pending",
-			entries: entries.map(e => ({
-				...e,
-				id: new TypeID("lte").toString(),
-				status: "pending",
-			})),
-		}
-	}
-
-	// Post transaction method
-	public postTransaction(transactionId: string) {
-		// TODO: Implement proper delegation to LedgerTransactionRepo
-		return {
-			id: transactionId,
-			status: "posted",
-			postedAt: new Date().toISOString(),
-		}
-	}
-
-	// Wrapper methods for account balance operations (simplified implementations for now)
-	public getAccountBalance(accountId: string) {
-		// TODO: Implement proper delegation to LedgerAccountRepo
-		return {
-			accountId,
-			balanceAmount: "0",
-			normalBalance: "debit",
-			availableBalance: "0",
-			lockVersion: 1,
-		}
-	}
-
-	public getAccountBalances(accountId: string, ledgerId: string) {
-		// TODO: Implement proper delegation to LedgerAccountRepo
-		return {
-			accountId,
-			ledgerId,
-			balances: {
-				pending: "0",
-				posted: "0",
-				available: "0",
-			},
+			throw new Error(`Ledger not found: ${id.toString()}`);
 		}
 	}
 }
 
-export { LedgerRepo }
+export { LedgerRepo };

@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm"
+import { relations, sql } from "drizzle-orm";
 import {
 	check,
 	index,
@@ -10,16 +10,16 @@ import {
 	text,
 	timestamp,
 	uniqueIndex,
-} from "drizzle-orm/pg-core"
+} from "drizzle-orm/pg-core";
 
 // Enums for ledger system
-const ledgerNormalBalance = pgEnum("ledger_normal_balance", ["debit", "credit"])
+const ledgerNormalBalance = pgEnum("ledger_normal_balance", ["debit", "credit"]);
 const ledgerTransactionStatus = pgEnum("ledger_transaction_status", [
 	"pending",
 	"posted",
 	"archived",
-])
-const ledgerEntryDirection = pgEnum("ledger_entry_direction", ["debit", "credit"])
+]);
+const ledgerEntryDirection = pgEnum("ledger_entry_direction", ["debit", "credit"]);
 const ledgerSettlementStatus = pgEnum("ledger_settlement_status", [
 	"drafting",
 	"processing",
@@ -27,7 +27,7 @@ const ledgerSettlementStatus = pgEnum("ledger_settlement_status", [
 	"posted",
 	"archiving",
 	"archived",
-])
+]);
 
 const OrganizationsTable = pgTable("organizations_table", {
 	id: text("id").primaryKey(),
@@ -35,7 +35,7 @@ const OrganizationsTable = pgTable("organizations_table", {
 	description: text("description"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-})
+});
 
 // Ledgers: Chart of accounts container
 const LedgersTable = pgTable("ledgers", {
@@ -50,7 +50,7 @@ const LedgersTable = pgTable("ledgers", {
 	metadata: jsonb("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-})
+});
 
 // Ledger Accounts: Individual accounts (merchant wallets, fee accounts, etc.)
 const LedgerAccountsTable = pgTable(
@@ -73,7 +73,7 @@ const LedgerAccountsTable = pgTable(
 		balanceIdx: index("idx_ledger_accounts_balance").on(table.ledgerId, table.balanceAmount),
 		uniqueNamePerLedger: uniqueIndex("unique_account_name_per_ledger").on(table.ledgerId, table.name),
 	})
-)
+);
 
 // Ledger Transactions: Double-entry transaction containers
 const LedgerTransactionsTable = pgTable(
@@ -94,7 +94,7 @@ const LedgerTransactionsTable = pgTable(
 		statusIdx: index("idx_ledger_transactions_status").on(table.status),
 		createdIdx: index("idx_ledger_transactions_created").on(table.created),
 	})
-)
+);
 
 // Ledger Transaction Entries: Individual debit/credit entries
 const LedgerTransactionEntriesTable = pgTable(
@@ -122,7 +122,7 @@ const LedgerTransactionEntriesTable = pgTable(
 		// Constraint: amount must be positive
 		positiveAmount: check("positive_amount", sql`${table.amount} > 0`),
 	})
-)
+);
 
 // Account Category Definitions: Chart of accounts structure
 const LedgerAccountCategoriesTable = pgTable("ledger_account_categories", {
@@ -137,7 +137,7 @@ const LedgerAccountCategoriesTable = pgTable("ledger_account_categories", {
 	metadata: jsonb("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-})
+});
 
 // Account Balance Monitors: Real-time balance tracking with alerts
 const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monitors", {
@@ -152,7 +152,7 @@ const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monito
 	metadata: jsonb("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-})
+});
 
 // Account Statements: Periodic balance snapshots and statements
 const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
@@ -169,7 +169,7 @@ const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
 	metadata: jsonb("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-})
+});
 
 // Settlement Batches: Automated settlement processing
 const LedgerAccountSettlementsTable = pgTable(
@@ -198,12 +198,12 @@ const LedgerAccountSettlementsTable = pgTable(
 		statusIdx: index("idx_ledger_account_settlements_status").on(table.status),
 		dateIdx: index("idx_ledger_account_settlements_date").on(table.settlementDate),
 	})
-)
+);
 
 // Define relations for Drizzle ORM
 const organizationsRelations = relations(OrganizationsTable, ({ many }) => ({
 	ledgers: many(LedgersTable),
-}))
+}));
 
 const ledgersRelations = relations(LedgersTable, ({ one, many }) => ({
 	organization: one(OrganizationsTable, {
@@ -213,7 +213,7 @@ const ledgersRelations = relations(LedgersTable, ({ one, many }) => ({
 	accounts: many(LedgerAccountsTable),
 	transactions: many(LedgerTransactionsTable),
 	categories: many(LedgerAccountCategoriesTable),
-}))
+}));
 
 const ledgerAccountsRelations = relations(LedgerAccountsTable, ({ one, many }) => ({
 	ledger: one(LedgersTable, {
@@ -224,7 +224,7 @@ const ledgerAccountsRelations = relations(LedgerAccountsTable, ({ one, many }) =
 	monitors: many(LedgerAccountBalanceMonitorsTable),
 	statements: many(LedgerAccountStatementsTable),
 	settlements: many(LedgerAccountSettlementsTable),
-}))
+}));
 
 const ledgerTransactionsRelations = relations(LedgerTransactionsTable, ({ one, many }) => ({
 	ledger: one(LedgersTable, {
@@ -232,7 +232,7 @@ const ledgerTransactionsRelations = relations(LedgerTransactionsTable, ({ one, m
 		references: [LedgersTable.id],
 	}),
 	entries: many(LedgerTransactionEntriesTable),
-}))
+}));
 
 const ledgerTransactionEntriesRelations = relations(LedgerTransactionEntriesTable, ({ one }) => ({
 	transaction: one(LedgerTransactionsTable, {
@@ -243,7 +243,7 @@ const ledgerTransactionEntriesRelations = relations(LedgerTransactionEntriesTabl
 		fields: [LedgerTransactionEntriesTable.accountId],
 		references: [LedgerAccountsTable.id],
 	}),
-}))
+}));
 
 export {
 	// Tables
@@ -267,4 +267,4 @@ export {
 	ledgerTransactionStatus,
 	ledgerEntryDirection,
 	ledgerSettlementStatus,
-}
+};

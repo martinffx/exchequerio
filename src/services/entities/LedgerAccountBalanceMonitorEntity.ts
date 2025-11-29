@@ -1,8 +1,8 @@
-import { typeid } from "typeid-js"
+import { typeid } from "typeid-js";
 import type {
 	LedgerAccountBalanceMonitorRequest,
 	LedgerAccountBalanceMonitorResponse,
-} from "@/routes/ledgers/schema"
+} from "@/routes/ledgers/schema";
 
 class LedgerAccountBalanceMonitorEntity {
 	constructor(
@@ -10,9 +10,9 @@ class LedgerAccountBalanceMonitorEntity {
 		public readonly ledgerAccountId: string,
 		public readonly description: string | undefined,
 		public readonly alertCondition: {
-			field: "balance" | "created" | "updated"
-			operator: "=" | "<" | ">" | "<=" | ">=" | "!="
-			value: number
+			field: "balance" | "created" | "updated";
+			operator: "=" | "<" | ">" | "<=" | ">=" | "!=";
+			value: number;
 		}[],
 		public readonly lockVersion: number,
 		public readonly metadata: Record<string, unknown> | undefined,
@@ -24,7 +24,7 @@ class LedgerAccountBalanceMonitorEntity {
 		rq: LedgerAccountBalanceMonitorRequest,
 		id?: string
 	): LedgerAccountBalanceMonitorEntity {
-		const now = new Date()
+		const now = new Date();
 		return new LedgerAccountBalanceMonitorEntity(
 			id ?? typeid("labm").toString(),
 			rq.ledgerAccountId,
@@ -34,7 +34,7 @@ class LedgerAccountBalanceMonitorEntity {
 			rq.metadata,
 			now,
 			now
-		)
+		);
 	}
 
 	public toResponse(): LedgerAccountBalanceMonitorResponse {
@@ -73,8 +73,8 @@ class LedgerAccountBalanceMonitorEntity {
 			lockVersion: this.lockVersion,
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
-		}
+		};
 	}
 }
 
-export { LedgerAccountBalanceMonitorEntity }
+export { LedgerAccountBalanceMonitorEntity };

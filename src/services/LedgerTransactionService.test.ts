@@ -1,16 +1,17 @@
-import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo"
+import { vi } from "vitest";
+import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
 
-import { LedgerTransactionService } from "./LedgerTransactionService"
+import { LedgerTransactionService } from "./LedgerTransactionService";
 
 describe("Ledger Service", () => {
-	const ledgerTransactionRepo = jest.mocked<LedgerTransactionRepo>(
+	const ledgerTransactionRepo = vi.mocked<LedgerTransactionRepo>(
 		{} as unknown as LedgerTransactionRepo
-	)
-	const ledgerTransactionService = new LedgerTransactionService(ledgerTransactionRepo)
+	);
+	const ledgerTransactionService = new LedgerTransactionService(ledgerTransactionRepo);
 
 	beforeEach(() => {
-		jest.resetAllMocks()
-	})
+		jest.resetAllMocks();
+	});
 
 	describe("Double-Entry Validation", () => {
 		it("should validate double-entry compliance for valid entries", async () => {
@@ -25,17 +26,18 @@ describe("Ledger Service", () => {
 					direction: "credit" as const,
 					amount: "100.00",
 				},
-			]
+			];
 
 			const result = await ledgerTransactionService.createTransactionWithEntries({
+				organizationId: "test-org",
 				ledgerId: "test-ledger",
 				description: "Test transaction",
 				entries: validEntries,
-			})
+			});
 
-			expect(result).toBeDefined()
-			expect((result as { status: string }).status).toBe("pending")
-		})
+			expect(result).toBeDefined();
+			expect((result as { status: string }).status).toBe("pending");
+		});
 
 		it("should reject transactions with unbalanced entries", async () => {
 			const unbalancedEntries = [
@@ -49,16 +51,17 @@ describe("Ledger Service", () => {
 					direction: "credit" as const,
 					amount: "50.00",
 				},
-			]
+			];
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: "test-org",
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries: unbalancedEntries,
 				})
-			).rejects.toThrow("Double-entry validation failed")
-		})
+			).rejects.toThrow("Double-entry validation failed");
+		});
 
 		it("should reject transactions with less than 2 entries", async () => {
 			const singleEntry = [
@@ -67,16 +70,17 @@ describe("Ledger Service", () => {
 					direction: "debit" as const,
 					amount: "100.00",
 				},
-			]
+			];
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: "test-org",
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries: singleEntry,
 				})
-			).rejects.toThrow("Transaction must have at least 2 entries")
-		})
+			).rejects.toThrow("Transaction must have at least 2 entries");
+		});
 
 		it("should reject transactions with invalid amounts", async () => {
 			const invalidEntries = [
@@ -90,16 +94,17 @@ describe("Ledger Service", () => {
 					direction: "credit" as const,
 					amount: "50.00",
 				},
-			]
+			];
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: "test-org",
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries: invalidEntries,
 				})
-			).rejects.toThrow("Invalid amount")
-		})
+			).rejects.toThrow("Invalid amount");
+		});
 
 		it("should reject transactions with invalid directions", async () => {
 			const invalidEntries = [
@@ -113,17 +118,18 @@ describe("Ledger Service", () => {
 					direction: "credit" as const,
 					amount: "50.00",
 				},
-			]
+			];
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: "test-org",
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries: invalidEntries,
 				})
-			).rejects.toThrow("Invalid direction")
-		})
-	})
+			).rejects.toThrow("Invalid direction");
+		});
+	});
 
 	describe("Settlement Workflow (US2)", () => {
 		it("should create settlement transactions correctly", async () => {
@@ -132,18 +138,18 @@ describe("Ledger Service", () => {
 				"settlement-account",
 				"500.00",
 				"Daily settlement"
-			)
+			);
 
-			expect(result).toBeDefined()
-			expect((result as { status: string }).status).toBe("pending")
-		})
-	})
+			expect(result).toBeDefined();
+			expect((result as { status: string }).status).toBe("pending");
+		});
+	});
 
 	describe("Balance Calculations (US1)", () => {
-		it("should delegate balance queries to repository", async () => {})
+		it("should delegate balance queries to repository", async () => {});
 
-		it("should provide fast balance queries for p99 performance", async () => {})
-	})
+		it("should provide fast balance queries for p99 performance", async () => {});
+	});
 
 	describe("Idempotency Key Handling", () => {
 		it("should handle idempotency key conflicts gracefully", async () => {
@@ -158,18 +164,19 @@ describe("Ledger Service", () => {
 					direction: "credit" as const,
 					amount: "100.00",
 				},
-			]
+			];
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: "test-org",
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries,
 					idempotencyKey: "duplicate-key",
 				})
-			).rejects.toThrow("Transaction with idempotency key 'duplicate-key' already exists")
-		})
-	})
+			).rejects.toThrow("Transaction with idempotency key 'duplicate-key' already exists");
+		});
+	});
 
 	describe("Account Validation", () => {
 		it("should validate that all accounts exist", async () => {
@@ -184,15 +191,16 @@ describe("Ledger Service", () => {
 					direction: "credit" as const,
 					amount: "100.00",
 				},
-			]
+			];
 
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: "test-org",
 					ledgerId: "test-ledger",
 					description: "Test transaction",
 					entries,
 				})
-			).rejects.toThrow("Account not found: nonexistent-account")
-		})
-	})
-})
+			).rejects.toThrow("Account not found: nonexistent-account");
+		});
+	});
+});

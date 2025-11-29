@@ -1,60 +1,60 @@
-import type { InferInsertModel, InferSelectModel } from "drizzle-orm"
-import { TypeID } from "typeid-js"
-import type { LedgerTransactionsTable } from "@/repo/schema"
+import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
+import { TypeID } from "typeid-js";
+import type { LedgerTransactionsTable } from "@/repo/schema";
 import type {
 	BalanceStatus,
 	Direction,
 	LedgerTransactionRequest,
 	LedgerTransactionResponse,
-} from "@/routes/ledgers/schema"
-import { LedgerTransactionEntryEntity } from "./LedgerTransactionEntryEntity"
-import type { LedgerID, LedgerTransactionID } from "./types"
+} from "@/routes/ledgers/schema";
+import { LedgerTransactionEntryEntity } from "./LedgerTransactionEntryEntity";
+import type { LedgerID, LedgerTransactionID } from "./types";
 
 // Infer types from Drizzle schema
-type LedgerTransactionRecord = InferSelectModel<typeof LedgerTransactionsTable>
-type LedgerTransactionInsert = InferInsertModel<typeof LedgerTransactionsTable>
+type LedgerTransactionRecord = InferSelectModel<typeof LedgerTransactionsTable>;
+type LedgerTransactionInsert = InferInsertModel<typeof LedgerTransactionsTable>;
 
 // Input for creating transaction entries (simplified for service layer use)
 interface TransactionEntryInput {
-	accountId: string
-	direction: Direction
-	amount: string
+	accountId: string;
+	direction: Direction;
+	amount: string;
 }
 
 interface LedgerTransactionEntityOptions {
-	id: LedgerTransactionID
-	ledgerId: LedgerID
-	idempotencyKey?: string
-	description?: string
-	status: BalanceStatus
-	metadata?: Record<string, unknown>
-	created: Date
-	updated: Date
+	id: LedgerTransactionID;
+	ledgerId: LedgerID;
+	idempotencyKey?: string;
+	description?: string;
+	status: BalanceStatus;
+	metadata?: Record<string, unknown>;
+	created: Date;
+	updated: Date;
 	// Embedded entries for complete transactions
-	entries?: LedgerTransactionEntryEntity[]
+	entries?: LedgerTransactionEntryEntity[];
 }
 
 class LedgerTransactionEntity {
-	public readonly id: LedgerTransactionID
-	public readonly ledgerId: LedgerID
-	public readonly idempotencyKey?: string
-	public readonly description?: string
-	public readonly status: BalanceStatus
-	public readonly metadata?: Record<string, unknown>
-	public readonly created: Date
-	public readonly updated: Date
-	public readonly entries?: LedgerTransactionEntryEntity[]
+	public readonly id: LedgerTransactionID;
+	public readonly ledgerId: LedgerID;
+	public readonly idempotencyKey?: string;
+	public readonly description?: string;
+	public readonly status: BalanceStatus;
+	public readonly metadata?: Record<string, unknown>;
+	public readonly created: Date;
+	public readonly updated: Date;
+	public readonly entries?: LedgerTransactionEntryEntity[];
 
 	constructor(options: LedgerTransactionEntityOptions) {
-		this.id = options.id
-		this.ledgerId = options.ledgerId
-		this.idempotencyKey = options.idempotencyKey
-		this.description = options.description
-		this.status = options.status
-		this.metadata = options.metadata
-		this.created = options.created
-		this.updated = options.updated
-		this.entries = options.entries
+		this.id = options.id;
+		this.ledgerId = options.ledgerId;
+		this.idempotencyKey = options.idempotencyKey;
+		this.description = options.description;
+		this.status = options.status;
+		this.metadata = options.metadata;
+		this.created = options.created;
+		this.updated = options.updated;
+		this.entries = options.entries;
 	}
 
 	// Create transaction from entry inputs (used by service layer)
@@ -65,11 +65,11 @@ class LedgerTransactionEntity {
 		idempotencyKey?: string,
 		id?: string
 	): LedgerTransactionEntity {
-		const now = new Date()
-		const transactionId = id ? TypeID.fromString<"ltr">(id) : new TypeID("ltr")
+		const now = new Date();
+		const transactionId = id ? TypeID.fromString<"ltr">(id) : new TypeID("ltr");
 
 		// Validate double-entry requirement
-		LedgerTransactionEntity.validateDoubleEntry(entryInputs)
+		LedgerTransactionEntity.validateDoubleEntry(entryInputs);
 
 		// Create entry entities
 		const entries = entryInputs.map(input =>
@@ -79,7 +79,7 @@ class LedgerTransactionEntity {
 				input.direction,
 				input.amount
 			)
-		)
+		);
 
 		return new LedgerTransactionEntity({
 			id: transactionId,
@@ -90,7 +90,7 @@ class LedgerTransactionEntity {
 			created: now,
 			updated: now,
 			entries,
-		})
+		});
 	}
 
 	// Create entity from API request - requires ledgerId
@@ -99,8 +99,8 @@ class LedgerTransactionEntity {
 		ledgerId: LedgerID,
 		id?: string
 	): LedgerTransactionEntity {
-		const now = new Date()
-		const transactionId = id ? TypeID.fromString<"ltr">(id) : new TypeID("ltr")
+		const now = new Date();
+		const transactionId = id ? TypeID.fromString<"ltr">(id) : new TypeID("ltr");
 
 		// Convert API entries to entry entities
 		const entries = rq.ledgerEntries.map(apiEntry =>
@@ -110,7 +110,7 @@ class LedgerTransactionEntity {
 				apiEntry.direction,
 				apiEntry.amount.toString() // Convert number to string for precision
 			)
-		)
+		);
 
 		return new LedgerTransactionEntity({
 			id: transactionId,
@@ -121,7 +121,7 @@ class LedgerTransactionEntity {
 			created: now,
 			updated: now,
 			entries,
-		})
+		});
 	}
 
 	// Create entity from database record
@@ -135,7 +135,7 @@ class LedgerTransactionEntity {
 			metadata: record.metadata as Record<string, unknown> | undefined,
 			created: record.created,
 			updated: record.updated,
-		})
+		});
 	}
 
 	// Create entity from database record with entries
@@ -143,7 +143,7 @@ class LedgerTransactionEntity {
 		record: LedgerTransactionRecord,
 		entries: LedgerTransactionEntryEntity[]
 	): LedgerTransactionEntity {
-		const entity = LedgerTransactionEntity.fromRecord(record)
+		const entity = LedgerTransactionEntity.fromRecord(record);
 		return new LedgerTransactionEntity({
 			id: entity.id,
 			ledgerId: entity.ledgerId,
@@ -154,7 +154,7 @@ class LedgerTransactionEntity {
 			created: entity.created,
 			updated: entity.updated,
 			entries,
-		})
+		});
 	}
 
 	// Convert entity to database record for insert/update
@@ -168,7 +168,7 @@ class LedgerTransactionEntity {
 			metadata: this.metadata,
 			created: this.created,
 			updated: this.updated,
-		}
+		};
 	}
 
 	// Convert entity to API response - requires entries
@@ -176,7 +176,7 @@ class LedgerTransactionEntity {
 		if (!this.entries) {
 			throw new Error(
 				"Transaction entries required for response conversion. Use fromRecordWithEntries()"
-			)
+			);
 		}
 
 		return {
@@ -188,15 +188,15 @@ class LedgerTransactionEntity {
 			ledgerEntries: this.entries.map(entry => entry.toResponse()),
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
-		}
+		};
 	}
 
 	// Helper method to post a transaction (change status)
 	public withPostedStatus(): LedgerTransactionEntity {
-		const postDate = new Date()
+		const postDate = new Date();
 
 		// Post all entries as well
-		const postedEntries = this.entries?.map(entry => entry.withPostedStatus(postDate))
+		const postedEntries = this.entries?.map(entry => entry.withPostedStatus(postDate));
 
 		return new LedgerTransactionEntity({
 			id: this.id,
@@ -208,72 +208,72 @@ class LedgerTransactionEntity {
 			created: this.created,
 			updated: postDate,
 			entries: postedEntries,
-		})
+		});
 	}
 
 	// Helper method to validate double-entry compliance
 	private static validateDoubleEntry(entryInputs: TransactionEntryInput[]): void {
 		if (entryInputs.length < 2) {
-			throw new Error("Transaction must have at least 2 entries")
+			throw new Error("Transaction must have at least 2 entries");
 		}
 
-		let totalDebits = 0
-		let totalCredits = 0
+		let totalDebits = 0;
+		let totalCredits = 0;
 
 		for (const entry of entryInputs) {
-			const amount = Number.parseFloat(entry.amount)
+			const amount = Number.parseFloat(entry.amount);
 
 			if (Number.isNaN(amount) || amount <= 0) {
-				throw new Error(`Invalid amount: ${entry.amount}`)
+				throw new Error(`Invalid amount: ${entry.amount}`);
 			}
 
 			if (entry.direction === "debit") {
-				totalDebits += amount
+				totalDebits += amount;
 			} else if (entry.direction === "credit") {
-				totalCredits += amount
+				totalCredits += amount;
 			} else {
-				throw new Error(`Invalid direction: ${entry.direction as string}`)
+				throw new Error(`Invalid direction: ${entry.direction as string}`);
 			}
 		}
 
-		const tolerance = 0.0001
+		const tolerance = 0.0001;
 		if (Math.abs(totalDebits - totalCredits) > tolerance) {
 			throw new Error(
 				`Double-entry validation failed: debits (${totalDebits}) must equal credits (${totalCredits})`
-			)
+			);
 		}
 	}
 
 	// Helper method to check if transaction is balanced
 	public isBalanced(): boolean {
 		if (!this.entries || this.entries.length < 2) {
-			return false
+			return false;
 		}
 
-		let totalDebits = 0
-		let totalCredits = 0
+		let totalDebits = 0;
+		let totalCredits = 0;
 
 		for (const entry of this.entries) {
-			const amount = entry.getAmountAsNumber()
+			const amount = entry.getAmountAsNumber();
 
 			if (entry.direction === "debit") {
-				totalDebits += amount
+				totalDebits += amount;
 			} else {
-				totalCredits += amount
+				totalCredits += amount;
 			}
 		}
 
-		const tolerance = 0.0001
-		return Math.abs(totalDebits - totalCredits) <= tolerance
+		const tolerance = 0.0001;
+		return Math.abs(totalDebits - totalCredits) <= tolerance;
 	}
 
 	// Helper method to get total transaction amount
 	public getTotalAmount(): number {
-		if (!this.entries) return 0
+		if (!this.entries) return 0;
 
 		return this.entries
 			.filter(entry => entry.direction === "debit")
-			.reduce((sum, entry) => sum + entry.getAmountAsNumber(), 0)
+			.reduce((sum, entry) => sum + entry.getAmountAsNumber(), 0);
 	}
 }
 
@@ -282,7 +282,7 @@ export type {
 	LedgerTransactionRecord,
 	LedgerTransactionInsert,
 	TransactionEntryInput,
-}
-export { LedgerTransactionEntity }
+};
+export { LedgerTransactionEntity };
 
-export type { LedgerTransactionID } from "./types"
+export type { LedgerTransactionID } from "./types";

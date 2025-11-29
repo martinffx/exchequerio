@@ -1,25 +1,25 @@
-import { type Static, Type } from "@sinclair/typebox"
-import type { FastifyRequest } from "fastify"
+import { type Static, Type } from "@sinclair/typebox";
+import type { FastifyRequest } from "fastify";
 
 const PaginationQuery = Type.Object({
 	offset: Type.Number({ default: 0 }),
 	limit: Type.Number({ default: 20 }),
-})
-type PaginationQuery = Static<typeof PaginationQuery>
+});
+type PaginationQuery = Static<typeof PaginationQuery>;
 
 const ProblemDetailError = Type.Object({
 	message: Type.String(),
 	stackTrace: Type.Optional(Type.Array(Type.String())),
-})
-type ProblemDetailError = Static<typeof ProblemDetailError>
+});
+type ProblemDetailError = Static<typeof ProblemDetailError>;
 const ProblemDetail = Type.Object({
 	title: Type.String(),
 	detail: Type.String(),
 	instance: Type.String(),
 	traceId: Type.String(),
 	errors: Type.Optional(Type.Array(ProblemDetailError)),
-})
-type ProblemDetail = Static<typeof ProblemDetail>
+});
+type ProblemDetail = Static<typeof ProblemDetail>;
 
 const BadRequestErrorResponse = Type.Composite(
 	[
@@ -30,8 +30,8 @@ const BadRequestErrorResponse = Type.Composite(
 		}),
 	],
 	{ $id: "BadRequestErrorResponse" }
-)
-type BadRequestErrorResponse = Static<typeof BadRequestErrorResponse>
+);
+type BadRequestErrorResponse = Static<typeof BadRequestErrorResponse>;
 const UnauthorizedErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
@@ -41,8 +41,8 @@ const UnauthorizedErrorResponse = Type.Composite(
 		}),
 	],
 	{ $id: "UnauthorizedErrorResponse" }
-)
-type UnauthorizedErrorResponse = Static<typeof UnauthorizedErrorResponse>
+);
+type UnauthorizedErrorResponse = Static<typeof UnauthorizedErrorResponse>;
 const ForbiddenErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
@@ -52,8 +52,8 @@ const ForbiddenErrorResponse = Type.Composite(
 		}),
 	],
 	{ $id: "ForbiddenErrorResponse" }
-)
-type ForbiddenErrorResponse = Static<typeof ForbiddenErrorResponse>
+);
+type ForbiddenErrorResponse = Static<typeof ForbiddenErrorResponse>;
 const NotFoundErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
@@ -63,8 +63,8 @@ const NotFoundErrorResponse = Type.Composite(
 		}),
 	],
 	{ $id: "NotFoundErrorResponse" }
-)
-type NotFoundErrorResponse = Static<typeof NotFoundErrorResponse>
+);
+type NotFoundErrorResponse = Static<typeof NotFoundErrorResponse>;
 const ConflictErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
@@ -74,8 +74,8 @@ const ConflictErrorResponse = Type.Composite(
 		}),
 	],
 	{ $id: "ConflictErrorResponse" }
-)
-type ConflictErrorResponse = Static<typeof ConflictErrorResponse>
+);
+type ConflictErrorResponse = Static<typeof ConflictErrorResponse>;
 const TooManyRequestsErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
@@ -85,8 +85,8 @@ const TooManyRequestsErrorResponse = Type.Composite(
 		}),
 	],
 	{ $id: "TooManyRequestsErrorResponse" }
-)
-type TooManyRequestsErrorResponse = Static<typeof TooManyRequestsErrorResponse>
+);
+type TooManyRequestsErrorResponse = Static<typeof TooManyRequestsErrorResponse>;
 const InternalServerErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
@@ -96,8 +96,8 @@ const InternalServerErrorResponse = Type.Composite(
 		}),
 	],
 	{ $id: "InternalServerErrorResponse" }
-)
-type InternalServerErrorResponse = Static<typeof InternalServerErrorResponse>
+);
+type InternalServerErrorResponse = Static<typeof InternalServerErrorResponse>;
 const ServiceUnavailableErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
@@ -107,8 +107,8 @@ const ServiceUnavailableErrorResponse = Type.Composite(
 		}),
 	],
 	{ $id: "ServiceUnavailableErrorResponse" }
-)
-type ServiceUnavailableErrorResponse = Static<typeof ServiceUnavailableErrorResponse>
+);
+type ServiceUnavailableErrorResponse = Static<typeof ServiceUnavailableErrorResponse>;
 
 type ErrorResponse =
 	| BadRequestErrorResponse
@@ -118,43 +118,43 @@ type ErrorResponse =
 	| ConflictErrorResponse
 	| TooManyRequestsErrorResponse
 	| InternalServerErrorResponse
-	| ServiceUnavailableErrorResponse
+	| ServiceUnavailableErrorResponse;
 
 const OrgId = Type.String({
 	description: "The organization's ID",
 	pattern: "^org_[0-9a-z]{26}$",
-})
-type OrgId = Static<typeof OrgId>
+});
+type OrgId = Static<typeof OrgId>;
 const OrgIdParameters = Type.Object({
 	orgId: OrgId,
-})
-type OrgIdParameters = Static<typeof OrgIdParameters>
+});
+type OrgIdParameters = Static<typeof OrgIdParameters>;
 const OrganizationResponse = Type.Object({
 	id: OrgId,
 	name: Type.String({ description: "The organization's name" }),
 	description: Type.Optional(Type.String({ description: "The organization's description" })),
 	created: Type.String({ description: "The organization's creation date" }),
 	updated: Type.String({ description: "The organization's last update date" }),
-})
-type OrganizationResponse = Static<typeof OrganizationResponse>
+});
+type OrganizationResponse = Static<typeof OrganizationResponse>;
 const OrganizationRequest = Type.Object({
 	name: Type.String(),
 	description: Type.Optional(Type.String()),
-})
-type OrganizationRequest = Static<typeof OrganizationRequest>
+});
+type OrganizationRequest = Static<typeof OrganizationRequest>;
 
 type ListOrganizationsRequest = FastifyRequest<{
-	Querystring: PaginationQuery
-}>
-type GetOrganizationRequest = FastifyRequest<{ Params: OrgIdParameters }>
+	Querystring: PaginationQuery;
+}>;
+type GetOrganizationRequest = FastifyRequest<{ Params: OrgIdParameters }>;
 type CreateOrganizationRequest = FastifyRequest<{
-	Body: OrganizationRequest
-}>
+	Body: OrganizationRequest;
+}>;
 type UpdateOrganizationRequest = FastifyRequest<{
-	Params: OrgIdParameters
-	Body: OrganizationRequest
-}>
-type DeleteOrganizationRequest = FastifyRequest<{ Params: OrgIdParameters }>
+	Params: OrgIdParameters;
+	Body: OrganizationRequest;
+}>;
+type DeleteOrganizationRequest = FastifyRequest<{ Params: OrgIdParameters }>;
 
 export {
 	PaginationQuery,
@@ -178,4 +178,4 @@ export {
 	type CreateOrganizationRequest,
 	type UpdateOrganizationRequest,
 	type DeleteOrganizationRequest,
-}
+};

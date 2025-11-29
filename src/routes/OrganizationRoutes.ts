@@ -1,6 +1,6 @@
-import { Type } from "@sinclair/typebox"
-import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from "fastify"
-import { OrganizationEntity } from "@/services"
+import { Type } from "@sinclair/typebox";
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from "fastify";
+import { OrganizationEntity } from "@/services";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -19,7 +19,7 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 	type UpdateOrganizationRequest,
-} from "./schema"
+} from "./schema";
 
 const OrganizationRoutes: FastifyPluginCallback = server => {
 	server.get<{ Querystring: PaginationQuery }>(
@@ -49,10 +49,10 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 			const orgs = await rq.server.services.organizationService.listOrganizations(
 				rq.query.offset,
 				rq.query.limit
-			)
-			return orgs.map(org => org.toResponse())
+			);
+			return orgs.map(org => org.toResponse());
 		}
-	)
+	);
 
 	server.get<{ Params: OrgIdParameters }>(
 		"/:orgId",
@@ -81,10 +81,10 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 			) => void,
 		},
 		async (rq: GetOrganizationRequest): Promise<OrganizationResponse> => {
-			const org = await rq.server.services.organizationService.getOrganization(rq.params.orgId)
-			return org.toResponse()
+			const org = await rq.server.services.organizationService.getOrganization(rq.params.orgId);
+			return org.toResponse();
 		}
-	)
+	);
 
 	server.post<{ Body: OrganizationRequest }>(
 		"/",
@@ -111,10 +111,10 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 		async (rq: CreateOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await server.services.organizationService.createOrganization(
 				OrganizationEntity.fromRequest(rq.body)
-			)
-			return org.toResponse()
+			);
+			return org.toResponse();
 		}
-	)
+	);
 
 	server.put<{ Body: OrganizationRequest; Params: OrgIdParameters }>(
 		"/:orgId",
@@ -146,10 +146,10 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 			const org = await rq.server.services.organizationService.updateOrganization(
 				rq.params.orgId,
 				OrganizationEntity.fromRequest(rq.body, rq.params.orgId)
-			)
-			return org.toResponse()
+			);
+			return org.toResponse();
 		}
-	)
+	);
 
 	server.delete<{ Params: OrgIdParameters }>(
 		"/:orgId",
@@ -175,9 +175,9 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 			preHandler: void server.hasPermissions(["my:organization:delete", "organization:delete"]),
 		},
 		async (rq: DeleteOrganizationRequest): Promise<void> => {
-			await rq.server.services.organizationService.deleteOrganization(rq.params.orgId)
+			await rq.server.services.organizationService.deleteOrganization(rq.params.orgId);
 		}
-	)
-}
+	);
+};
 
-export { OrganizationRoutes }
+export { OrganizationRoutes };

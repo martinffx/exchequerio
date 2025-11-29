@@ -1,6 +1,6 @@
-import { Type } from "@sinclair/typebox"
-import type { FastifyPluginAsync } from "fastify"
-import { NotImplementedError } from "@/errors"
+import { Type } from "@sinclair/typebox";
+import type { FastifyPluginAsync } from "fastify";
+import { NotImplementedError } from "@/errors";
 
 import {
 	BadRequestErrorResponse,
@@ -12,7 +12,7 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema"
+} from "@/routes/schema";
 import {
 	type GetLedgerTransactionEntryRequest,
 	LedgerTransactionEntryIdParams as LedgerTransactionEntryIdParameters,
@@ -20,9 +20,9 @@ import {
 	LedgerTransactionEntryResponse,
 	type ListLedgerTransactionEntriesRequest,
 	type UpdateLedgerTransactionEntryRequest,
-} from "./schema"
+} from "./schema";
 
-const TAGS = ["Ledger Transaction Entries"]
+const TAGS = ["Ledger Transaction Entries"];
 const LedgerTransactionEntriesRoutes: FastifyPluginAsync = server => {
 	server.get(
 		"/",
@@ -48,10 +48,10 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = server => {
 			const entries = await rq.server.services.ledgerTransactionService.listLedgerTransactionEntries(
 				rq.query.offset,
 				rq.query.limit
-			)
-			return entries.map(entry => entry.toResponse())
+			);
+			return entries.map(entry => entry.toResponse());
 		}
-	)
+	);
 
 	server.get(
 		"/:ledgerTransactionEntryId",
@@ -77,10 +77,10 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = server => {
 		async (rq: GetLedgerTransactionEntryRequest): Promise<LedgerTransactionEntryResponse> => {
 			const ledger = await rq.server.services.ledgerTransactionService.getLedgerTransactionEntry(
 				rq.params.ledgerTransactionEntryId
-			)
-			return ledger.toResponse()
+			);
+			return ledger.toResponse();
 		}
-	)
+	);
 
 	server.put(
 		"/:ledgerTransactionEntryId",
@@ -107,10 +107,10 @@ const LedgerTransactionEntriesRoutes: FastifyPluginAsync = server => {
 		},
 		(_rq: UpdateLedgerTransactionEntryRequest): LedgerTransactionEntryResponse => {
 			// TODO: Implement proper entity creation from request body
-			throw new NotImplementedError("Feature not yet implemented")
+			throw new NotImplementedError("Feature not yet implemented");
 		}
-	)
-	return Promise.resolve()
-}
+	);
+	return Promise.resolve();
+};
 
-export { LedgerTransactionEntriesRoutes }
+export { LedgerTransactionEntriesRoutes };

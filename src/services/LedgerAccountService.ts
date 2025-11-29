@@ -1,14 +1,14 @@
-import { NotImplementedError } from "@/errors"
-import type { LedgerAccountRepo } from "@/repo/LedgerAccountRepo"
-import type { LedgerRepo } from "@/repo/LedgerRepo"
+import { NotImplementedError } from "@/errors";
+import type { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
+import type { LedgerRepo } from "@/repo/LedgerRepo";
 import type {
 	LedgerAccountBalanceMonitorEntity,
 	LedgerAccountCategoryEntity,
 	LedgerAccountEntity,
 	LedgerAccountSettlementEntity,
 	LedgerAccountStatementEntity,
-} from "./entities"
-import type { LedgerAccountID, LedgerID, OrgID } from "./entities/types"
+} from "./entities";
+import type { LedgerAccountID, LedgerID, OrgID } from "./entities/types";
 
 class LedgerAccountService {
 	constructor(
@@ -23,8 +23,8 @@ class LedgerAccountService {
 		offset = 0,
 		limit = 50
 	): Promise<LedgerAccountEntity[]> {
-		await this.ledgerRepo.getLedger(orgId, ledgerId) // Verify ledger exists
-		return this.ledgerAccountRepo.listLedgerAccounts(orgId.toString(), ledgerId, offset, limit)
+		await this.ledgerRepo.getLedger(orgId, ledgerId); // Verify ledger exists
+		return this.ledgerAccountRepo.listLedgerAccounts(orgId.toString(), ledgerId, offset, limit);
 	}
 
 	public async getLedgerAccount(
@@ -32,15 +32,15 @@ class LedgerAccountService {
 		ledgerId: LedgerID,
 		id: LedgerAccountID
 	): Promise<LedgerAccountEntity> {
-		return this.ledgerAccountRepo.getLedgerAccount(orgId.toString(), ledgerId, id)
+		return this.ledgerAccountRepo.getLedgerAccount(orgId.toString(), ledgerId, id);
 	}
 
 	public async createLedgerAccount(
 		orgId: OrgID,
 		entity: LedgerAccountEntity
 	): Promise<LedgerAccountEntity> {
-		await this.ledgerRepo.getLedger(orgId, entity.ledgerId) // Verify ledger exists
-		return this.ledgerAccountRepo.createLedgerAccount(orgId.toString(), entity)
+		await this.ledgerRepo.getLedger(orgId, entity.ledgerId); // Verify ledger exists
+		return this.ledgerAccountRepo.createLedgerAccount(orgId.toString(), entity);
 	}
 
 	public async updateLedgerAccount(
@@ -48,7 +48,7 @@ class LedgerAccountService {
 		ledgerId: LedgerID,
 		entity: LedgerAccountEntity
 	): Promise<LedgerAccountEntity> {
-		return this.ledgerAccountRepo.updateLedgerAccount(orgId.toString(), ledgerId, entity)
+		return this.ledgerAccountRepo.updateLedgerAccount(orgId.toString(), ledgerId, entity);
 	}
 
 	public async deleteLedgerAccount(
@@ -56,7 +56,7 @@ class LedgerAccountService {
 		ledgerId: LedgerID,
 		id: LedgerAccountID
 	): Promise<void> {
-		return this.ledgerAccountRepo.deleteLedgerAccount(orgId.toString(), ledgerId, id)
+		return this.ledgerAccountRepo.deleteLedgerAccount(orgId.toString(), ledgerId, id);
 	}
 
 	// Ledger Account Category
@@ -66,13 +66,13 @@ class LedgerAccountService {
 	): Promise<LedgerAccountCategoryEntity[]> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		)
+		);
 	}
 
 	public getLedgerAccountCategory(_id: string): Promise<LedgerAccountCategoryEntity> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		)
+		);
 	}
 
 	public createLedgerAccountCategory(
@@ -80,7 +80,7 @@ class LedgerAccountService {
 	): Promise<LedgerAccountCategoryEntity> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		)
+		);
 	}
 
 	public updateLedgerAccountCategory(
@@ -89,37 +89,37 @@ class LedgerAccountService {
 	): Promise<LedgerAccountCategoryEntity> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		)
+		);
 	}
 
 	public deleteLedgerAccountCategory(_id: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		)
+		);
 	}
 
 	public linkLedgerAccountToCategory(_id: string, _accountId: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		)
+		);
 	}
 
 	public unlinkLedgerAccountToCategory(_id: string, _accountId: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		)
+		);
 	}
 
 	public linkLedgerAccountCategoryToCategory(_id: string, _categoryId: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		)
+		);
 	}
 
 	public unlinkLedgerAccountCategoryToCategory(_id: string, _categoryId: string): Promise<void> {
 		throw new NotImplementedError(
 			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		)
+		);
 	}
 
 	// Ledger Account Settlement
@@ -129,13 +129,13 @@ class LedgerAccountService {
 	): Promise<LedgerAccountSettlementEntity[]> {
 		throw new NotImplementedError(
 			"Account settlements require LedgerAccountSettlementsTable and LedgerAccountSettlementEntity implementation"
-		)
+		);
 	}
 
 	public getLedgerAccountSettlement(_id: string): Promise<LedgerAccountSettlementEntity> {
 		throw new NotImplementedError(
 			"Account settlements require LedgerAccountSettlementsTable and LedgerAccountSettlementEntity implementation"
-		)
+		);
 	}
 
 	public createLedgerAccountSettlement(
@@ -143,37 +143,37 @@ class LedgerAccountService {
 	): Promise<LedgerAccountSettlementEntity> {
 		throw new NotImplementedError(
 			"Account settlements require LedgerAccountSettlementsTable and LedgerAccountSettlementEntity implementation"
-		)
+		);
 	}
 
 	public updateLedgerAccountSettlement(
 		_id: string,
 		_entity: LedgerAccountSettlementEntity
 	): Promise<LedgerAccountSettlementEntity> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	public deleteLedgerAccountSettlement(_id: string): Promise<void> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	public addLedgerAccountSettlementEntries(_id: string, _entries: string[]): Promise<void> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	public removeLedgerAccountSettlementEntries(_id: string, _entries: string[]): Promise<void> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	// Ledger Account Statement
 	public getLedgerAccountStatement(_id: string): Promise<LedgerAccountStatementEntity> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	public createLedgerAccountStatement(
 		_entity: LedgerAccountStatementEntity
 	): Promise<LedgerAccountStatementEntity> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	// Ledger Account Balance Monitor§
@@ -181,29 +181,29 @@ class LedgerAccountService {
 		_offset: number,
 		_limit: number
 	): Promise<LedgerAccountBalanceMonitorEntity[]> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	public getLedgerAccountBalanceMonitor(_id: string): Promise<LedgerAccountBalanceMonitorEntity> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	public createLedgerAccountBalanceMonitor(
 		_entity: LedgerAccountBalanceMonitorEntity
 	): Promise<LedgerAccountBalanceMonitorEntity> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	public updateLedgerAccountBalanceMonitor(
 		_id: string,
 		_entity: LedgerAccountBalanceMonitorEntity
 	): Promise<LedgerAccountBalanceMonitorEntity> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 
 	public deleteLedgerAccountBalanceMonitor(_id: string): Promise<void> {
-		throw new NotImplementedError("Feature not yet implemented")
+		throw new NotImplementedError("Feature not yet implemented");
 	}
 }
 
-export { LedgerAccountService }
+export { LedgerAccountService };

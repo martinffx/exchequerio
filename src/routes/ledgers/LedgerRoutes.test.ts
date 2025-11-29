@@ -1,5 +1,6 @@
-import type { FastifyInstance } from "fastify"
-import { signJWT } from "@/auth"
+import { vi } from "vitest";
+import type { FastifyInstance } from "fastify";
+import { signJWT } from "@/auth";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -7,38 +8,38 @@ import type {
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema"
-import { buildServer } from "@/server"
-import type { LedgerService } from "@/services/LedgerService"
-import { createLedgerFixture, createOrganizationFixture } from "./fixtures"
+} from "@/routes/schema";
+import { buildServer } from "@/server";
+import type { LedgerService } from "@/services/LedgerService";
+import { createLedgerFixture, createOrganizationFixture } from "./fixtures";
 
-const mockLedgerService = jest.mocked<LedgerService>({
-	listLedgers: jest.fn(),
-	getLedger: jest.fn(),
-	updateLedger: jest.fn(),
-	deleteLedger: jest.fn(),
-	listLedger: jest.fn(),
-} as unknown as LedgerService)
+const mockLedgerService = vi.mocked<LedgerService>({
+	listLedgers: vi.fn(),
+	getLedger: vi.fn(),
+	updateLedger: vi.fn(),
+	deleteLedger: vi.fn(),
+	listLedger: vi.fn(),
+} as unknown as LedgerService);
 
 describe("LedgerRoutes", () => {
-	let server: FastifyInstance
-	const org = createOrganizationFixture()
-	const ledger = createLedgerFixture()
-	const token = signJWT({ sub: org.id.toString(), scope: ["org_admin"] })
+	let server: FastifyInstance;
+	const org = createOrganizationFixture();
+	const ledger = createLedgerFixture();
+	const token = signJWT({ sub: org.id.toString(), scope: ["org_admin"] });
 
 	beforeEach(async () => {
-		jest.clearAllMocks()
-		server = await buildServer()
-	})
+		vi.clearAllMocks();
+		server = await buildServer();
+	});
 
 	describe("List Ledgers", () => {
 		it("should return a list of ledgers", async () => {
 			mockLedgerService.listLedgers.mockImplementation((orgId, offset, limit) => {
-				expect(orgId).toEqual(org.id)
-				expect(offset).toBe(0)
-				expect(limit).toBe(20)
-				return Promise.resolve([ledger])
-			})
+				expect(orgId).toEqual(org.id);
+				expect(offset).toBe(0);
+				expect(limit).toBe(20);
+				return Promise.resolve([ledger]);
+			});
 
 			const rs = await server.inject({
 				method: "GET",
@@ -46,116 +47,116 @@ describe("LedgerRoutes", () => {
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
-			})
+			});
 
-			expect(rs.statusCode).toBe(200)
-			expect(rs.json()).toEqual([ledger.toResponse()])
-		})
+			expect(rs.statusCode).toBe(200);
+			expect(rs.json()).toEqual([ledger.toResponse()]);
+		});
 
 		it("should return a list of ledgers with pagination", async () => {
 			mockLedgerService.listLedgers.mockImplementation((orgId, offset, limit) => {
-				expect(orgId).toEqual(org.id)
-				expect(offset).toBe(10)
-				expect(limit).toBe(20)
-				return Promise.resolve([ledger])
-			})
+				expect(orgId).toEqual(org.id);
+				expect(offset).toBe(10);
+				expect(limit).toBe(20);
+				return Promise.resolve([ledger]);
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: "/api/ledgers?offset=10&limit=20",
-			})
-			expect(rs.statusCode).toBe(200)
-			expect(rs.json()).toEqual([ledger.toResponse()])
-		})
+			});
+			expect(rs.statusCode).toBe(200);
+			expect(rs.json()).toEqual([ledger.toResponse()]);
+		});
 
 		it("should handle unauthorized error", async () => {
 			mockLedgerService.listLedgers.mockImplementation((_orgId, _offset, _limit) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: "/api/ledgers",
-			})
-			expect(rs.statusCode).toBe(401)
-			const response: UnauthorizedErrorResponse = rs.json()
-			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Invalid token")
-		})
+			});
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+			expect(response.detail).toEqual("Invalid token");
+		});
 
 		it("should handle forbidden error", async () => {
 			mockLedgerService.listLedgers.mockImplementation((_orgId, _offset, _limit) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: "/api/ledgers",
-			})
-			expect(rs.statusCode).toBe(403)
-			const response: ForbiddenErrorResponse = rs.json()
-			expect(response.status).toEqual(403)
-			expect(response.detail).toEqual("One of: my:ledger:read,ledger:read; permissions is required")
-		})
+			});
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+			expect(response.detail).toEqual("One of: my:ledger:read,ledger:read; permissions is required");
+		});
 
 		it("should handle internal server error", async () => {
 			mockLedgerService.listLedgers.mockImplementation((_orgId, _offset, _limit) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: "/api/ledgers",
-			})
-			expect(rs.statusCode).toBe(500)
-			const response: InternalServerErrorResponse = rs.json()
-			expect(response.status).toEqual(500)
-			expect(response.detail).toEqual("Internal Server Error")
-		})
+			});
+			expect(rs.statusCode).toBe(500);
+			const response: InternalServerErrorResponse = rs.json();
+			expect(response.status).toEqual(500);
+			expect(response.detail).toEqual("Internal Server Error");
+		});
 
 		it("should handle bad request error", async () => {
 			mockLedgerService.listLedgers.mockImplementation((_orgId, _offset, _limit) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: "/api/ledgers?offset=invalid&limit=invalid",
-			})
-			expect(rs.statusCode).toBe(400)
-			const response: BadRequestErrorResponse = rs.json()
-			expect(response.status).toEqual(400)
-			expect(response.detail).toEqual("body/name must be string")
-		})
-	})
+			});
+			expect(rs.statusCode).toBe(400);
+			const response: BadRequestErrorResponse = rs.json();
+			expect(response.status).toEqual(400);
+			expect(response.detail).toEqual("body/name must be string");
+		});
+	});
 
 	describe("Get Ledger", () => {
 		it("should return a ledger", async () => {
 			mockLedgerService.getLedger.mockImplementation((orgId, ledgerId) => {
-				expect(orgId).toEqual(org.id)
-				expect(ledgerId).toEqual(ledger.id)
-				return Promise.resolve(ledger)
-			})
+				expect(orgId).toEqual(org.id);
+				expect(ledgerId).toEqual(ledger.id);
+				return Promise.resolve(ledger);
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(200)
-			expect(rs.json()).toEqual(ledger.toResponse())
-		})
+			});
+			expect(rs.statusCode).toBe(200);
+			expect(rs.json()).toEqual(ledger.toResponse());
+		});
 
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
@@ -164,89 +165,89 @@ describe("LedgerRoutes", () => {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/org_${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(400)
-			const response: BadRequestErrorResponse = rs.json()
-			expect(response.status).toEqual(400)
-			expect(response.detail).toEqual("path/ledgerId must be number")
-		})
+			});
+			expect(rs.statusCode).toBe(400);
+			const response: BadRequestErrorResponse = rs.json();
+			expect(response.status).toEqual(400);
+			expect(response.detail).toEqual("path/ledgerId must be number");
+		});
 
 		it("should handle unauthorized error", async () => {
 			mockLedgerService.getLedger.mockImplementation(async (_orgId, _ledgerId) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(401)
-			const response: UnauthorizedErrorResponse = rs.json()
-			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Invalid token")
-		})
+			});
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+			expect(response.detail).toEqual("Invalid token");
+		});
 
 		it("should handle forbidden error", async () => {
 			mockLedgerService.getLedger.mockImplementation((_orgId, _ledgerId) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(403)
-			const response: ForbiddenErrorResponse = rs.json()
-			expect(response.status).toEqual(403)
-			expect(response.detail).toEqual("One of: my:ledger:read,ledger:read; permissions is required")
-		})
+			});
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+			expect(response.detail).toEqual("One of: my:ledger:read,ledger:read; permissions is required");
+		});
 
 		it("should handle not found error", async () => {
 			mockLedgerService.getLedger.mockImplementation((_orgId, _ledgerId) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(404)
-			const response: NotFoundErrorResponse = rs.json()
-			expect(response.status).toEqual(404)
-			expect(response.detail).toEqual("Not Found")
-		})
+			});
+			expect(rs.statusCode).toBe(404);
+			const response: NotFoundErrorResponse = rs.json();
+			expect(response.status).toEqual(404);
+			expect(response.detail).toEqual("Not Found");
+		});
 
 		it("should handle internal server error", async () => {
 			mockLedgerService.getLedger.mockImplementation((_orgId, _ledgerId) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "GET",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(500)
-			const response: InternalServerErrorResponse = rs.json()
-			expect(response.status).toEqual(500)
-			expect(response.detail).toEqual("Internal Server Error")
-		})
-	})
+			});
+			expect(rs.statusCode).toBe(500);
+			const response: InternalServerErrorResponse = rs.json();
+			expect(response.status).toEqual(500);
+			expect(response.detail).toEqual("Internal Server Error");
+		});
+	});
 
 	describe("Create Ledger", () => {
 		it("should create a ledger", async () => {
 			mockLedgerService.createLedger.mockImplementation(async (orgId, ledger) => {
-				expect(orgId).toEqual(org.id)
-				expect(ledger.name).toEqual("test")
-				return ledger
-			})
+				expect(orgId).toEqual(org.id);
+				expect(ledger.name).toEqual("test");
+				return ledger;
+			});
 			const rs = await server.inject({
 				method: "POST",
 				headers: {
@@ -256,10 +257,10 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(201)
-			expect(rs.json()).toEqual(ledger.toResponse())
-		})
+			});
+			expect(rs.statusCode).toBe(201);
+			expect(rs.json()).toEqual(ledger.toResponse());
+		});
 
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
@@ -271,17 +272,17 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(400)
-			const response: BadRequestErrorResponse = rs.json()
-			expect(response.status).toEqual(400)
-			expect(response.detail).toEqual("body/name must be string")
-		})
+			});
+			expect(rs.statusCode).toBe(400);
+			const response: BadRequestErrorResponse = rs.json();
+			expect(response.status).toEqual(400);
+			expect(response.detail).toEqual("body/name must be string");
+		});
 
 		it("should handle unauthorized error", async () => {
 			mockLedgerService.createLedger.mockImplementation(async (_orgId, _ledger) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "POST",
 				headers: {
@@ -291,17 +292,17 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(401)
-			const response: UnauthorizedErrorResponse = rs.json()
-			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Invalid token")
-		})
+			});
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+			expect(response.detail).toEqual("Invalid token");
+		});
 
 		it("should handle forbidden error", async () => {
 			mockLedgerService.createLedger.mockImplementation(async (_orgId, _ledger) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "POST",
 				headers: {
@@ -311,17 +312,17 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(403)
-			const response: ForbiddenErrorResponse = rs.json()
-			expect(response.status).toEqual(403)
-			expect(response.detail).toEqual("One of: my:ledger:write,ledger:write; permissions is required")
-		})
+			});
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+			expect(response.detail).toEqual("One of: my:ledger:write,ledger:write; permissions is required");
+		});
 
 		it("should handle conflict error", async () => {
 			mockLedgerService.createLedger.mockImplementation(async (_orgId, _ledger) => {
-				throw new Error("Conflict")
-			})
+				throw new Error("Conflict");
+			});
 			const rs = await server.inject({
 				method: "POST",
 				headers: {
@@ -331,17 +332,17 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(409)
-			const response: ConflictErrorResponse = rs.json()
-			expect(response.status).toEqual(409)
-			expect(response.detail).toEqual("Conflict")
-		})
+			});
+			expect(rs.statusCode).toBe(409);
+			const response: ConflictErrorResponse = rs.json();
+			expect(response.status).toEqual(409);
+			expect(response.detail).toEqual("Conflict");
+		});
 
 		it("should handle internal server error", async () => {
 			mockLedgerService.createLedger.mockImplementation(async (_orgId, _ledger) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "POST",
 				headers: {
@@ -351,21 +352,21 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(500)
-			const response: InternalServerErrorResponse = rs.json()
-			expect(response.status).toEqual(500)
-			expect(response.detail).toEqual("Internal Server Error")
-		})
-	})
+			});
+			expect(rs.statusCode).toBe(500);
+			const response: InternalServerErrorResponse = rs.json();
+			expect(response.status).toEqual(500);
+			expect(response.detail).toEqual("Internal Server Error");
+		});
+	});
 
 	describe("Update Ledger", () => {
 		it("should update a ledger", async () => {
 			mockLedgerService.updateLedger.mockImplementation(async (orgId, ledger) => {
-				expect(orgId).toEqual(org.id)
-				expect(ledger.name).toEqual("test")
-				return ledger
-			})
+				expect(orgId).toEqual(org.id);
+				expect(ledger.name).toEqual("test");
+				return ledger;
+			});
 			const rs = await server.inject({
 				method: "PUT",
 				headers: {
@@ -375,10 +376,10 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(200)
-			expect(rs.json()).toEqual(ledger.toResponse())
-		})
+			});
+			expect(rs.statusCode).toBe(200);
+			expect(rs.json()).toEqual(ledger.toResponse());
+		});
 
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
@@ -390,17 +391,17 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(400)
-			const response: BadRequestErrorResponse = rs.json()
-			expect(response.status).toEqual(400)
-			expect(response.detail).toEqual("body/name must be string")
-		})
+			});
+			expect(rs.statusCode).toBe(400);
+			const response: BadRequestErrorResponse = rs.json();
+			expect(response.status).toEqual(400);
+			expect(response.detail).toEqual("body/name must be string");
+		});
 
 		it("should handle unauthorized error", async () => {
 			mockLedgerService.updateLedger.mockImplementation(async (_orgId, _ledger) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "PUT",
 				headers: {
@@ -410,17 +411,17 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(401)
-			const response: UnauthorizedErrorResponse = rs.json()
-			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Invalid token")
-		})
+			});
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+			expect(response.detail).toEqual("Invalid token");
+		});
 
 		it("should handle forbidden error", async () => {
 			mockLedgerService.updateLedger.mockImplementation(async (_orgId, _ledger) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "PUT",
 				headers: {
@@ -430,17 +431,17 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(403)
-			const response: ForbiddenErrorResponse = rs.json()
-			expect(response.status).toEqual(403)
-			expect(response.detail).toEqual("One of: my:ledger:write,ledger:write; permissions is required")
-		})
+			});
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+			expect(response.detail).toEqual("One of: my:ledger:write,ledger:write; permissions is required");
+		});
 
 		it("should handle not found error", async () => {
 			mockLedgerService.updateLedger.mockImplementation(async (_orgId, _ledger) => {
-				throw new Error("Not Found")
-			})
+				throw new Error("Not Found");
+			});
 			const rs = await server.inject({
 				method: "PUT",
 				headers: {
@@ -450,17 +451,17 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(404)
-			const response: NotFoundErrorResponse = rs.json()
-			expect(response.status).toEqual(404)
-			expect(response.detail).toEqual("Not Found")
-		})
+			});
+			expect(rs.statusCode).toBe(404);
+			const response: NotFoundErrorResponse = rs.json();
+			expect(response.status).toEqual(404);
+			expect(response.detail).toEqual("Not Found");
+		});
 
 		it("should handle conflict error", async () => {
 			mockLedgerService.updateLedger.mockImplementation(async (_orgId, _ledger) => {
-				throw new Error("Conflict")
-			})
+				throw new Error("Conflict");
+			});
 			const rs = await server.inject({
 				method: "PUT",
 				headers: {
@@ -470,17 +471,17 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(409)
-			const response: ConflictErrorResponse = rs.json()
-			expect(response.status).toEqual(409)
-			expect(response.detail).toEqual("Conflict")
-		})
+			});
+			expect(rs.statusCode).toBe(409);
+			const response: ConflictErrorResponse = rs.json();
+			expect(response.status).toEqual(409);
+			expect(response.detail).toEqual("Conflict");
+		});
 
 		it("should handle internal server error", async () => {
 			mockLedgerService.updateLedger.mockImplementation(async (_orgId, _ledger) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "PUT",
 				headers: {
@@ -490,30 +491,30 @@ describe("LedgerRoutes", () => {
 				payload: {
 					name: "test",
 				},
-			})
-			expect(rs.statusCode).toBe(500)
-			const response: InternalServerErrorResponse = rs.json()
-			expect(response.status).toEqual(500)
-			expect(response.detail).toEqual("Internal Server Error")
-		})
-	})
+			});
+			expect(rs.statusCode).toBe(500);
+			const response: InternalServerErrorResponse = rs.json();
+			expect(response.status).toEqual(500);
+			expect(response.detail).toEqual("Internal Server Error");
+		});
+	});
 
 	describe("Delete Ledger", () => {
 		it("should delete a ledger", async () => {
 			mockLedgerService.deleteLedger.mockImplementation(async (orgId, ledgerId) => {
-				expect(orgId).toEqual(org.id)
-				expect(ledgerId).toEqual(ledger.id)
-			})
+				expect(orgId).toEqual(org.id);
+				expect(ledgerId).toEqual(ledger.id);
+			});
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(200)
-			expect(rs.json()).toEqual(ledger.toResponse())
-		})
+			});
+			expect(rs.statusCode).toBe(200);
+			expect(rs.json()).toEqual(ledger.toResponse());
+		});
 
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
@@ -522,98 +523,98 @@ describe("LedgerRoutes", () => {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(400)
-			const response: BadRequestErrorResponse = rs.json()
-			expect(response.status).toEqual(400)
-			expect(response.detail).toEqual("path/ledgerId must be number")
-		})
+			});
+			expect(rs.statusCode).toBe(400);
+			const response: BadRequestErrorResponse = rs.json();
+			expect(response.status).toEqual(400);
+			expect(response.detail).toEqual("path/ledgerId must be number");
+		});
 
 		it("should handle unauthorized error", async () => {
 			mockLedgerService.deleteLedger.mockImplementation(async (_orgId, _ledgerId) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(401)
-			const response: UnauthorizedErrorResponse = rs.json()
-			expect(response.status).toEqual(401)
-			expect(response.detail).toEqual("Invalid token")
-		})
+			});
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+			expect(response.detail).toEqual("Invalid token");
+		});
 
 		it("should handle forbidden error", async () => {
 			mockLedgerService.deleteLedger.mockImplementation(async (_orgId, _ledgerId) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(403)
-			const response: ForbiddenErrorResponse = rs.json()
-			expect(response.status).toEqual(403)
+			});
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
 			expect(response.detail).toEqual(
 				"One of: my:ledger:delete,ledger:delete; permissions is required"
-			)
-		})
+			);
+		});
 
 		it("should handle not found error", async () => {
 			mockLedgerService.deleteLedger.mockImplementation(async (_orgId, _ledgerId) => {
-				throw new Error("Not Found")
-			})
+				throw new Error("Not Found");
+			});
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(404)
-			const response: NotFoundErrorResponse = rs.json()
-			expect(response.status).toEqual(404)
-			expect(response.detail).toEqual("Not Found")
-		})
+			});
+			expect(rs.statusCode).toBe(404);
+			const response: NotFoundErrorResponse = rs.json();
+			expect(response.status).toEqual(404);
+			expect(response.detail).toEqual("Not Found");
+		});
 
 		it("should handle conflict error", async () => {
 			mockLedgerService.deleteLedger.mockImplementation(async (_orgId, _ledgerId) => {
-				throw new Error("Conflict")
-			})
+				throw new Error("Conflict");
+			});
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(409)
-			const response: ConflictErrorResponse = rs.json()
-			expect(response.status).toEqual(409)
-			expect(response.detail).toEqual("Conflict")
-		})
+			});
+			expect(rs.statusCode).toBe(409);
+			const response: ConflictErrorResponse = rs.json();
+			expect(response.status).toEqual(409);
+			expect(response.detail).toEqual("Conflict");
+		});
 
 		it("should handle internal server error", async () => {
 			mockLedgerService.deleteLedger.mockImplementation(async (_orgId, _ledgerId) => {
-				throw new Error("Internal Server Error")
-			})
+				throw new Error("Internal Server Error");
+			});
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-			})
-			expect(rs.statusCode).toBe(500)
-			const response: InternalServerErrorResponse = rs.json()
-			expect(response.status).toEqual(500)
-			expect(response.detail).toEqual("Internal Server Error")
-		})
-	})
-})
+			});
+			expect(rs.statusCode).toBe(500);
+			const response: InternalServerErrorResponse = rs.json();
+			expect(response.status).toEqual(500);
+			expect(response.detail).toEqual("Internal Server Error");
+		});
+	});
+});

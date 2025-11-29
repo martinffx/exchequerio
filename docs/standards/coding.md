@@ -2,18 +2,20 @@
 
 ## Code Style & Formatting
 
-### ESLint + Prettier Configuration
-- **Primary tools:** ESLint for type-aware linting, Prettier for formatting
+### ESLint + Biome Configuration
+- **Primary tools:** Biome for fast formatting and linting, ESLint for type-aware linting
 - **Indentation:** Tab characters (not spaces)
 - **Quotes:** Double quotes for strings
-- **Semicolons:** Required semicolons in TypeScript (Prettier default)
+- **Semicolons:** Always required (enforced by Biome)
 - **Line endings:** LF (Unix-style)
 
 ### Commands
-- `mise run lint` - Run ESLint with type-aware linting and architectural boundaries
-- `mise run format` - Format code with Prettier + oxc plugin
-- `mise run check` - Run all code quality checks (format + lint + types)
-- Both commands should be run before committing
+- \`mise run lint\` - Run Biome + ESLint (hybrid linting approach)
+- \`mise run lint_fast\` - Run Biome only (fast formatting + syntax checks)
+- \`mise run lint_slow\` - Run ESLint only (type-aware + boundaries + unicorn)
+- \`mise run format\` - Format code with Biome
+- \`mise run check\` - Run all code quality checks (format + lint + types)
+- Run \`mise run format && mise run lint\` before committing
 
 ## TypeScript Conventions
 

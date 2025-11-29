@@ -1,6 +1,6 @@
-import { Type } from "@sinclair/typebox"
-import type { FastifyPluginAsync } from "fastify"
-import { NotImplementedError } from "@/errors"
+import { Type } from "@sinclair/typebox";
+import type { FastifyPluginAsync } from "fastify";
+import { NotImplementedError } from "@/errors";
 
 import {
 	BadRequestErrorResponse,
@@ -12,7 +12,7 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema"
+} from "@/routes/schema";
 
 import {
 	type CreateLedgerTransactionRequest,
@@ -23,9 +23,9 @@ import {
 	LedgerTransactionResponse,
 	type ListLedgerTransactionsRequest,
 	type UpdateLedgerTransactionRequest,
-} from "./schema"
+} from "./schema";
 
-const TAGS = ["Ledger Transactions"]
+const TAGS = ["Ledger Transactions"];
 const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 	server.get(
 		"/",
@@ -51,10 +51,10 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 			const transactions = await rq.server.services.ledgerTransactionService.listLedgerTransactions(
 				rq.query.offset,
 				rq.query.limit
-			)
-			return transactions.map(transaction => transaction.toResponse())
+			);
+			return transactions.map(transaction => transaction.toResponse());
 		}
-	)
+	);
 
 	server.get(
 		"/:id",
@@ -80,10 +80,10 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		async (rq: GetLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
 			const ledger = await rq.server.services.ledgerTransactionService.getLedgerTransaction(
 				rq.params.ledgerTransactionId
-			)
-			return ledger.toResponse()
+			);
+			return ledger.toResponse();
 		}
-	)
+	);
 
 	server.post(
 		"/",
@@ -108,9 +108,9 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		},
 		(_rq: CreateLedgerTransactionRequest): LedgerTransactionResponse => {
 			// TODO: Implement proper entity creation from request body
-			throw new NotImplementedError("Feature not yet implemented")
+			throw new NotImplementedError("Feature not yet implemented");
 		}
-	)
+	);
 
 	server.put(
 		"/:id",
@@ -137,9 +137,9 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		},
 		(_rq: UpdateLedgerTransactionRequest): LedgerTransactionResponse => {
 			// TODO: Implement proper entity creation from request body
-			throw new NotImplementedError("Feature not yet implemented")
+			throw new NotImplementedError("Feature not yet implemented");
 		}
-	)
+	);
 
 	server.delete(
 		"/:id",
@@ -166,10 +166,10 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		async (rq: DeleteLedgerTransactionRequest): Promise<void> => {
 			await rq.server.services.ledgerTransactionService.deleteLedgerTransaction(
 				rq.params.ledgerTransactionId
-			)
+			);
 		}
-	)
-	return Promise.resolve()
-}
+	);
+	return Promise.resolve();
+};
 
-export { LedgerTransactionRoutes }
+export { LedgerTransactionRoutes };
