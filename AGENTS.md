@@ -24,6 +24,11 @@
 - `drizzle-kit generate` - Generate migrations from schema
 - `drizzle-kit migrate` - Apply migrations to database
 
+### **Database Schema Documentation**
+- **ERD Reference**: See `docs/product/erd.md` for complete Entity Relationship Diagram
+- **Schema Source**: `src/repo/schema.ts` for Drizzle ORM definitions
+- **Architecture**: Follow Router → Service → Repository → Entity → Database pattern
+
 ## Code Style
 
 ### **Recommended Workflow**
@@ -48,3 +53,6 @@ mise run test         # Run tests
 - **Naming**: PascalCase for classes/types, camelCase for variables/functions
 - **Testing**: Jest with ts-jest, test files follow `*.test.ts` pattern in src/
 - **Database**: Schema-first with Drizzle ORM, PostgreSQL required for ACID compliance
+  - **Schema Visualization**: Reference `docs/product/erd.md` for complete ERD
+  - **Schema Definitions**: Use `src/repo/schema.ts` for table structures
+  - **Relationship Patterns**: Follow double-entry accounting principles

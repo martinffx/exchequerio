@@ -99,6 +99,9 @@ declare module "fastify" {
 - **Migrations:** Schema-driven with `drizzle-kit`
 - **Connection Pooling:** Configured for production load
 
+### Schema Visualization
+**See the complete [Entity Relationship Diagram](../product/erd.md) for detailed database schema visualization with all entities, relationships, and attributes.**
+
 ### Schema Principles
 - **Schema-first approach** with TypeScript type inference
 - **ACID compliance** required for financial operations

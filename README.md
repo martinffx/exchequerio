@@ -109,6 +109,10 @@ Visit `http://localhost:3000/docs` for interactive Swagger UI.
 
 ## Database Schema
 
+### Entity Relationship Diagram
+
+**See the complete [Entity Relationship Diagram](docs/product/erd.md) for detailed schema visualization with all entities, relationships, and attributes.**
+
 ### Core Entities
 
 #### Ledger
@@ -135,6 +139,14 @@ Ledger (1)
 └── Ledger Transactions (many)
       └── Ledger Entries (2+)
 ```
+
+### Key Features
+
+- **Double-Entry Accounting**: Every transaction must balance (debits = credits)
+- **Account Isolation**: Accounts only transact within the same ledger
+- **Transaction Atomicity**: All entries succeed or fail together
+- **Real-Time Balances**: Posted, pending, and available balance tracking
+- **Audit Trail**: Complete history of all money movements
 
 ## Balance Types
 

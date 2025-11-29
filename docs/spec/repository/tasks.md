@@ -2,89 +2,114 @@
 
 ## Overview
 
-**Estimated Completion**: 13.5 hours (with parallel execution)  
-**Critical Path**: Phase 1 → Phase 2 → Phase 3  
-**Current Blocker**: Missing repository CRUD implementations
+**Estimated Completion**: 12 hours (with parallel execution)  
+**Critical Path**: Phase 0 → Phase 1 → Phase 2 → Phase 3  
+**Current Blocker**: LedgerRepo architecture cleanup (cross-repository method violations)
 
-## Phase 1: Foundation (Repository Layer) - 6.5 hours
+**Current State Assessment:**
+- ✅ LedgerRepo: Core CRUD complete, needs cleanup of 4 placeholder methods
+- ✅ LedgerAccountRepo: CRUD complete, needs legacy method cleanup
+- ❌ LedgerTransactionRepo: Needs to receive methods from LedgerRepo + completion
 
-### RC-001: Fix LedgerAccountRepo Import Issues (0.5 hours) ⚠️ CRITICAL BLOCKER
-**Priority**: Critical Blocker  
+## Phase 0: Architecture Cleanup (LedgerRepo) - 0.5 hours
+
+### RC-000: Clean LedgerRepo Architecture (0.5 hours) ⚠️ CRITICAL BLOCKER
+**Priority**: Architecture Foundation  
 **Dependencies**: None  
 **Time Estimate**: 0.5 hours
 
 #### Tasks
-- [ ] Import `TypeID` from `typeid-js`
-- [ ] Import schema tables (`LedgerAccountsTable`, `LedgersTable`, `LedgerTransactionEntriesTable`)
-- [ ] Import Drizzle ORM operators (`eq`, `and`, `desc`, `sum`)
-- [ ] Import entities (`LedgerAccountEntity`, `LedgerAccountID`, `LedgerID`, `OrgID`)
-- [ ] Import error types (`NotFoundError`, `ConflictError`)
-- [ ] Verify TypeScript compilation succeeds
+- [ ] REMOVE `createTransactionWithEntries()` method from LedgerRepo
+- [ ] REMOVE `postTransaction()` method from LedgerRepo
+- [ ] REMOVE `getAccountBalance()` method from LedgerRepo  
+- [ ] REMOVE `getAccountBalances()` method from LedgerRepo
+- [ ] Add TODO comments directing to correct repositories
+- [ ] Update ESLint boundaries to prevent cross-repo imports
+- [ ] Verify no service calls reference removed methods
 
-#### File: `src/repo/LedgerAccountRepo.ts`
+#### Files: `src/repo/LedgerRepo.ts`, `eslint.config.mjs`
 
 ---
 
-### RC-002: Fix LedgerTransactionRepo Import Issues (0.5 hours) ⚠️ CRITICAL BLOCKER
-**Priority**: Critical Blocker  
-**Dependencies**: None  
-**Time Estimate**: 0.5 hours
+## Phase 1: Repository Layer Completion - 3.5 hours
+
+### RC-001: Verify Repository Compilation (0.25 hours) ✅ COMPLETED
+**Priority**: Verification  
+**Dependencies**: RC-000  
+**Time Estimate**: 0.25 hours
 
 #### Tasks
-- [ ] Import `TypeID` from `typeid-js`
-- [ ] Import schema tables (`LedgerTransactionsTable`, `LedgerTransactionEntriesTable`, `LedgerAccountsTable`)
-- [ ] Import Drizzle ORM operators (`eq`, `and`, `desc`, `sum`)
-- [ ] Import entities (`LedgerTransactionEntity`, `LedgerTransactionID`, `LedgerAccountID`, `OrgID`)
-- [ ] Import error types (`NotFoundError`, `ConflictError`)
-- [ ] Verify TypeScript compilation succeeds
+- [x] ✅ All repository imports resolved (TypeID, schema, entities, errors)
+- [x] ✅ TypeScript compilation succeeds
+- [ ] Verify no compilation errors after cleanup
 
-#### File: `src/repo/LedgerTransactionRepo.ts`
+#### Files: `src/repo/LedgerAccountRepo.ts`, `src/repo/LedgerTransactionRepo.ts`
 
 ---
 
-### RC-003: Implement LedgerAccountRepo CRUD Operations (1.5 hours) 🔄 PARALLEL
+### RC-003: Complete LedgerTransactionRepo (1.5 hours) 🔄 PARALLEL
 **Priority**: Core Foundation  
-**Dependencies**: RC-001  
+**Dependencies**: RC-000  
 **Time Estimate**: 1.5 hours
 
 #### Tasks
-- [ ] `getLedgerAccount(ledgerId, accountId)` - Single account retrieval
-- [ ] `listLedgerAccounts(ledgerId)` - List accounts with organization tenancy
-- [ ] `createLedgerAccount(ledgerId, accountData)` - Create with validation
-- [ ] `updateLedgerAccount(ledgerId, accountId, updateData)` - Update with optimistic locking
-- [ ] `deleteLedgerAccount(ledgerId, accountId)` - Delete with entry validation
-- [ ] Organization-scoped queries in all methods
-- [ ] SELECT...FOR UPDATE locking for balance operations
-- [ ] Entity.fromRecord/toRecord transformations
-- [ ] Proper error handling (NotFoundError, ValidationError)
-
-#### File: `src/repo/LedgerAccountRepo.ts`
-
----
-
-### RC-004: Implement LedgerTransactionRepo CRUD Operations (1.5 hours) 🔄 PARALLEL
-**Priority**: Core Foundation  
-**Dependencies**: RC-002  
-**Time Estimate**: 1.5 hours
-
-#### Tasks
+- [ ] Move `createTransactionWithEntries()` from LedgerRepo with organization tenancy
+- [ ] Move `postTransaction()` from LedgerRepo with organization tenancy
+- [ ] `getLedgerTransaction(orgId, ledgerId, transactionId)` - Single transaction retrieval
+- [ ] `listLedgerTransactions(orgId, ledgerId, offset, limit)` - List with organization tenancy
 - [ ] `withTransaction(callback)` - Database transaction wrapper
-- [ ] `getLedgerTransaction(ledgerId, transactionId)` - Single transaction retrieval
-- [ ] `listLedgerTransactions(ledgerId)` - List with organization tenancy
-- [ ] `createTransactionWithEntries(ledgerId, transactionData)` - Atomic transaction creation
-- [ ] Database transaction wrapper for atomicity
 - [ ] Double-entry balance validation (debits = credits)
-- [ ] Organization tenancy enforcement
 - [ ] Atomic transaction + entries creation
+- [ ] Organization tenancy enforcement in all methods
 - [ ] Proper error handling for financial operations
 
 #### File: `src/repo/LedgerTransactionRepo.ts`
 
 ---
 
-### RC-005: Test LedgerAccountRepo Methods (2 hours) ⏭️ SEQUENTIAL
+### RC-004: Clean LedgerAccountRepo Legacy Methods (0.5 hours) 🔄 PARALLEL
+**Priority**: Code Cleanup  
+**Dependencies**: RC-000  
+**Time Estimate**: 0.5 hours
+
+#### Tasks
+- [ ] Remove legacy `listAccounts()` method (use `listLedgerAccounts` instead)
+- [ ] Remove legacy `getAccount()` method (use `getLedgerAccount` instead)
+- [ ] Remove legacy `createAccount()` method (use `createLedgerAccount` instead)
+- [ ] Remove legacy `updateAccount()` method (use `updateLedgerAccount` instead)
+- [ ] Remove legacy `deleteAccount()` method (use `deleteLedgerAccount` instead)
+- [ ] Remove legacy `getAccountBalance()` method (use `getAccountBalances` instead)
+- [ ] Remove legacy `getAccountBalances()` method (use `getAccountBalances` instead)
+- [ ] Remove legacy transaction processing methods (`getAccountWithLock`, `updateAccountBalance`)
+- [ ] Keep `calculateBalance()` as internal method for comprehensive balance calculation
+- [ ] Ensure all remaining methods have proper organization tenancy
+
+#### File: `src/repo/LedgerAccountRepo.ts`
+
+---
+
+### RC-005: Test LedgerTransactionRepo Methods (2 hours) ⏭️ SEQUENTIAL
 **Priority**: Quality Assurance  
 **Dependencies**: RC-003  
+**Time Estimate**: 2 hours
+
+#### Tasks
+- [ ] Test transaction creation with entries
+- [ ] Test double-entry balance validation
+- [ ] Test transaction status updates (postTransaction)
+- [ ] Test concurrent transaction handling
+- [ ] Test rollback scenarios
+- [ ] Test organization tenancy enforcement
+- [ ] Achieve >90% code coverage
+- [ ] Verify financial integrity
+
+#### File: `src/repo/LedgerTransactionRepo.test.ts`
+
+---
+
+### RC-006: Test LedgerAccountRepo Methods (2 hours) ⏭️ SEQUENTIAL
+**Priority**: Quality Assurance  
+**Dependencies**: RC-004  
 **Time Estimate**: 2 hours
 
 #### Tasks
@@ -93,28 +118,11 @@
 - [ ] Test constraint violation handling
 - [ ] Test concurrent access scenarios with optimistic locking
 - [ ] Test balance calculation accuracy
+- [ ] Test legacy method removal (ensure no regressions)
 - [ ] Achieve >90% code coverage
 - [ ] Use LedgerRepo.test.ts as template
 
 #### File: `src/repo/LedgerAccountRepo.test.ts`
-
----
-
-### RC-006: Test LedgerTransactionRepo Methods (2 hours) ⏭️ SEQUENTIAL
-**Priority**: Quality Assurance  
-**Dependencies**: RC-004  
-**Time Estimate**: 2 hours
-
-#### Tasks
-- [ ] Test transaction creation with entries
-- [ ] Test double-entry balance validation
-- [ ] Test concurrent transaction handling
-- [ ] Test rollback scenarios
-- [ ] Test organization tenancy enforcement
-- [ ] Achieve >90% code coverage
-- [ ] Verify financial integrity
-
-#### File: `src/repo/LedgerTransactionRepo.test.ts`
 
 ---
 
@@ -167,18 +175,25 @@
 
 ---
 
-### RC-010: Fix LedgerTransactionService Method Calls (1 hour) ⏭️ SEQUENTIAL
+### RC-010: Fix Service Method Calls (1 hour) ⏭️ SEQUENTIAL
 **Priority**: Integration  
 **Dependencies**: RC-009  
 **Time Estimate**: 1 hour
 
 #### Tasks
-- [ ] Update all method calls to use repository instead of placeholders
+- [ ] Update calls to use `LedgerTransactionRepo.createTransactionWithEntries`
+- [ ] Update calls to use `LedgerTransactionRepo.postTransaction`
+- [ ] Update calls to use `LedgerAccountRepo.getLedgerAccount` (instead of legacy methods)
+- [ ] Update calls to use `LedgerAccountRepo.listLedgerAccounts` (instead of legacy methods)
+- [ ] Update calls to use `LedgerAccountRepo.createLedgerAccount` (instead of legacy methods)
+- [ ] Update calls to use `LedgerAccountRepo.updateLedgerAccount` (instead of legacy methods)
+- [ ] Update calls to use `LedgerAccountRepo.deleteLedgerAccount` (instead of legacy methods)
+- [ ] Remove any calls to deleted LedgerRepo methods
 - [ ] Fix method signatures and return types
 - [ ] Handle repository error responses
 - [ ] Maintain existing API contracts
 
-#### File: `src/services/LedgerTransactionService.ts`
+#### Files: `src/services/LedgerTransactionService.ts`, `src/services/LedgerAccountService.ts`
 
 ---
 
@@ -302,10 +317,15 @@ pnpm test:integration # Integration tests
 
 ## Success Criteria
 
+- [ ] LedgerRepo cleaned to contain only ledger-specific operations (4 placeholder methods removed)
+- [ ] LedgerTransactionRepo completed with moved methods + organization tenancy
+- [ ] LedgerAccountRepo cleaned of legacy methods (backward compatibility removed)
 - [ ] All repository CRUD operations implemented with organization tenancy
-- [ ] All service methods delegate to repositories with business logic
+- [ ] All service methods delegate to correct repositories with business logic
+- [ ] ESLint boundaries prevent cross-repository imports
 - [ ] TypeScript compilation succeeds without errors
 - [ ] >90% test coverage achieved across all layers
 - [ ] End-to-end integration validates complete request flow
 - [ ] Organization boundary enforcement verified
 - [ ] Error handling works correctly across all layers
+- [ ] No architectural violations (single responsibility principle maintained)

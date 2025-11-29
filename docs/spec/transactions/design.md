@@ -1,5 +1,7 @@
 # Technical Design: Atomic Transactions
 
+**See the complete [Entity Relationship Diagram](../../product/erd.md) for detailed database schema visualization with all transaction-related entities and relationships.**
+
 ## Architecture Decision Records (ADRs)
 
 ### ADR-001: SQL-First Atomic Transaction Strategy

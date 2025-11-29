@@ -60,6 +60,8 @@
 
 ## Entity Relationships
 
+**See the complete [Entity Relationship Diagram](./erd.md) for detailed schema visualization.**
+
 ```
 Ledger (1)
   ├── Ledger Accounts (many)

@@ -34,6 +34,12 @@ The ledger system requires complete repository layer implementation to support f
 **Testable Condition:** All files import correctly without missing dependencies or circular references  
 **Validation:** TypeScript compilation succeeds without import errors and runtime dependencies resolve
 
+### AC4.1: Repository Architecture Boundaries
+
+**Requirement:** Each repository handles only its domain tables and methods  
+**Testable Condition:** ESLint boundaries prevent cross-repository imports and method calls  
+**Validation:** LedgerRepo contains only ledger operations, no cross-repository dependencies exist
+
 ### AC5: Service Integration
 
 **Requirement:** LedgerAccountService integrates with repositories for business logic  
@@ -99,10 +105,12 @@ The ledger system requires complete repository layer implementation to support f
 
 ### Included in This Feature
 
-- Complete LedgerRepo with all CRUD operations (create, findById, findByOrganization, update, delete)
-- Complete LedgerAccountRepo with balance calculation methods (getBalance, getPendingBalance, getAvailableBalance)
-- Complete LedgerTransactionRepo with atomic transaction handling (create, findById, findByAccount, validateDoubleEntry)
-- Fix all missing imports and dependencies (TypeID, schema imports, error types)
+- Clean LedgerRepo to contain only ledger-specific CRUD operations (remove cross-repository methods)
+- Complete LedgerAccountRepo with comprehensive balance calculation method (getAccountBalances)
+- Complete LedgerTransactionRepo with atomic transaction handling (createTransactionWithEntries, postTransaction)
+- Move transaction methods from LedgerRepo to LedgerTransactionRepo
+- Move balance methods from LedgerRepo to LedgerAccountRepo
+- Update ESLint boundaries to enforce repository isolation
 - Implement LedgerAccountService methods with repository integration (replace placeholder implementations)
 
 ### Excluded from This Feature
@@ -112,15 +120,18 @@ The ledger system requires complete repository layer implementation to support f
 - Database schema modifications (work with existing schema)
 - Advanced performance optimizations (focus on correctness first)
 - Business logic beyond repository operations (keep repositories focused on data access)
+- Cross-repository method calls (enforced by ESLint boundaries)
+- Repository-to-repository dependencies (architectural violation)
 
 ## Critical Implementation Gaps
 
 ### Missing Dependencies
 
-- TypeID imports missing in repository files
-- Schema imports incomplete or incorrect
-- Error type imports not resolved
-- Circular dependency risks between repositories
+- ✅ TypeID imports resolved in repository files
+- ✅ Schema imports complete and correct
+- ✅ Error type imports resolved
+- ❌ Cross-repository method dependencies (LedgerRepo calling other repos)
+- ❌ Architectural boundary violations (need ESLint enforcement)
 
 ### Method Implementation
 
@@ -143,6 +154,7 @@ The ledger system requires complete repository layer implementation to support f
 - **Repository Coverage:** 100% of CRUD operations implemented and tested
 - **Service Integration:** 0 'Not implemented' errors in service layer
 - **Import Resolution:** 0 TypeScript compilation errors related to missing imports
+- **Architecture Compliance:** 0 ESLint boundary violations (no cross-repo imports)
 - **Test Coverage:** >90% test coverage for all repository methods
 
 ### Performance Metrics
@@ -163,16 +175,17 @@ The ledger system requires complete repository layer implementation to support f
 
 ### Prerequisites (Must Complete First)
 
-1. **Import Resolution:** Fix all missing TypeID and schema imports
-2. **Error Types:** Ensure proper error type definitions available
-3. **Plugin Setup:** Verify repository plugins are properly registered in Fastify
+1. **Architecture Cleanup:** Remove cross-repository methods from LedgerRepo
+2. **ESLint Boundaries:** Update linting rules to enforce repository isolation
+3. **Import Resolution:** Verify all imports are working correctly
+4. **Plugin Setup:** Verify repository plugins are properly registered in Fastify
 
 ### Implementation Order
 
-1. **LedgerRepo:** Start with simplest CRUD operations, establish patterns
-2. **LedgerAccountRepo:** Add balance calculation methods with locking
-3. **LedgerTransactionRepo:** Implement complex atomic transaction handling
-4. **Service Integration:** Connect LedgerAccountService to completed repositories
+1. **LedgerRepo Cleanup:** Remove placeholder methods, establish clean boundaries
+2. **LedgerAccountRepo:** Add comprehensive balance calculation method
+3. **LedgerTransactionRepo:** Implement transaction methods moved from LedgerRepo
+4. **Service Integration:** Update services to use correct repositories
 5. **Error Handling:** Add comprehensive error handling and validation
 6. **Testing:** Validate all methods meet acceptance criteria
 

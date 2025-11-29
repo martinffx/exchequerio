@@ -4,6 +4,8 @@
 
 This is a completion task to finalize the established layered architecture (Router → Service → Repository → Database) by resolving import issues, implementing repository methods, and completing service integration. The architecture follows proven patterns from LedgerRepo with entity transformations and organization tenancy throughout.
 
+**See the complete [Entity Relationship Diagram](../../product/erd.md) for detailed database schema visualization.**
+
 **Core Pattern:**
 ```
 API Routes → Services → Repositories → Database Schema
@@ -14,7 +16,7 @@ JWT Auth → Business Logic → Data Access → PostgreSQL + Drizzle
 **Completion Status:**
 - ✅ Database Schema (Complete with proper relationships)
 - ✅ Entity Layer (Complete with transformations)  
-- ❌ Repository Layer (Import issues, incomplete methods)
+- ⚠️ Repository Layer (Imports resolved, methods need completion, architecture cleanup needed)
 - ❌ Service Layer (23+ placeholder methods)
 - ✅ Route Layer (Complete with proper auth/validation)
 
@@ -22,29 +24,49 @@ JWT Auth → Business Logic → Data Access → PostgreSQL + Drizzle
 
 ### Repository Layer Architecture
 
+#### 0. LedgerRepo - Architecture Cleanup Requirements
+
+**Current State:**
+- Core CRUD operations complete and working (getLedger, listLedgers, createLedger, updateLedger, deleteLedger)
+- Contains 4 placeholder methods that violate single responsibility principle
+- Methods should be moved to appropriate domain repositories
+
+**Required Cleanup:**
+- ❌ **REMOVE** `createTransactionWithEntries()` - belongs to LedgerTransactionRepo
+- ❌ **REMOVE** `postTransaction()` - belongs to LedgerTransactionRepo  
+- ❌ **REMOVE** `getAccountBalance()` - belongs to LedgerAccountRepo
+- ❌ **REMOVE** `getAccountBalances()` - belongs to LedgerAccountRepo
+
+**Architectural Rationale:**
+- Maintain clean repository boundaries (single responsibility principle)
+- Each repository should handle only its domain tables
+- Service layer should orchestrate cross-repository operations
+- ESLint boundaries will enforce these rules automatically
+
+---
+
 #### 1. LedgerAccountRepo - Completion Requirements
 
 **Current State:**
-- Basic account operations exist but missing critical imports
-- Advanced balance calculations present but lack organization tenancy
+- ✅ Import issues resolved (TypeID, schema, entities, errors all imported)
+- Basic account operations exist but missing CRUD methods
+- Balance calculation methods need consolidation and organization tenancy
 - Missing entity-based CRUD methods following established LedgerRepo pattern
 
-**Required Imports (CRITICAL - Unblocks TypeScript):**
+**Import Status:**
 ```typescript
-import { TypeID } from "typeid-js";
-import { 
-  LedgerAccountsTable, 
-  LedgersTable, 
-  LedgerTransactionEntriesTable 
-} from "./schema";
-import { eq, and, desc, sum } from "drizzle-orm";
-import { 
-  LedgerAccountEntity, 
-  type LedgerAccountID, 
-  type LedgerID, 
-  type OrgID 
-} from "@/services";
-import { NotFoundError, ConflictError } from "@/errors";
+// ✅ COMPLETED - All imports already resolved
+import { and, desc, eq, like } from "drizzle-orm"
+import { TypeID } from "typeid-js"
+import { ConflictError, NotFoundError } from "@/errors"
+import type {
+	BalanceData,
+	LedgerAccountID,
+	LedgerID,
+} from "@/services/entities/LedgerAccountEntity"
+import { LedgerAccountEntity } from "@/services/entities/LedgerAccountEntity"
+import { LedgerAccountsTable, LedgersTable, LedgerTransactionEntriesTable } from "./schema"
+import type { DrizzleDB } from "./types"
 ```
 
 **Required Methods (Following LedgerRepo Pattern):**
@@ -167,44 +189,49 @@ public async deleteLedgerAccount(
   }
 }
 
-// Enhanced balance operations (upgrade existing methods)
-public async getLedgerAccountWithBalances(
+// Comprehensive balance operations (consolidate redundant methods)
+public async getAccountBalances(
   orgId: OrgID,
   ledgerId: LedgerID,
-  id: LedgerAccountID
-): Promise<LedgerAccountEntity> {
-  // Use existing balance calculation but add org tenancy
-  const account = await this.getLedgerAccount(orgId, ledgerId, id);
-  // Balance calculation logic is already implemented - just needs org filtering
-  return account;
+  accountId: LedgerAccountID
+): Promise<{
+  accountId: string
+  postedBalance: string
+  pendingBalance: string
+  availableBalance: string
+  normalBalance: "debit" | "credit"
+  lockVersion: number
+}> {
+  // Single query to calculate all three balance types
+  // Posted Balance: Completed/settled transactions only
+  // Pending Balance: Both pending and posted transactions  
+  // Available Balance: Posted balance minus pending outbound transactions
+  // Return comprehensive balance information with organization tenancy
 }
 ```
 
 #### 2. LedgerTransactionRepo - Completion Requirements
 
 **Current State:**
-- Has `createTransactionWithEntries` method but missing organization tenancy
-- Missing transaction wrapper method referenced in existing code
-- Missing entity-based CRUD methods for consistency
+- ✅ Import issues resolved (TypeID, schema, entities, errors all imported)
+- Has basic structure with `withTransaction` wrapper method
+- Has `getLedgerTransaction` method but needs organization tenancy
+- Missing complete CRUD methods for consistency
+- Missing `createTransactionWithEntries` and `postTransaction` methods (currently in LedgerRepo)
 
-**Required Imports (CRITICAL - Unblocks TypeScript):**
+**Import Status:**
 ```typescript
-import { TypeID } from "typeid-js";
-import { 
-  LedgerTransactionsTable, 
-  LedgerTransactionEntriesTable,
-  LedgerAccountsTable,
-  LedgersTable
-} from "./schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
-import { 
-  LedgerTransactionEntity, 
-  LedgerTransactionEntryEntity,
-  type LedgerTransactionID, 
-  type LedgerID, 
-  type OrgID 
-} from "@/services";
-import { NotFoundError, ConflictError, BadRequestError } from "@/errors";
+// ✅ COMPLETED - All imports already resolved
+import { and, desc, eq } from "drizzle-orm"
+import { ConflictError, NotFoundError } from "@/errors"
+import { LedgerTransactionEntity, type LedgerTransactionEntryEntity } from "@/services/entities"
+import {
+	LedgerAccountsTable,
+	LedgersTable,
+	LedgerTransactionEntriesTable,
+	LedgerTransactionsTable,
+} from "./schema"
+import type { DrizzleDB } from "./types"
 ```
 
 **Required Methods:**
@@ -432,24 +459,50 @@ constructor(
 ```typescript
 // Fix existing method calls to use correct repositories
 - this.ledgerRepo.createTransactionWithEntries → this.ledgerTransactionRepo.createTransactionWithEntries
-- this.ledgerRepo.getAccountBalance → this.ledgerAccountRepo.getLedgerAccountWithBalances  
-- this.ledgerRepo.getAccountBalances → this.ledgerAccountRepo.listLedgerAccounts (with balance calc)
+- this.ledgerRepo.postTransaction → this.ledgerTransactionRepo.postTransaction
+- this.ledgerRepo.getAccountBalance → this.ledgerAccountRepo.getAccountBalances  
+- this.ledgerRepo.getAccountBalances → this.ledgerAccountRepo.getAccountBalances
 ```
 
 ## Implementation Strategy
 
-### Phase 1: Import Resolution (CRITICAL - 30 minutes)
+### Phase 0: Architecture Cleanup (CRITICAL - 30 minutes)
 **Acceptance Criteria:**
-- [ ] LedgerAccountRepo compiles without TypeScript errors
-- [ ] LedgerTransactionRepo compiles without TypeScript errors  
-- [ ] All import paths resolve correctly
-- [ ] `pnpm typecheck` passes without errors
+- [ ] LedgerRepo contains only ledger-specific CRUD operations
+- [ ] All placeholder methods removed from LedgerRepo
+- [ ] ESLint boundaries rule updated to prevent cross-repo imports
+- [ ] No service layer calls reference removed LedgerRepo methods
 
 **Implementation Steps:**
-1. Add missing imports to LedgerAccountRepo (TypeID, schema tables, drizzle operators)
-2. Add missing imports to LedgerTransactionRepo (TypeID, schema tables, drizzle operators)
-3. Verify entity imports resolve correctly
-4. Run `pnpm typecheck` to confirm compilation success
+1. Remove 4 placeholder methods from LedgerRepo.ts
+2. Update ESLint boundaries configuration to enforce repository isolation
+3. Update service layer method calls to use correct repositories
+4. Run `pnpm lint` to verify architectural compliance
+
+### Phase 1: Repository Method Implementation (HIGH - 2 hours)
+**Acceptance Criteria:**
+- [ ] LedgerAccountRepo implements all CRUD methods with organization tenancy
+- [ ] LedgerTransactionRepo implements transaction wrapper and CRUD methods
+- [ ] All methods follow LedgerRepo entity transformation patterns
+- [ ] Error handling uses consistent LedgerError types
+- [ ] Methods pass unit tests with proper fixtures
+
+**Implementation Steps:**
+1. **LedgerAccountRepo CRUD Methods (60 min)**
+   - Implement `getLedgerAccount` with org tenancy
+   - Implement `listLedgerAccounts` with pagination
+   - Implement `createLedgerAccount` with entity transformation
+   - Implement `updateLedgerAccount` with optimistic locking
+   - Implement `deleteLedgerAccount` with constraint checking
+   - Implement `getAccountBalances` comprehensive balance calculation
+
+2. **LedgerTransactionRepo Methods (60 min)**
+   - Implement `withTransaction` wrapper method
+   - Implement `getLedgerTransaction` with org tenancy
+   - Implement `listLedgerTransactions` with pagination
+   - Implement `createTransactionWithEntries` with double-entry validation
+   - Implement `postTransaction` status update method
+   - Add organization tenancy enforcement to all methods
 
 ### Phase 2: Repository Method Implementation (HIGH - 2 hours)
 **Acceptance Criteria:**
