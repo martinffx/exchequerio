@@ -16,8 +16,14 @@ type LedgerAccountRecord = InferSelectModel<typeof LedgerAccountsTable>;
 type LedgerAccountInsert = InferInsertModel<typeof LedgerAccountsTable>;
 type NormalBalance = "debit" | "credit";
 
-// Balance calculation structure
-interface BalanceData {
+interface LedgerAccountEntityOptions {
+	id: LedgerAccountID;
+	organizationId: OrgID;
+	ledgerId: LedgerID;
+	name: string;
+	description?: string;
+	normalBalance: NormalBalance;
+	// Individual balance fields (integers in minor units)
 	pendingAmount: number;
 	postedAmount: number;
 	availableAmount: number;
@@ -27,24 +33,10 @@ interface BalanceData {
 	postedDebits: number;
 	availableCredits: number;
 	availableDebits: number;
-	currency: string;
-	currencyExponent: number;
-}
-
-interface LedgerAccountEntityOptions {
-	id: LedgerAccountID;
-	organizationId: OrgID;
-	ledgerId: LedgerID;
-	name: string;
-	description?: string;
-	normalBalance: NormalBalance;
-	balanceAmount: string;
 	lockVersion: number;
 	metadata?: Record<string, unknown>;
 	created: Date;
 	updated: Date;
-	// Optional balance data for responses - calculated by repository
-	balanceData?: BalanceData;
 }
 
 class LedgerAccountEntity {
@@ -54,12 +46,20 @@ class LedgerAccountEntity {
 	public readonly name: string;
 	public readonly description?: string;
 	public readonly normalBalance: NormalBalance;
-	public readonly balanceAmount: string;
+	// Individual balance fields (integers in minor units)
+	public readonly pendingAmount: number;
+	public readonly postedAmount: number;
+	public readonly availableAmount: number;
+	public readonly pendingCredits: number;
+	public readonly pendingDebits: number;
+	public readonly postedCredits: number;
+	public readonly postedDebits: number;
+	public readonly availableCredits: number;
+	public readonly availableDebits: number;
 	public readonly lockVersion: number;
 	public readonly metadata?: Record<string, unknown>;
 	public readonly created: Date;
 	public readonly updated: Date;
-	public readonly balanceData?: BalanceData;
 
 	constructor(options: LedgerAccountEntityOptions) {
 		this.id = options.id;
@@ -68,12 +68,19 @@ class LedgerAccountEntity {
 		this.name = options.name;
 		this.description = options.description;
 		this.normalBalance = options.normalBalance;
-		this.balanceAmount = options.balanceAmount;
+		this.pendingAmount = options.pendingAmount;
+		this.postedAmount = options.postedAmount;
+		this.availableAmount = options.availableAmount;
+		this.pendingCredits = options.pendingCredits;
+		this.pendingDebits = options.pendingDebits;
+		this.postedCredits = options.postedCredits;
+		this.postedDebits = options.postedDebits;
+		this.availableCredits = options.availableCredits;
+		this.availableDebits = options.availableDebits;
 		this.lockVersion = options.lockVersion;
 		this.metadata = options.metadata;
 		this.created = options.created;
 		this.updated = options.updated;
-		this.balanceData = options.balanceData;
 	}
 
 	public static fromRequest(
@@ -91,7 +98,16 @@ class LedgerAccountEntity {
 			name: rq.name,
 			description: rq.description,
 			normalBalance,
-			balanceAmount: "0", // New accounts start with zero balance
+			// Initialize all balances to zero (integer minor units)
+			pendingAmount: 0,
+			postedAmount: 0,
+			availableAmount: 0,
+			pendingCredits: 0,
+			pendingDebits: 0,
+			postedCredits: 0,
+			postedDebits: 0,
+			availableCredits: 0,
+			availableDebits: 0,
 			lockVersion: 0,
 			metadata: rq.metadata,
 			created: now,
@@ -100,6 +116,16 @@ class LedgerAccountEntity {
 	}
 
 	public static fromRecord(record: LedgerAccountRecord): LedgerAccountEntity {
+		// Parse metadata from TEXT (JSON string) to object
+		let metadata: Record<string, unknown> | undefined;
+		if (record.metadata) {
+			try {
+				metadata = JSON.parse(record.metadata) as Record<string, unknown>;
+			} catch {
+				metadata = undefined;
+			}
+		}
+
 		return new LedgerAccountEntity({
 			id: TypeID.fromString<"lat">(record.id),
 			organizationId: TypeID.fromString<"org">(record.organizationId),
@@ -107,22 +133,20 @@ class LedgerAccountEntity {
 			name: record.name,
 			description: record.description ?? undefined,
 			normalBalance: record.normalBalance as NormalBalance,
-			balanceAmount: record.balanceAmount === "0.0000" ? "0" : record.balanceAmount,
+			// Individual balance fields (already integers from DB)
+			pendingAmount: record.pendingAmount,
+			postedAmount: record.postedAmount,
+			availableAmount: record.availableAmount,
+			pendingCredits: record.pendingCredits,
+			pendingDebits: record.pendingDebits,
+			postedCredits: record.postedCredits,
+			postedDebits: record.postedDebits,
+			availableCredits: record.availableCredits,
+			availableDebits: record.availableDebits,
 			lockVersion: record.lockVersion,
-			metadata: record.metadata as Record<string, unknown> | undefined,
+			metadata,
 			created: record.created,
 			updated: record.updated,
-		});
-	}
-
-	public static fromRecordWithBalances(
-		record: LedgerAccountRecord,
-		balanceData: BalanceData
-	): LedgerAccountEntity {
-		const entity = LedgerAccountEntity.fromRecord(record);
-		return new LedgerAccountEntity({
-			...entity,
-			balanceData,
 		});
 	}
 
@@ -134,42 +158,48 @@ class LedgerAccountEntity {
 			name: this.name,
 			description: this.description ?? undefined,
 			normalBalance: this.normalBalance,
-			balanceAmount: this.balanceAmount,
+			// Individual balance fields (integers)
+			pendingAmount: this.pendingAmount,
+			postedAmount: this.postedAmount,
+			availableAmount: this.availableAmount,
+			pendingCredits: this.pendingCredits,
+			pendingDebits: this.pendingDebits,
+			postedCredits: this.postedCredits,
+			postedDebits: this.postedDebits,
+			availableCredits: this.availableCredits,
+			availableDebits: this.availableDebits,
 			lockVersion: this.lockVersion + 1,
-			metadata: this.metadata,
+			// Stringify metadata to TEXT (JSON string)
+			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
 			updated: new Date(),
 		};
 	}
 
-	public toResponse(): LedgerAccountResponse {
-		if (!this.balanceData) {
-			throw new Error("Balance data required for response conversion. Use fromRecordWithBalances()");
-		}
-
+	public toResponse(currency: string, currencyExponent: number): LedgerAccountResponse {
 		const balances: Balances = [
 			{
 				balanceType: "pending" as const,
-				credits: this.balanceData.pendingCredits,
-				debits: this.balanceData.pendingDebits,
-				amount: this.balanceData.pendingAmount,
-				currency: this.balanceData.currency,
-				currencyExponent: this.balanceData.currencyExponent,
+				credits: this.pendingCredits,
+				debits: this.pendingDebits,
+				amount: this.pendingAmount,
+				currency,
+				currencyExponent,
 			} satisfies PendingBalance,
 			{
 				balanceType: "posted" as const,
-				credits: this.balanceData.postedCredits,
-				debits: this.balanceData.postedDebits,
-				amount: this.balanceData.postedAmount,
-				currency: this.balanceData.currency,
-				currencyExponent: this.balanceData.currencyExponent,
+				credits: this.postedCredits,
+				debits: this.postedDebits,
+				amount: this.postedAmount,
+				currency,
+				currencyExponent,
 			} satisfies PostedBalance,
 			{
 				balanceType: "availableBalance" as const,
-				credits: this.balanceData.availableCredits,
-				debits: this.balanceData.availableDebits,
-				amount: this.balanceData.availableAmount,
-				currency: this.balanceData.currency,
-				currencyExponent: this.balanceData.currencyExponent,
+				credits: this.availableCredits,
+				debits: this.availableDebits,
+				amount: this.availableAmount,
+				currency,
+				currencyExponent,
 			} satisfies AvailableBalance,
 		];
 
@@ -187,11 +217,16 @@ class LedgerAccountEntity {
 		};
 	}
 
-	// Helper method to update balance amount (for optimistic locking)
-	public withUpdatedBalance(newAmount: string, newLockVersion: number): LedgerAccountEntity {
+	// Helper method to update balance fields (for optimistic locking)
+	public withUpdatedBalance(
+		postedAmount: number,
+		availableAmount: number,
+		newLockVersion: number
+	): LedgerAccountEntity {
 		return new LedgerAccountEntity({
 			...this,
-			balanceAmount: newAmount,
+			postedAmount,
+			availableAmount,
 			lockVersion: newLockVersion,
 			updated: new Date(),
 		});
@@ -202,7 +237,6 @@ export type {
 	LedgerAccountEntityOptions as LedgerAccountEntityOpts,
 	LedgerAccountRecord,
 	LedgerAccountInsert,
-	BalanceData,
 	NormalBalance,
 };
 export { LedgerAccountEntity };

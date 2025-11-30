@@ -13,11 +13,11 @@ class LedgerService {
 	}
 
 	public async createLedger(_orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
-		return this.ledgerRepo.createLedger(entity);
+		return this.ledgerRepo.upsertLedger(entity);
 	}
 
-	public async updateLedger(orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
-		return this.ledgerRepo.updateLedger(orgId, entity);
+	public async updateLedger(_orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
+		return this.ledgerRepo.upsertLedger(entity);
 	}
 
 	public async deleteLedger(orgId: OrgID, id: LedgerID): Promise<void> {

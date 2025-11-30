@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+	bigint,
 	check,
 	index,
 	integer,
@@ -47,7 +48,7 @@ const LedgersTable = pgTable("ledgers", {
 	description: text("description"),
 	currency: text("currency").notNull().default("USD"),
 	currencyExponent: integer("currency_exponent").notNull().default(2),
-	metadata: jsonb("metadata"),
+	metadata: text("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -66,14 +67,22 @@ const LedgerAccountsTable = pgTable(
 		name: text("name").notNull(),
 		description: text("description"),
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
-		balanceAmount: numeric("balance_amount", { precision: 20, scale: 4 }).notNull().default("0"),
+		// Individual balance columns as BIGINT (integer minor units)
+		pendingAmount: bigint("pending_amount", { mode: "number" }).notNull().default(0),
+		postedAmount: bigint("posted_amount", { mode: "number" }).notNull().default(0),
+		availableAmount: bigint("available_amount", { mode: "number" }).notNull().default(0),
+		pendingCredits: bigint("pending_credits", { mode: "number" }).notNull().default(0),
+		pendingDebits: bigint("pending_debits", { mode: "number" }).notNull().default(0),
+		postedCredits: bigint("posted_credits", { mode: "number" }).notNull().default(0),
+		postedDebits: bigint("posted_debits", { mode: "number" }).notNull().default(0),
+		availableCredits: bigint("available_credits", { mode: "number" }).notNull().default(0),
+		availableDebits: bigint("available_debits", { mode: "number" }).notNull().default(0),
 		lockVersion: integer("lock_version").notNull().default(0),
-		metadata: jsonb("metadata"),
+		metadata: text("metadata"), // TEXT for DSQL compatibility (JSON string)
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
-		balanceIdx: index("idx_ledger_accounts_balance").on(table.ledgerId, table.balanceAmount),
 		uniqueNamePerLedger: uniqueIndex("unique_account_name_per_ledger").on(table.ledgerId, table.name),
 	})
 );
@@ -89,7 +98,7 @@ const LedgerTransactionsTable = pgTable(
 		idempotencyKey: text("idempotency_key").unique(),
 		description: text("description"),
 		status: ledgerTransactionStatus("status").notNull().default("pending"),
-		metadata: jsonb("metadata"),
+		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -113,7 +122,7 @@ const LedgerTransactionEntriesTable = pgTable(
 		direction: ledgerEntryDirection("direction").notNull(),
 		amount: numeric("amount", { precision: 20, scale: 4 }).notNull(),
 		status: ledgerTransactionStatus("status").notNull().default("pending"),
-		metadata: jsonb("metadata"),
+		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -137,7 +146,7 @@ const LedgerAccountCategoriesTable = pgTable("ledger_account_categories", {
 	description: text("description"),
 	normalBalance: ledgerNormalBalance("normal_balance").notNull(),
 	parentCategoryId: text("parent_category_id"),
-	metadata: jsonb("metadata"),
+	metadata: text("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -152,7 +161,7 @@ const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monito
 	description: text("description"),
 	alertThreshold: numeric("alert_threshold", { precision: 20, scale: 4 }).notNull().default("0"),
 	isActive: integer("is_active").notNull().default(1), // SQLite-compatible boolean
-	metadata: jsonb("metadata"),
+	metadata: text("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -169,7 +178,7 @@ const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
 	totalCredits: numeric("total_credits", { precision: 20, scale: 4 }).notNull().default("0"),
 	totalDebits: numeric("total_debits", { precision: 20, scale: 4 }).notNull().default("0"),
 	transactionCount: integer("transaction_count").notNull().default(0),
-	metadata: jsonb("metadata"),
+	metadata: text("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -192,7 +201,7 @@ const LedgerAccountSettlementsTable = pgTable(
 			.default("0"),
 		status: ledgerSettlementStatus("status").notNull().default("drafting"),
 		externalReference: text("external_reference"),
-		metadata: jsonb("metadata"),
+		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},

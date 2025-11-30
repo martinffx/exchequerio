@@ -64,8 +64,9 @@ class LedgerAccountRepo {
 	 *
 	 * @remarks
 	 * - Results are ordered by created date (descending)
-	 * - Returns empty array if no accounts match the criteria
-	 * - Validates ledger ownership before querying accounts
+	 * - Returns empty array if no accounts match the criteria (after validating ledger ownership)
+	 * - Uses inner join to validate organization tenancy, with conditional validation on empty results
+	 * - Optimized to use single query when results are found, two queries only when empty
 	 */
 	public async listLedgerAccounts(
 		organizationId: OrgID,
@@ -74,25 +75,7 @@ class LedgerAccountRepo {
 		limit: number,
 		nameFilter?: string
 	): Promise<LedgerAccountEntity[]> {
-		// First validate that the ledger belongs to the organization
-		const ledgerValidation = await this.db
-			.select({ id: LedgersTable.id })
-			.from(LedgersTable)
-			.where(
-				and(
-					eq(LedgersTable.id, ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId.toString())
-				)
-			)
-			.limit(1);
-
-		if (ledgerValidation.length === 0) {
-			throw new NotFoundError(
-				`Ledger not found or does not belong to organization: ${ledgerId.toString()}`
-			);
-		}
-
-		// Build where conditions with organization tenancy
+		// Build where conditions with organization tenancy validation via inner join
 		const whereConditions = [
 			eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
 			eq(LedgersTable.organizationId, organizationId.toString()),
@@ -110,6 +93,27 @@ class LedgerAccountRepo {
 			.orderBy(desc(LedgerAccountsTable.created))
 			.limit(limit)
 			.offset(offset);
+
+		// If no results and we're at offset 0 without filters, verify ledger ownership
+		// This ensures we throw NotFoundError for invalid ledger access rather than returning empty array
+		if (results.length === 0 && offset === 0 && !nameFilter) {
+			const ledgerValidation = await this.db
+				.select({ id: LedgersTable.id })
+				.from(LedgersTable)
+				.where(
+					and(
+						eq(LedgersTable.id, ledgerId.toString()),
+						eq(LedgersTable.organizationId, organizationId.toString())
+					)
+				)
+				.limit(1);
+
+			if (ledgerValidation.length === 0) {
+				throw new NotFoundError(
+					`Ledger not found or does not belong to organization: ${ledgerId.toString()}`
+				);
+			}
+		}
 
 		return results.map(record => LedgerAccountEntity.fromRecord(record));
 	}

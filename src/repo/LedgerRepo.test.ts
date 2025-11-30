@@ -1,566 +1,382 @@
-import { eq, inArray } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
 import { TypeID } from "typeid-js";
-import { Config } from "@/config";
-import { OrganizationEntity } from "@/services/entities";
-import { LedgerTransactionEntity } from "@/services/entities/LedgerTransactionEntity";
-import { createLedgerEntity } from "./fixtures";
-import { LedgerAccountRepo } from "./LedgerAccountRepo";
-import { LedgerRepo } from "./LedgerRepo";
-import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
-import { OrganizationRepo } from "./OrganizationRepo";
-import * as schema from "./schema";
-import {
-	LedgerAccountsTable,
-	LedgersTable,
-	LedgerTransactionEntriesTable,
-	LedgerTransactionsTable,
-	OrganizationsTable,
-} from "./schema";
+import type { LedgerID, OrgID } from "@/services/entities/types";
+import { LedgerEntity } from "@/services/entities/LedgerEntity";
+import { getRepos, createOrganizationEntity, createLedgerEntity } from "./fixtures";
 
-// Integration tests that require a real database connection
-describe("LedgerRepo Integration Tests", () => {
-	const config = new Config();
-	const pool = new Pool({ connectionString: config.databaseUrl, max: 1 });
-	const database = drizzle(pool, { schema });
-	const organizationRepo = new OrganizationRepo(database);
-	const ledgerRepo = new LedgerRepo(database);
-	const ledgerTransactionRepo = new LedgerTransactionRepo(database);
-	const ledgerAccountRepo = new LedgerAccountRepo(database);
-	const testLedger = createLedgerEntity();
-	const testLedgerId = testLedger.id.toString();
-	const _testOrgId = testLedger.organizationId.toString();
-	const testAccount1Id = new TypeID("lat").toString();
-	const testAccount2Id = new TypeID("lat").toString();
+describe("LedgerRepo", () => {
+	const { organizationRepo, ledgerRepo } = getRepos();
+
+	// Test IDs - shared across test suite
+	let testOrgId: OrgID;
 
 	beforeAll(async () => {
-		// Create organization first (foreign key requirement) using direct database insert
-		await database.insert(OrganizationsTable).values({
-			id: testLedger.organizationId.toString(),
-			name: "Test Organization",
-			description: "Test organization for ledger tests",
-			created: new Date(),
-			updated: new Date(),
+		// Create test organization
+		testOrgId = new TypeID("org") as OrgID;
+		const orgEntity = createOrganizationEntity({
+			id: testOrgId,
+			name: "Ledger Test Org",
 		});
-
-		// Insert test data
-		await ledgerRepo.createLedger(testLedger);
-
-		await database.insert(LedgerAccountsTable).values([
-			{
-				id: testAccount1Id,
-				ledgerId: testLedgerId,
-				name: "Test Account 1",
-				normalBalance: "debit",
-				balanceAmount: "0",
-				lockVersion: 1,
-				created: new Date(),
-				updated: new Date(),
-			},
-			{
-				id: testAccount2Id,
-				ledgerId: testLedgerId,
-				name: "Test Account 2",
-				normalBalance: "credit",
-				balanceAmount: "0",
-				lockVersion: 1,
-				created: new Date(),
-				updated: new Date(),
-			},
-		]);
+		await organizationRepo.createOrganization(orgEntity);
 	});
 
 	afterAll(async () => {
-		// Clean up test data scoped to THIS test file only (in reverse order of creation due to foreign keys)
-		// First get all transaction IDs for this ledger
-		const transactions = await database
-			.select({ id: LedgerTransactionsTable.id })
-			.from(LedgerTransactionsTable)
-			.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
-		const transactionIds = transactions.map(t => t.id);
-
-		if (transactionIds.length > 0) {
-			await database
-				.delete(LedgerTransactionEntriesTable)
-				.where(inArray(LedgerTransactionEntriesTable.transactionId, transactionIds));
-		}
-		await database
-			.delete(LedgerTransactionsTable)
-			.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
-		await database.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
-		await database.delete(LedgersTable).where(eq(LedgersTable.id, testLedgerId));
-		await database.delete(OrganizationsTable).where(eq(OrganizationsTable.id, _testOrgId));
-		await pool.end();
+		// Clean up test data
+		await organizationRepo.deleteOrganization(testOrgId);
 	});
 
-	beforeEach(async () => {
-		// Clean up THIS test file's transactions only (scoped to testLedgerId)
-		try {
-			const transactions = await database
-				.select({ id: LedgerTransactionsTable.id })
-				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
-			const transactionIds = transactions.map(t => t.id);
+	describe("getLedger", () => {
+		let ledgerId: LedgerID;
 
-			if (transactionIds.length > 0) {
-				await database
-					.delete(LedgerTransactionEntriesTable)
-					.where(inArray(LedgerTransactionEntriesTable.transactionId, transactionIds));
+		afterEach(async () => {
+			if (ledgerId) {
+				try {
+					await ledgerRepo.deleteLedger(testOrgId, ledgerId);
+				} catch {
+					// Ignore if already deleted
+				}
 			}
-			await database
-				.delete(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
-
-			// Reset account balances and lock versions
-			await database
-				.update(LedgerAccountsTable)
-				.set({ balanceAmount: "0", lockVersion: 1 })
-				.where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
-		} catch (error) {
-			// Ignore cleanup errors
-		}
-	});
-
-	beforeEach(async () => {
-		// ONLY reset account balances - no deletions
-		await database
-			.update(LedgerAccountsTable)
-			.set({ balanceAmount: "0", lockVersion: 1 })
-			.where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
-	});
-
-	describe("Atomic Transaction Creation", () => {
-		it("should create transaction with entries atomically", async () => {
-			const entries = [
-				{
-					accountId: testAccount1Id,
-					direction: "debit" as const,
-					amount: "100.00",
-				},
-				{
-					accountId: testAccount2Id,
-					direction: "credit" as const,
-					amount: "100.00",
-				},
-			];
-
-			// Create transaction entity using factory method
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				TypeID.fromString<"lgr">(testLedgerId),
-				entries,
-				"Test transaction"
-			);
-			const entryEntities = transactionEntity.entries || [];
-
-			const transaction = await ledgerTransactionRepo.createTransactionWithEntries(
-				_testOrgId,
-				transactionEntity,
-				entryEntities
-			);
-
-			expect(transaction).toBeDefined();
-			expect(transaction.id).toBeDefined();
-			expect(transaction.status).toBe("pending");
-
-			// Verify balances were updated
-			const account1 = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount1Id)
-			);
-			const account2 = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount2Id)
-			);
-
-			expect(account1.pendingAmount).toBe(100);
-			expect(account2.pendingAmount).toBe(100);
 		});
 
-		it("should rollback on double-entry validation failure", async () => {
-			const unbalancedEntries = [
-				{
-					accountId: testAccount1Id,
-					direction: "debit" as const,
-					amount: "100.00",
-				},
-				{
-					accountId: testAccount2Id,
-					direction: "credit" as const,
-					amount: "50.00",
-				},
-			];
-
-			// Entity validates on creation, so this should throw
-			expect(() =>
-				LedgerTransactionEntity.createWithEntries(
-					TypeID.fromString<"lgr">(testLedgerId),
-					unbalancedEntries,
-					"Unbalanced transaction"
-				)
-			).toThrow("Double-entry validation failed");
-
-			// Verify no changes were made to accounts
-			const account1 = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount1Id)
+		it("should throw error when ledger not found", async () => {
+			const nonExistentId = new TypeID("lgr") as LedgerID;
+			await expect(ledgerRepo.getLedger(testOrgId, nonExistentId)).rejects.toThrow(
+				`Ledger not found: ${nonExistentId.toString()}`
 			);
-			const account2 = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount2Id)
-			);
+		});
 
-			expect(account1.pendingAmount).toBe(0);
-			expect(account2.pendingAmount).toBe(0);
+		it("should return ledger when found", async () => {
+			ledgerId = new TypeID("lgr") as LedgerID;
+			const entity = createLedgerEntity({
+				id: ledgerId,
+				organizationId: testOrgId,
+				name: "Test Ledger",
+				currency: "USD",
+				currencyExponent: 2,
+			});
+
+			await ledgerRepo.upsertLedger(entity);
+
+			const ledger = await ledgerRepo.getLedger(testOrgId, ledgerId);
+			expect(ledger).toBeInstanceOf(LedgerEntity);
+			expect(ledger.id.toString()).toBe(ledgerId.toString());
+			expect(ledger.name).toBe("Test Ledger");
+			expect(ledger.currency).toBe("USD");
+		});
+
+		it("should throw error when ledger belongs to different organization", async () => {
+			ledgerId = new TypeID("lgr") as LedgerID;
+			const entity = createLedgerEntity({
+				id: ledgerId,
+				organizationId: testOrgId,
+				name: "Test Ledger",
+			});
+			await ledgerRepo.upsertLedger(entity);
+
+			// Try to access with different organization ID
+			const differentOrgId = new TypeID("org") as OrgID;
+			await expect(ledgerRepo.getLedger(differentOrgId, ledgerId)).rejects.toThrow("Ledger not found");
 		});
 	});
 
-	describe("Concurrency and Race Conditions", () => {
-		it("should handle concurrent transactions on same account", async () => {
-			const entries1 = [
-				{
-					accountId: testAccount1Id,
-					direction: "debit" as const,
-					amount: "50.00",
-				},
-				{
-					accountId: testAccount2Id,
-					direction: "credit" as const,
-					amount: "50.00",
-				},
-			];
+	describe("listLedgers", () => {
+		let ledgerId: LedgerID;
 
-			const entries2 = [
-				{
-					accountId: testAccount1Id,
-					direction: "debit" as const,
-					amount: "75.00",
-				},
-				{
-					accountId: testAccount2Id,
-					direction: "credit" as const,
-					amount: "75.00",
-				},
-			];
-
-			// Execute concurrent transactions
-			const [tx1, tx2] = await Promise.all([
-				ledgerTransactionRepo.createTransactionWithEntries(
-					_testOrgId,
-					LedgerTransactionEntity.createWithEntries(
-						TypeID.fromString<"lgr">(testLedgerId),
-						entries1,
-						"Concurrent tx 1"
-					),
-					LedgerTransactionEntity.createWithEntries(
-						TypeID.fromString<"lgr">(testLedgerId),
-						entries1,
-						"Concurrent tx 1"
-					).entries || []
-				),
-				ledgerTransactionRepo.createTransactionWithEntries(
-					_testOrgId,
-					LedgerTransactionEntity.createWithEntries(
-						TypeID.fromString<"lgr">(testLedgerId),
-						entries2,
-						"Concurrent tx 2"
-					),
-					LedgerTransactionEntity.createWithEntries(
-						TypeID.fromString<"lgr">(testLedgerId),
-						entries2,
-						"Concurrent tx 2"
-					).entries || []
-				),
-			]);
-
-			expect(tx1).toBeDefined();
-			expect(tx2).toBeDefined();
-
-			// Verify final balances are correct
-			const account1 = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount1Id)
-			);
-			const account2 = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount2Id)
-			);
-
-			expect(account1.pendingAmount).toBe(125); // 50 + 75
-			expect(account2.pendingAmount).toBe(125);
+		afterEach(async () => {
+			if (ledgerId) {
+				try {
+					await ledgerRepo.deleteLedger(testOrgId, ledgerId);
+				} catch {
+					// Ignore if already deleted
+				}
+			}
 		});
 
-		it("should prevent lost updates with optimistic locking", async () => {
-			// First, create a transaction to set initial balance
-			await ledgerTransactionRepo.createTransactionWithEntries(
-				_testOrgId,
-				LedgerTransactionEntity.createWithEntries(
-					TypeID.fromString<"lgr">(testLedgerId),
-					[
-						{ accountId: testAccount1Id, direction: "debit", amount: "100.00" },
-						{ accountId: testAccount2Id, direction: "credit", amount: "100.00" },
-					],
-					"Setup"
-				),
-				LedgerTransactionEntity.createWithEntries(
-					TypeID.fromString<"lgr">(testLedgerId),
-					[
-						{ accountId: testAccount1Id, direction: "debit", amount: "100.00" },
-						{ accountId: testAccount2Id, direction: "credit", amount: "100.00" },
-					],
-					"Setup"
-				).entries || []
-			);
+		it("should return empty array when no ledgers exist", async () => {
+			const ledgers = await ledgerRepo.listLedgers(testOrgId, 0, 10);
+			expect(ledgers).toEqual([]);
+		});
 
-			// Get account state
-			const _account1 = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount1Id)
-			);
+		it("should list ledgers with pagination", async () => {
+			ledgerId = new TypeID("lgr") as LedgerID;
+			const entity = createLedgerEntity({
+				id: ledgerId,
+				organizationId: testOrgId,
+				name: "Ledger 1",
+				currency: "USD",
+				currencyExponent: 2,
+			});
+			await ledgerRepo.upsertLedger(entity);
 
-			// Try to create concurrent modifications that would cause lost updates
-			const concurrentPromises = Array.from({ length: 5 }, (_, index) =>
-				ledgerTransactionRepo.createTransactionWithEntries(
-					_testOrgId,
-					LedgerTransactionEntity.createWithEntries(
-						TypeID.fromString<"lgr">(testLedgerId),
-						[
-							{ accountId: testAccount1Id, direction: "debit", amount: "10.00" },
-							{ accountId: testAccount2Id, direction: "credit", amount: "10.00" },
-						],
-						`Concurrent ${index}`
-					),
-					LedgerTransactionEntity.createWithEntries(
-						TypeID.fromString<"lgr">(testLedgerId),
-						[
-							{ accountId: testAccount1Id, direction: "debit", amount: "10.00" },
-							{ accountId: testAccount2Id, direction: "credit", amount: "10.00" },
-						],
-						`Concurrent ${index}`
-					).entries || []
-				)
-			);
+			const ledgers = await ledgerRepo.listLedgers(testOrgId, 0, 10);
+			expect(ledgers).toHaveLength(1);
+			expect(ledgers[0].name).toBe("Ledger 1");
+		});
 
-			// All should succeed due to proper locking
-			const results = await Promise.all(concurrentPromises);
-			expect(results).toHaveLength(5);
+		it("should return only ledgers for the specified organization", async () => {
+			ledgerId = new TypeID("lgr") as LedgerID;
+			const entity = createLedgerEntity({
+				id: ledgerId,
+				organizationId: testOrgId,
+				name: "Org Ledger",
+			});
+			await ledgerRepo.upsertLedger(entity);
 
-			// Final balance should be accurate
-			const finalAccount1 = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount1Id)
-			);
-			expect(finalAccount1.pendingAmount).toBe(150); // 100 + (5 * 10)
+			// Different org should see empty list
+			const differentOrgId = new TypeID("org") as OrgID;
+			const ledgers = await ledgerRepo.listLedgers(differentOrgId, 0, 10);
+			expect(ledgers).toEqual([]);
 		});
 	});
 
-	describe("Idempotency Key Handling", () => {
-		it("should store idempotency keys with transactions", async () => {
-			const entries = [
-				{
-					accountId: testAccount1Id,
-					direction: "debit" as const,
-					amount: "100.00",
-				},
-				{
-					accountId: testAccount2Id,
-					direction: "credit" as const,
-					amount: "100.00",
-				},
-			];
+	describe("upsertLedger", () => {
+		let ledgerId: LedgerID;
 
-			const idempotencyKey = "test-idempotency-key";
+		afterEach(async () => {
+			if (ledgerId) {
+				try {
+					await ledgerRepo.deleteLedger(testOrgId, ledgerId);
+				} catch {
+					// Ignore if already deleted
+				}
+			}
+		});
 
-			// Create transaction with idempotency key
-			const txEntity = LedgerTransactionEntity.createWithEntries(
-				TypeID.fromString<"lgr">(testLedgerId),
-				entries,
-				"Transaction with idempotency key",
-				idempotencyKey
-			);
+		describe("create (insert) operations", () => {
+			it("should create new ledger with valid data", async () => {
+				ledgerId = new TypeID("lgr") as LedgerID;
+				const entity = createLedgerEntity({
+					id: ledgerId,
+					organizationId: testOrgId,
+					name: "New Ledger",
+					description: "Test ledger",
+					currency: "USD",
+					currencyExponent: 2,
+				});
 
-			const tx = await ledgerTransactionRepo.createTransactionWithEntries(
-				_testOrgId,
-				txEntity,
-				txEntity.entries || []
-			);
+				const created = await ledgerRepo.upsertLedger(entity);
 
-			expect(tx).toBeDefined();
-			expect(tx.idempotencyKey).toBe(idempotencyKey);
+				expect(created).toBeInstanceOf(LedgerEntity);
+				expect(created.id.toString()).toBe(ledgerId.toString());
+				expect(created.name).toBe("New Ledger");
+				expect(created.currency).toBe("USD");
+				expect(created.currencyExponent).toBe(2);
+			});
 
-			// TODO: Add unique constraint on idempotency key and test duplicate prevention
+			it("should throw error when organization doesn't exist", async () => {
+				ledgerId = new TypeID("lgr") as LedgerID;
+				const nonExistentOrgId = new TypeID("org") as OrgID;
+				const entity = createLedgerEntity({
+					id: ledgerId,
+					organizationId: nonExistentOrgId,
+					name: "New Ledger",
+				});
+
+				// Should throw an error (either FK violation or NotFoundError)
+				await expect(ledgerRepo.upsertLedger(entity)).rejects.toThrow();
+			});
+
+			it("should create ledger with metadata", async () => {
+				ledgerId = new TypeID("lgr") as LedgerID;
+				const metadata = { purpose: "testing", region: "us-east" };
+				const entity = createLedgerEntity({
+					id: ledgerId,
+					organizationId: testOrgId,
+					name: "Metadata Ledger",
+					metadata,
+				});
+
+				const created = await ledgerRepo.upsertLedger(entity);
+				expect(created.metadata).toEqual(metadata);
+			});
+		});
+
+		describe("update operations", () => {
+			beforeEach(async () => {
+				// Create a base ledger for update tests
+				ledgerId = new TypeID("lgr") as LedgerID;
+				const entity = createLedgerEntity({
+					id: ledgerId,
+					organizationId: testOrgId,
+					name: "Original Name",
+					description: "Original description",
+					currency: "USD",
+					currencyExponent: 2,
+				});
+				await ledgerRepo.upsertLedger(entity);
+			});
+
+			it("should update mutable fields (name, description, metadata)", async () => {
+				const existing = await ledgerRepo.getLedger(testOrgId, ledgerId);
+
+				const updated = new LedgerEntity({
+					...existing,
+					name: "Updated Name",
+					description: "Updated description",
+					metadata: { updated: true },
+				});
+
+				const result = await ledgerRepo.upsertLedger(updated);
+
+				expect(result.name).toBe("Updated Name");
+				expect(result.description).toBe("Updated description");
+				expect(result.metadata).toEqual({ updated: true });
+			});
+
+			it("should update currency fields", async () => {
+				const existing = await ledgerRepo.getLedger(testOrgId, ledgerId);
+
+				const updated = new LedgerEntity({
+					...existing,
+					currency: "EUR",
+					currencyExponent: 2,
+				});
+
+				const result = await ledgerRepo.upsertLedger(updated);
+				expect(result.currency).toBe("EUR");
+				expect(result.currencyExponent).toBe(2);
+			});
+
+			it("should fail when trying to change immutable field (organizationId)", async () => {
+				const existing = await ledgerRepo.getLedger(testOrgId, ledgerId);
+
+				const differentOrgId = new TypeID("org") as OrgID;
+				const updated = new LedgerEntity({
+					...existing,
+					organizationId: differentOrgId, // Changing immutable field
+				});
+
+				await expect(ledgerRepo.upsertLedger(updated)).rejects.toThrow();
+			});
+		});
+
+		describe("idempotent create", () => {
+			it("should create ledger on first call, update on second call", async () => {
+				ledgerId = new TypeID("lgr") as LedgerID;
+				const entity = createLedgerEntity({
+					id: ledgerId,
+					organizationId: testOrgId,
+					name: "Idempotent Ledger",
+				});
+
+				// First create
+				const first = await ledgerRepo.upsertLedger(entity);
+				expect(first.name).toBe("Idempotent Ledger");
+
+				// Second call with same ID but updated name
+				const updated = new LedgerEntity({
+					...first,
+					name: "Updated Ledger",
+				});
+				const second = await ledgerRepo.upsertLedger(updated);
+				expect(second.name).toBe("Updated Ledger");
+			});
 		});
 	});
 
-	describe("Balance Calculation Performance", () => {
-		it("should calculate balances efficiently for multiple transactions", async () => {
-			// Create multiple transactions to test balance calculation performance
-			const _transactionPromises = await Promise.all(
-				Array.from({ length: 10 }, (_, index) =>
-					ledgerTransactionRepo.createTransactionWithEntries(
-						_testOrgId,
-						LedgerTransactionEntity.createWithEntries(
-							TypeID.fromString<"lgr">(testLedgerId),
-							[
-								{
-									accountId: testAccount1Id,
-									direction: "debit" as const,
-									amount: "10.00",
-								},
-								{
-									accountId: testAccount2Id,
-									direction: "credit" as const,
-									amount: "10.00",
-								},
-							],
-							`Performance test ${index}`
-						),
-						LedgerTransactionEntity.createWithEntries(
-							TypeID.fromString<"lgr">(testLedgerId),
-							[
-								{
-									accountId: testAccount1Id,
-									direction: "debit" as const,
-									amount: "10.00",
-								},
-								{
-									accountId: testAccount2Id,
-									direction: "credit" as const,
-									amount: "10.00",
-								},
-							],
-							`Performance test ${index}`
-						).entries || []
-					)
-				)
-			);
+	describe("deleteLedger", () => {
+		let ledgerId: LedgerID;
 
-			// Test balance query performance
-			const startTime = performance.now();
-			const balances = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount1Id)
-			);
-			const endTime = performance.now();
-
-			const queryTime = endTime - startTime;
-
-			// Should be well under 500ms p99 target
-			expect(queryTime).toBeLessThan(100);
-			expect(balances.pendingAmount).toBe(100); // 10 transactions * 10 each
+		beforeEach(async () => {
+			ledgerId = new TypeID("lgr") as LedgerID;
+			const entity = createLedgerEntity({
+				id: ledgerId,
+				organizationId: testOrgId,
+				name: "Ledger to Delete",
+			});
+			await ledgerRepo.upsertLedger(entity);
 		});
 
-		it("should handle fast balance queries for high frequency operations", async () => {
-			// Create some test data
-			await ledgerTransactionRepo.createTransactionWithEntries(
-				_testOrgId,
-				LedgerTransactionEntity.createWithEntries(
-					TypeID.fromString<"lgr">(testLedgerId),
-					[
-						{ accountId: testAccount1Id, direction: "debit", amount: "50.00" },
-						{ accountId: testAccount2Id, direction: "credit", amount: "50.00" },
-					],
-					"Fast balance test"
-				),
-				LedgerTransactionEntity.createWithEntries(
-					TypeID.fromString<"lgr">(testLedgerId),
-					[
-						{ accountId: testAccount1Id, direction: "debit", amount: "50.00" },
-						{ accountId: testAccount2Id, direction: "credit", amount: "50.00" },
-					],
-					"Fast balance test"
-				).entries || []
+		afterEach(async () => {
+			if (ledgerId) {
+				try {
+					await ledgerRepo.deleteLedger(testOrgId, ledgerId);
+				} catch {
+					// Ignore if already deleted
+				}
+			}
+		});
+
+		it("should delete ledger successfully", async () => {
+			await ledgerRepo.deleteLedger(testOrgId, ledgerId);
+
+			await expect(ledgerRepo.getLedger(testOrgId, ledgerId)).rejects.toThrow("Ledger not found");
+		});
+
+		it("should throw error when ledger not found", async () => {
+			const nonExistentId = new TypeID("lgr") as LedgerID;
+			await expect(ledgerRepo.deleteLedger(testOrgId, nonExistentId)).rejects.toThrow(
+				`Ledger not found: ${nonExistentId.toString()}`
 			);
+		});
 
-			// Test fast balance query
-			const startTime = performance.now();
-			const balances = await ledgerAccountRepo.calculateBalance(
-				TypeID.fromString<"lgr">(testLedgerId),
-				TypeID.fromString<"lat">(testAccount1Id)
-			);
-			const endTime = performance.now();
-
-			const queryTime = endTime - startTime;
-
-			// Fast query should be even faster
-			expect(queryTime).toBeLessThan(50);
-			expect(balances.pendingAmount).toBe(50);
+		it("should throw error when deleting from different organization", async () => {
+			const otherOrgId = new TypeID("org") as OrgID;
+			await expect(ledgerRepo.deleteLedger(otherOrgId, ledgerId)).rejects.toThrow("Ledger not found");
 		});
 	});
 
-	describe("Database Constraint Validation", () => {
-		it("should enforce positive amount constraints", async () => {
-			const invalidEntries = [
-				{
-					accountId: testAccount1Id,
-					direction: "debit" as const,
-					amount: "-50.00",
-				},
-				{
-					accountId: testAccount2Id,
-					direction: "credit" as const,
-					amount: "50.00",
-				},
-			];
+	describe("organization tenancy isolation", () => {
+		let org1Id: OrgID;
+		let org2Id: OrgID;
+		let ledger1Id: LedgerID;
+		let ledger2Id: LedgerID;
 
-			// Entity validates on creation, so this should throw
-			expect(() =>
-				LedgerTransactionEntity.createWithEntries(
-					TypeID.fromString<"lgr">(testLedgerId),
-					invalidEntries,
-					"Invalid amount test"
-				)
-			).toThrow("Invalid amount");
-		});
+		beforeAll(async () => {
+			// Create two organizations
+			org1Id = new TypeID("org") as OrgID;
+			org2Id = new TypeID("org") as OrgID;
 
-		it("should enforce foreign key constraints", async () => {
-			const nonExistentAccountId = new TypeID("lat").toString();
-			const entries = [
-				{
-					accountId: nonExistentAccountId,
-					direction: "debit" as const,
-					amount: "50.00",
-				},
-				{
-					accountId: testAccount2Id,
-					direction: "credit" as const,
-					amount: "50.00",
-				},
-			];
+			await organizationRepo.createOrganization(
+				createOrganizationEntity({ id: org1Id, name: "Org 1" })
+			);
+			await organizationRepo.createOrganization(
+				createOrganizationEntity({ id: org2Id, name: "Org 2" })
+			);
 
-			await expect(
-				ledgerTransactionRepo.createTransactionWithEntries(
-					_testOrgId,
-					LedgerTransactionEntity.createWithEntries(
-						TypeID.fromString<"lgr">(testLedgerId),
-						entries,
-						"FK constraint test"
-					),
-					LedgerTransactionEntity.createWithEntries(
-						TypeID.fromString<"lgr">(testLedgerId),
-						entries,
-						"FK constraint test"
-					).entries || []
-				)
-			).rejects.toThrow();
-		});
+			// Create ledgers for each organization
+			ledger1Id = new TypeID("lgr") as LedgerID;
+			ledger2Id = new TypeID("lgr") as LedgerID;
 
-		it("should enforce required fields", async () => {
-			// Test basic transaction creation with all required fields
-			const transactionId = new TypeID("ltr").toString();
-			const result = await database
-				.insert(LedgerTransactionsTable)
-				.values({
-					id: transactionId,
-					ledgerId: testLedgerId,
-					status: "pending",
+			await ledgerRepo.upsertLedger(
+				createLedgerEntity({
+					id: ledger1Id,
+					organizationId: org1Id,
+					name: "Ledger 1",
 				})
-				.returning();
+			);
+			await ledgerRepo.upsertLedger(
+				createLedgerEntity({
+					id: ledger2Id,
+					organizationId: org2Id,
+					name: "Ledger 2",
+				})
+			);
+		});
 
-			expect(result).toHaveLength(1);
-			expect(result[0].id).toBe(transactionId);
-			expect(result[0].ledgerId).toBe(testLedgerId);
-			expect(result[0].status).toBe("pending");
+		afterAll(async () => {
+			// Clean up
+			await ledgerRepo.deleteLedger(org1Id, ledger1Id);
+			await ledgerRepo.deleteLedger(org2Id, ledger2Id);
+			await organizationRepo.deleteOrganization(org1Id);
+			await organizationRepo.deleteOrganization(org2Id);
+		});
+
+		it("should not allow org1 to access org2's ledgers", async () => {
+			await expect(ledgerRepo.getLedger(org1Id, ledger2Id)).rejects.toThrow("Ledger not found");
+		});
+
+		it("should not allow org2 to access org1's ledgers", async () => {
+			await expect(ledgerRepo.getLedger(org2Id, ledger1Id)).rejects.toThrow("Ledger not found");
+		});
+
+		it("should list only own organization's ledgers", async () => {
+			const org1Ledgers = await ledgerRepo.listLedgers(org1Id, 0, 10);
+			expect(org1Ledgers).toHaveLength(1);
+			expect(org1Ledgers[0].id.toString()).toBe(ledger1Id.toString());
+
+			const org2Ledgers = await ledgerRepo.listLedgers(org2Id, 0, 10);
+			expect(org2Ledgers).toHaveLength(1);
+			expect(org2Ledgers[0].id.toString()).toBe(ledger2Id.toString());
 		});
 	});
 });

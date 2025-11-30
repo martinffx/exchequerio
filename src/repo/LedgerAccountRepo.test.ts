@@ -28,7 +28,7 @@ describe("LedgerAccountRepo", () => {
 			currency: "USD",
 			currencyExponent: 2,
 		});
-		await ledgerRepo.createLedger(ledgerEntity);
+		await ledgerRepo.upsertLedger(ledgerEntity);
 	});
 
 	afterAll(async () => {
@@ -410,14 +410,14 @@ describe("LedgerAccountRepo", () => {
 			ledger1Id = new TypeID("lgr") as LedgerID;
 			ledger2Id = new TypeID("lgr") as LedgerID;
 
-			await ledgerRepo.createLedger(
+			await ledgerRepo.upsertLedger(
 				createLedgerEntity({
 					id: ledger1Id,
 					organizationId: org1Id,
 					name: "Ledger 1",
 				})
 			);
-			await ledgerRepo.createLedger(
+			await ledgerRepo.upsertLedger(
 				createLedgerEntity({
 					id: ledger2Id,
 					organizationId: org2Id,
