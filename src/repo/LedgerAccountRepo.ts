@@ -1,158 +1,45 @@
-import { and, desc, eq, like } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, like } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "@/errors";
-import type {
-	BalanceData,
-	LedgerAccountID,
-	LedgerID,
-} from "@/services/entities/LedgerAccountEntity";
+import type { OrgID } from "@/services";
+import type { LedgerAccountID, LedgerID } from "@/services/entities/LedgerAccountEntity";
 import { LedgerAccountEntity } from "@/services/entities/LedgerAccountEntity";
-
-import { LedgerAccountsTable, LedgersTable, LedgerTransactionEntriesTable } from "./schema";
+import { LedgerAccountsTable, LedgersTable } from "./schema";
 import type { DrizzleDB } from "./types";
 
+/**
+ * Repository for ledger account data access operations.
+ * Handles CRUD operations with organization tenancy, optimistic locking, and FK constraint validation.
+ */
 class LedgerAccountRepo {
 	constructor(private readonly db: DrizzleDB) {}
 
 	/**
-	 * Real-time balance calculation with transaction entries
-	 */
-	public async calculateBalance(
-		ledgerId: LedgerID,
-		accountId: LedgerAccountID
-	): Promise<BalanceData> {
-		// Get account info for normal balance type
-		const accountResult = await this.db
-			.select({
-				normalBalance: LedgerAccountsTable.normalBalance,
-			})
-			.from(LedgerAccountsTable)
-			.where(
-				and(
-					eq(LedgerAccountsTable.id, accountId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
-				)
-			)
-			.limit(1);
-
-		if (accountResult.length === 0) {
-			throw new NotFoundError(`Account not found: ${accountId.toString()}`);
-		}
-
-		const account = accountResult[0];
-
-		// Get ledger for currency info
-		const ledgerResult = await this.db
-			.select({
-				currency: LedgersTable.currency,
-				currencyExponent: LedgersTable.currencyExponent,
-			})
-			.from(LedgersTable)
-			.where(eq(LedgersTable.id, ledgerId.toString()))
-			.limit(1);
-
-		if (ledgerResult.length === 0) {
-			throw new NotFoundError(`Ledger not found: ${ledgerId.toString()}`);
-		}
-
-		const ledger = ledgerResult[0];
-
-		// Calculate balances by aggregating transaction entries
-		const entries = await this.db
-			.select({
-				direction: LedgerTransactionEntriesTable.direction,
-				amount: LedgerTransactionEntriesTable.amount,
-				status: LedgerTransactionEntriesTable.status,
-			})
-			.from(LedgerTransactionEntriesTable)
-			.where(eq(LedgerTransactionEntriesTable.accountId, accountId.toString()));
-
-		let postedCredits = 0;
-		let postedDebits = 0;
-		let pendingCredits = 0;
-		let pendingDebits = 0;
-
-		for (const entry of entries) {
-			const amount = Number.parseFloat(entry.amount);
-
-			if (entry.status === "posted") {
-				if (entry.direction === "credit") {
-					postedCredits += amount;
-				} else {
-					postedDebits += amount;
-				}
-			} else if (entry.status === "pending") {
-				if (entry.direction === "credit") {
-					pendingCredits += amount;
-				} else {
-					pendingDebits += amount;
-				}
-			}
-		}
-
-		// Calculate balances based on normal balance type
-		const isDebitNormal = account.normalBalance === "debit";
-
-		// Posted balance (confirmed transactions only)
-		const postedAmount = isDebitNormal ? postedDebits - postedCredits : postedCredits - postedDebits;
-
-		// Pending balance (all transactions including pending)
-		const totalCredits = postedCredits + pendingCredits;
-		const totalDebits = postedDebits + pendingDebits;
-		const pendingAmount = isDebitNormal ? totalDebits - totalCredits : totalCredits - totalDebits;
-
-		// Available balance (posted + pending inbound - pending outbound)
-		// For debit accounts: available = posted + pending debits - pending credits
-		// For credit accounts: available = posted + pending credits - pending debits
-		const availableAmount = isDebitNormal
-			? postedAmount + pendingDebits - pendingCredits
-			: postedAmount + pendingCredits - pendingDebits;
-
-		return {
-			pendingAmount,
-			postedAmount,
-			availableAmount,
-			pendingCredits,
-			pendingDebits,
-			postedCredits,
-			postedDebits,
-			availableCredits: isDebitNormal ? postedCredits : postedCredits + pendingCredits,
-			availableDebits: isDebitNormal ? postedDebits + pendingDebits : postedDebits,
-			currency: ledger.currency,
-			currencyExponent: ledger.currencyExponent,
-		};
-	}
-
-	// NEW CRUD METHODS WITH ORGANIZATION TENANCY
-
-	/**
-	 * Get single account by ID with organization tenancy validation
+	 * Retrieves a single ledger account by ID with organization tenancy validation.
+	 *
+	 * @param organizationId - Organization ID for tenancy isolation
+	 * @param ledgerId - Ledger ID that owns the account
+	 * @param accountId - Unique account identifier
+	 * @returns The ledger account entity
+	 * @throws {NotFoundError} If account not found or doesn't belong to the organization
+	 *
+	 * @remarks
+	 * Uses an inner join with the ledgers table to validate organization ownership in a single query.
 	 */
 	public async getLedgerAccount(
-		organizationId: string,
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Promise<LedgerAccountEntity> {
 		// Join with LedgersTable to validate organization tenancy
 		const result = await this.db
-			.select({
-				id: LedgerAccountsTable.id,
-				ledgerId: LedgerAccountsTable.ledgerId,
-				name: LedgerAccountsTable.name,
-				description: LedgerAccountsTable.description,
-				normalBalance: LedgerAccountsTable.normalBalance,
-				balanceAmount: LedgerAccountsTable.balanceAmount,
-				lockVersion: LedgerAccountsTable.lockVersion,
-				metadata: LedgerAccountsTable.metadata,
-				created: LedgerAccountsTable.created,
-				updated: LedgerAccountsTable.updated,
-			})
+			.select(getTableColumns(LedgerAccountsTable))
 			.from(LedgerAccountsTable)
 			.innerJoin(LedgersTable, eq(LedgerAccountsTable.ledgerId, LedgersTable.id))
 			.where(
 				and(
 					eq(LedgerAccountsTable.id, accountId.toString()),
 					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId)
+					eq(LedgersTable.organizationId, organizationId.toString())
 				)
 			)
 			.limit(1);
@@ -165,10 +52,23 @@ class LedgerAccountRepo {
 	}
 
 	/**
-	 * List accounts by ledger with organization tenancy validation
+	 * Lists all ledger accounts with pagination and optional name filtering.
+	 *
+	 * @param organizationId - Organization ID for tenancy isolation
+	 * @param ledgerId - Ledger ID to list accounts from
+	 * @param offset - Number of records to skip for pagination
+	 * @param limit - Maximum number of records to return
+	 * @param nameFilter - Optional SQL LIKE pattern to filter by account name
+	 * @returns Array of ledger account entities
+	 * @throws {NotFoundError} If the ledger doesn't exist or doesn't belong to the organization
+	 *
+	 * @remarks
+	 * - Results are ordered by created date (descending)
+	 * - Returns empty array if no accounts match the criteria
+	 * - Validates ledger ownership before querying accounts
 	 */
 	public async listLedgerAccounts(
-		organizationId: string,
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		offset: number,
 		limit: number,
@@ -179,7 +79,10 @@ class LedgerAccountRepo {
 			.select({ id: LedgersTable.id })
 			.from(LedgersTable)
 			.where(
-				and(eq(LedgersTable.id, ledgerId.toString()), eq(LedgersTable.organizationId, organizationId))
+				and(
+					eq(LedgersTable.id, ledgerId.toString()),
+					eq(LedgersTable.organizationId, organizationId.toString())
+				)
 			)
 			.limit(1);
 
@@ -192,7 +95,7 @@ class LedgerAccountRepo {
 		// Build where conditions with organization tenancy
 		const whereConditions = [
 			eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-			eq(LedgersTable.organizationId, organizationId),
+			eq(LedgersTable.organizationId, organizationId.toString()),
 		];
 
 		if (nameFilter) {
@@ -200,18 +103,7 @@ class LedgerAccountRepo {
 		}
 
 		const results = await this.db
-			.select({
-				id: LedgerAccountsTable.id,
-				ledgerId: LedgerAccountsTable.ledgerId,
-				name: LedgerAccountsTable.name,
-				description: LedgerAccountsTable.description,
-				normalBalance: LedgerAccountsTable.normalBalance,
-				balanceAmount: LedgerAccountsTable.balanceAmount,
-				lockVersion: LedgerAccountsTable.lockVersion,
-				metadata: LedgerAccountsTable.metadata,
-				created: LedgerAccountsTable.created,
-				updated: LedgerAccountsTable.updated,
-			})
+			.select(getTableColumns(LedgerAccountsTable))
 			.from(LedgerAccountsTable)
 			.innerJoin(LedgersTable, eq(LedgerAccountsTable.ledgerId, LedgersTable.id))
 			.where(and(...whereConditions))
@@ -223,143 +115,144 @@ class LedgerAccountRepo {
 	}
 
 	/**
-	 * Create new account with organization tenancy validation
+	 * Creates a new ledger account or updates an existing one (upsert).
+	 *
+	 * @param entity - The ledger account entity to create or update
+	 * @returns The created or updated ledger account entity with new lock version
+	 * @throws {NotFoundError} If the referenced ledger doesn't exist or doesn't belong to the organization
+	 * @throws {ConflictError} If optimistic locking fails or immutable fields were changed
+	 *
+	 * @remarks
+	 * **Idempotent Operation:**
+	 * - Uses PostgreSQL's ON CONFLICT DO UPDATE for atomic upsert
+	 * - Automatically handles both create and update in a single query
+	 *
+	 * **On INSERT (new account):**
+	 * - Validates ledger FK constraint (throws NotFoundError if invalid)
+	 * - Initializes with lockVersion from entity.toRecord() (typically 1)
+	 *
+	 * **On UPDATE (existing account):**
+	 * - Validates immutable fields haven't changed (organizationId, ledgerId)
+	 * - Enforces optimistic locking via lockVersion check
+	 * - Only updates mutable fields: name, description, metadata
+	 * - Auto-increments lockVersion and updates timestamp
+	 *
+	 * **Conflict Handling:**
+	 * - Returns 0 rows if WHERE clause fails (wrong lockVersion or immutable field change)
+	 * - Throws ConflictError with descriptive message
+	 *
+	 * @example
+	 * ```typescript
+	 * // Create new account
+	 * const newAccount = LedgerAccountEntity.fromRequest(req, orgId, ledgerId, "debit");
+	 * const created = await repo.upsertLedgerAccount(newAccount);
+	 *
+	 * // Update existing account
+	 * const existing = await repo.getLedgerAccount(orgId, ledgerId, accountId);
+	 * const updated = await repo.upsertLedgerAccount(existing);
+	 * ```
 	 */
-	public async createLedgerAccount(
-		organizationId: string,
-		entity: LedgerAccountEntity
-	): Promise<LedgerAccountEntity> {
-		// Validate that the ledger belongs to the organization
-		const ledgerValidation = await this.db
-			.select({ id: LedgersTable.id })
-			.from(LedgersTable)
-			.where(
-				and(
-					eq(LedgersTable.id, entity.ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId)
-				)
-			)
-			.limit(1);
+	public async upsertLedgerAccount(entity: LedgerAccountEntity): Promise<LedgerAccountEntity> {
+		try {
+			const record = entity.toRecord();
+			// toRecord() always increments lockVersion, so record.lockVersion = entity.lockVersion + 1
+			// For the WHERE clause, we need to check against the current DB version (before increment)
+			const currentLockVersion = (record.lockVersion ?? 1) - 1;
 
-		if (ledgerValidation.length === 0) {
-			throw new NotFoundError(
-				`Ledger not found or does not belong to organization: ${entity.ledgerId.toString()}`
-			);
+			const result = await this.db
+				.insert(LedgerAccountsTable)
+				.values(record)
+				.onConflictDoUpdate({
+					target: LedgerAccountsTable.id,
+					set: {
+						name: record.name,
+						description: record.description,
+						metadata: record.metadata,
+						lockVersion: record.lockVersion,
+						updated: record.updated,
+					},
+					where: and(
+						eq(LedgerAccountsTable.organizationId, entity.organizationId.toString()),
+						eq(LedgerAccountsTable.ledgerId, entity.ledgerId.toString()),
+						eq(LedgerAccountsTable.lockVersion, currentLockVersion)
+					),
+				})
+				.returning();
+
+			if (result.length === 0) {
+				throw new ConflictError(
+					"Account not found, was modified by another transaction, or immutable fields (organizationId/ledgerId) were changed"
+				);
+			}
+
+			return LedgerAccountEntity.fromRecord(result[0]);
+		} catch (error) {
+			// PostgreSQL foreign key violation (ledger doesn't exist or doesn't match organization)
+			if (error instanceof Error && "code" in error && error.code === "23503") {
+				throw new NotFoundError(
+					`Ledger not found or does not belong to organization: ${entity.ledgerId.toString()}`
+				);
+			}
+			throw error;
 		}
-
-		const record = entity.toRecord();
-
-		const insertResult = await this.db.insert(LedgerAccountsTable).values(record).returning();
-
-		return LedgerAccountEntity.fromRecord(insertResult[0]);
 	}
 
 	/**
-	 * Update existing account with organization tenancy validation and optimistic locking
-	 */
-	public async updateLedgerAccount(
-		organizationId: string,
-		ledgerId: LedgerID,
-		entity: LedgerAccountEntity
-	): Promise<LedgerAccountEntity> {
-		// Validate organization tenancy first
-		const validation = await this.db
-			.select({ id: LedgerAccountsTable.id })
-			.from(LedgerAccountsTable)
-			.innerJoin(LedgersTable, eq(LedgerAccountsTable.ledgerId, LedgersTable.id))
-			.where(
-				and(
-					eq(LedgerAccountsTable.id, entity.id.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId)
-				)
-			)
-			.limit(1);
-
-		if (validation.length === 0) {
-			throw new NotFoundError(`Account not found: ${entity.id.toString()}`);
-		}
-
-		const record = entity.toRecord();
-		const now = new Date();
-
-		const updateResult = await this.db
-			.update(LedgerAccountsTable)
-			.set({
-				name: record.name,
-				description: record.description,
-				// normalBalance is immutable - don't update it
-				metadata: record.metadata,
-				lockVersion: entity.lockVersion + 1,
-				updated: now,
-			})
-			.where(
-				and(
-					eq(LedgerAccountsTable.id, entity.id.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountsTable.lockVersion, entity.lockVersion)
-				)
-			)
-			.returning();
-
-		if (updateResult.length === 0) {
-			throw new ConflictError(
-				"Optimistic locking failure - account was modified by another transaction"
-			);
-		}
-
-		return LedgerAccountEntity.fromRecord(updateResult[0]);
-	}
-
-	/**
-	 * Delete account with organization tenancy validation and dependency checks
+	 * Deletes a ledger account with organization tenancy validation.
+	 *
+	 * @param organizationId - Organization ID for tenancy isolation
+	 * @param ledgerId - Ledger ID that owns the account
+	 * @param accountId - Unique account identifier to delete
+	 * @throws {NotFoundError} If account not found or doesn't belong to the organization
+	 * @throws {ConflictError} If account has dependent transaction entries
+	 *
+	 * @remarks
+	 * **Safety Mechanisms:**
+	 * - Validates organizationId, ledgerId, and accountId in WHERE clause (single query)
+	 * - Database FK constraints prevent deletion if transaction entries exist
+	 * - No manual dependency checks needed - DB enforces referential integrity
+	 *
+	 * **Error Handling:**
+	 * - PostgreSQL FK violation (error code 23503) is caught and translated to ConflictError
+	 * - Provides user-friendly error message about existing transaction entries
+	 *
+	 * @example
+	 * ```typescript
+	 * try {
+	 *   await repo.deleteLedgerAccount(orgId, ledgerId, accountId);
+	 * } catch (error) {
+	 *   if (error instanceof ConflictError) {
+	 *     // Account has transaction entries, cannot delete
+	 *   }
+	 * }
+	 * ```
 	 */
 	public async deleteLedgerAccount(
-		organizationId: string,
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Promise<void> {
-		// Validate organization tenancy first
-		const validation = await this.db
-			.select({ id: LedgerAccountsTable.id })
-			.from(LedgerAccountsTable)
-			.innerJoin(LedgersTable, eq(LedgerAccountsTable.ledgerId, LedgersTable.id))
-			.where(
-				and(
-					eq(LedgerAccountsTable.id, accountId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId)
+		try {
+			const deleteResult = await this.db
+				.delete(LedgerAccountsTable)
+				.where(
+					and(
+						eq(LedgerAccountsTable.id, accountId.toString()),
+						eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
+						eq(LedgerAccountsTable.organizationId, organizationId.toString())
+					)
 				)
-			)
-			.limit(1);
+				.returning({ id: LedgerAccountsTable.id });
 
-		if (validation.length === 0) {
-			throw new NotFoundError(`Account not found: ${accountId.toString()}`);
-		}
-
-		// Check if account has transaction entries - prevent deletion if it has data
-		const entryCount = await this.db
-			.select({ id: LedgerTransactionEntriesTable.id })
-			.from(LedgerTransactionEntriesTable)
-			.where(eq(LedgerTransactionEntriesTable.accountId, accountId.toString()))
-			.limit(1);
-
-		if (entryCount.length > 0) {
-			throw new Error("Cannot delete account with existing transaction entries");
-		}
-
-		const deleteResult = await this.db
-			.delete(LedgerAccountsTable)
-			.where(
-				and(
-					eq(LedgerAccountsTable.id, accountId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
-				)
-			)
-			.returning({ id: LedgerAccountsTable.id });
-
-		if (deleteResult.length === 0) {
-			throw new NotFoundError(`Account not found: ${accountId.toString()}`);
+			if (deleteResult.length === 0) {
+				throw new NotFoundError(`Account not found: ${accountId.toString()}`);
+			}
+		} catch (error) {
+			// PostgreSQL foreign key violation (account has dependent transaction entries)
+			if (error instanceof Error && "code" in error && error.code === "23503") {
+				throw new ConflictError("Cannot delete account with existing transaction entries");
+			}
+			throw error;
 		}
 	}
 }

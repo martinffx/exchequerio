@@ -316,6 +316,41 @@ class LedgerTransactionRepo {
 			return LedgerTransactionEntity.fromRecord(updateResult[0]);
 		});
 	}
+
+	/**
+	 * Delete a transaction and all its entries (for testing/cleanup purposes)
+	 * WARNING: This bypasses business logic - only use for tests
+	 */
+	public async deleteTransaction(
+		organizationId: string,
+		ledgerId: string,
+		transactionId: string
+	): Promise<void> {
+		await this.withTransaction(async tx => {
+			// Verify transaction belongs to this org/ledger
+			const transaction = await tx
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, transactionId))
+				.limit(1);
+
+			if (transaction.length === 0) {
+				throw new NotFoundError(`Transaction not found: ${transactionId}`);
+			}
+
+			if (transaction[0].ledgerId !== ledgerId) {
+				throw new NotFoundError(`Transaction not found: ${transactionId}`);
+			}
+
+			// Delete entries first (FK constraint)
+			await tx
+				.delete(LedgerTransactionEntriesTable)
+				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId));
+
+			// Then delete transaction
+			await tx.delete(LedgerTransactionsTable).where(eq(LedgerTransactionsTable.id, transactionId));
+		});
+	}
 }
 
 export { LedgerTransactionRepo };

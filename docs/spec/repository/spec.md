@@ -20,13 +20,17 @@ The ledger system requires complete repository layer implementation to support f
 
 **Requirement:** LedgerAccountRepo provides balance queries with optimistic locking  
 **Testable Condition:** Can query account balances (pending/posted/available) with proper locking mechanisms  
-**Validation:** Balance calculations are accurate to precision requirements with proper concurrency control
+**Validation:** Balance calculations use integer arithmetic (minor units) with exact precision and proper concurrency control
+
+**Critical:** All balance calculations MUST use integer arithmetic. Balances are stored and calculated in minor units (e.g., cents for USD). No floating-point operations allowed.
 
 ### AC3: LedgerTransactionRepo Atomic Operations
 
 **Requirement:** LedgerTransactionRepo handles atomic double-entry transactions  
 **Testable Condition:** Can create transactions that automatically validate double-entry compliance and update account balances atomically  
 **Validation:** Transactions maintain referential integrity and double-entry rules under concurrent operations
+
+**Critical:** Double-entry validation MUST use exact integer comparison (`debits === credits`). No epsilon tolerance. All amounts are integers in minor units.
 
 ### AC4: Resolved Dependencies
 
@@ -66,11 +70,37 @@ The ledger system requires complete repository layer implementation to support f
 - Concurrent balance modifications are detected and handled
 - Retry mechanisms for lock conflicts
 
-### Financial Precision
+### Financial Precision (Integer Minor Units)
 
-- All monetary calculations maintain precision requirements
-- Decimal handling prevents floating-point errors
-- Rounding rules consistently applied
+**CRITICAL: All monetary values MUST be stored as integers in minor units.**
+
+- **Storage Format:** All amounts stored as `integer` or `bigint` (never `numeric`, `decimal`, or `float`)
+- **Minor Units:** Values represent smallest currency unit: `101 = $1.01`, `1000000 = $10,000.00`
+- **Currency Exponent:** `LedgersTable.currencyExponent` determines decimal places (USD=2, JPY=0, KWD=3)
+- **No Floating-Point:** Integer arithmetic eliminates precision errors (`0.1 + 0.2 = 0.3` guaranteed)
+- **Exact Calculations:** All balance operations use integer addition/subtraction
+- **Industry Standard:** Matches Stripe, Square, Modern Treasury, payment processor APIs
+- **Validation:** Double-entry balance must equal exactly (no epsilon tolerance)
+
+**Example Conversions:**
+```typescript
+// API accepts formatted strings
+input: { amount: "12.34" }
+
+// Entity converts to integer minor units (USD exponent=2)
+stored: 1234 // 12.34 * 10^2
+
+// Entity converts back to formatted string for API response
+output: { amount: "12.34" } // 1234 / 10^2
+```
+
+**Affected Fields (all must be integers):**
+- `balanceAmount` - Account balance in minor units
+- `amount` - Transaction entry amount in minor units
+- `alertThreshold` - Balance monitor threshold in minor units
+- `openingBalance`, `closingBalance` - Statement balances in minor units
+- `totalCredits`, `totalDebits` - Statement totals in minor units
+- `settlementAmount` - Settlement batch amount in minor units
 
 ### Audit Trail Integrity
 
@@ -117,11 +147,13 @@ The ledger system requires complete repository layer implementation to support f
 
 - API route handlers and HTTP layer changes (routes remain unchanged)
 - Authentication and authorization logic (handled at route layer)
-- Database schema modifications (work with existing schema)
+- Database schema modifications to integer types (future migration required - see design doc)
 - Advanced performance optimizations (focus on correctness first)
 - Business logic beyond repository operations (keep repositories focused on data access)
 - Cross-repository method calls (enforced by ESLint boundaries)
 - Repository-to-repository dependencies (architectural violation)
+
+**Note:** While the current schema uses `numeric(20, 4)` for monetary fields, all new code MUST be written to handle integer minor units. A schema migration will convert existing decimal columns to integers. See "Monetary Value Standards" in design document.
 
 ## Critical Implementation Gaps
 
@@ -204,6 +236,9 @@ The ledger system requires complete repository layer implementation to support f
 - Use consistent error handling approach across all repositories
 - Maintain separation of concerns (repositories handle data, services handle business logic)
 - Leverage Drizzle ORM type inference for query safety
+- **CRITICAL:** All monetary calculations use integer arithmetic (minor units)
+- **NEVER** use `parseFloat()`, `toFixed()`, or decimal types for financial calculations
+- Entity layer handles conversion between display format (strings) and storage format (integers)
 
 ### Testing Strategy
 

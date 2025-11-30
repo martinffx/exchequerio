@@ -22,7 +22,7 @@ class OrganizationRepo {
 		const orgs = await this.db
 			.select()
 			.from(OrganizationsTable)
-			.where(eq(OrganizationsTable.id, id.toUUID()))
+			.where(eq(OrganizationsTable.id, id.toString()))
 			.limit(1);
 		if (!orgs.length) {
 			throw new NotFoundError(`Organization with id ${id.toString()} not found`);
@@ -35,7 +35,7 @@ class OrganizationRepo {
 			const [organization] = await this.db
 				.insert(OrganizationsTable)
 				.values({
-					id: record.id.toUUID(),
+					id: record.id.toString(),
 					name: record.name,
 					description: record.description,
 				})
@@ -46,8 +46,35 @@ class OrganizationRepo {
 				throw error;
 			}
 
+			// Drizzle wraps PostgreSQL errors, check the cause for the original error
+			if (error && typeof error === "object" && "cause" in error) {
+				const errorWithCause = error as { cause?: unknown };
+				if (
+					errorWithCause.cause &&
+					typeof errorWithCause.cause === "object" &&
+					"code" in errorWithCause.cause
+				) {
+					const cause = errorWithCause.cause as { code?: string };
+					if (cause.code === "23505") {
+						throw new ConflictError(`Organization with id ${record.id.toString()} already exists`);
+					}
+				}
+			}
+
+			// Also check direct DatabaseError instances (backwards compatibility)
 			if (error instanceof DatabaseError) {
-				throw new ConflictError(`Organization with id ${record.id.toString()} already exists`);
+				if (error.code === "23505") {
+					throw new ConflictError(`Organization with id ${record.id.toString()} already exists`);
+				}
+				throw new InternalServerError(error.message);
+			}
+
+			// Check if error has a 'code' property (for other wrapped errors)
+			if (error && typeof error === "object" && "code" in error) {
+				const dbError = error as { code?: string; message?: string };
+				if (dbError.code === "23505") {
+					throw new ConflictError(`Organization with id ${record.id.toString()} already exists`);
+				}
 			}
 
 			if (error instanceof Error) {
@@ -70,7 +97,7 @@ class OrganizationRepo {
 					description: record.description,
 					updated: record.updated?.toJSDate() ?? DateTime.utc().toJSDate(),
 				})
-				.where(eq(OrganizationsTable.id, id.toUUID()))
+				.where(eq(OrganizationsTable.id, id.toString()))
 				.returning();
 			if (organization === undefined) {
 				throw new NotFoundError(`Organization with id ${id.toString()} not found`);
@@ -90,7 +117,7 @@ class OrganizationRepo {
 	}
 
 	public async deleteOrganization(id: OrgID): Promise<void> {
-		await this.db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id.toUUID()));
+		await this.db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id.toString()));
 	}
 }
 

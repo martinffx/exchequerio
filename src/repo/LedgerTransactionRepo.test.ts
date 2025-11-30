@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { TypeID } from "typeid-js";
@@ -14,6 +14,7 @@ import {
 	LedgersTable,
 	LedgerTransactionEntriesTable,
 	LedgerTransactionsTable,
+	OrganizationsTable,
 } from "./schema";
 
 // Mock uuid to avoid ES module issues
@@ -36,6 +37,15 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 	const testAccount2Id = new TypeID("lac").toString();
 
 	beforeAll(async () => {
+		// Create organization first (foreign key requirement)
+		await database.insert(OrganizationsTable).values({
+			id: testOrgId.toString(),
+			name: "Test Organization",
+			description: "Test organization for transaction tests",
+			created: new Date(),
+			updated: new Date(),
+		});
+
 		// Insert test ledger
 		await database.insert(LedgersTable).values(testLedger.toRecord());
 
@@ -65,26 +75,55 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 	});
 
 	afterAll(async () => {
-		// Clean up test data
-		await database.delete(LedgerTransactionEntriesTable);
-		await database.delete(LedgerTransactionsTable);
-		await database.delete(LedgerAccountsTable);
-		await database.delete(LedgersTable);
+		// Clean up test data using repos (proper cascade handling)
+		try {
+			// Delete all transactions for this ledger using repo
+			const transactions = await repo.listLedgerTransactions(
+				testOrgId.toString(),
+				testLedgerId,
+				0,
+				1000
+			);
+			for (const tx of transactions) {
+				await repo.deleteTransaction(testOrgId.toString(), testLedgerId, tx.id.toString());
+			}
+
+			// Delete accounts (direct query since repo enforces no entries constraint)
+			await database.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
+
+			// Delete ledger (direct query to avoid account count check)
+			await database.delete(LedgersTable).where(eq(LedgersTable.id, testLedgerId));
+
+			// Delete organization (direct query to avoid FK check)
+			await database.delete(OrganizationsTable).where(eq(OrganizationsTable.id, testOrgId.toString()));
+		} catch (error) {
+			console.error("Cleanup error:", error);
+		}
 		await pool.end();
 	});
 
 	beforeEach(async () => {
-		// Reset account balances and lock versions before each test
-		await database
-			.update(LedgerAccountsTable)
-			.set({ balanceAmount: "0", lockVersion: 1 })
-			.where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
+		// Clean up THIS test file's transactions only (scoped to testLedgerId)
+		// This won't affect other test files since they have different ledger IDs
+		try {
+			const transactions = await repo.listLedgerTransactions(
+				testOrgId.toString(),
+				testLedgerId,
+				0,
+				1000
+			);
+			for (const tx of transactions) {
+				await repo.deleteTransaction(testOrgId.toString(), testLedgerId, tx.id.toString());
+			}
 
-		// Clean up transactions
-		await database.delete(LedgerTransactionEntriesTable);
-		await database
-			.delete(LedgerTransactionsTable)
-			.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
+			// Reset account balances and lock versions after deleting transactions
+			await database
+				.update(LedgerAccountsTable)
+				.set({ balanceAmount: "0", lockVersion: 1 })
+				.where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
+		} catch (error) {
+			// Ignore cleanup errors
+		}
 	});
 
 	describe("Transaction Creation with Entries", () => {
@@ -135,8 +174,8 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount2Id))
 				.limit(1);
 
-			expect(account1[0].balanceAmount).toBe("100.00");
-			expect(account2[0].balanceAmount).toBe("100.00");
+			expect(account1[0].balanceAmount).toBe("100.0000");
+			expect(account2[0].balanceAmount).toBe("100.0000");
 			expect(account1[0].lockVersion).toBe(2);
 			expect(account2[0].lockVersion).toBe(2);
 		});
@@ -156,20 +195,14 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testLedger.id,
-				unbalancedEntries,
-				"Unbalanced transaction"
-			);
-
-			// Act & Assert
-			await expect(
-				repo.createTransactionWithEntries(
-					testOrgId.toString(),
-					transactionEntity,
-					transactionEntity.entries ?? []
-				)
-			).rejects.toThrow(ConflictError);
+			// Act & Assert - createWithEntries should throw during entity creation
+			expect(() => {
+				LedgerTransactionEntity.createWithEntries(
+					testLedger.id,
+					unbalancedEntries,
+					"Unbalanced transaction"
+				);
+			}).toThrow("Double-entry validation failed");
 
 			// Verify no changes were made (rollback)
 			const account1 = await database
@@ -184,8 +217,8 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount2Id))
 				.limit(1);
 
-			expect(account1[0].balanceAmount).toBe("0");
-			expect(account2[0].balanceAmount).toBe("0");
+			expect(account1[0].balanceAmount).toBe("0.0000");
+			expect(account2[0].balanceAmount).toBe("0.0000");
 			expect(account1[0].lockVersion).toBe(1);
 			expect(account2[0].lockVersion).toBe(1);
 		});
@@ -260,7 +293,7 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 
 			// Assert
 			expect(postedTransaction.status).toBe("posted");
-			expect(postedTransaction.id).toBe(createdTransaction.id);
+			expect(postedTransaction.id.toString()).toBe(createdTransaction.id.toString());
 		});
 
 		it("should handle posting already posted transaction", async () => {
@@ -302,7 +335,7 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 
 			// Assert
 			expect(postedAgain.status).toBe("posted");
-			expect(postedAgain.id).toBe(createdTransaction.id);
+			expect(postedAgain.id.toString()).toBe(createdTransaction.id.toString());
 		});
 
 		it("should enforce organization tenancy for postTransaction", async () => {
@@ -380,7 +413,7 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 			);
 
 			// Assert
-			expect(retrievedTransaction.id).toBe(createdTransaction.id);
+			expect(retrievedTransaction.id.toString()).toBe(createdTransaction.id.toString());
 			expect(retrievedTransaction.description).toBe("Test transaction");
 			expect(retrievedTransaction.status).toBe("pending");
 		});
@@ -546,8 +579,8 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount2Id))
 				.limit(1);
 
-			expect(account1[0].balanceAmount).toBe("125.00"); // 50 + 75
-			expect(account2[0].balanceAmount).toBe("125.00");
+			expect(account1[0].balanceAmount).toBe("125.0000"); // 50 + 75
+			expect(account2[0].balanceAmount).toBe("125.0000");
 			expect(account1[0].lockVersion).toBe(3); // Updated twice
 			expect(account2[0].lockVersion).toBe(3);
 		});
@@ -628,7 +661,7 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount1Id))
 				.limit(1);
 
-			expect(finalAccount1[0].balanceAmount).toBe("150.00"); // 100 + (5 * 10)
+			expect(finalAccount1[0].balanceAmount).toBe("150.0000"); // 100 + (5 * 10)
 			expect(finalAccount1[0].lockVersion).toBe(7); // Initial + setup + 5 updates
 		});
 	});
@@ -785,8 +818,8 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 
 			const expectedTotal = transactions.reduce((sum, t) => sum + Number.parseFloat(t.debit), 0);
 
-			expect(account1[0].balanceAmount).toBe(expectedTotal.toFixed(2));
-			expect(account2[0].balanceAmount).toBe(expectedTotal.toFixed(2));
+			expect(account1[0].balanceAmount).toBe(expectedTotal.toFixed(4));
+			expect(account2[0].balanceAmount).toBe(expectedTotal.toFixed(4));
 		});
 
 		it("should handle decimal precision correctly", async () => {

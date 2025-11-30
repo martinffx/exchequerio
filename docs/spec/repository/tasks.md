@@ -11,6 +11,30 @@
 - ✅ LedgerAccountRepo: CRUD complete, legacy method cleanup COMPLETED
 - ✅ LedgerTransactionRepo: All methods implemented with organization tenancy COMPLETED
 
+## CRITICAL REQUIREMENT: Integer Minor Units for Money
+
+**All monetary values MUST be stored and calculated as integers in minor units.**
+
+### Standards:
+- ✅ **Storage:** Use `integer` or `bigint` types (NEVER `numeric`, `decimal`, or `float`)
+- ✅ **Format:** `101` = `$1.01`, `1000000` = `$10,000.00` (multiply display value by 10^currencyExponent)
+- ✅ **Calculations:** Integer arithmetic only (`debits === credits`, no epsilon tolerance)
+- ✅ **API Layer:** Accept/return formatted strings (`"12.34"`) in entities
+- ✅ **Repository Layer:** Store/query integer values only (no conversion)
+- ✅ **Validation:** Exact equality for double-entry (`debits === credits`)
+
+### Benefits:
+- No floating-point precision errors
+- Exact financial calculations guaranteed
+- Industry standard (Stripe, Square, Modern Treasury)
+- Supports all currencies (USD, JPY, KWD) via exponent
+
+### Implementation Notes:
+- Current schema uses `numeric(20, 4)` - **migration required**
+- All new code MUST handle integer minor units
+- Entity layer converts: API strings ↔ storage integers
+- Repository layer: integers only, no conversion
+
 ## Phase 0: Architecture Cleanup (LedgerRepo) - 0.5 hours
 
 ### RC-000: Clean LedgerRepo Architecture (0.5 hours) ✅ COMPLETED
@@ -95,13 +119,13 @@
 
 #### Tasks
 - [x] ✅ Test transaction creation with entries
-- [x] ✅ Test double-entry balance validation
+- [x] ✅ Test double-entry balance validation (MUST use exact integer equality)
 - [x] ✅ Test transaction status updates (postTransaction)
 - [x] ✅ Test concurrent transaction handling
 - [x] ✅ Test rollback scenarios
 - [x] ✅ Test organization tenancy enforcement
 - [x] ✅ Achieve >90% code coverage (13/13 unit tests passing)
-- [x] ✅ Verify financial integrity
+- [x] ✅ Verify financial integrity with integer minor units
 
 #### Files: `src/repo/LedgerTransactionRepo.test.ts`
 
@@ -109,6 +133,8 @@
 - Created comprehensive integration tests covering all repository methods
 - Tests validate method signatures, error handling, and business logic with real database
 - Double-entry validation tested at entity level (correct behavior)
+- **CRITICAL:** All amount assertions use integer values (minor units)
+- **CRITICAL:** Double-entry validation uses exact equality (`debits === credits`, no epsilon)
 - Organization tenancy enforcement tested with actual database queries
 - All tests use real database connection (follows coding standards)
 - Integration tests ensure financial accuracy and concurrent operation safety
@@ -125,7 +151,7 @@
 - [x] ✅ Test organization boundary enforcement
 - [x] ✅ Test constraint violation handling
 - [x] ✅ Test concurrent access scenarios with optimistic locking
-- [x] ✅ Test balance calculation accuracy
+- [x] ✅ Test balance calculation accuracy (integer minor units only)
 - [x] ✅ Test legacy method removal (ensure no regressions)
 - [x] ✅ Achieve >90% code coverage (22/22 unit tests passing)
 - [x] ✅ Use LedgerRepo.test.ts as template
@@ -135,6 +161,8 @@
 #### Implementation Notes:
 - Created comprehensive integration tests covering all repository methods
 - Tests validate CRUD operations with proper entity transformations using real database
+- **CRITICAL:** Balance calculation tests use integer arithmetic (minor units)
+- **CRITICAL:** All balance assertions verify exact integer values (no floating-point)
 - Balance calculation tests for both debit-normal and credit-normal accounts
 - Organization tenancy enforcement tested across all methods with actual database queries
 - Optimistic locking tested in update operations with concurrent scenarios
@@ -315,12 +343,14 @@
 - **Dependency Injection**: Plugin-based registration
 - **Entity Transformations**: fromRecord/toRecord patterns
 - **Organization Tenancy**: Cross-org access prevention
+- **Integer Minor Units**: All monetary values as integers (CRITICAL)
 
 ### Quality Standards
 - **TypeScript Compilation**: Must pass without errors
 - **Code Coverage**: Target >90% for all layers
 - **Error Handling**: Proper exception types and propagation
 - **Business Logic**: Separated from data access concerns
+- **Financial Accuracy**: Integer arithmetic only, no floating-point (CRITICAL)
 
 ### Validation Commands
 ```bash
@@ -347,3 +377,62 @@ pnpm test:integration # Integration tests
 - [ ] Organization boundary enforcement verified
 - [ ] Error handling works correctly across all layers
 - [ ] No architectural violations (single responsibility principle maintained)
+- [ ] **Integer minor units standard enforced** (all monetary values as integers)
+- [ ] **Double-entry validation uses exact equality** (`debits === credits`, no epsilon)
+- [ ] **No floating-point arithmetic in financial calculations** (integer-only operations)
+
+## Future Work: Schema Migration to Integer Types
+
+**Status:** Documented, not yet implemented  
+**Priority:** HIGH (required for production deployment)  
+**Blocker:** Current schema uses `numeric(20, 4)` for all monetary fields
+
+### Migration Task (Future Phase)
+
+Convert all monetary columns from `numeric(20, 4)` to `integer` or `bigint`:
+
+**Affected Columns:**
+- `LedgerAccountsTable.balanceAmount`
+- `LedgerTransactionEntriesTable.amount`
+- `LedgerAccountBalanceMonitorsTable.alertThreshold`
+- `LedgerAccountStatementsTable.openingBalance`
+- `LedgerAccountStatementsTable.closingBalance`
+- `LedgerAccountStatementsTable.totalCredits`
+- `LedgerAccountStatementsTable.totalDebits`
+- `LedgerAccountSettlementsTable.settlementAmount`
+
+**Migration Strategy:**
+```sql
+-- Example for balanceAmount (repeat for each column)
+-- Step 1: Add new integer column
+ALTER TABLE ledger_accounts 
+ADD COLUMN balance_amount_new BIGINT NOT NULL DEFAULT 0;
+
+-- Step 2: Migrate data (multiply by 10^exponent)
+UPDATE ledger_accounts la
+SET balance_amount_new = ROUND(la.balance_amount * POWER(10, l.currency_exponent))
+FROM ledgers l
+WHERE la.ledger_id = l.id;
+
+-- Step 3: Verify data integrity
+SELECT COUNT(*) FROM ledger_accounts 
+WHERE balance_amount_new != ROUND(balance_amount * 100); -- for USD
+
+-- Step 4: Drop old column and rename
+ALTER TABLE ledger_accounts DROP COLUMN balance_amount;
+ALTER TABLE ledger_accounts RENAME COLUMN balance_amount_new TO balance_amount;
+```
+
+**Pre-Migration Requirements:**
+- [ ] All repository code handles integer minor units
+- [ ] All entity transformations convert between strings and integers
+- [ ] All tests validate integer arithmetic
+- [ ] No floating-point operations in codebase
+- [ ] Currency exponent properly referenced in all conversions
+
+**Post-Migration Verification:**
+- [ ] All balances match pre-migration values (when converted)
+- [ ] Double-entry transactions still balance
+- [ ] API responses maintain same format (strings with decimals)
+- [ ] Performance metrics maintained or improved
+- [ ] Full test suite passes with integer columns

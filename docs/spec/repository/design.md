@@ -20,6 +20,150 @@ JWT Auth → Business Logic → Data Access → PostgreSQL + Drizzle
 - ❌ Service Layer (23+ placeholder methods)
 - ✅ Route Layer (Complete with proper auth/validation)
 
+## Monetary Value Standards
+
+**CRITICAL REQUIREMENT: All monetary values MUST be stored as integers in minor units.**
+
+### Integer Minor Units Standard
+
+**Storage Format:**
+- All monetary amounts stored as `integer` or `bigint` (never `numeric` or `decimal`)
+- Values represent minor units: `101` = `$1.01`, `1000000` = `$10,000.00`
+- Currency exponent (from `LedgersTable.currencyExponent`) determines decimal places
+
+**Benefits:**
+- ✅ **No floating-point precision errors** - Eliminates `0.1 + 0.2 !== 0.3` issues
+- ✅ **Accurate calculations** - Integer arithmetic is exact and predictable
+- ✅ **Industry standard** - Matches Stripe, Square, Modern Treasury APIs
+- ✅ **Currency flexibility** - Supports JPY (0 decimals), USD (2 decimals), KWD (3 decimals)
+- ✅ **Database performance** - Integer operations faster than decimal arithmetic
+- ✅ **Audit compliance** - Exact values prevent rounding discrepancies
+
+**Currency Exponent Examples:**
+```typescript
+// USD, EUR, GBP (exponent: 2)
+amount: 101 → $1.01
+amount: 1000000 → $10,000.00
+
+// JPY, KRW (exponent: 0)
+amount: 101 → ¥101
+amount: 1000000 → ¥1,000,000
+
+// KWD, BHD (exponent: 3)
+amount: 1001 → 1.001 KWD
+amount: 1000000 → 1,000.000 KWD
+```
+
+### Schema Fields Using Integer Minor Units
+
+**All monetary fields MUST use this pattern:**
+```typescript
+// Account balances
+balanceAmount: integer("balance_amount").notNull().default(0)
+
+// Transaction amounts  
+amount: integer("amount").notNull()
+
+// Thresholds and limits
+alertThreshold: integer("alert_threshold").notNull().default(0)
+
+// Statement balances
+openingBalance: integer("opening_balance").notNull().default(0)
+closingBalance: integer("closing_balance").notNull().default(0)
+totalCredits: integer("total_credits").notNull().default(0)
+totalDebits: integer("total_debits").notNull().default(0)
+
+// Settlement amounts
+settlementAmount: integer("settlement_amount").notNull().default(0)
+```
+
+### Entity Transformation Requirements
+
+**Entities MUST handle conversion between display format and storage format:**
+
+```typescript
+// Converting API input (string) to storage (integer)
+public static fromRequest(
+  input: { amount: string },
+  currencyExponent: number
+): number {
+  // Parse display format and convert to minor units
+  const value = parseFloat(input.amount)
+  const minorUnits = Math.round(value * (10 ** currencyExponent))
+  return minorUnits
+}
+
+// Converting storage (integer) to API output (string)
+public toResponse(currencyExponent: number): { amount: string } {
+  // Convert minor units to display format
+  const divisor = 10 ** currencyExponent
+  const displayValue = this.amount / divisor
+  return {
+    amount: displayValue.toFixed(currencyExponent)
+  }
+}
+```
+
+### Double-Entry Balance Validation
+
+**All transaction validation MUST use integer arithmetic:**
+
+```typescript
+// CORRECT: Integer arithmetic
+const debits = entries
+  .filter(e => e.direction === "debit")
+  .reduce((sum, e) => sum + e.amount, 0) // Integer sum
+
+const credits = entries
+  .filter(e => e.direction === "credit")
+  .reduce((sum, e) => sum + e.amount, 0) // Integer sum
+
+if (debits !== credits) {
+  throw new BadRequestError(
+    `Transaction entries must balance (debits=${debits} credits=${credits})`
+  )
+}
+
+// WRONG: Never use floating-point for financial calculations
+const debits = entries
+  .filter(e => e.direction === "debit")
+  .reduce((sum, e) => sum + parseFloat(e.amount), 0.0) // ❌ FORBIDDEN
+```
+
+### Migration Strategy
+
+**For existing decimal/numeric columns:**
+
+```sql
+-- Step 1: Add new integer column
+ALTER TABLE ledger_accounts 
+ADD COLUMN balance_amount_new INTEGER NOT NULL DEFAULT 0;
+
+-- Step 2: Migrate data (multiply by 10^exponent)
+UPDATE ledger_accounts la
+SET balance_amount_new = ROUND(la.balance_amount * POWER(10, l.currency_exponent))
+FROM ledgers l
+WHERE la.ledger_id = l.id;
+
+-- Step 3: Drop old column and rename
+ALTER TABLE ledger_accounts DROP COLUMN balance_amount;
+ALTER TABLE ledger_accounts RENAME COLUMN balance_amount_new TO balance_amount;
+```
+
+### Validation Requirements
+
+**All repository methods MUST:**
+- Store amounts as integers (never convert to float/decimal in queries)
+- Use integer arithmetic for all balance calculations
+- Return integer values to entity layer for transformation
+- Enforce positive amounts using database constraints
+
+**All entity methods MUST:**
+- Accept monetary input as strings (e.g., `"12.34"`)
+- Convert to integer minor units for storage
+- Convert from integer minor units to string for display
+- Reference currency exponent from ledger configuration
+
 ## Component Design
 
 ### Repository Layer Architecture

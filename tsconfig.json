@@ -8,6 +8,7 @@
 		"paths": {
 			"@/*": ["./src/*"]
 		},
+		"types": ["vitest/globals"],
 		"strict": true,
 		"skipLibCheck": true
 	}

@@ -9,7 +9,7 @@ import type {
 	PendingBalance,
 	PostedBalance,
 } from "@/routes/ledgers/schema";
-import type { LedgerAccountID, LedgerID } from "./types";
+import type { LedgerAccountID, LedgerID, OrgID } from "./types";
 
 // Infer types from Drizzle schema
 type LedgerAccountRecord = InferSelectModel<typeof LedgerAccountsTable>;
@@ -33,6 +33,7 @@ interface BalanceData {
 
 interface LedgerAccountEntityOptions {
 	id: LedgerAccountID;
+	organizationId: OrgID;
 	ledgerId: LedgerID;
 	name: string;
 	description?: string;
@@ -48,6 +49,7 @@ interface LedgerAccountEntityOptions {
 
 class LedgerAccountEntity {
 	public readonly id: LedgerAccountID;
+	public readonly organizationId: OrgID;
 	public readonly ledgerId: LedgerID;
 	public readonly name: string;
 	public readonly description?: string;
@@ -61,6 +63,7 @@ class LedgerAccountEntity {
 
 	constructor(options: LedgerAccountEntityOptions) {
 		this.id = options.id;
+		this.organizationId = options.organizationId;
 		this.ledgerId = options.ledgerId;
 		this.name = options.name;
 		this.description = options.description;
@@ -73,9 +76,9 @@ class LedgerAccountEntity {
 		this.balanceData = options.balanceData;
 	}
 
-	// Create entity from API request - requires ledgerId and normalBalance to be set by service
 	public static fromRequest(
 		rq: LedgerAccountRequest,
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		normalBalance: NormalBalance,
 		id?: string
@@ -83,6 +86,7 @@ class LedgerAccountEntity {
 		const now = new Date();
 		return new LedgerAccountEntity({
 			id: id ? TypeID.fromString<"lat">(id) : new TypeID("lat"),
+			organizationId,
 			ledgerId,
 			name: rq.name,
 			description: rq.description,
@@ -95,10 +99,10 @@ class LedgerAccountEntity {
 		});
 	}
 
-	// Create entity from database record
 	public static fromRecord(record: LedgerAccountRecord): LedgerAccountEntity {
 		return new LedgerAccountEntity({
 			id: TypeID.fromString<"lat">(record.id),
+			organizationId: TypeID.fromString<"org">(record.organizationId),
 			ledgerId: TypeID.fromString<"lgr">(record.ledgerId),
 			name: record.name,
 			description: record.description ?? undefined,
@@ -111,7 +115,6 @@ class LedgerAccountEntity {
 		});
 	}
 
-	// Create entity from database record with balance calculations
 	public static fromRecordWithBalances(
 		record: LedgerAccountRecord,
 		balanceData: BalanceData
@@ -123,23 +126,21 @@ class LedgerAccountEntity {
 		});
 	}
 
-	// Convert entity to database record for insert/update
 	public toRecord(): LedgerAccountInsert {
 		return {
 			id: this.id.toString(),
+			organizationId: this.organizationId.toString(),
 			ledgerId: this.ledgerId.toString(),
 			name: this.name,
 			description: this.description ?? undefined,
 			normalBalance: this.normalBalance,
 			balanceAmount: this.balanceAmount,
-			lockVersion: this.lockVersion,
+			lockVersion: this.lockVersion + 1,
 			metadata: this.metadata,
-			created: this.created,
-			updated: this.updated,
+			updated: new Date(),
 		};
 	}
 
-	// Convert entity to API response - requires balance data
 	public toResponse(): LedgerAccountResponse {
 		if (!this.balanceData) {
 			throw new Error("Balance data required for response conversion. Use fromRecordWithBalances()");

@@ -57,6 +57,9 @@ const LedgerAccountsTable = pgTable(
 	"ledger_accounts",
 	{
 		id: text("id").primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => OrganizationsTable.id),
 		ledgerId: text("ledger_id")
 			.notNull()
 			.references(() => LedgersTable.id),

@@ -1,5 +1,5 @@
 import { Type } from "@sinclair/typebox";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { TypeID } from "typeid-js";
 import {
 	BadRequestErrorResponse,
@@ -45,6 +45,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			preHandler: server.hasPermissions(["ledger:read"]) as any,
 		},
 		async (rq: ListLedgersRequest): Promise<LedgerResponse[]> => {
 			const ledgers = await rq.server.services.ledgerService.listLedgers(
@@ -76,6 +77,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			preHandler: server.hasPermissions(["ledger:read"]) as any,
 		},
 		async (rq: GetLedgerRequest): Promise<LedgerResponse> => {
 			const orgId = rq.token.orgId;
@@ -105,6 +107,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			preHandler: server.hasPermissions(["ledger:write"]) as any,
 		},
 		async (rq: CreateLedgerRequest): Promise<LedgerResponse> => {
 			const ledger = await rq.server.services.ledgerService.createLedger(
@@ -137,6 +140,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			preHandler: server.hasPermissions(["ledger:write"]) as any,
 		},
 		async (rq: UpdateLedgerRequest): Promise<LedgerResponse> => {
 			const org = await rq.server.services.ledgerService.updateLedger(
@@ -168,6 +172,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			preHandler: server.hasPermissions(["ledger:delete"]) as any,
 		},
 		async (rq: DeleteLedgerRequest): Promise<void> => {
 			const orgId = rq.token.orgId;

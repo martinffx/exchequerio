@@ -6,19 +6,7 @@ import { LedgerRepo } from "./LedgerRepo";
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
 import { OrganizationRepo } from "./OrganizationRepo";
 import * as schema from "./schema";
-import type { DrizzleDB } from "./types";
-
-type Repos = {
-	organizationRepo: OrganizationRepo;
-	ledgerRepo: LedgerRepo;
-	ledgerAccountRepo: LedgerAccountRepo;
-	ledgerTransactionRepo: LedgerTransactionRepo;
-};
-
-type RepoPluginOptions = {
-	db?: DrizzleDB;
-	repos?: Partial<Repos>;
-};
+import type { RepoPluginOptions, Repos } from "./types";
 
 declare module "fastify" {
 	interface FastifyInstance {
@@ -43,4 +31,4 @@ const RepoPlugin: FastifyPluginAsync<RepoPluginOptions> = fp(
 	}
 );
 
-export { RepoPlugin, type RepoPluginOptions };
+export { RepoPlugin };

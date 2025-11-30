@@ -1,1 +1,2 @@
-CREATE DATABASE ledger_test;
+CREATE DATABASE exchequer;
+CREATE DATABASE exchequer_test;

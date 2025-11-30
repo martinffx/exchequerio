@@ -21,7 +21,7 @@ describe("OrganizationService", () => {
 	});
 
 	afterEach(() => {
-		jest.resetAllMocks();
+		vi.resetAllMocks();
 	});
 
 	it("should list and paginate organizations ", async () => {

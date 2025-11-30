@@ -75,6 +75,8 @@ class LedgerTransactionService {
 
 	// Settlement workflow for PSP operations (US2: Accurate settlement processing)
 	public async createSettlement(
+		organizationId: string,
+		ledgerId: string,
 		settledAccountId: string,
 		contraAccountId: string,
 		amount: string,
@@ -96,8 +98,8 @@ class LedgerTransactionService {
 		const entries = [settledAccount, contraAccount];
 
 		return this.createTransactionWithEntries({
-			organizationId: "default", // TODO: Get from context
-			ledgerId: "default", // TODO: Get from context
+			organizationId,
+			ledgerId,
 			description: description ?? `Settlement: ${settledAccountId} -> ${contraAccountId}`,
 			entries,
 		});

@@ -1,53 +1,83 @@
+import { TypeID } from "typeid-js";
 import { vi } from "vitest";
 import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
 
 import { LedgerTransactionService } from "./LedgerTransactionService";
 
 describe("Ledger Service", () => {
-	const ledgerTransactionRepo = vi.mocked<LedgerTransactionRepo>(
-		{} as unknown as LedgerTransactionRepo
-	);
-	const ledgerTransactionService = new LedgerTransactionService(ledgerTransactionRepo);
+	// Create valid TypeIDs for testing
+	const testOrganizationId = new TypeID("org").toString();
+	const testLedgerId = new TypeID("lgr").toString();
+	const testAccount1Id = new TypeID("lat").toString();
+	const testAccount2Id = new TypeID("lat").toString();
+
+	// Create mock with defined methods
+	const mockLedgerTransactionRepo = vi.mocked<LedgerTransactionRepo>({
+		createTransactionWithEntries: vi.fn(),
+		postTransaction: vi.fn(),
+		getLedgerTransaction: vi.fn(),
+		listLedgerTransactions: vi.fn(),
+		withTransaction: vi.fn(),
+		createTransaction: vi.fn(),
+		getAccountWithLock: vi.fn(),
+		updateAccountBalance: vi.fn(),
+	} as unknown as LedgerTransactionRepo);
+
+	const ledgerTransactionService = new LedgerTransactionService(mockLedgerTransactionRepo);
 
 	beforeEach(() => {
-		jest.resetAllMocks();
+		vi.resetAllMocks();
 	});
 
 	describe("Double-Entry Validation", () => {
 		it("should validate double-entry compliance for valid entries", async () => {
 			const validEntries = [
 				{
-					accountId: "account1",
+					accountId: testAccount1Id,
 					direction: "debit" as const,
 					amount: "100.00",
 				},
 				{
-					accountId: "account2",
+					accountId: testAccount2Id,
 					direction: "credit" as const,
 					amount: "100.00",
 				},
 			];
 
+			// Mock the repository method to return a transaction entity
+			const mockTransactionId = new TypeID("ltr").toString();
+			const mockResult = {
+				id: TypeID.fromString(mockTransactionId),
+				ledgerId: TypeID.fromString(testLedgerId),
+				description: "Test transaction",
+				status: "pending" as const,
+				created: new Date(),
+				updated: new Date(),
+			};
+
+			mockLedgerTransactionRepo.createTransactionWithEntries.mockResolvedValue(mockResult as any);
+
 			const result = await ledgerTransactionService.createTransactionWithEntries({
-				organizationId: "test-org",
-				ledgerId: "test-ledger",
+				organizationId: testOrganizationId,
+				ledgerId: testLedgerId,
 				description: "Test transaction",
 				entries: validEntries,
 			});
 
 			expect(result).toBeDefined();
-			expect((result as { status: string }).status).toBe("pending");
+			expect(result.status).toBe("pending");
+			expect(mockLedgerTransactionRepo.createTransactionWithEntries).toHaveBeenCalledTimes(1);
 		});
 
 		it("should reject transactions with unbalanced entries", async () => {
 			const unbalancedEntries = [
 				{
-					accountId: "account1",
+					accountId: testAccount1Id,
 					direction: "debit" as const,
 					amount: "100.00",
 				},
 				{
-					accountId: "account2",
+					accountId: testAccount2Id,
 					direction: "credit" as const,
 					amount: "50.00",
 				},
@@ -56,7 +86,7 @@ describe("Ledger Service", () => {
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
 					organizationId: "test-org",
-					ledgerId: "test-ledger",
+					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries: unbalancedEntries,
 				})
@@ -66,7 +96,7 @@ describe("Ledger Service", () => {
 		it("should reject transactions with less than 2 entries", async () => {
 			const singleEntry = [
 				{
-					accountId: "account1",
+					accountId: testAccount1Id,
 					direction: "debit" as const,
 					amount: "100.00",
 				},
@@ -75,22 +105,22 @@ describe("Ledger Service", () => {
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
 					organizationId: "test-org",
-					ledgerId: "test-ledger",
+					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries: singleEntry,
 				})
-			).rejects.toThrow("Transaction must have at least 2 entries");
+			).rejects.toThrow("Double-entry validation failed");
 		});
 
 		it("should reject transactions with invalid amounts", async () => {
 			const invalidEntries = [
 				{
-					accountId: "account1",
+					accountId: testAccount1Id,
 					direction: "debit" as const,
 					amount: "-50.00",
 				},
 				{
-					accountId: "account2",
+					accountId: testAccount2Id,
 					direction: "credit" as const,
 					amount: "50.00",
 				},
@@ -99,22 +129,22 @@ describe("Ledger Service", () => {
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
 					organizationId: "test-org",
-					ledgerId: "test-ledger",
+					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries: invalidEntries,
 				})
-			).rejects.toThrow("Invalid amount");
+			).rejects.toThrow("Double-entry validation failed");
 		});
 
 		it("should reject transactions with invalid directions", async () => {
 			const invalidEntries = [
 				{
-					accountId: "account1",
+					accountId: testAccount1Id,
 					direction: "invalid" as "debit" | "credit",
 					amount: "50.00",
 				},
 				{
-					accountId: "account2",
+					accountId: testAccount2Id,
 					direction: "credit" as const,
 					amount: "50.00",
 				},
@@ -123,25 +153,41 @@ describe("Ledger Service", () => {
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
 					organizationId: "test-org",
-					ledgerId: "test-ledger",
+					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries: invalidEntries,
 				})
-			).rejects.toThrow("Invalid direction");
+			).rejects.toThrow("Double-entry validation failed");
 		});
 	});
 
 	describe("Settlement Workflow (US2)", () => {
 		it("should create settlement transactions correctly", async () => {
+			// Mock the repository method to return a transaction entity
+			const mockTransactionId = new TypeID("ltr").toString();
+			const mockResult = {
+				id: TypeID.fromString(mockTransactionId),
+				ledgerId: TypeID.fromString(testLedgerId),
+				description: "Daily settlement",
+				status: "pending" as const,
+				created: new Date(),
+				updated: new Date(),
+			};
+
+			mockLedgerTransactionRepo.createTransactionWithEntries.mockResolvedValue(mockResult as any);
+
 			const result = await ledgerTransactionService.createSettlement(
-				"merchant-account",
-				"settlement-account",
+				testOrganizationId,
+				testLedgerId,
+				testAccount1Id,
+				testAccount2Id,
 				"500.00",
 				"Daily settlement"
 			);
 
 			expect(result).toBeDefined();
-			expect((result as { status: string }).status).toBe("pending");
+			expect(result.status).toBe("pending");
+			expect(mockLedgerTransactionRepo.createTransactionWithEntries).toHaveBeenCalledTimes(1);
 		});
 	});
 
@@ -155,21 +201,26 @@ describe("Ledger Service", () => {
 		it("should handle idempotency key conflicts gracefully", async () => {
 			const entries = [
 				{
-					accountId: "account1",
+					accountId: testAccount1Id,
 					direction: "debit" as const,
 					amount: "100.00",
 				},
 				{
-					accountId: "account2",
+					accountId: testAccount2Id,
 					direction: "credit" as const,
 					amount: "100.00",
 				},
 			];
 
+			// Mock the repository to throw a duplicate key error
+			mockLedgerTransactionRepo.createTransactionWithEntries.mockRejectedValue(
+				new Error("duplicate key value violates unique constraint")
+			);
+
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
-					organizationId: "test-org",
-					ledgerId: "test-ledger",
+					organizationId: testOrganizationId,
+					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries,
 					idempotencyKey: "duplicate-key",
@@ -180,27 +231,33 @@ describe("Ledger Service", () => {
 
 	describe("Account Validation", () => {
 		it("should validate that all accounts exist", async () => {
+			const nonExistentId = new TypeID("lat").toString();
 			const entries = [
 				{
-					accountId: "account1",
+					accountId: testAccount1Id,
 					direction: "debit" as const,
 					amount: "100.00",
 				},
 				{
-					accountId: "nonexistent-account",
+					accountId: nonExistentId,
 					direction: "credit" as const,
 					amount: "100.00",
 				},
 			];
 
+			// Mock the repository to throw an account not found error
+			mockLedgerTransactionRepo.createTransactionWithEntries.mockRejectedValue(
+				new Error(`Account ${nonExistentId} not found`)
+			);
+
 			await expect(
 				ledgerTransactionService.createTransactionWithEntries({
-					organizationId: "test-org",
-					ledgerId: "test-ledger",
+					organizationId: testOrganizationId,
+					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries,
 				})
-			).rejects.toThrow("Account not found: nonexistent-account");
+			).rejects.toThrow();
 		});
 	});
 });

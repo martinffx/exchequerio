@@ -39,7 +39,7 @@ class OrganizationEntity {
 			throw new Error(`Invalid updated date: ${updated.toString()}`);
 		}
 
-		const orgId = TypeID.fromUUID("org", row.id);
+		const orgId = TypeID.fromString<"org">(row.id);
 		return new OrganizationEntity({
 			id: orgId,
 			name: row.name,

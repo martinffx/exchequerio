@@ -148,7 +148,7 @@ type AlertCondition = Static<typeof AlertCondition>;
  */
 const LedgerId = Type.String({
 	description: "The ledger's ID",
-	pattern: "^lgr_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+	pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 type LedgerId = Static<typeof LedgerId>;
 const LedgerIdParameters = Type.Object({
@@ -193,7 +193,7 @@ type DeleteLedgerRequest = FastifyRequest<{ Params: LedgerIdParameters }>;
  */
 const LedgerAccountId = Type.String({
 	description: "The ledger account's ID",
-	pattern: "^lat_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+	pattern: "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 type LedgerAccountId = Static<typeof LedgerAccountId>;
 const LedgerAccountIdParameters = Type.Object({
@@ -257,7 +257,7 @@ type DeleteLedgerAccountRequest = FastifyRequest<{
  */
 const LedgerAccountCategoryId = Type.String({
 	description: "Unique identifier for the ledger account category.",
-	pattern: "^lac_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+	pattern: "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 type LedgerAccountCategoryId = Static<typeof LedgerAccountCategoryId>;
 const LedgerAccountCategoryIdParameters = Type.Object({
@@ -364,7 +364,7 @@ type UnlinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
  */
 const LedgerTransactionEntryId = Type.String({
 	description: "Unique identifier for the ledger transaction entry.",
-	pattern: "^lte_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+	pattern: "^lte_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 type LedgerTransactionEntryId = Static<typeof LedgerTransactionEntryId>;
 const LedgerTransactionEntryIdParameters = Type.Object({
@@ -445,7 +445,7 @@ type UpdateLedgerTransactionEntryRequest = FastifyRequest<{
  */
 const LedgerTransactionId = Type.String({
 	description: "Unique identifier for the ledger transaction.",
-	pattern: "^ltr_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+	pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 type LedgerTransactionId = Static<typeof LedgerTransactionId>;
 const LedgerTransactionIdParameters = Type.Object({
@@ -549,7 +549,7 @@ type DeleteLedgerTransactionRequest = FastifyRequest<{
  */
 const LedgerAccountSettlementId = Type.String({
 	description: "Unique identifier for the ledger account settlement.",
-	pattern: "^las_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+	pattern: "^las_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 type LedgerAccountSettlementId = Static<typeof LedgerAccountSettlementId>;
 const LedgerAccountSettlementIdParameters = Type.Object({
@@ -657,7 +657,7 @@ type RemoveLedgerAccountSettlementEntryRequest = FastifyRequest<{
  */
 const LedgerAccountStatementId = Type.String({
 	description: "The ledger account statement ID",
-	pattern: "^lst_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+	pattern: "^lst_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 type LedgerAccountStatementId = Static<typeof LedgerAccountStatementId>;
 const LedgerAccountStatementIdParameters = Type.Object({
@@ -744,7 +744,7 @@ type CreateLedgerAccountStatementRequest = FastifyRequest<{
  */
 const LedgerAccountBalanceMonitorId = Type.String({
 	description: "Unique identifier for the ledger account balance monitor.",
-	pattern: "^lbm_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+	pattern: "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 type LedgerAccountBalanceMonitorId = Static<typeof LedgerAccountBalanceMonitorId>;
 const LedgerAccountBalanceMonitorIdParameters = Type.Object({

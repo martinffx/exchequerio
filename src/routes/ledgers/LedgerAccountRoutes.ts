@@ -118,7 +118,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			// TODO: Get orgId from request context or auth
 			const orgId = TypeID.fromString<"org">("placeholder");
 			const ledgerId = TypeID.fromString<"lgr">("placeholder");
-			const entity = LedgerAccountEntity.fromRequest(rq.body, ledgerId, "debit");
+			const entity = LedgerAccountEntity.fromRequest(rq.body, orgId, ledgerId, "debit");
 			const ledger = await rq.server.services.ledgerAccountService.createLedgerAccount(orgId, entity);
 			return ledger.toResponse();
 		}
@@ -153,6 +153,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			const ledgerId = TypeID.fromString<"lgr">("placeholder");
 			const entity = LedgerAccountEntity.fromRequest(
 				rq.body,
+				orgId,
 				ledgerId,
 				"debit", // Default normal balance - should come from existing account
 				rq.params.ledgerAccountId

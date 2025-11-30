@@ -34,11 +34,11 @@ run = "bun run test"
 # Code Quality Tasks
 [tasks.lint_fast]
 description = "Fast linting with Biome only (formatting + syntax)"
-run = "bun run lint_fast"
+run = "bun run lint:fix"
 
 [tasks.lint_slow]
 description = "Slow linting with ESLint only (type-aware + boundaries + unicorn)"
-run = "bun run lint_slow"
+run = "bun run lint:slow"
 
 [tasks.lint]
 description = "Complete linting with Biome + ESLint"

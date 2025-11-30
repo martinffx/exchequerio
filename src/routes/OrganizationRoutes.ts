@@ -106,7 +106,9 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: void server.hasPermissions(["my:organization:write", "organization:write"]),
+			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]) as (
+				request: FastifyRequest
+			) => void,
 		},
 		async (rq: CreateOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await server.services.organizationService.createOrganization(
@@ -172,7 +174,9 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: void server.hasPermissions(["my:organization:delete", "organization:delete"]),
+			preHandler: server.hasPermissions(["my:organization:delete", "organization:delete"]) as (
+				request: FastifyRequest
+			) => void,
 		},
 		async (rq: DeleteOrganizationRequest): Promise<void> => {
 			await rq.server.services.organizationService.deleteOrganization(rq.params.orgId);

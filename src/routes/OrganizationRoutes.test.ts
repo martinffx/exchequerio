@@ -58,7 +58,7 @@ describe("OrganizationRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual([mockOrg.toResponse()]);
-			expect(mockOrganizationService.listOrganizations).toHaveBeenCalledWith();
+			expect(mockOrganizationService.listOrganizations).toHaveBeenCalledWith(0, 20);
 		});
 
 		it("should return a list of organizations with pagination", async () => {
@@ -140,7 +140,7 @@ describe("OrganizationRoutes", () => {
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
 			expect(response.detail).toEqual(
-				"One of: my:organization:read,organization:read; permissions is required"
+				"One of: my:organization:read, organization:read; permissions is required"
 			);
 		});
 	});
@@ -270,14 +270,14 @@ describe("OrganizationRoutes", () => {
 		});
 
 		it("should handle forbidden request error", async () => {
-			const orgAdmin = signJWT({
+			const orgReadonly = signJWT({
 				sub: mockOrg.id.toString(),
-				scope: ["org_admin"],
+				scope: ["org_readonly"],
 			});
 			const rs = await server.inject({
 				method: "POST",
 				headers: {
-					Authorization: `Bearer ${orgAdmin}`,
+					Authorization: `Bearer ${orgReadonly}`,
 				},
 				url: "/api/organizations",
 				payload: {
@@ -288,7 +288,7 @@ describe("OrganizationRoutes", () => {
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
 			expect(response.detail).toEqual(
-				"One of: my:organization:write,organization:write; permissions is required"
+				"One of: my:organization:write, organization:write; permissions is required"
 			);
 		});
 
@@ -408,7 +408,7 @@ describe("OrganizationRoutes", () => {
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
 			expect(response.detail).toEqual(
-				"One of: my:organization:write,organization:write; permissions is required"
+				"One of: my:organization:write, organization:write; permissions is required"
 			);
 		});
 
@@ -535,7 +535,7 @@ describe("OrganizationRoutes", () => {
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
 			expect(response.detail).toEqual(
-				"One of: my:organization:delete,organization:delete; permissions is required"
+				"One of: my:organization:delete, organization:delete; permissions is required"
 			);
 		});
 

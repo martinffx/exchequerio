@@ -4,11 +4,6 @@ import { LedgerEntity } from "@/services";
 import { LedgerAccountsTable, LedgersTable } from "./schema";
 import type { DrizzleDB } from "./types";
 
-// TODO: Transaction operations moved to LedgerTransactionRepo
-// TODO: Account balance operations moved to LedgerAccountRepo
-// TODO: Use LedgerTransactionRepo for createTransactionWithEntries() and postTransaction()
-// TODO: Use LedgerAccountRepo for getAccountBalance() and getAccountBalances()
-
 class LedgerRepo {
 	constructor(private readonly db: DrizzleDB) {}
 
@@ -48,14 +43,10 @@ class LedgerRepo {
 
 	public async updateLedger(orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
 		const record = entity.toRecord();
-		const now = new Date();
 
 		const updateResult = await this.db
 			.update(LedgersTable)
-			.set({
-				...record,
-				updated: now,
-			})
+			.set(entity.toRecord())
 			.where(
 				and(
 					eq(LedgersTable.id, entity.id.toString()),

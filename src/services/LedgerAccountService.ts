@@ -39,8 +39,7 @@ class LedgerAccountService {
 		orgId: OrgID,
 		entity: LedgerAccountEntity
 	): Promise<LedgerAccountEntity> {
-		await this.ledgerRepo.getLedger(orgId, entity.ledgerId); // Verify ledger exists
-		return this.ledgerAccountRepo.createLedgerAccount(orgId.toString(), entity);
+		return this.ledgerAccountRepo.upsertLedgerAccount(entity);
 	}
 
 	public async updateLedgerAccount(
@@ -48,7 +47,7 @@ class LedgerAccountService {
 		ledgerId: LedgerID,
 		entity: LedgerAccountEntity
 	): Promise<LedgerAccountEntity> {
-		return this.ledgerAccountRepo.updateLedgerAccount(orgId.toString(), ledgerId, entity);
+		return this.ledgerAccountRepo.upsertLedgerAccount(entity);
 	}
 
 	public async deleteLedgerAccount(
