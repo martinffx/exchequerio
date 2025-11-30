@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1733068800000,
-      "tag": "0002_init_balance_columns",
+      "when": 1764514476255,
+      "tag": "0003_absurd_nicolaos",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1764514803172,
+      "tag": "0004_milky_boom_boom",
       "breakpoints": true
     }
   ]

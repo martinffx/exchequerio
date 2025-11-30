@@ -84,6 +84,14 @@ const LedgerAccountsTable = pgTable(
 	},
 	table => ({
 		uniqueNamePerLedger: uniqueIndex("unique_account_name_per_ledger").on(table.ledgerId, table.name),
+		postedBalanceIdx: index("idx_ledger_accounts_posted_balance").on(
+			table.ledgerId,
+			table.postedAmount
+		),
+		availableBalanceIdx: index("idx_ledger_accounts_available_balance").on(
+			table.ledgerId,
+			table.availableAmount
+		),
 	})
 );
 
@@ -120,7 +128,7 @@ const LedgerTransactionEntriesTable = pgTable(
 			.notNull()
 			.references(() => LedgerAccountsTable.id),
 		direction: ledgerEntryDirection("direction").notNull(),
-		amount: numeric("amount", { precision: 20, scale: 4 }).notNull(),
+		amount: bigint("amount", { mode: "number" }).notNull(), // Integer minor units
 		status: ledgerTransactionStatus("status").notNull().default("pending"),
 		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),

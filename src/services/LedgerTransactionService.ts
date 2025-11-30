@@ -47,7 +47,7 @@ class LedgerTransactionService {
 			// Create entry entities
 			const entryEntities = transactionEntity.entries ?? [];
 
-			const result = await this.ledgerTransactionRepo.createTransactionWithEntries(
+			const result = await this.ledgerTransactionRepo.createTransaction(
 				input.organizationId,
 				transactionEntity,
 				entryEntities

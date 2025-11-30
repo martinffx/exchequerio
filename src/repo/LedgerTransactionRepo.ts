@@ -13,13 +13,6 @@ class LedgerTransactionRepo {
 	constructor(private readonly db: DrizzleDB) {}
 
 	/**
-	 * Database transaction wrapper for ACID operations
-	 */
-	public async withTransaction<T>(function_: (tx: DrizzleDB) => Promise<T>): Promise<T> {
-		return await this.db.transaction(function_);
-	}
-
-	/**
 	 * Get a single transaction with organization tenancy validation
 	 */
 	public async getLedgerTransaction(
@@ -75,15 +68,16 @@ class LedgerTransactionRepo {
 	}
 
 	/**
-	 * Create transaction with entries using entity transformation pattern
+	 * Create transaction with entries and update account balances atomically.
+	 * Uses optimistic locking and upserts for idempotency.
 	 */
-	public async createTransactionWithEntries(
+	public async createTransaction(
 		organizationId: string,
 		transactionEntity: LedgerTransactionEntity,
 		entryEntities: LedgerTransactionEntryEntity[]
 	): Promise<LedgerTransactionEntity> {
-		return await this.withTransaction(async tx => {
-			// 1. Validate ledger belongs to organization
+		return await this.db.transaction(async tx => {
+			// 1. Validate ledger belongs to organization and get currency info
 			const ledgerValidation = await tx
 				.select()
 				.from(LedgersTable)
@@ -106,25 +100,29 @@ class LedgerTransactionRepo {
 			let totalCredits = 0;
 
 			for (const entry of entryEntities) {
-				const amount = Number.parseFloat(entry.amount);
+				// Amount is already integer minor units
 				if (entry.direction === "debit") {
-					totalDebits += amount;
+					totalDebits += entry.amount;
 				} else {
-					totalCredits += amount;
+					totalCredits += entry.amount;
 				}
 			}
 
-			if (Math.abs(totalDebits - totalCredits) > 0.0001) {
+			if (totalDebits !== totalCredits) {
 				throw new ConflictError(
 					"Double-entry validation failed: total debits must equal total credits"
 				);
 			}
 
-			// 3. Create the transaction record
+			// 3. Upsert the transaction record
 			const transactionRecord = transactionEntity.toRecord();
 			const transactionResult = await tx
 				.insert(LedgerTransactionsTable)
 				.values(transactionRecord)
+				.onConflictDoUpdate({
+					target: LedgerTransactionsTable.id,
+					set: { updated: new Date() },
+				})
 				.returning();
 
 			const createdTransaction = transactionResult[0];
@@ -132,134 +130,87 @@ class LedgerTransactionRepo {
 			// 4. Create entries and update account balances atomically
 			for (const entryEntity of entryEntities) {
 				// Lock account for update to prevent race conditions
-				const account = await this.getAccountWithLockInternal(entryEntity.accountId.toString(), tx);
+				const accounts = await tx
+					.select()
+					.from(LedgerAccountsTable)
+					.where(eq(LedgerAccountsTable.id, entryEntity.accountId.toString()))
+					.for("update");
 
-				// Calculate new balance based on normal balance and entry direction
-				const currentBalance = Number.parseFloat(account.balanceAmount);
-				const entryAmount = Number.parseFloat(entryEntity.amount);
-				let newBalance: number;
+				if (accounts.length === 0) {
+					throw new NotFoundError(`Account not found: ${entryEntity.accountId.toString()}`);
+				}
+
+				const account = accounts[0];
+
+				// Entry amount is already integer minor units - use directly
+				const entryAmountMinor = entryEntity.amount;
+
+				// Calculate new balance using integer arithmetic
+				let newPostedAmount = account.postedAmount;
+				let newPostedCredits = account.postedCredits;
+				let newPostedDebits = account.postedDebits;
 
 				// Apply double-entry accounting rules
 				if (account.normalBalance === "debit") {
-					newBalance =
-						entryEntity.direction === "debit"
-							? currentBalance + entryAmount
-							: currentBalance - entryAmount;
+					if (entryEntity.direction === "debit") {
+						newPostedAmount += entryAmountMinor;
+						newPostedDebits += entryAmountMinor;
+					} else {
+						newPostedAmount -= entryAmountMinor;
+						newPostedCredits += entryAmountMinor;
+					}
 				} else {
 					// credit normal balance
-					newBalance =
-						entryEntity.direction === "credit"
-							? currentBalance + entryAmount
-							: currentBalance - entryAmount;
+					if (entryEntity.direction === "credit") {
+						newPostedAmount += entryAmountMinor;
+						newPostedCredits += entryAmountMinor;
+					} else {
+						newPostedAmount -= entryAmountMinor;
+						newPostedDebits += entryAmountMinor;
+					}
 				}
 
 				// Update account balance with optimistic locking
-				await this.updateAccountBalanceInternal(
-					entryEntity.accountId.toString(),
-					newBalance.toFixed(4),
-					account.lockVersion,
-					tx
-				);
+				const updateResult = await tx
+					.update(LedgerAccountsTable)
+					.set({
+						postedAmount: newPostedAmount,
+						postedCredits: newPostedCredits,
+						postedDebits: newPostedDebits,
+						availableAmount: newPostedAmount,
+						availableCredits: newPostedCredits,
+						availableDebits: newPostedDebits,
+						lockVersion: account.lockVersion + 1,
+						updated: new Date(),
+					})
+					.where(
+						and(
+							eq(LedgerAccountsTable.id, entryEntity.accountId.toString()),
+							eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+						)
+					)
+					.returning();
 
-				// Create transaction entry record
+				if (updateResult.length === 0) {
+					throw new ConflictError(
+						`Account ${entryEntity.accountId.toString()} was modified by another transaction`
+					);
+				}
+
+				// Upsert transaction entry record
 				const entryRecord = entryEntity.toRecord();
 				entryRecord.transactionId = createdTransaction.id;
-				await tx.insert(LedgerTransactionEntriesTable).values(entryRecord);
+				await tx
+					.insert(LedgerTransactionEntriesTable)
+					.values(entryRecord)
+					.onConflictDoUpdate({
+						target: LedgerTransactionEntriesTable.id,
+						set: { updated: new Date() },
+					});
 			}
 
 			// 5. Return the created transaction as entity
 			return LedgerTransactionEntity.fromRecord(createdTransaction);
-		});
-	}
-
-	/**
-	 * Get account with row-level lock for atomic operations
-	 */
-	private async getAccountWithLockInternal(accountId: string, tx: DrizzleDB) {
-		const accounts = await tx
-			.select()
-			.from(LedgerAccountsTable)
-			.where(eq(LedgerAccountsTable.id, accountId))
-			.for("update");
-
-		if (accounts.length === 0) {
-			throw new NotFoundError(`Account ${accountId} not found`);
-		}
-
-		return accounts[0];
-	}
-
-	/**
-	 * Update account balance with optimistic locking
-	 */
-	private async updateAccountBalanceInternal(
-		accountId: string,
-		balance: string,
-		expectedVersion: number,
-		tx: DrizzleDB
-	): Promise<void> {
-		const result = await tx
-			.update(LedgerAccountsTable)
-			.set({
-				balanceAmount: balance,
-				lockVersion: expectedVersion + 1,
-				updated: new Date(),
-			})
-			.where(
-				and(eq(LedgerAccountsTable.id, accountId), eq(LedgerAccountsTable.lockVersion, expectedVersion))
-			);
-
-		// Check if update was successful (optimistic lock check)
-		if (result.rowCount === 0) {
-			throw new ConflictError(
-				`Account ${accountId} was modified by another transaction (version mismatch)`
-			);
-		}
-	}
-
-	// Public method for creating transactions with callback (for test compatibility)
-	public async createTransaction<T>(callback: (tx: DrizzleDB) => Promise<T>): Promise<T> {
-		return await this.db.transaction(callback);
-	}
-
-	// Public wrapper for getAccountWithLock (for test compatibility)
-	public async getAccountWithLock(accountId: string): Promise<Record<string, unknown>> {
-		return await this.withTransaction(async tx => {
-			return await this.getAccountWithLockInternal(accountId, tx);
-		});
-	}
-
-	// Public wrapper for updateAccountBalance (for test compatibility)
-	public async updateAccountBalance(
-		accountId: string,
-		amount: string,
-		direction: "debit" | "credit"
-	): Promise<void> {
-		return await this.withTransaction(async tx => {
-			// Get current account state
-			const account = await this.getAccountWithLockInternal(accountId, tx);
-
-			// Calculate new balance
-			const currentBalance = Number.parseFloat(account.balanceAmount);
-			const amountNumber = Number.parseFloat(amount);
-			let newBalance: number;
-
-			if (account.normalBalance === "debit") {
-				newBalance =
-					direction === "debit" ? currentBalance + amountNumber : currentBalance - amountNumber;
-			} else {
-				// credit normal balance
-				newBalance =
-					direction === "credit" ? currentBalance + amountNumber : currentBalance - amountNumber;
-			}
-
-			// Update the balance
-			await this.updateAccountBalanceInternal(
-				accountId,
-				newBalance.toFixed(4),
-				account.lockVersion,
-				tx
-			);
 		});
 	}
 
@@ -271,7 +222,7 @@ class LedgerTransactionRepo {
 		ledgerId: string,
 		transactionId: string
 	): Promise<LedgerTransactionEntity> {
-		return await this.withTransaction(async tx => {
+		return await this.db.transaction(async tx => {
 			// 1. Get the transaction with organization tenancy validation
 			const transactionRecords = await tx
 				.select()
@@ -326,7 +277,7 @@ class LedgerTransactionRepo {
 		ledgerId: string,
 		transactionId: string
 	): Promise<void> {
-		await this.withTransaction(async tx => {
+		await this.db.transaction(async tx => {
 			// Verify transaction belongs to this org/ledger
 			const transaction = await tx
 				.select()

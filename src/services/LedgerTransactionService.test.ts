@@ -13,7 +13,7 @@ describe("Ledger Service", () => {
 
 	// Create mock with defined methods
 	const mockLedgerTransactionRepo = vi.mocked<LedgerTransactionRepo>({
-		createTransactionWithEntries: vi.fn(),
+		createTransaction: vi.fn(),
 		postTransaction: vi.fn(),
 		getLedgerTransaction: vi.fn(),
 		listLedgerTransactions: vi.fn(),
@@ -55,9 +55,9 @@ describe("Ledger Service", () => {
 				updated: new Date(),
 			};
 
-			mockLedgerTransactionRepo.createTransactionWithEntries.mockResolvedValue(mockResult as any);
+			mockLedgerTransactionRepo.createTransaction.mockResolvedValue(mockResult as any);
 
-			const result = await ledgerTransactionService.createTransactionWithEntries({
+			const result = await ledgerTransactionService.createTransaction({
 				organizationId: testOrganizationId,
 				ledgerId: testLedgerId,
 				description: "Test transaction",
@@ -66,7 +66,7 @@ describe("Ledger Service", () => {
 
 			expect(result).toBeDefined();
 			expect(result.status).toBe("pending");
-			expect(mockLedgerTransactionRepo.createTransactionWithEntries).toHaveBeenCalledTimes(1);
+			expect(mockLedgerTransactionRepo.createTransaction).toHaveBeenCalledTimes(1);
 		});
 
 		it("should reject transactions with unbalanced entries", async () => {
@@ -84,7 +84,7 @@ describe("Ledger Service", () => {
 			];
 
 			await expect(
-				ledgerTransactionService.createTransactionWithEntries({
+				ledgerTransactionService.createTransaction({
 					organizationId: "test-org",
 					ledgerId: testLedgerId,
 					description: "Test transaction",
@@ -103,7 +103,7 @@ describe("Ledger Service", () => {
 			];
 
 			await expect(
-				ledgerTransactionService.createTransactionWithEntries({
+				ledgerTransactionService.createTransaction({
 					organizationId: "test-org",
 					ledgerId: testLedgerId,
 					description: "Test transaction",
@@ -127,7 +127,7 @@ describe("Ledger Service", () => {
 			];
 
 			await expect(
-				ledgerTransactionService.createTransactionWithEntries({
+				ledgerTransactionService.createTransaction({
 					organizationId: "test-org",
 					ledgerId: testLedgerId,
 					description: "Test transaction",
@@ -151,7 +151,7 @@ describe("Ledger Service", () => {
 			];
 
 			await expect(
-				ledgerTransactionService.createTransactionWithEntries({
+				ledgerTransactionService.createTransaction({
 					organizationId: "test-org",
 					ledgerId: testLedgerId,
 					description: "Test transaction",
@@ -174,7 +174,7 @@ describe("Ledger Service", () => {
 				updated: new Date(),
 			};
 
-			mockLedgerTransactionRepo.createTransactionWithEntries.mockResolvedValue(mockResult as any);
+			mockLedgerTransactionRepo.createTransaction.mockResolvedValue(mockResult as any);
 
 			const result = await ledgerTransactionService.createSettlement(
 				testOrganizationId,
@@ -187,7 +187,7 @@ describe("Ledger Service", () => {
 
 			expect(result).toBeDefined();
 			expect(result.status).toBe("pending");
-			expect(mockLedgerTransactionRepo.createTransactionWithEntries).toHaveBeenCalledTimes(1);
+			expect(mockLedgerTransactionRepo.createTransaction).toHaveBeenCalledTimes(1);
 		});
 	});
 
@@ -213,12 +213,12 @@ describe("Ledger Service", () => {
 			];
 
 			// Mock the repository to throw a duplicate key error
-			mockLedgerTransactionRepo.createTransactionWithEntries.mockRejectedValue(
+			mockLedgerTransactionRepo.createTransaction.mockRejectedValue(
 				new Error("duplicate key value violates unique constraint")
 			);
 
 			await expect(
-				ledgerTransactionService.createTransactionWithEntries({
+				ledgerTransactionService.createTransaction({
 					organizationId: testOrganizationId,
 					ledgerId: testLedgerId,
 					description: "Test transaction",
@@ -246,12 +246,12 @@ describe("Ledger Service", () => {
 			];
 
 			// Mock the repository to throw an account not found error
-			mockLedgerTransactionRepo.createTransactionWithEntries.mockRejectedValue(
+			mockLedgerTransactionRepo.createTransaction.mockRejectedValue(
 				new Error(`Account ${nonExistentId} not found`)
 			);
 
 			await expect(
-				ledgerTransactionService.createTransactionWithEntries({
+				ledgerTransactionService.createTransaction({
 					organizationId: testOrganizationId,
 					ledgerId: testLedgerId,
 					description: "Test transaction",

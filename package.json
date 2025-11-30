@@ -6,6 +6,8 @@
     "start": "dotenvx run -- bun ./src/index.ts",
     "dev": "dotenvx run -- bun --watch ./src/index.ts",
     "docker": "docker-compose up -d",
+    "db:gen": "drizzle-kit generate",
+    "db:migrate": "dotenvx run -- drizzle-kit migrate",
     "test": "dotenvx run -f .env.test -- vitest run",
     "test:watch": "dotenvx run -f .env.test -- vitest",
     "test:ci": "dotenvx run -f .env.test -- vitest run --coverage",

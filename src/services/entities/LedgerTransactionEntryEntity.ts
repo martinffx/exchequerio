@@ -30,7 +30,7 @@ interface LedgerTransactionEntryEntityOptions {
 	transactionId: LedgerTransactionID;
 	accountId: LedgerAccountID;
 	direction: Direction;
-	amount: string; // Stored as string for precision
+	amount: number; // Integer minor units (e.g., 10050 = $100.50 for USD)
 	status: BalanceStatus;
 	metadata?: Record<string, unknown>;
 	created: Date;
@@ -46,7 +46,7 @@ class LedgerTransactionEntryEntity {
 	public readonly transactionId: LedgerTransactionID;
 	public readonly accountId: LedgerAccountID;
 	public readonly direction: Direction;
-	public readonly amount: string;
+	public readonly amount: number; // Integer minor units
 	public readonly status: BalanceStatus;
 	public readonly metadata?: Record<string, unknown>;
 	public readonly created: Date;
@@ -76,7 +76,7 @@ class LedgerTransactionEntryEntity {
 		transactionId: LedgerTransactionID,
 		accountId: LedgerAccountID,
 		direction: Direction,
-		amount: string,
+		amount: number, // Integer minor units
 		id?: string
 	): LedgerTransactionEntryEntity {
 		const now = new Date();
@@ -94,14 +94,24 @@ class LedgerTransactionEntryEntity {
 
 	// Create entity from database record
 	public static fromRecord(record: LedgerTransactionEntryRecord): LedgerTransactionEntryEntity {
+		// Parse metadata from TEXT (JSON string) to object
+		let metadata: Record<string, unknown> | undefined;
+		if (record.metadata) {
+			try {
+				metadata = JSON.parse(record.metadata) as Record<string, unknown>;
+			} catch {
+				metadata = undefined;
+			}
+		}
+
 		return new LedgerTransactionEntryEntity({
 			id: TypeID.fromString<"lte">(record.id),
 			transactionId: TypeID.fromString<"ltr">(record.transactionId),
 			accountId: TypeID.fromString<"lat">(record.accountId),
 			direction: record.direction,
-			amount: record.amount,
+			amount: record.amount, // Already integer from DB
 			status: record.status,
-			metadata: record.metadata as Record<string, unknown> | undefined,
+			metadata,
 			created: record.created,
 			updated: record.updated,
 		});
@@ -130,9 +140,9 @@ class LedgerTransactionEntryEntity {
 			transactionId: this.transactionId.toString(),
 			accountId: this.accountId.toString(),
 			direction: this.direction,
-			amount: this.amount,
+			amount: this.amount, // Integer minor units
 			status: this.status,
-			metadata: this.metadata,
+			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
 			created: this.created,
 			updated: this.updated,
 		};
@@ -150,7 +160,7 @@ class LedgerTransactionEntryEntity {
 			id: this.id.toString(),
 			ledgerAccountId: this.accountId.toString(),
 			direction: this.direction,
-			amount: Number.parseFloat(this.amount), // Convert string to number for API
+			amount: this.amount, // Already a number (integer minor units)
 			currency: this.currency,
 			currencyExponent: this.currencyExponent,
 			resultingBalance: this.resultingBalance,
@@ -172,13 +182,12 @@ class LedgerTransactionEntryEntity {
 
 	// Helper method to validate entry amount is positive
 	public isValidAmount(): boolean {
-		const amount = Number.parseFloat(this.amount);
-		return !Number.isNaN(amount) && amount > 0;
+		return !Number.isNaN(this.amount) && this.amount > 0;
 	}
 
-	// Helper method to get amount as number
+	// Helper method to get amount as number (already a number)
 	public getAmountAsNumber(): number {
-		return Number.parseFloat(this.amount);
+		return this.amount;
 	}
 }
 
