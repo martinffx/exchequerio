@@ -15,6 +15,13 @@
       "when": 1764495958488,
       "tag": "0001_luxuriant_frog_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1733068800000,
+      "tag": "0002_init_balance_columns",
+      "breakpoints": true
     }
   ]
 }
