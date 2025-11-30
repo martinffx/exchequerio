@@ -1,5 +1,5 @@
 import { Type } from "@sinclair/typebox";
-import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyPluginAsync } from "fastify";
 import { TypeID } from "typeid-js";
 import {
 	BadRequestErrorResponse,

@@ -32,3 +32,4 @@ const RepoPlugin: FastifyPluginAsync<RepoPluginOptions> = fp(
 );
 
 export { RepoPlugin };
+export type { RepoPluginOptions, Repos } from "./types";

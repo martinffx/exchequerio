@@ -4,7 +4,6 @@ import {
 	check,
 	index,
 	integer,
-	jsonb,
 	numeric,
 	pgEnum,
 	pgTable,

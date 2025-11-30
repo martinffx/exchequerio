@@ -48,13 +48,19 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: ListLedgerAccountsRequest): Promise<LedgerAccountResponse[]> => {
+			// Fetch ledger to get currency info
+			const ledger = await rq.server.services.ledgerService.getLedger(
+				TypeID.fromString<"org">(rq.query.orgId),
+				TypeID.fromString<"lgr">(rq.query.ledgerId)
+			);
+
 			const accounts = await rq.server.services.ledgerAccountService.listLedgerAccounts(
 				TypeID.fromString<"org">(rq.query.orgId),
 				TypeID.fromString<"lgr">(rq.query.ledgerId),
 				rq.query.offset,
 				rq.query.limit
 			);
-			return accounts.map(account => account.toResponse());
+			return accounts.map(account => account.toResponse(ledger.currency, ledger.currencyExponent));
 		}
 	);
 
@@ -84,12 +90,16 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			// For now, using placeholder values - this needs to be fixed based on route structure
 			const orgId = TypeID.fromString<"org">("placeholder");
 			const ledgerId = TypeID.fromString<"lgr">("placeholder");
-			const ledger = await rq.server.services.ledgerAccountService.getLedgerAccount(
+
+			// Get ledger for currency info
+			const ledgerEntity = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
+
+			const account = await rq.server.services.ledgerAccountService.getLedgerAccount(
 				orgId,
 				ledgerId,
 				TypeID.fromString<"lat">(rq.params.ledgerAccountId)
 			);
-			return ledger.toResponse();
+			return account.toResponse(ledgerEntity.currency, ledgerEntity.currencyExponent);
 		}
 	);
 
@@ -118,9 +128,13 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			// TODO: Get orgId from request context or auth
 			const orgId = TypeID.fromString<"org">("placeholder");
 			const ledgerId = TypeID.fromString<"lgr">("placeholder");
+
+			// Get ledger for currency info
+			const ledgerEntity = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
+
 			const entity = LedgerAccountEntity.fromRequest(rq.body, orgId, ledgerId, "debit");
-			const ledger = await rq.server.services.ledgerAccountService.createLedgerAccount(orgId, entity);
-			return ledger.toResponse();
+			const account = await rq.server.services.ledgerAccountService.createLedgerAccount(orgId, entity);
+			return account.toResponse(ledgerEntity.currency, ledgerEntity.currencyExponent);
 		}
 	);
 
@@ -151,6 +165,10 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			// TODO: Get orgId and ledgerId from request context
 			const orgId = TypeID.fromString<"org">("placeholder");
 			const ledgerId = TypeID.fromString<"lgr">("placeholder");
+
+			// Get ledger for currency info
+			const ledgerEntity = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
+
 			const entity = LedgerAccountEntity.fromRequest(
 				rq.body,
 				orgId,
@@ -158,12 +176,12 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 				"debit", // Default normal balance - should come from existing account
 				rq.params.ledgerAccountId
 			);
-			const org = await rq.server.services.ledgerAccountService.updateLedgerAccount(
+			const account = await rq.server.services.ledgerAccountService.updateLedgerAccount(
 				orgId,
 				ledgerId,
 				entity
 			);
-			return org.toResponse();
+			return account.toResponse(ledgerEntity.currency, ledgerEntity.currencyExponent);
 		}
 	);
 

@@ -3,9 +3,15 @@ import { DateTime } from "luxon";
 import { Pool } from "pg";
 import { TypeID } from "typeid-js";
 import { Config } from "@/config";
-import { LedgerAccountEntity, LedgerEntity, OrganizationEntity } from "@/services/entities";
+import {
+	LedgerAccountEntity,
+	LedgerEntity,
+	LedgerTransactionEntity,
+	OrganizationEntity,
+} from "@/services/entities";
 import type { LedgerAccountEntityOpts } from "@/services/entities/LedgerAccountEntity";
 import type { LedgerEntityOpts } from "@/services/entities/LedgerEntity";
+import type { LedgerTransactionEntityOpts } from "@/services/entities/LedgerTransactionEntity";
 import type { OrgEntityOpts } from "@/services/entities/OrganizationEntity";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
 import { LedgerRepo } from "./LedgerRepo";
@@ -126,4 +132,45 @@ function createLedgerAccountEntity(
 	});
 }
 
-export { getRepos, createOrganizationEntity, createLedgerEntity, createLedgerAccountEntity };
+/**
+ * Creates a LedgerTransactionEntity with sensible test defaults.
+ *
+ * @param options - Partial options to override defaults
+ * @returns A new LedgerTransactionEntity instance
+ *
+ * @example
+ * ```typescript
+ * const transaction = createLedgerTransactionEntity({
+ *   organizationId: orgId,
+ *   ledgerId: ledgerId,
+ *   entries: [debitEntry, creditEntry]
+ * });
+ * ```
+ */
+function createLedgerTransactionEntity(
+	options: Partial<LedgerTransactionEntityOpts> & {
+		entries: LedgerTransactionEntityOpts["entries"];
+	}
+): LedgerTransactionEntity {
+	const now = new Date();
+	return new LedgerTransactionEntity({
+		id: options.id ?? new TypeID("ltr"),
+		organizationId: options.organizationId ?? new TypeID("org"),
+		ledgerId: options.ledgerId ?? new TypeID("lgr"),
+		entries: options.entries,
+		idempotencyKey: options.idempotencyKey,
+		description: options.description ?? "Test transaction",
+		status: options.status ?? "pending",
+		metadata: options.metadata,
+		created: options.created ?? now,
+		updated: options.updated ?? now,
+	});
+}
+
+export {
+	getRepos,
+	createOrganizationEntity,
+	createLedgerEntity,
+	createLedgerAccountEntity,
+	createLedgerTransactionEntity,
+};

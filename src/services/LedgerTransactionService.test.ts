@@ -1,7 +1,8 @@
 import { TypeID } from "typeid-js";
 import { vi } from "vitest";
+import { createLedgerTransactionEntity } from "@/repo/fixtures";
 import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
-
+import { LedgerTransactionEntryEntity } from "./entities";
 import { LedgerTransactionService } from "./LedgerTransactionService";
 
 describe("Ledger Service", () => {
@@ -18,7 +19,6 @@ describe("Ledger Service", () => {
 		getLedgerTransaction: vi.fn(),
 		listLedgerTransactions: vi.fn(),
 		withTransaction: vi.fn(),
-		createTransaction: vi.fn(),
 		getAccountWithLock: vi.fn(),
 		updateAccountBalance: vi.fn(),
 	} as unknown as LedgerTransactionRepo);
@@ -35,29 +35,44 @@ describe("Ledger Service", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
-			// Mock the repository method to return a transaction entity
-			const mockTransactionId = new TypeID("ltr").toString();
-			const mockResult = {
-				id: TypeID.fromString(mockTransactionId),
+			// Create mock transaction entity using fixture
+			const mockTransactionId = new TypeID("ltr");
+			const mockEntries = [
+				LedgerTransactionEntryEntity.create(
+					mockTransactionId,
+					TypeID.fromString(testAccount1Id),
+					"debit",
+					10000
+				),
+				LedgerTransactionEntryEntity.create(
+					mockTransactionId,
+					TypeID.fromString(testAccount2Id),
+					"credit",
+					10000
+				),
+			];
+
+			const mockResult = createLedgerTransactionEntity({
+				id: mockTransactionId,
+				organizationId: TypeID.fromString(testOrganizationId),
 				ledgerId: TypeID.fromString(testLedgerId),
+				entries: mockEntries,
 				description: "Test transaction",
-				status: "pending" as const,
-				created: new Date(),
-				updated: new Date(),
-			};
+				status: "pending",
+			});
 
-			mockLedgerTransactionRepo.createTransaction.mockResolvedValue(mockResult as any);
+			mockLedgerTransactionRepo.createTransaction.mockResolvedValue(mockResult);
 
-			const result = await ledgerTransactionService.createTransaction({
+			const result = await ledgerTransactionService.createTransactionWithEntries({
 				organizationId: testOrganizationId,
 				ledgerId: testLedgerId,
 				description: "Test transaction",
@@ -74,18 +89,18 @@ describe("Ledger Service", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "50.00",
+					amount: 5000,
 				},
 			];
 
 			await expect(
-				ledgerTransactionService.createTransaction({
-					organizationId: "test-org",
+				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: testOrganizationId,
 					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries: unbalancedEntries,
@@ -98,18 +113,18 @@ describe("Ledger Service", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			await expect(
-				ledgerTransactionService.createTransaction({
-					organizationId: "test-org",
+				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: testOrganizationId,
 					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries: singleEntry,
 				})
-			).rejects.toThrow("Double-entry validation failed");
+			).rejects.toThrow("Transaction must have at least 2 entries");
 		});
 
 		it("should reject transactions with invalid amounts", async () => {
@@ -117,23 +132,23 @@ describe("Ledger Service", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "-50.00",
+					amount: -5000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "50.00",
+					amount: 5000,
 				},
 			];
 
 			await expect(
-				ledgerTransactionService.createTransaction({
-					organizationId: "test-org",
+				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: testOrganizationId,
 					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries: invalidEntries,
 				})
-			).rejects.toThrow("Double-entry validation failed");
+			).rejects.toThrow("Invalid entry amount: -5000");
 		});
 
 		it("should reject transactions with invalid directions", async () => {
@@ -141,47 +156,62 @@ describe("Ledger Service", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "invalid" as "debit" | "credit",
-					amount: "50.00",
+					amount: 5000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "50.00",
+					amount: 5000,
 				},
 			];
 
 			await expect(
-				ledgerTransactionService.createTransaction({
-					organizationId: "test-org",
+				ledgerTransactionService.createTransactionWithEntries({
+					organizationId: testOrganizationId,
 					ledgerId: testLedgerId,
 					description: "Test transaction",
 					entries: invalidEntries,
 				})
-			).rejects.toThrow("Double-entry validation failed");
+			).rejects.toThrow("Invalid direction: invalid");
 		});
 	});
 
 	describe("Settlement Workflow (US2)", () => {
 		it("should create settlement transactions correctly", async () => {
-			// Mock the repository method to return a transaction entity
-			const mockTransactionId = new TypeID("ltr").toString();
-			const mockResult = {
-				id: TypeID.fromString(mockTransactionId),
-				ledgerId: TypeID.fromString(testLedgerId),
-				description: "Daily settlement",
-				status: "pending" as const,
-				created: new Date(),
-				updated: new Date(),
-			};
+			// Create mock transaction entity using fixture
+			const mockTransactionId = new TypeID("ltr");
+			const mockEntries = [
+				LedgerTransactionEntryEntity.create(
+					mockTransactionId,
+					TypeID.fromString(testAccount1Id),
+					"debit",
+					50000
+				),
+				LedgerTransactionEntryEntity.create(
+					mockTransactionId,
+					TypeID.fromString(testAccount2Id),
+					"credit",
+					50000
+				),
+			];
 
-			mockLedgerTransactionRepo.createTransaction.mockResolvedValue(mockResult as any);
+			const mockResult = createLedgerTransactionEntity({
+				id: mockTransactionId,
+				organizationId: TypeID.fromString(testOrganizationId),
+				ledgerId: TypeID.fromString(testLedgerId),
+				entries: mockEntries,
+				description: "Daily settlement",
+				status: "pending",
+			});
+
+			mockLedgerTransactionRepo.createTransaction.mockResolvedValue(mockResult);
 
 			const result = await ledgerTransactionService.createSettlement(
 				testOrganizationId,
 				testLedgerId,
 				testAccount1Id,
 				testAccount2Id,
-				"500.00",
+				50000,
 				"Daily settlement"
 			);
 
@@ -203,12 +233,12 @@ describe("Ledger Service", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
@@ -218,7 +248,7 @@ describe("Ledger Service", () => {
 			);
 
 			await expect(
-				ledgerTransactionService.createTransaction({
+				ledgerTransactionService.createTransactionWithEntries({
 					organizationId: testOrganizationId,
 					ledgerId: testLedgerId,
 					description: "Test transaction",
@@ -236,12 +266,12 @@ describe("Ledger Service", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: nonExistentId,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
@@ -251,7 +281,7 @@ describe("Ledger Service", () => {
 			);
 
 			await expect(
-				ledgerTransactionService.createTransaction({
+				ledgerTransactionService.createTransactionWithEntries({
 					organizationId: testOrganizationId,
 					ledgerId: testLedgerId,
 					description: "Test transaction",

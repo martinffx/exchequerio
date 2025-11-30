@@ -1,6 +1,7 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { TypeID } from "typeid-js";
 import { ConflictError, NotFoundError } from "@/errors";
-import { LedgerTransactionEntity, type LedgerTransactionEntryEntity } from "@/services/entities";
+import { LedgerTransactionEntity, LedgerTransactionEntryEntity } from "@/services/entities";
 import {
 	LedgerAccountsTable,
 	LedgersTable,
@@ -13,7 +14,7 @@ class LedgerTransactionRepo {
 	constructor(private readonly db: DrizzleDB) {}
 
 	/**
-	 * Get a single transaction with organization tenancy validation
+	 * Get a single transaction with entries and organization tenancy validation
 	 */
 	public async getLedgerTransaction(
 		organizationId: string,
@@ -38,11 +39,26 @@ class LedgerTransactionRepo {
 		}
 
 		const record = records[0];
-		return LedgerTransactionEntity.fromRecord(record.ledger_transactions);
+
+		// Fetch entries for this transaction
+		const entryRecords = await this.db
+			.select()
+			.from(LedgerTransactionEntriesTable)
+			.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId));
+
+		const entries = entryRecords.map(entryRecord =>
+			LedgerTransactionEntryEntity.fromRecord(entryRecord)
+		);
+
+		return LedgerTransactionEntity.fromRecordWithEntries(
+			record.ledger_transactions,
+			TypeID.fromString<"org">(organizationId),
+			entries
+		);
 	}
 
 	/**
-	 * List transactions with pagination and organization tenancy
+	 * List transactions with entries, pagination, and organization tenancy
 	 */
 	public async listLedgerTransactions(
 		organizationId: string,
@@ -64,58 +80,64 @@ class LedgerTransactionRepo {
 			.limit(limit)
 			.offset(offset);
 
-		return records.map(record => LedgerTransactionEntity.fromRecord(record.ledger_transactions));
+		// Fetch entries for all transactions
+		const transactionIds = records.map(r => r.ledger_transactions.id);
+
+		if (transactionIds.length === 0) {
+			return [];
+		}
+
+		const allEntries = await this.db
+			.select()
+			.from(LedgerTransactionEntriesTable)
+			.where(inArray(LedgerTransactionEntriesTable.transactionId, transactionIds));
+
+		// Group entries by transaction ID
+		const entriesByTransaction = new Map<string, LedgerTransactionEntryEntity[]>();
+		for (const entryRecord of allEntries) {
+			const entry = LedgerTransactionEntryEntity.fromRecord(entryRecord);
+			const txId = entryRecord.transactionId;
+			if (!entriesByTransaction.has(txId)) {
+				entriesByTransaction.set(txId, []);
+			}
+			entriesByTransaction.get(txId)?.push(entry);
+		}
+
+		const orgId = TypeID.fromString<"org">(organizationId);
+
+		return records.map(record => {
+			const entries = entriesByTransaction.get(record.ledger_transactions.id) ?? [];
+			return LedgerTransactionEntity.fromRecordWithEntries(record.ledger_transactions, orgId, entries);
+		});
 	}
 
 	/**
 	 * Create transaction with entries and update account balances atomically.
 	 * Uses optimistic locking and upserts for idempotency.
+	 * Entity invariants are enforced by LedgerTransactionEntity constructor.
 	 */
-	public async createTransaction(
-		organizationId: string,
-		transactionEntity: LedgerTransactionEntity,
-		entryEntities: LedgerTransactionEntryEntity[]
-	): Promise<LedgerTransactionEntity> {
+	public async createTransaction(entity: LedgerTransactionEntity): Promise<LedgerTransactionEntity> {
 		return await this.db.transaction(async tx => {
-			// 1. Validate ledger belongs to organization and get currency info
+			// 1. Validate ledger belongs to organization
 			const ledgerValidation = await tx
 				.select()
 				.from(LedgersTable)
 				.where(
 					and(
-						eq(LedgersTable.id, transactionEntity.ledgerId.toString()),
-						eq(LedgersTable.organizationId, organizationId)
+						eq(LedgersTable.id, entity.ledgerId.toString()),
+						eq(LedgersTable.organizationId, entity.organizationId.toString())
 					)
 				)
 				.limit(1);
 
 			if (ledgerValidation.length === 0) {
 				throw new NotFoundError(
-					`Ledger not found or does not belong to organization: ${transactionEntity.ledgerId.toString()}`
+					`Ledger not found or does not belong to organization: ${entity.ledgerId.toString()}`
 				);
 			}
 
-			// 2. Validate double-entry rule: debits must equal credits
-			let totalDebits = 0;
-			let totalCredits = 0;
-
-			for (const entry of entryEntities) {
-				// Amount is already integer minor units
-				if (entry.direction === "debit") {
-					totalDebits += entry.amount;
-				} else {
-					totalCredits += entry.amount;
-				}
-			}
-
-			if (totalDebits !== totalCredits) {
-				throw new ConflictError(
-					"Double-entry validation failed: total debits must equal total credits"
-				);
-			}
-
-			// 3. Upsert the transaction record
-			const transactionRecord = transactionEntity.toRecord();
+			// 2. Upsert the transaction record
+			const transactionRecord = entity.toRecord();
 			const transactionResult = await tx
 				.insert(LedgerTransactionsTable)
 				.values(transactionRecord)
@@ -127,8 +149,8 @@ class LedgerTransactionRepo {
 
 			const createdTransaction = transactionResult[0];
 
-			// 4. Create entries and update account balances atomically
-			for (const entryEntity of entryEntities) {
+			// 3. Create entries and update account balances atomically
+			for (const entryEntity of entity.entries) {
 				// Lock account for update to prevent race conditions
 				const accounts = await tx
 					.select()
@@ -209,8 +231,12 @@ class LedgerTransactionRepo {
 					});
 			}
 
-			// 5. Return the created transaction as entity
-			return LedgerTransactionEntity.fromRecord(createdTransaction);
+			// 4. Return the created transaction with entries
+			return LedgerTransactionEntity.fromRecordWithEntries(
+				createdTransaction,
+				entity.organizationId,
+				[...entity.entries] // Convert readonly to mutable array
+			);
 		});
 	}
 
@@ -243,13 +269,25 @@ class LedgerTransactionRepo {
 
 			const transactionRecord = transactionRecords[0].ledger_transactions;
 
-			// 2. Check if transaction is already posted
+			// 2. Fetch entries
+			const entryRecords = await tx
+				.select()
+				.from(LedgerTransactionEntriesTable)
+				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId));
+
+			const entries = entryRecords.map(entryRecord =>
+				LedgerTransactionEntryEntity.fromRecord(entryRecord)
+			);
+
+			const orgId = TypeID.fromString<"org">(organizationId);
+
+			// 3. Check if transaction is already posted
 			if (transactionRecord.status === "posted") {
 				// Return existing transaction if already posted
-				return LedgerTransactionEntity.fromRecord(transactionRecord);
+				return LedgerTransactionEntity.fromRecordWithEntries(transactionRecord, orgId, entries);
 			}
 
-			// 3. Update transaction status to posted
+			// 4. Update transaction status to posted
 			const updateResult = await tx
 				.update(LedgerTransactionsTable)
 				.set({
@@ -263,8 +301,8 @@ class LedgerTransactionRepo {
 				throw new NotFoundError(`Transaction not found: ${transactionId}`);
 			}
 
-			// 4. Return the updated transaction
-			return LedgerTransactionEntity.fromRecord(updateResult[0]);
+			// 5. Return the updated transaction with entries
+			return LedgerTransactionEntity.fromRecordWithEntries(updateResult[0], orgId, entries);
 		});
 	}
 
@@ -273,7 +311,7 @@ class LedgerTransactionRepo {
 	 * WARNING: This bypasses business logic - only use for tests
 	 */
 	public async deleteTransaction(
-		organizationId: string,
+		_organizationId: string,
 		ledgerId: string,
 		transactionId: string
 	): Promise<void> {

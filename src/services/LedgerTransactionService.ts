@@ -2,16 +2,15 @@ import { TypeID } from "typeid-js";
 import { NotImplementedError } from "@/errors";
 import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
 import { LedgerTransactionEntity, type LedgerTransactionEntryEntity } from "./entities";
-import type { LedgerID } from "./entities/types";
 
 // Transaction entry interface for creating transactions
 interface TransactionEntryInput {
 	accountId: string;
 	direction: "debit" | "credit";
-	amount: string;
+	amount: number; // Integer minor units
 }
 
-// Transaction creation interface with validation
+// Transaction creation interface
 interface CreateTransactionInput {
 	organizationId: string;
 	ledgerId: string;
@@ -24,34 +23,22 @@ interface CreateTransactionInput {
 class LedgerTransactionService {
 	constructor(private readonly ledgerTransactionRepo: LedgerTransactionRepo) {}
 
-	// Core transaction operations with double-entry enforcement
+	// Core transaction operations - entity enforces double-entry invariants
 	public async createTransactionWithEntries(
 		input: CreateTransactionInput
 	): Promise<LedgerTransactionEntity> {
-		// 1. Validate entries for double-entry compliance
-		this.validateDoubleEntry(input.entries);
-
-		// 2. Validate all accounts exist and belong to the same ledger
-		await this.validateAccounts(input.entries, input.ledgerId);
-
-		// 3. Create the transaction atomically with all entries
 		try {
-			// Create transaction entity using the factory method
+			// Create transaction entity - constructor validates all invariants
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				TypeID.fromString<"lgr">(input.ledgerId) as LedgerID,
+				TypeID.fromString<"org">(input.organizationId),
+				TypeID.fromString<"lgr">(input.ledgerId),
 				input.entries,
 				input.description,
 				input.idempotencyKey
 			);
 
-			// Create entry entities
-			const entryEntities = transactionEntity.entries ?? [];
-
-			const result = await this.ledgerTransactionRepo.createTransaction(
-				input.organizationId,
-				transactionEntity,
-				entryEntities
-			);
+			// Repository validates accounts exist and belong to ledger
+			const result = await this.ledgerTransactionRepo.createTransaction(transactionEntity);
 
 			return result;
 		} catch (error: unknown) {
@@ -79,10 +66,10 @@ class LedgerTransactionService {
 		ledgerId: string,
 		settledAccountId: string,
 		contraAccountId: string,
-		amount: string,
+		amount: number, // Integer minor units
 		description?: string
 	): Promise<LedgerTransactionEntity> {
-		// Create settlement transaction entries
+		// Create settlement transaction entries (amount already in integer minor units)
 		const settledAccount = {
 			accountId: settledAccountId,
 			direction: "debit" as const,
@@ -198,33 +185,6 @@ class LedgerTransactionService {
 	public deleteLedgerTransactionEntry(_id: string): Promise<void> {
 		// TODO: Implement with proper organization tenancy
 		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	// Private validation methods
-	private validateDoubleEntry(entries: TransactionEntryInput[]): void {
-		let totalDebits = 0;
-		let totalCredits = 0;
-
-		for (const entry of entries) {
-			const amount = Number.parseFloat(entry.amount);
-			if (entry.direction === "debit") {
-				totalDebits += amount;
-			} else {
-				totalCredits += amount;
-			}
-		}
-
-		if (Math.abs(totalDebits - totalCredits) > 0.0001) {
-			throw new Error("Double-entry validation failed: total debits must equal total credits");
-		}
-	}
-
-	private async validateAccounts(
-		_entries: TransactionEntryInput[],
-		_ledgerId: string
-	): Promise<void> {
-		// TODO: Implement account validation
-		// For now, just pass validation
 	}
 }
 

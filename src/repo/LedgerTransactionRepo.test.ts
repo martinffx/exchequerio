@@ -4,7 +4,7 @@ import { Pool } from "pg";
 import { TypeID } from "typeid-js";
 import { vi } from "vitest";
 import { Config } from "@/config";
-import { ConflictError, NotFoundError } from "@/errors";
+import { NotFoundError } from "@/errors";
 import { LedgerTransactionEntity } from "@/services/entities";
 import { createLedgerEntity } from "./fixtures";
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
@@ -93,18 +93,24 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 	});
 
 	afterAll(async () => {
-		// Clean up test data using repos (proper cascade handling)
+		// Clean up test data using direct database queries to avoid entity validation issues
 		try {
-			// Delete all transactions for this ledger using repo
-			const transactions = await repo.listLedgerTransactions(
-				testOrgId.toString(),
-				testLedgerId,
-				0,
-				1000
-			);
-			for (const tx of transactions) {
-				await repo.deleteTransaction(testOrgId.toString(), testLedgerId, tx.id.toString());
-			}
+			// Delete entries first, then transactions (respects FK constraints)
+			await database
+				.delete(LedgerTransactionEntriesTable)
+				.where(
+					inArray(
+						LedgerTransactionEntriesTable.transactionId,
+						database
+							.select({ id: LedgerTransactionsTable.id })
+							.from(LedgerTransactionsTable)
+							.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId))
+					)
+				);
+
+			await database
+				.delete(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
 
 			// Delete accounts (direct query since repo enforces no entries constraint)
 			await database.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
@@ -124,15 +130,23 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 		// Clean up THIS test file's transactions only (scoped to testLedgerId)
 		// This won't affect other test files since they have different ledger IDs
 		try {
-			const transactions = await repo.listLedgerTransactions(
-				testOrgId.toString(),
-				testLedgerId,
-				0,
-				1000
-			);
-			for (const tx of transactions) {
-				await repo.deleteTransaction(testOrgId.toString(), testLedgerId, tx.id.toString());
-			}
+			// Direct database cleanup to avoid entity validation issues with orphaned data
+			// Delete entries first, then transactions (respects FK constraints)
+			await database
+				.delete(LedgerTransactionEntriesTable)
+				.where(
+					inArray(
+						LedgerTransactionEntriesTable.transactionId,
+						database
+							.select({ id: LedgerTransactionsTable.id })
+							.from(LedgerTransactionsTable)
+							.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId))
+					)
+				);
+
+			await database
+				.delete(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
 
 			// Reset account balances and lock versions after deleting transactions
 			await database
@@ -150,7 +164,7 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 					lockVersion: 1,
 				})
 				.where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
-		} catch (error) {
+		} catch (_error) {
 			// Ignore cleanup errors
 		}
 	});
@@ -162,27 +176,24 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries,
 				"Test transaction"
 			);
 
 			// Act
-			const result = await repo.createTransaction(
-				testOrgId.toString(),
-				transactionEntity,
-				transactionEntity.entries ?? []
-			);
+			const result = await repo.createTransaction(transactionEntity);
 
 			// Assert
 			expect(result).toBeDefined();
@@ -203,8 +214,8 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount2Id))
 				.limit(1);
 
-			expect(account1[0].postedAmount).toBe("100.0000");
-			expect(account2[0].postedAmount).toBe("100.0000");
+			expect(account1[0].postedAmount).toBe(10000);
+			expect(account2[0].postedAmount).toBe(10000);
 			expect(account1[0].lockVersion).toBe(2);
 			expect(account2[0].lockVersion).toBe(2);
 		});
@@ -215,18 +226,19 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "50.00", // Unbalanced!
+					amount: 5000, // Unbalanced!
 				},
 			];
 
 			// Act & Assert - createWithEntries should throw during entity creation
 			expect(() => {
 				LedgerTransactionEntity.createWithEntries(
+					testOrgId,
 					testLedger.id,
 					unbalancedEntries,
 					"Unbalanced transaction"
@@ -246,42 +258,37 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount2Id))
 				.limit(1);
 
-			expect(account1[0].postedAmount).toBe("0.0000");
-			expect(account2[0].postedAmount).toBe("0.0000");
+			expect(account1[0].postedAmount).toBe(0);
+			expect(account2[0].postedAmount).toBe(0);
 			expect(account1[0].lockVersion).toBe(1);
 			expect(account2[0].lockVersion).toBe(1);
 		});
 
 		it("should enforce organization tenancy", async () => {
 			// Arrange
-			const wrongOrgId = new TypeID("org").toString();
+			const wrongOrgId = new TypeID("org");
 			const entries = [
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				wrongOrgId,
 				testLedger.id,
 				entries,
 				"Test transaction"
 			);
 
 			// Act & Assert
-			await expect(
-				repo.createTransaction(
-					wrongOrgId, // Wrong organization
-					transactionEntity,
-					transactionEntity.entries ?? []
-				)
-			).rejects.toThrow(NotFoundError);
+			await expect(repo.createTransaction(transactionEntity)).rejects.toThrow(NotFoundError);
 		});
 	});
 
@@ -292,26 +299,23 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries,
 				"Test transaction"
 			);
 
-			const createdTransaction = await repo.createTransaction(
-				testOrgId.toString(),
-				transactionEntity,
-				transactionEntity.entries ?? []
-			);
+			const createdTransaction = await repo.createTransaction(transactionEntity);
 
 			// Act
 			const postedTransaction = await repo.postTransaction(
@@ -331,26 +335,23 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries,
 				"Test transaction"
 			);
 
-			const createdTransaction = await repo.createTransaction(
-				testOrgId.toString(),
-				transactionEntity,
-				transactionEntity.entries ?? []
-			);
+			const createdTransaction = await repo.createTransaction(transactionEntity);
 
 			// Post once
 			await repo.postTransaction(testOrgId.toString(), testLedgerId, createdTransaction.id.toString());
@@ -374,26 +375,23 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries,
 				"Test transaction"
 			);
 
-			const createdTransaction = await repo.createTransaction(
-				testOrgId.toString(),
-				transactionEntity,
-				transactionEntity.entries ?? []
-			);
+			const createdTransaction = await repo.createTransaction(transactionEntity);
 
 			// Act & Assert
 			await expect(
@@ -413,26 +411,23 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries,
 				"Test transaction"
 			);
 
-			const createdTransaction = await repo.createTransaction(
-				testOrgId.toString(),
-				transactionEntity,
-				transactionEntity.entries ?? []
-			);
+			const createdTransaction = await repo.createTransaction(transactionEntity);
 
 			// Act
 			const retrievedTransaction = await repo.getLedgerTransaction(
@@ -454,26 +449,23 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries,
 				"Test transaction"
 			);
 
-			const createdTransaction = await repo.createTransaction(
-				testOrgId.toString(),
-				transactionEntity,
-				transactionEntity.entries ?? []
-			);
+			const createdTransaction = await repo.createTransaction(transactionEntity);
 
 			// Act & Assert
 			await expect(
@@ -491,28 +483,25 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			// Create multiple transactions
 			for (let i = 0; i < 5; i++) {
 				const transactionEntity = LedgerTransactionEntity.createWithEntries(
+					testOrgId,
 					testLedger.id,
 					entries,
 					`Test transaction ${i}`
 				);
 
-				await repo.createTransaction(
-					testOrgId.toString(),
-					transactionEntity,
-					transactionEntity.entries ?? []
-				);
+				await repo.createTransaction(transactionEntity);
 			}
 
 			// Act
@@ -543,12 +532,12 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "50.00",
+					amount: 5000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "50.00",
+					amount: 5000,
 				},
 			];
 
@@ -556,22 +545,24 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "75.00",
+					amount: 7500,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "75.00",
+					amount: 7500,
 				},
 			];
 
 			const transactionEntity1 = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries1,
 				"Concurrent tx 1"
 			);
 
 			const transactionEntity2 = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries2,
 				"Concurrent tx 2"
@@ -579,16 +570,8 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 
 			// Act - Execute concurrent transactions
 			const [tx1, tx2] = await Promise.all([
-				repo.createTransaction(
-					testOrgId.toString(),
-					transactionEntity1,
-					transactionEntity1.entries ?? []
-				),
-				repo.createTransaction(
-					testOrgId.toString(),
-					transactionEntity2,
-					transactionEntity2.entries ?? []
-				),
+				repo.createTransaction(transactionEntity1),
+				repo.createTransaction(transactionEntity2),
 			]);
 
 			// Assert
@@ -608,8 +591,8 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount2Id))
 				.limit(1);
 
-			expect(account1[0].postedAmount).toBe("125.0000"); // 50 + 75
-			expect(account2[0].postedAmount).toBe("125.0000");
+			expect(account1[0].postedAmount).toBe(12500); // 5000 + 7500
+			expect(account2[0].postedAmount).toBe(12500);
 			expect(account1[0].lockVersion).toBe(3); // Updated twice
 			expect(account2[0].lockVersion).toBe(3);
 		});
@@ -620,26 +603,23 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries,
 				"Setup transaction"
 			);
 
-			await repo.createTransaction(
-				testOrgId.toString(),
-				transactionEntity,
-				transactionEntity.entries ?? []
-			);
+			await repo.createTransaction(transactionEntity);
 
 			// Get account state
 			const account1 = await database
@@ -656,26 +636,23 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 					{
 						accountId: testAccount1Id,
 						direction: "debit" as const,
-						amount: "10.00",
+						amount: 1000,
 					},
 					{
 						accountId: testAccount2Id,
 						direction: "credit" as const,
-						amount: "10.00",
+						amount: 1000,
 					},
 				];
 
 				const concurrentTransactionEntity = LedgerTransactionEntity.createWithEntries(
+					testOrgId,
 					testLedger.id,
 					concurrentEntries,
 					`Concurrent transaction ${index}`
 				);
 
-				return repo.createTransaction(
-					testOrgId.toString(),
-					concurrentTransactionEntity,
-					concurrentTransactionEntity.entries ?? []
-				);
+				return repo.createTransaction(concurrentTransactionEntity);
 			});
 
 			const results = await Promise.all(concurrentPromises);
@@ -690,7 +667,7 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount1Id))
 				.limit(1);
 
-			expect(finalAccount1[0].postedAmount).toBe("150.0000"); // 100 + (5 * 10)
+			expect(finalAccount1[0].postedAmount).toBe(15000); // 10000 + (5 * 1000)
 			expect(finalAccount1[0].lockVersion).toBe(7); // Initial + setup + 5 updates
 		});
 	});
@@ -703,16 +680,17 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: nonExistentAccountId,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries,
 				"Invalid account transaction"
@@ -726,9 +704,7 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.limit(1);
 
 			// Act & Assert
-			await expect(
-				repo.createTransaction(testOrgId.toString(), transactionEntity, transactionEntity.entries ?? [])
-			).rejects.toThrow(NotFoundError);
+			await expect(repo.createTransaction(transactionEntity)).rejects.toThrow(NotFoundError);
 
 			// Verify no changes were made (rollback)
 			const finalAccount2 = await database
@@ -748,16 +724,17 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.00",
+					amount: 10000,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				TypeID.fromString<"lgr">(wrongLedgerId), // Wrong ledger
 				entries,
 				"Wrong ledger transaction"
@@ -771,9 +748,7 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.limit(1);
 
 			// Act & Assert
-			await expect(
-				repo.createTransaction(testOrgId.toString(), transactionEntity, transactionEntity.entries ?? [])
-			).rejects.toThrow(NotFoundError);
+			await expect(repo.createTransaction(transactionEntity)).rejects.toThrow(NotFoundError);
 
 			// Verify no changes were made (rollback)
 			const finalAccount1 = await database
@@ -791,9 +766,9 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 		it("should maintain accurate balance calculations for multiple transactions", async () => {
 			// Arrange
 			const transactions = [
-				{ debit: "100.00", credit: "100.00" },
-				{ debit: "50.00", credit: "50.00" },
-				{ debit: "25.00", credit: "25.00" },
+				{ debit: 10000, credit: 10000 },
+				{ debit: 5000, credit: 5000 },
+				{ debit: 2500, credit: 2500 },
 			];
 
 			// Act - Create multiple transactions
@@ -812,16 +787,13 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				];
 
 				const transactionEntity = LedgerTransactionEntity.createWithEntries(
+					testOrgId,
 					testLedger.id,
 					entries,
 					`Balance test transaction ${index}`
 				);
 
-				await repo.createTransaction(
-					testOrgId.toString(),
-					transactionEntity,
-					transactionEntity.entries ?? []
-				);
+				await repo.createTransaction(transactionEntity);
 			}
 
 			// Assert - Verify final balances
@@ -837,10 +809,10 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount2Id))
 				.limit(1);
 
-			const expectedTotal = transactions.reduce((sum, t) => sum + Number.parseFloat(t.debit), 0);
+			const expectedTotal = transactions.reduce((sum, t) => sum + t.debit, 0);
 
-			expect(account1[0].postedAmount).toBe(expectedTotal.toFixed(4));
-			expect(account2[0].postedAmount).toBe(expectedTotal.toFixed(4));
+			expect(account1[0].postedAmount).toBe(expectedTotal);
+			expect(account2[0].postedAmount).toBe(expectedTotal);
 		});
 
 		it("should handle decimal precision correctly", async () => {
@@ -849,27 +821,24 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				{
 					accountId: testAccount1Id,
 					direction: "debit" as const,
-					amount: "100.1234",
+					amount: 1001234,
 				},
 				{
 					accountId: testAccount2Id,
 					direction: "credit" as const,
-					amount: "100.1234",
+					amount: 1001234,
 				},
 			];
 
 			const transactionEntity = LedgerTransactionEntity.createWithEntries(
+				testOrgId,
 				testLedger.id,
 				entries,
 				"Precision test transaction"
 			);
 
 			// Act
-			await repo.createTransaction(
-				testOrgId.toString(),
-				transactionEntity,
-				transactionEntity.entries ?? []
-			);
+			await repo.createTransaction(transactionEntity);
 
 			// Assert
 			const account1 = await database
@@ -884,8 +853,8 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				.where(eq(LedgerAccountsTable.id, testAccount2Id))
 				.limit(1);
 
-			expect(account1[0].postedAmount).toBe("100.1234");
-			expect(account2[0].postedAmount).toBe("100.1234");
+			expect(account1[0].postedAmount).toBe(1001234);
+			expect(account2[0].postedAmount).toBe(1001234);
 		});
 	});
 

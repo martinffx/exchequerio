@@ -180,9 +180,9 @@ class LedgerTransactionEntryEntity {
 		});
 	}
 
-	// Helper method to validate entry amount is positive
+	// Helper method to validate entry amount is positive integer
 	public isValidAmount(): boolean {
-		return !Number.isNaN(this.amount) && this.amount > 0;
+		return !Number.isNaN(this.amount) && this.amount > 0 && Number.isInteger(this.amount);
 	}
 
 	// Helper method to get amount as number (already a number)

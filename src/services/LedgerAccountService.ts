@@ -24,7 +24,7 @@ class LedgerAccountService {
 		limit = 50
 	): Promise<LedgerAccountEntity[]> {
 		await this.ledgerRepo.getLedger(orgId, ledgerId); // Verify ledger exists
-		return this.ledgerAccountRepo.listLedgerAccounts(orgId.toString(), ledgerId, offset, limit);
+		return this.ledgerAccountRepo.listLedgerAccounts(orgId, ledgerId, offset, limit);
 	}
 
 	public async getLedgerAccount(
@@ -32,19 +32,19 @@ class LedgerAccountService {
 		ledgerId: LedgerID,
 		id: LedgerAccountID
 	): Promise<LedgerAccountEntity> {
-		return this.ledgerAccountRepo.getLedgerAccount(orgId.toString(), ledgerId, id);
+		return this.ledgerAccountRepo.getLedgerAccount(orgId, ledgerId, id);
 	}
 
 	public async createLedgerAccount(
-		orgId: OrgID,
+		_orgId: OrgID,
 		entity: LedgerAccountEntity
 	): Promise<LedgerAccountEntity> {
 		return this.ledgerAccountRepo.upsertLedgerAccount(entity);
 	}
 
 	public async updateLedgerAccount(
-		orgId: OrgID,
-		ledgerId: LedgerID,
+		_orgId: OrgID,
+		_ledgerId: LedgerID,
 		entity: LedgerAccountEntity
 	): Promise<LedgerAccountEntity> {
 		return this.ledgerAccountRepo.upsertLedgerAccount(entity);
@@ -55,7 +55,7 @@ class LedgerAccountService {
 		ledgerId: LedgerID,
 		id: LedgerAccountID
 	): Promise<void> {
-		return this.ledgerAccountRepo.deleteLedgerAccount(orgId.toString(), ledgerId, id);
+		return this.ledgerAccountRepo.deleteLedgerAccount(orgId, ledgerId, id);
 	}
 
 	// Ledger Account Category

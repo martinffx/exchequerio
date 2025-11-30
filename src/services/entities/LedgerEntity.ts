@@ -61,6 +61,16 @@ class LedgerEntity {
 
 	// Create entity from database record
 	public static fromRecord(record: LedgerRecord): LedgerEntity {
+		// Parse metadata from TEXT (JSON string) to object
+		let metadata: Record<string, unknown> | undefined;
+		if (record.metadata) {
+			try {
+				metadata = JSON.parse(record.metadata) as Record<string, unknown>;
+			} catch {
+				metadata = undefined;
+			}
+		}
+
 		return new LedgerEntity({
 			id: TypeID.fromString<"lgr">(record.id),
 			organizationId: TypeID.fromString<"org">(record.organizationId),
@@ -68,7 +78,7 @@ class LedgerEntity {
 			description: record.description ?? undefined,
 			currency: record.currency,
 			currencyExponent: record.currencyExponent,
-			metadata: record.metadata as Record<string, unknown> | undefined,
+			metadata,
 			created: record.created,
 			updated: record.updated,
 		});
@@ -83,7 +93,7 @@ class LedgerEntity {
 			description: this.description ?? undefined,
 			currency: this.currency,
 			currencyExponent: this.currencyExponent,
-			metadata: this.metadata,
+			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
 			created: this.created,
 			updated: this.updated,
 		};
