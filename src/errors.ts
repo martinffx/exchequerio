@@ -11,6 +11,17 @@ import type {
 	UnauthorizedErrorResponse,
 } from "@/routes/schema";
 
+/**
+ * Context passed to errors for better debugging
+ */
+interface ErrorContext {
+	organizationId?: string;
+	ledgerId?: string;
+	accountId?: string;
+	transactionId?: string;
+	idempotencyKey?: string;
+}
+
 abstract class LedgerError extends Error {
 	abstract status: number;
 	abstract toResponse(): unknown;
@@ -75,38 +86,49 @@ class ForbiddenError extends LedgerError {
 
 class NotFoundError extends LedgerError {
 	public readonly status = 404;
-	constructor(message: string) {
+	public readonly context?: ErrorContext;
+
+	constructor(message: string, context?: ErrorContext) {
 		super(message);
 		this.name = "NotFoundError";
+		this.context = context;
 	}
 
 	public toResponse(): NotFoundErrorResponse {
 		return {
 			type: "NOT_FOUND",
 			status: this.status,
-			title: "Bad Request",
+			title: "Not Found",
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
+			...(this.context ?? {}),
 		};
 	}
 }
 
 class ConflictError extends LedgerError {
 	public readonly status = 409;
-	constructor(message: string) {
+	public readonly retryable: boolean;
+	public readonly context?: ErrorContext;
+
+	constructor(message: string, retryable = false, context?: ErrorContext) {
 		super(message);
 		this.name = "ConflictError";
+		this.retryable = retryable;
+		this.context = context;
 	}
 
 	public toResponse(): ConflictErrorResponse {
 		return {
 			type: "CONFLICT",
 			status: this.status,
-			title: "Bad Request",
+			title: "Conflict",
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
+			retryable: this.retryable,
+			...(this.context ?? {}),
 		};
 	}
 }
@@ -132,38 +154,49 @@ class TooManyRequestsError extends LedgerError {
 
 class InternalServerError extends LedgerError {
 	public readonly status = 500;
-	constructor(message: string) {
+	public readonly context?: ErrorContext;
+
+	constructor(message: string, context?: ErrorContext) {
 		super(message);
 		this.name = "InternalServerError";
+		this.context = context;
 	}
 
 	public toResponse(): InternalServerErrorResponse {
 		return {
 			type: "INTERNAL_SERVER_ERROR",
 			status: this.status,
-			title: "Bad Request",
+			title: "Internal Server Error",
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
+			...(this.context ?? {}),
 		};
 	}
 }
 
 class ServiceUnavailableError extends LedgerError {
 	public readonly status = 503;
-	constructor(message: string) {
+	public readonly retryable: boolean;
+	public readonly context?: ErrorContext;
+
+	constructor(message: string, retryable = true, context?: ErrorContext) {
 		super(message);
 		this.name = "ServiceUnavailableError";
+		this.retryable = retryable;
+		this.context = context;
 	}
 
 	public toResponse(): ServiceUnavailableErrorResponse {
 		return {
 			type: "SERVICE_UNAVAILABLE",
 			status: this.status,
-			title: "Bad Request",
+			title: "Service Unavailable",
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
+			retryable: this.retryable,
+			...(this.context ?? {}),
 		};
 	}
 }
@@ -218,4 +251,5 @@ export {
 	InternalServerError,
 	ServiceUnavailableError,
 	NotImplementedError,
+	type ErrorContext,
 };

@@ -1,7 +1,17 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { TypeID } from "typeid-js";
-import { ConflictError, NotFoundError } from "@/errors";
-import { LedgerTransactionEntity, LedgerTransactionEntryEntity } from "@/services/entities";
+import {
+	ConflictError,
+	InternalServerError,
+	NotFoundError,
+	ServiceUnavailableError,
+} from "@/errors";
+import {
+	LedgerAccountEntity,
+	LedgerTransactionEntity,
+	LedgerTransactionEntryEntity,
+} from "@/services/entities";
+import { handleDBError, isDBError } from "./errors";
 import {
 	LedgerAccountsTable,
 	LedgersTable,
@@ -9,6 +19,14 @@ import {
 	LedgerTransactionsTable,
 } from "./schema";
 import type { DrizzleDB } from "./types";
+
+interface BalanceUpdate {
+	id: string;
+	newPostedAmount: number;
+	newPostedCredits: number;
+	newPostedDebits: number;
+	expectedLockVersion: number;
+}
 
 class LedgerTransactionRepo {
 	constructor(private readonly db: DrizzleDB) {}
@@ -50,11 +68,7 @@ class LedgerTransactionRepo {
 			LedgerTransactionEntryEntity.fromRecord(entryRecord)
 		);
 
-		return LedgerTransactionEntity.fromRecordWithEntries(
-			record.ledger_transactions,
-			TypeID.fromString<"org">(organizationId),
-			entries
-		);
+		return LedgerTransactionEntity.fromRecord(record.ledger_transactions, entries);
 	}
 
 	/**
@@ -113,131 +127,121 @@ class LedgerTransactionRepo {
 
 	/**
 	 * Create transaction with entries and update account balances atomically.
+	 *
+	 * Optimistic locking approach:
+	 * 1. READ: Fetch all accounts (outside transaction, no locks)
+	 * 2. VALIDATE & BUILD: Check accounts, calculate balance updates in-memory
+	 * 3. WRITE: Execute batched writes in single transaction
+	 *
 	 * Uses optimistic locking and upserts for idempotency.
 	 * Entity invariants are enforced by LedgerTransactionEntity constructor.
 	 */
-	public async createTransaction(entity: LedgerTransactionEntity): Promise<LedgerTransactionEntity> {
-		return await this.db.transaction(async tx => {
-			// 1. Validate ledger belongs to organization
-			const ledgerValidation = await tx
-				.select()
-				.from(LedgersTable)
-				.where(
-					and(
-						eq(LedgersTable.id, entity.ledgerId.toString()),
-						eq(LedgersTable.organizationId, entity.organizationId.toString())
-					)
-				)
-				.limit(1);
+	public async createTransaction(
+		transaction: LedgerTransactionEntity
+	): Promise<LedgerTransactionEntity> {
+		// 1. Fetch all ledger accounts
+		const accountIds = transaction.entries.map(e => e.accountId.toString());
+		const accounts = await this.db
+			.select()
+			.from(LedgerAccountsTable)
+			.where(inArray(LedgerAccountsTable.id, accountIds));
 
-			if (ledgerValidation.length === 0) {
-				throw new NotFoundError(
-					`Ledger not found or does not belong to organization: ${entity.ledgerId.toString()}`
-				);
+		// 2. Update balances In-memory
+		const ledgerAccountsById = new Map(
+			accounts.map(a => {
+				const account = LedgerAccountEntity.fromRecord(a);
+				return [account.id.toString(), account];
+			})
+		);
+		const ledgerAccounts = transaction.entries.map(entry => {
+			const account = ledgerAccountsById.get(entry.accountId.toString());
+			if (account !== undefined) {
+				return account.applyEntry(entry);
 			}
-
-			// 2. Upsert the transaction record
-			const transactionRecord = entity.toRecord();
-			const transactionResult = await tx
-				.insert(LedgerTransactionsTable)
-				.values(transactionRecord)
-				.onConflictDoUpdate({
-					target: LedgerTransactionsTable.id,
-					set: { updated: new Date() },
-				})
-				.returning();
-
-			const createdTransaction = transactionResult[0];
-
-			// 3. Create entries and update account balances atomically
-			for (const entryEntity of entity.entries) {
-				// Lock account for update to prevent race conditions
-				const accounts = await tx
-					.select()
-					.from(LedgerAccountsTable)
-					.where(eq(LedgerAccountsTable.id, entryEntity.accountId.toString()))
-					.for("update");
-
-				if (accounts.length === 0) {
-					throw new NotFoundError(`Account not found: ${entryEntity.accountId.toString()}`);
-				}
-
-				const account = accounts[0];
-
-				// Entry amount is already integer minor units - use directly
-				const entryAmountMinor = entryEntity.amount;
-
-				// Calculate new balance using integer arithmetic
-				let newPostedAmount = account.postedAmount;
-				let newPostedCredits = account.postedCredits;
-				let newPostedDebits = account.postedDebits;
-
-				// Apply double-entry accounting rules
-				if (account.normalBalance === "debit") {
-					if (entryEntity.direction === "debit") {
-						newPostedAmount += entryAmountMinor;
-						newPostedDebits += entryAmountMinor;
-					} else {
-						newPostedAmount -= entryAmountMinor;
-						newPostedCredits += entryAmountMinor;
-					}
-				} else {
-					// credit normal balance
-					if (entryEntity.direction === "credit") {
-						newPostedAmount += entryAmountMinor;
-						newPostedCredits += entryAmountMinor;
-					} else {
-						newPostedAmount -= entryAmountMinor;
-						newPostedDebits += entryAmountMinor;
-					}
-				}
-
-				// Update account balance with optimistic locking
-				const updateResult = await tx
-					.update(LedgerAccountsTable)
-					.set({
-						postedAmount: newPostedAmount,
-						postedCredits: newPostedCredits,
-						postedDebits: newPostedDebits,
-						availableAmount: newPostedAmount,
-						availableCredits: newPostedCredits,
-						availableDebits: newPostedDebits,
-						lockVersion: account.lockVersion + 1,
-						updated: new Date(),
-					})
-					.where(
-						and(
-							eq(LedgerAccountsTable.id, entryEntity.accountId.toString()),
-							eq(LedgerAccountsTable.lockVersion, account.lockVersion)
-						)
-					)
-					.returning();
-
-				if (updateResult.length === 0) {
-					throw new ConflictError(
-						`Account ${entryEntity.accountId.toString()} was modified by another transaction`
-					);
-				}
-
-				// Upsert transaction entry record
-				const entryRecord = entryEntity.toRecord();
-				entryRecord.transactionId = createdTransaction.id;
-				await tx
-					.insert(LedgerTransactionEntriesTable)
-					.values(entryRecord)
-					.onConflictDoUpdate({
-						target: LedgerTransactionEntriesTable.id,
-						set: { updated: new Date() },
-					});
-			}
-
-			// 4. Return the created transaction with entries
-			return LedgerTransactionEntity.fromRecordWithEntries(
-				createdTransaction,
-				entity.organizationId,
-				[...entity.entries] // Convert readonly to mutable array
+			throw new NotFoundError(
+				`Missing Ledger Account ${entry.accountId.toString()}, for entry ${entry.id.toString()}`
 			);
 		});
+
+		// 3. Write all the changes for the Ledger Transaction
+		//    in a single DB transaction
+		try {
+			return await this.db.transaction(async tx => {
+				// 3a. Insert transaction record
+				const transactionResult = await tx
+					.insert(LedgerTransactionsTable)
+					.values(transaction.toRecord())
+					.onConflictDoNothing({
+						target: LedgerTransactionsTable.id,
+					})
+					.returning();
+				const createdTransaction = LedgerTransactionEntity.fromRecord(transactionResult[0], [
+					...transaction.entries,
+				]);
+
+				// 3b. Insert all entries in batch
+				await Promise.all(
+					transaction.entries.map(async entry => {
+						await tx.insert(LedgerTransactionEntriesTable).values(entry.toRecord()).onConflictDoNothing({
+							target: LedgerTransactionEntriesTable.id,
+						});
+					})
+				);
+
+				// 3c. Update all account balances in parallel with optimistic locking
+				await Promise.all(
+					ledgerAccounts.map(async account => {
+						const result = await tx
+							.update(LedgerAccountsTable)
+							.set(account.toRecord())
+							.where(
+								and(
+									eq(LedgerAccountsTable.id, account.id.toString()),
+									eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+								)
+							)
+							.returning();
+
+						// No rows updated = optimistic lock failure
+						if (result.length === 0) {
+							throw new ConflictError(
+								`Account ${account.id.toString()} was modified by another transaction`
+							);
+						}
+
+						// More than one row updated = data integrity issue
+						if (result.length > 1) {
+							throw new ConflictError(
+								`Data integrity error: Updated ${result.length} rows for account ${account.id.toString()}, expected 1`
+							);
+						}
+
+						return LedgerAccountEntity.fromRecord(result[0]);
+					})
+				);
+
+				// Return the created transaction with entries
+				return createdTransaction;
+			});
+		} catch (error: unknown) {
+			if (
+				error instanceof ConflictError ||
+				error instanceof ServiceUnavailableError ||
+				error instanceof NotFoundError
+			) {
+				throw error;
+			}
+
+			if (isDBError(error)) {
+				throw handleDBError(error, {
+					ledgerId: transaction.ledgerId.toString(),
+					transactionId: transaction.id.toString(),
+					idempotencyKey: transaction.idempotencyKey,
+				});
+			}
+
+			throw new InternalServerError("Unexpected error during transaction creation");
+		}
 	}
 
 	/**
@@ -316,25 +320,16 @@ class LedgerTransactionRepo {
 		transactionId: string
 	): Promise<void> {
 		await this.db.transaction(async tx => {
-			// Verify transaction belongs to this org/ledger
-			const transaction = await tx
-				.select()
-				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.id, transactionId))
-				.limit(1);
-
-			if (transaction.length === 0) {
-				throw new NotFoundError(`Transaction not found: ${transactionId}`);
-			}
-
-			if (transaction[0].ledgerId !== ledgerId) {
-				throw new NotFoundError(`Transaction not found: ${transactionId}`);
-			}
-
 			// Delete entries first (FK constraint)
 			await tx
 				.delete(LedgerTransactionEntriesTable)
-				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId));
+				.where(
+					and(
+						eq(LedgerTransactionEntriesTable.led, transactionId),
+						eq(LedgerTransactionEntriesTable.transactionId, transactionId),
+						eq(LedgerTransactionEntriesTable.transactionId, transactionId)
+					)
+				);
 
 			// Then delete transaction
 			await tx.delete(LedgerTransactionsTable).where(eq(LedgerTransactionsTable.id, transactionId));

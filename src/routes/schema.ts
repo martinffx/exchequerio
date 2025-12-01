@@ -21,6 +21,15 @@ const ProblemDetail = Type.Object({
 });
 type ProblemDetail = Static<typeof ProblemDetail>;
 
+const ErrorContext = Type.Object({
+	organizationId: Type.Optional(Type.String()),
+	ledgerId: Type.Optional(Type.String()),
+	accountId: Type.Optional(Type.String()),
+	transactionId: Type.Optional(Type.String()),
+	idempotencyKey: Type.Optional(Type.String()),
+});
+type ErrorContext = Static<typeof ErrorContext>;
+
 const BadRequestErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
@@ -57,6 +66,7 @@ type ForbiddenErrorResponse = Static<typeof ForbiddenErrorResponse>;
 const NotFoundErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
+		ErrorContext,
 		Type.Object({
 			type: Type.Literal("NOT_FOUND"),
 			status: Type.Literal(404),
@@ -68,9 +78,11 @@ type NotFoundErrorResponse = Static<typeof NotFoundErrorResponse>;
 const ConflictErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
+		ErrorContext,
 		Type.Object({
 			type: Type.Literal("CONFLICT"),
 			status: Type.Literal(409),
+			retryable: Type.Optional(Type.Boolean()),
 		}),
 	],
 	{ $id: "ConflictErrorResponse" }
@@ -90,6 +102,7 @@ type TooManyRequestsErrorResponse = Static<typeof TooManyRequestsErrorResponse>;
 const InternalServerErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
+		ErrorContext,
 		Type.Object({
 			type: Type.Literal("INTERNAL_SERVER_ERROR"),
 			status: Type.Literal(500),
@@ -101,9 +114,11 @@ type InternalServerErrorResponse = Static<typeof InternalServerErrorResponse>;
 const ServiceUnavailableErrorResponse = Type.Composite(
 	[
 		ProblemDetail,
+		ErrorContext,
 		Type.Object({
 			type: Type.Literal("SERVICE_UNAVAILABLE"),
 			status: Type.Literal(503),
+			retryable: Type.Optional(Type.Boolean()),
 		}),
 	],
 	{ $id: "ServiceUnavailableErrorResponse" }
