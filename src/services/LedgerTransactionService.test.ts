@@ -48,12 +48,14 @@ describe("Ledger Service", () => {
 			const mockTransactionId = new TypeID("ltr");
 			const mockEntries = [
 				LedgerTransactionEntryEntity.create(
+					TypeID.fromString(testOrganizationId),
 					mockTransactionId,
 					TypeID.fromString(testAccount1Id),
 					"debit",
 					10000
 				),
 				LedgerTransactionEntryEntity.create(
+					TypeID.fromString(testOrganizationId),
 					mockTransactionId,
 					TypeID.fromString(testAccount2Id),
 					"credit",
@@ -182,12 +184,14 @@ describe("Ledger Service", () => {
 			const mockTransactionId = new TypeID("ltr");
 			const mockEntries = [
 				LedgerTransactionEntryEntity.create(
+					TypeID.fromString(testOrganizationId),
 					mockTransactionId,
 					TypeID.fromString(testAccount1Id),
 					"debit",
 					50000
 				),
 				LedgerTransactionEntryEntity.create(
+					TypeID.fromString(testOrganizationId),
 					mockTransactionId,
 					TypeID.fromString(testAccount2Id),
 					"credit",

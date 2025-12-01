@@ -1,15 +1,15 @@
 {
-	"extends": [
-		"@tsconfig/recommended/tsconfig.json",
-		"@tsconfig/node-lts/tsconfig.json"
-	],
-	"compilerOptions": {
-		"lib": ["es2020"],
-		"paths": {
-			"@/*": ["./src/*"]
-		},
-		"types": ["vitest/globals"],
-		"strict": true,
-		"skipLibCheck": true
-	}
+  "extends": [
+    "@tsconfig/recommended/tsconfig.json",
+    "@tsconfig/node-lts/tsconfig.json"
+  ],
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": ["vitest/globals"],
+    "strict": true,
+    "skipLibCheck": true
+  }
 }

@@ -17,6 +17,7 @@ type LedgerTransactionEntryInsert = InferInsertModel<typeof LedgerTransactionEnt
 type LedgerTransactionEntryID = TypeID<"lte">;
 type LedgerTransactionID = TypeID<"ltr">;
 type LedgerAccountID = TypeID<"lat">;
+type OrgID = TypeID<"org">;
 
 // Resulting balance structure for API responses
 interface ResultingBalance {
@@ -27,6 +28,7 @@ interface ResultingBalance {
 
 interface LedgerTransactionEntryEntityOptions {
 	id: LedgerTransactionEntryID;
+	organizationId: OrgID;
 	transactionId: LedgerTransactionID;
 	accountId: LedgerAccountID;
 	direction: Direction;
@@ -43,6 +45,7 @@ interface LedgerTransactionEntryEntityOptions {
 
 class LedgerTransactionEntryEntity {
 	public readonly id: LedgerTransactionEntryID;
+	public readonly organizationId: OrgID;
 	public readonly transactionId: LedgerTransactionID;
 	public readonly accountId: LedgerAccountID;
 	public readonly direction: Direction;
@@ -58,6 +61,7 @@ class LedgerTransactionEntryEntity {
 
 	constructor(options: LedgerTransactionEntryEntityOptions) {
 		this.id = options.id;
+		this.organizationId = options.organizationId;
 		this.transactionId = options.transactionId;
 		this.accountId = options.accountId;
 		this.direction = options.direction;
@@ -73,6 +77,7 @@ class LedgerTransactionEntryEntity {
 
 	// Create entry for transaction creation (used by service layer)
 	public static create(
+		organizationId: OrgID,
 		transactionId: LedgerTransactionID,
 		accountId: LedgerAccountID,
 		direction: Direction,
@@ -82,6 +87,7 @@ class LedgerTransactionEntryEntity {
 		const now = new Date();
 		return new LedgerTransactionEntryEntity({
 			id: id ? TypeID.fromString<"lte">(id) : new TypeID("lte"),
+			organizationId,
 			transactionId,
 			accountId,
 			direction,
@@ -106,6 +112,7 @@ class LedgerTransactionEntryEntity {
 
 		return new LedgerTransactionEntryEntity({
 			id: TypeID.fromString<"lte">(record.id),
+			organizationId: TypeID.fromString<"org">(record.organizationId),
 			transactionId: TypeID.fromString<"ltr">(record.transactionId),
 			accountId: TypeID.fromString<"lat">(record.accountId),
 			direction: record.direction,
@@ -117,26 +124,11 @@ class LedgerTransactionEntryEntity {
 		});
 	}
 
-	// Create entity from database record with balance information for API responses
-	public static fromRecordWithBalance(
-		record: LedgerTransactionEntryRecord,
-		currency: string,
-		currencyExponent: number,
-		resultingBalance: ResultingBalance
-	): LedgerTransactionEntryEntity {
-		const entity = LedgerTransactionEntryEntity.fromRecord(record);
-		return new LedgerTransactionEntryEntity({
-			...entity,
-			currency,
-			currencyExponent,
-			resultingBalance,
-		});
-	}
-
 	// Convert entity to database record for insert/update
 	public toRecord(): LedgerTransactionEntryInsert {
 		return {
 			id: this.id.toString(),
+			organizationId: this.organizationId.toString(),
 			transactionId: this.transactionId.toString(),
 			accountId: this.accountId.toString(),
 			direction: this.direction,

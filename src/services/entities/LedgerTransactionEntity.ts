@@ -9,6 +9,7 @@ import type {
 } from "@/routes/ledgers/schema";
 import { LedgerTransactionEntryEntity } from "./LedgerTransactionEntryEntity";
 import type { LedgerID, LedgerTransactionID, OrgID } from "./types";
+import { NotImplementedError } from "@/errors";
 
 // Infer types from Drizzle schema
 type LedgerTransactionRecord = InferSelectModel<typeof LedgerTransactionsTable>;
@@ -62,7 +63,6 @@ class LedgerTransactionEntity {
 		this.updated = options.updated;
 	}
 
-	// Validate entries enforce double-entry accounting invariants
 	private validateEntries(entries: LedgerTransactionEntryEntity[]): void {
 		if (entries.length < 2) {
 			throw new Error("Transaction must have at least 2 entries");
@@ -93,42 +93,19 @@ class LedgerTransactionEntity {
 		}
 	}
 
-	// Create transaction from entry inputs (used by service layer)
-	public static createWithEntries(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		entryInputs: TransactionEntryInput[],
-		description?: string,
-		idempotencyKey?: string,
-		id?: string
-	): LedgerTransactionEntity {
-		const now = new Date();
-		const transactionId = id ? TypeID.fromString<"ltr">(id) : new TypeID("ltr");
-
-		// Create entry entities - validation happens in constructor
-		const entries = entryInputs.map(input =>
-			LedgerTransactionEntryEntity.create(
-				transactionId,
-				TypeID.fromString<"lat">(input.accountId),
-				input.direction,
-				input.amount // Already integer minor units
-			)
-		);
-
-		return new LedgerTransactionEntity({
-			id: transactionId,
-			organizationId,
-			ledgerId,
-			entries,
-			idempotencyKey,
-			description,
-			status: "pending", // New transactions start as pending
-			created: now,
-			updated: now,
-		});
+	public postTransaction(): LedgerTransactionEntity {
+		throw new NotImplementedError("post transaction");
 	}
 
-	// Create entity from API request - requires organizationId and ledgerId
+	/**
+	 * Creates a transaction entity from API request data.
+	 *
+	 * @param rq - The API request containing transaction details
+	 * @param organizationId - Organization that owns this transaction
+	 * @param ledgerId - Ledger this transaction belongs to
+	 * @param id - Optional transaction ID (generates new one if not provided)
+	 * @returns A new transaction entity with validated entries
+	 */
 	public static fromRequest(
 		rq: LedgerTransactionRequest,
 		organizationId: OrgID,
@@ -141,6 +118,7 @@ class LedgerTransactionEntity {
 		// Convert API entries to entry entities (amount is already integer minor units)
 		const entries = rq.ledgerEntries.map(apiEntry =>
 			LedgerTransactionEntryEntity.create(
+				organizationId,
 				transactionId,
 				TypeID.fromString<"lat">(apiEntry.ledgerAccountId),
 				apiEntry.direction,
@@ -161,10 +139,54 @@ class LedgerTransactionEntity {
 		});
 	}
 
-	// Create entity from database record with entries (primary factory from DB)
-	public static fromRecordWithEntries(
-		record: LedgerTransactionRecord,
+	/**
+	 * Creates a transaction entity directly from entry inputs (for testing and service layer).
+	 *
+	 * @param organizationId - Organization that owns this transaction
+	 * @param ledgerId - Ledger this transaction belongs to
+	 * @param entries - Array of entry inputs (accountId, direction, amount)
+	 * @param description - Optional transaction description
+	 * @param idempotencyKey - Optional idempotency key for duplicate detection
+	 * @returns A new pending transaction entity with validated entries
+	 */
+	public static createWithEntries(
 		organizationId: OrgID,
+		ledgerId: LedgerID,
+		entries: TransactionEntryInput[],
+		description?: string,
+		idempotencyKey?: string
+	): LedgerTransactionEntity {
+		const now = new Date();
+		const transactionId = new TypeID("ltr");
+
+		// Convert entry inputs to entry entities
+		const entryEntities = entries.map(input =>
+			LedgerTransactionEntryEntity.create(
+				organizationId,
+				transactionId,
+				TypeID.fromString<"lat">(input.accountId),
+				input.direction,
+				input.amount // Integer minor units
+			)
+		);
+
+		return new LedgerTransactionEntity({
+			id: transactionId,
+			organizationId,
+			ledgerId,
+			entries: entryEntities,
+			description,
+			idempotencyKey,
+			status: "pending",
+			metadata: undefined,
+			created: now,
+			updated: now,
+		});
+	}
+
+	// Create entity from database record with entries (primary factory from DB)
+	public static fromRecord(
+		record: LedgerTransactionRecord,
 		entries: LedgerTransactionEntryEntity[]
 	): LedgerTransactionEntity {
 		// Parse metadata from TEXT (JSON string) to object
@@ -179,7 +201,7 @@ class LedgerTransactionEntity {
 
 		return new LedgerTransactionEntity({
 			id: TypeID.fromString<"ltr">(record.id),
-			organizationId,
+			organizationId: TypeID.fromString<"org">(record.organizationId),
 			ledgerId: TypeID.fromString<"lgr">(record.ledgerId),
 			entries,
 			idempotencyKey: record.idempotencyKey ?? undefined,
@@ -196,6 +218,7 @@ class LedgerTransactionEntity {
 		return {
 			id: this.id.toString(),
 			ledgerId: this.ledgerId.toString(),
+			organizationId: this.organizationId.toString(),
 			idempotencyKey: this.idempotencyKey ?? undefined,
 			description: this.description ?? undefined,
 			status: this.status,
@@ -217,34 +240,6 @@ class LedgerTransactionEntity {
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
 		};
-	}
-
-	// Helper method to post a transaction (change status)
-	public withPostedStatus(): LedgerTransactionEntity {
-		const postDate = new Date();
-
-		// Post all entries as well
-		const postedEntries = this.entries.map(entry => entry.withPostedStatus(postDate));
-
-		return new LedgerTransactionEntity({
-			id: this.id,
-			organizationId: this.organizationId,
-			ledgerId: this.ledgerId,
-			entries: postedEntries,
-			idempotencyKey: this.idempotencyKey,
-			description: this.description,
-			status: "posted",
-			metadata: this.metadata,
-			created: this.created,
-			updated: postDate,
-		});
-	}
-
-	// Helper method to get total transaction amount (sum of all debits = sum of all credits)
-	public getTotalAmount(): number {
-		return this.entries
-			.filter(entry => entry.direction === "debit")
-			.reduce((sum, entry) => sum + entry.amount, 0);
 	}
 }
 
