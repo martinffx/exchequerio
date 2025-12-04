@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { range } from "radash";
+import { TypeID } from "typeid-js";
 import { Config } from "@/config";
 import { ConflictError, NotFoundError } from "@/errors";
 import * as schema from "@/repo/schema";
@@ -10,6 +11,7 @@ import { OrganizationEntity, OrganizationRepo } from "./OrganizationRepo";
 describe("OrganizationRepo", () => {
 	let pool: Pool;
 	let repo: OrganizationRepo;
+	const createdOrganizations: Set<string> = new Set();
 
 	beforeAll(async () => {
 		const config = new Config();
@@ -22,14 +24,14 @@ describe("OrganizationRepo", () => {
 	});
 
 	afterAll(async () => {
-		let offset = 0;
-		const limit = 100;
-		let records: OrganizationEntity[] = [];
-		do {
-			records = await repo.listOrganizations(offset, limit);
-			offset += limit;
-			await Promise.all(records.map(r => repo.deleteOrganization(r.id)));
-		} while (records.length === limit);
+		// Only delete organizations created by this test file
+		for (const orgId of createdOrganizations) {
+			try {
+				await repo.deleteOrganization(TypeID.fromString<"org">(orgId));
+			} catch {
+				// Ignore errors if organization was already deleted
+			}
+		}
 		await pool.end();
 	});
 
@@ -39,6 +41,8 @@ describe("OrganizationRepo", () => {
 			description: "Test description",
 		});
 		const rs = await repo.createOrganization(record);
+		createdOrganizations.add(rs.id.toString());
+
 		expect(record.id).toEqual(rs.id);
 		expect(record.name).toEqual(rs.name);
 		expect(record.description).toEqual(rs.description);
@@ -47,6 +51,7 @@ describe("OrganizationRepo", () => {
 		expect(rs).toEqual(rs1);
 
 		await repo.deleteOrganization(rs.id);
+		createdOrganizations.delete(rs.id.toString());
 		await expect(repo.getOrganization(rs.id)).rejects.toThrow(NotFoundError);
 	});
 
@@ -56,8 +61,12 @@ describe("OrganizationRepo", () => {
 			description: "Test description",
 		});
 		const rs = await repo.createOrganization(record);
+		createdOrganizations.add(rs.id.toString());
+
 		await expect(repo.createOrganization(record)).rejects.toThrow(ConflictError);
+
 		await repo.deleteOrganization(rs.id);
+		createdOrganizations.delete(rs.id.toString());
 	});
 
 	it("should allow records to be updated", async () => {
@@ -68,6 +77,8 @@ describe("OrganizationRepo", () => {
 		await expect(repo.updateOrganization(record.id, record)).rejects.toThrow(NotFoundError);
 
 		const rs = await repo.createOrganization(record);
+		createdOrganizations.add(rs.id.toString());
+
 		try {
 			const updatedRecord = record.update({
 				name: "Test Organization Updated",
@@ -81,6 +92,7 @@ describe("OrganizationRepo", () => {
 			expect(rs1.description).toEqual(updatedRecord.description);
 		} finally {
 			await repo.deleteOrganization(rs.id);
+			createdOrganizations.delete(rs.id.toString());
 		}
 	});
 
@@ -95,6 +107,9 @@ describe("OrganizationRepo", () => {
 			records.push(rs);
 		}
 		const savedRecords = await Promise.all(records);
+		for (const record of savedRecords) {
+			createdOrganizations.add(record.id.toString());
+		}
 
 		try {
 			// Get all organizations and filter to only our test records
@@ -111,6 +126,9 @@ describe("OrganizationRepo", () => {
 			expect(rs1.length).toBeGreaterThanOrEqual(10);
 		} finally {
 			await Promise.all(savedRecords.map(record => repo.deleteOrganization(record.id)));
+			for (const record of savedRecords) {
+				createdOrganizations.delete(record.id.toString());
+			}
 		}
 	});
 });

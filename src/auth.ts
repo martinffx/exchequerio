@@ -1,7 +1,7 @@
 import fastifyAuth from "@fastify/auth";
 import fastifyJwt from "@fastify/jwt";
 import { createSigner, type SignerSync } from "fast-jwt";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { TypeID } from "typeid-js";
 import { Config } from "./config";
 import { ForbiddenError, UnauthorizedError } from "./errors";
@@ -113,7 +113,9 @@ class OrgToken {
 declare module "fastify" {
 	interface FastifyInstance {
 		verifyJWT: (request: FastifyRequest) => Promise<void>;
-		hasPermissions: (permissions: Permissions[]) => (request: FastifyRequest) => Promise<void>;
+		hasPermissions: (
+			permissions: Permissions[]
+		) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 	}
 
 	interface FastifyRequest {
@@ -143,7 +145,7 @@ const registerAuth = async (server: FastifyInstance): Promise<void> => {
 		}
 	});
 	server.decorate("hasPermissions", (requiredPermissions: Permissions[]) => {
-		return async (request: FastifyRequest): Promise<void> => {
+		return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
 			const role = request.token.scope[0];
 			const permissions = RolePermissions[role];
 			if (!permissions) {

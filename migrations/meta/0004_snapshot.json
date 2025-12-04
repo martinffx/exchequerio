@@ -1,6 +1,6 @@
 {
-  "id": "d6668ede-9d7c-4261-a6e2-495da26fc5f5",
-  "prevId": "bf93b79a-5e27-436c-93fa-31052f14d626",
+  "id": "73c7a554-d549-4aa9-bdff-a91f3796c9ba",
+  "prevId": "d6668ede-9d7c-4261-a6e2-495da26fc5f5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -665,6 +665,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "direction": {
           "name": "direction",
           "type": "ledger_entry_direction",
@@ -674,6 +680,18 @@
         },
         "amount": {
           "name": "amount",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency_exponent": {
+          "name": "currency_exponent",
           "type": "bigint",
           "primaryKey": false,
           "notNull": true
@@ -780,6 +798,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "ledger_transaction_entries_organization_id_organizations_table_id_fk": {
+          "name": "ledger_transaction_entries_organization_id_organizations_table_id_fk",
+          "tableFrom": "ledger_transaction_entries",
+          "tableTo": "organizations_table",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -805,6 +836,12 @@
         },
         "ledger_id": {
           "name": "ledger_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -889,6 +926,19 @@
           "tableTo": "ledgers",
           "columnsFrom": [
             "ledger_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ledger_transactions_organization_id_organizations_table_id_fk": {
+          "name": "ledger_transactions_organization_id_organizations_table_id_fk",
+          "tableFrom": "ledger_transactions",
+          "tableTo": "organizations_table",
+          "columnsFrom": [
+            "organization_id"
           ],
           "columnsTo": [
             "id"

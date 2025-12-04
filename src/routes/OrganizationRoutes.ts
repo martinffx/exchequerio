@@ -1,5 +1,5 @@
 import { Type } from "@sinclair/typebox";
-import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyPluginCallback } from "fastify";
 import { OrganizationEntity } from "@/services";
 import {
 	BadRequestErrorResponse,
@@ -41,9 +41,8 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]) as (
-				request: FastifyRequest
-			) => void,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]),
 		},
 		async (rq: ListOrganizationsRequest): Promise<OrganizationResponse[]> => {
 			const orgs = await rq.server.services.organizationService.listOrganizations(
@@ -74,11 +73,8 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]) as (
-				req: FastifyRequest,
-				reply: FastifyReply,
-				done: (err?: Error) => void
-			) => void,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]),
 		},
 		async (rq: GetOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await rq.server.services.organizationService.getOrganization(rq.params.orgId);
@@ -106,9 +102,8 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]) as (
-				request: FastifyRequest
-			) => void,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]),
 		},
 		async (rq: CreateOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await server.services.organizationService.createOrganization(
@@ -140,9 +135,8 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]) as (
-				request: FastifyRequest
-			) => void,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]),
 		},
 		async (rq: UpdateOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await rq.server.services.organizationService.updateOrganization(
@@ -174,9 +168,8 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["my:organization:delete", "organization:delete"]) as (
-				request: FastifyRequest
-			) => void,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["my:organization:delete", "organization:delete"]),
 		},
 		async (rq: DeleteOrganizationRequest): Promise<void> => {
 			await rq.server.services.organizationService.deleteOrganization(rq.params.orgId);

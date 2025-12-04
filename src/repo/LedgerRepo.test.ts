@@ -29,11 +29,7 @@ describe("LedgerRepo", () => {
 
 		afterEach(async () => {
 			if (ledgerId) {
-				try {
-					await ledgerRepo.deleteLedger(testOrgId, ledgerId);
-				} catch {
-					// Ignore if already deleted
-				}
+				await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 			}
 		});
 

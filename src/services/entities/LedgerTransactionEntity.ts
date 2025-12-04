@@ -1,5 +1,6 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
+import { ConflictError } from "@/errors";
 import type { LedgerTransactionsTable } from "@/repo/schema";
 import type {
 	BalanceStatus,
@@ -7,22 +8,22 @@ import type {
 	LedgerTransactionRequest,
 	LedgerTransactionResponse,
 } from "@/routes/ledgers/schema";
+import type { LedgerEntity } from "./LedgerEntity";
 import { LedgerTransactionEntryEntity } from "./LedgerTransactionEntryEntity";
 import type { LedgerID, LedgerTransactionID, OrgID } from "./types";
-import { NotImplementedError } from "@/errors";
 
 // Infer types from Drizzle schema
 type LedgerTransactionRecord = InferSelectModel<typeof LedgerTransactionsTable>;
 type LedgerTransactionInsert = InferInsertModel<typeof LedgerTransactionsTable>;
 
 // Input for creating transaction entries (simplified for service layer use)
-interface TransactionEntryInput {
+type TransactionEntryInput = {
 	accountId: string;
 	direction: Direction;
 	amount: number; // Integer minor units
-}
+};
 
-interface LedgerTransactionEntityOptions {
+type LedgerTransactionEntityOptions = {
 	id: LedgerTransactionID;
 	organizationId: OrgID;
 	ledgerId: LedgerID;
@@ -33,7 +34,13 @@ interface LedgerTransactionEntityOptions {
 	metadata?: Record<string, unknown>;
 	created: Date;
 	updated: Date;
-}
+};
+
+type LedgerTransactionRequestOpts = {
+	rq: LedgerTransactionRequest;
+	ledger: LedgerEntity;
+	id?: string;
+};
 
 class LedgerTransactionEntity {
 	public readonly id: LedgerTransactionID;
@@ -72,10 +79,6 @@ class LedgerTransactionEntity {
 		let totalCredits = 0;
 
 		for (const entry of entries) {
-			if (!entry.isValidAmount()) {
-				throw new Error(`Invalid entry amount: ${entry.amount}`);
-			}
-
 			if (entry.direction === "debit") {
 				totalDebits += entry.amount;
 			} else if (entry.direction === "credit") {
@@ -93,8 +96,40 @@ class LedgerTransactionEntity {
 		}
 	}
 
+	/**
+	 * Posts a pending transaction, changing its status to "posted".
+	 * Idempotent - returns the same transaction if already posted.
+	 *
+	 * @returns A new transaction entity with posted status
+	 * @throws {ConflictError} If transaction is archived
+	 */
 	public postTransaction(): LedgerTransactionEntity {
-		throw new NotImplementedError("post transaction");
+		if (this.status === "posted") {
+			return this; // Idempotent
+		}
+
+		if (this.status === "archived") {
+			throw new ConflictError({
+				message: "Cannot post an archived transaction",
+			});
+		}
+
+		// Create new entity with posted status and updated entries
+		const now = new Date();
+		const postedEntries = this.entries.map(entry => entry.withPostedStatus(now));
+
+		return new LedgerTransactionEntity({
+			id: this.id,
+			organizationId: this.organizationId,
+			ledgerId: this.ledgerId,
+			entries: postedEntries,
+			idempotencyKey: this.idempotencyKey,
+			description: this.description,
+			status: "posted",
+			metadata: this.metadata,
+			created: this.created,
+			updated: now,
+		});
 	}
 
 	/**
@@ -106,81 +141,41 @@ class LedgerTransactionEntity {
 	 * @param id - Optional transaction ID (generates new one if not provided)
 	 * @returns A new transaction entity with validated entries
 	 */
-	public static fromRequest(
-		rq: LedgerTransactionRequest,
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		id?: string
-	): LedgerTransactionEntity {
-		const now = new Date();
+	public static fromRequest({
+		rq,
+		ledger,
+		id,
+	}: LedgerTransactionRequestOpts): LedgerTransactionEntity {
 		const transactionId = id ? TypeID.fromString<"ltr">(id) : new TypeID("ltr");
 
 		// Convert API entries to entry entities (amount is already integer minor units)
-		const entries = rq.ledgerEntries.map(apiEntry =>
-			LedgerTransactionEntryEntity.create(
-				organizationId,
-				transactionId,
-				TypeID.fromString<"lat">(apiEntry.ledgerAccountId),
-				apiEntry.direction,
-				apiEntry.amount // Already integer minor units
-			)
+		const entries = rq.ledgerEntries.map(
+			entry =>
+				new LedgerTransactionEntryEntity({
+					id: new TypeID("lte"),
+					organizationId: ledger.organizationId,
+					transactionId,
+					accountId: TypeID.fromString<"lat">(entry.ledgerAccountId),
+					direction: entry.direction,
+					amount: entry.amount, // Already integer minor units
+					currency: ledger.currency,
+					currencyExponent: ledger.currencyExponent,
+					status: rq.status,
+					created: new Date(rq.created),
+					updated: new Date(rq.updated),
+				})
 		);
 
 		return new LedgerTransactionEntity({
 			id: transactionId,
-			organizationId,
-			ledgerId,
+			organizationId: ledger.organizationId,
+			ledgerId: ledger.id,
 			entries,
 			description: rq.description,
 			status: rq.status,
 			metadata: rq.metadata,
-			created: now,
-			updated: now,
-		});
-	}
-
-	/**
-	 * Creates a transaction entity directly from entry inputs (for testing and service layer).
-	 *
-	 * @param organizationId - Organization that owns this transaction
-	 * @param ledgerId - Ledger this transaction belongs to
-	 * @param entries - Array of entry inputs (accountId, direction, amount)
-	 * @param description - Optional transaction description
-	 * @param idempotencyKey - Optional idempotency key for duplicate detection
-	 * @returns A new pending transaction entity with validated entries
-	 */
-	public static createWithEntries(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		entries: TransactionEntryInput[],
-		description?: string,
-		idempotencyKey?: string
-	): LedgerTransactionEntity {
-		const now = new Date();
-		const transactionId = new TypeID("ltr");
-
-		// Convert entry inputs to entry entities
-		const entryEntities = entries.map(input =>
-			LedgerTransactionEntryEntity.create(
-				organizationId,
-				transactionId,
-				TypeID.fromString<"lat">(input.accountId),
-				input.direction,
-				input.amount // Integer minor units
-			)
-		);
-
-		return new LedgerTransactionEntity({
-			id: transactionId,
-			organizationId,
-			ledgerId,
-			entries: entryEntities,
-			description,
-			idempotencyKey,
-			status: "pending",
-			metadata: undefined,
-			created: now,
-			updated: now,
+			created: new Date(rq.created),
+			updated: new Date(rq.updated),
 		});
 	}
 

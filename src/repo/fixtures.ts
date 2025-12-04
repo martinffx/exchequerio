@@ -7,11 +7,13 @@ import {
 	LedgerAccountEntity,
 	LedgerEntity,
 	LedgerTransactionEntity,
+	LedgerTransactionEntryEntity,
 	OrganizationEntity,
 } from "@/services/entities";
 import type { LedgerAccountEntityOpts } from "@/services/entities/LedgerAccountEntity";
 import type { LedgerEntityOpts } from "@/services/entities/LedgerEntity";
 import type { LedgerTransactionEntityOpts } from "@/services/entities/LedgerTransactionEntity";
+import type { LedgerTransactionEntryEntityOpts } from "@/services/entities/LedgerTransactionEntryEntity";
 import type { OrgEntityOpts } from "@/services/entities/OrganizationEntity";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
 import { LedgerRepo } from "./LedgerRepo";
@@ -133,6 +135,47 @@ function createLedgerAccountEntity(
 }
 
 /**
+ * Creates a LedgerTransactionEntryEntity with sensible test defaults.
+ *
+ * @param options - Partial options to override defaults
+ * @returns A new LedgerTransactionEntryEntity instance
+ *
+ * @example
+ * ```typescript
+ * const entry = createLedgerTransactionEntryEntity({
+ *   transactionId: txId,
+ *   accountId: accountId,
+ *   direction: "debit",
+ *   amount: 10000
+ * });
+ * ```
+ */
+function createLedgerTransactionEntryEntity(
+	options: Partial<LedgerTransactionEntryEntityOpts> & {
+		transactionId: TypeID<"ltr">;
+		accountId: TypeID<"lat">;
+		direction: "debit" | "credit";
+		amount: number;
+	}
+): LedgerTransactionEntryEntity {
+	const now = new Date();
+	return new LedgerTransactionEntryEntity({
+		id: options.id ?? new TypeID("lte"),
+		organizationId: options.organizationId ?? new TypeID("org"),
+		transactionId: options.transactionId,
+		accountId: options.accountId,
+		direction: options.direction,
+		amount: options.amount,
+		currency: options.currency ?? "USD",
+		currencyExponent: options.currencyExponent ?? 2,
+		status: options.status ?? "pending",
+		metadata: options.metadata,
+		created: options.created ?? now,
+		updated: options.updated ?? now,
+	});
+}
+
+/**
  * Creates a LedgerTransactionEntity with sensible test defaults.
  *
  * @param options - Partial options to override defaults
@@ -172,5 +215,6 @@ export {
 	createOrganizationEntity,
 	createLedgerEntity,
 	createLedgerAccountEntity,
+	createLedgerTransactionEntryEntity,
 	createLedgerTransactionEntity,
 };

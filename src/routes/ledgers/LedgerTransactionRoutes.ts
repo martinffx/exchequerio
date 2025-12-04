@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyPluginAsync } from "fastify";
-import { NotImplementedError } from "@/errors";
-
+import { TypeID } from "typeid-js";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -13,16 +12,16 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/routes/schema";
-
 import {
 	type CreateLedgerTransactionRequest,
 	type DeleteLedgerTransactionRequest,
 	type GetLedgerTransactionRequest,
-	LedgerTransactionIdParams as LedgerTransactionIdParameters,
+	LedgerIdParams as LedgerIdParameters,
+	LedgerIdWithTransactionIdParams,
 	LedgerTransactionRequest,
 	LedgerTransactionResponse,
 	type ListLedgerTransactionsRequest,
-	type UpdateLedgerTransactionRequest,
+	type PostLedgerTransactionRequest,
 } from "./schema";
 
 const TAGS = ["Ledger Transactions"];
@@ -35,6 +34,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 				tags: TAGS,
 				summary: "List Ledger Transactions",
 				description: "List ledger transactions",
+				params: LedgerIdParameters,
 				querystring: PaginationQuery,
 				response: {
 					200: Type.Array(LedgerTransactionResponse),
@@ -48,7 +48,9 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 			},
 		},
 		async (rq: ListLedgerTransactionsRequest): Promise<LedgerTransactionResponse[]> => {
-			const transactions = await rq.server.services.ledgerTransactionService.listLedgerTransactions(
+			const transactions = await rq.server.services.ledgerTransactionService.listTransactions(
+				rq.token.orgId,
+				TypeID.fromString<"lgr">(rq.params.ledgerId),
 				rq.query.offset,
 				rq.query.limit
 			);
@@ -57,14 +59,14 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 	);
 
 	server.get(
-		"/:id",
+		"/:ledgerTransactionId",
 		{
 			schema: {
 				operationId: "getLedgerTransaction",
 				tags: TAGS,
 				summary: "Get Ledger Transaction",
 				description: "Get ledger transaction",
-				params: LedgerTransactionIdParameters,
+				params: LedgerIdWithTransactionIdParams,
 				response: {
 					200: LedgerTransactionResponse,
 					400: BadRequestErrorResponse,
@@ -78,10 +80,12 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 			},
 		},
 		async (rq: GetLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
-			const ledger = await rq.server.services.ledgerTransactionService.getLedgerTransaction(
-				rq.params.ledgerTransactionId
+			const transaction = await rq.server.services.ledgerTransactionService.getLedgerTransaction(
+				rq.token.orgId,
+				TypeID.fromString<"lgr">(rq.params.ledgerId),
+				TypeID.fromString<"ltr">(rq.params.ledgerTransactionId)
 			);
-			return ledger.toResponse();
+			return transaction.toResponse();
 		}
 	);
 
@@ -93,6 +97,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 				tags: TAGS,
 				summary: "Create Ledger Transaction",
 				description: "Create ledger transaction",
+				params: LedgerIdParameters,
 				body: LedgerTransactionRequest,
 				response: {
 					200: LedgerTransactionResponse,
@@ -106,22 +111,26 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 				},
 			},
 		},
-		(_rq: CreateLedgerTransactionRequest): LedgerTransactionResponse => {
-			// TODO: Implement proper entity creation from request body
-			throw new NotImplementedError("Feature not yet implemented");
+		async (rq: CreateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
+			const ledgerTransaction = await rq.server.services.ledgerTransactionService.createTransaction(
+				rq.token.orgId,
+				ledgerId,
+				rq.body
+			);
+			return ledgerTransaction.toResponse();
 		}
 	);
 
-	server.put(
-		"/:id",
+	server.post(
+		"/:ledgerTransactionId/post",
 		{
 			schema: {
-				operationId: "updateLedgerTransaction",
+				operationId: "postLedgerTransaction",
 				tags: TAGS,
-				summary: "Update Ledger Transaction",
-				description: "Update ledger transaction",
-				params: LedgerTransactionIdParameters,
-				body: LedgerTransactionRequest,
+				summary: "Post Ledger Transaction",
+				description: "Post (confirm) a pending ledger transaction",
+				params: LedgerIdWithTransactionIdParams,
 				response: {
 					200: LedgerTransactionResponse,
 					400: BadRequestErrorResponse,
@@ -135,21 +144,55 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 				},
 			},
 		},
-		(_rq: UpdateLedgerTransactionRequest): LedgerTransactionResponse => {
-			// TODO: Implement proper entity creation from request body
-			throw new NotImplementedError("Feature not yet implemented");
+		async (rq: PostLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
+			const transaction = await rq.server.services.ledgerTransactionService.postTransaction(
+				rq.token.orgId,
+				TypeID.fromString<"lgr">(rq.params.ledgerId),
+				TypeID.fromString<"ltr">(rq.params.ledgerTransactionId)
+			);
+			return transaction.toResponse();
 		}
 	);
 
+	// TODO: Implement update transaction
+	// server.put(
+	// 	"/:ledgerTransactionId",
+	// 	{
+	// 		schema: {
+	// 			operationId: "updateLedgerTransaction",
+	// 			tags: TAGS,
+	// 			summary: "Update Ledger Transaction",
+	// 			description: "Update ledger transaction",
+	// 			params: LedgerIdWithTransactionIdParams,
+	// 			body: LedgerTransactionRequest,
+	// 			response: {
+	// 				200: LedgerTransactionResponse,
+	// 				400: BadRequestErrorResponse,
+	// 				401: UnauthorizedErrorResponse,
+	// 				403: ForbiddenErrorResponse,
+	// 				404: NotFoundErrorResponse,
+	// 				409: ConflictErrorResponse,
+	// 				429: TooManyRequestsErrorResponse,
+	// 				500: InternalServerErrorResponse,
+	// 				503: ServiceUnavailableErrorResponse,
+	// 			},
+	// 		},
+	// 	},
+	// 	async (_rq: UpdateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
+	// 		// TODO: Implement proper entity creation from request body
+	// 		throw new NotImplementedError("Feature not yet implemented");
+	// 	}
+	// );
+
 	server.delete(
-		"/:id",
+		"/:ledgerTransactionId",
 		{
 			schema: {
 				operationId: "deleteLedgerTransaction",
 				tags: TAGS,
 				summary: "Delete Ledger Transaction",
 				description: "Delete ledger transaction",
-				params: LedgerTransactionIdParameters,
+				params: LedgerIdWithTransactionIdParams,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -164,8 +207,10 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 			},
 		},
 		async (rq: DeleteLedgerTransactionRequest): Promise<void> => {
-			await rq.server.services.ledgerTransactionService.deleteLedgerTransaction(
-				rq.params.ledgerTransactionId
+			await rq.server.services.ledgerTransactionService.deleteTransaction(
+				rq.token.orgId,
+				TypeID.fromString<"lgr">(rq.params.ledgerId),
+				TypeID.fromString<"ltr">(rq.params.ledgerTransactionId)
 			);
 		}
 	);

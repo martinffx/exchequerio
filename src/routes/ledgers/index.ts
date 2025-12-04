@@ -10,11 +10,13 @@ import { LedgerTransactionRoutes } from "./LedgerTransactionRoutes";
 
 const LedgerRouterPlugin: FastifyPluginAsync = async server => {
 	await server.register(LedgerRoutes);
-	await server.register(LedgerTransactionRoutes, { prefix: "/transactions" });
+	await server.register(LedgerTransactionRoutes, {
+		prefix: "/:ledgerId/transactions",
+	});
 	await server.register(LedgerTransactionEntriesRoutes, {
 		prefix: "/transactions/entries",
 	});
-	await server.register(LedgerAccountRoutes, { prefix: "/accounts" });
+	await server.register(LedgerAccountRoutes, { prefix: "/:ledgerId/accounts" });
 	await server.register(LedgerAccountCategoryRoutes, {
 		prefix: "/accounts/categories",
 	});

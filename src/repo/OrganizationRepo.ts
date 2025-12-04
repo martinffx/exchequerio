@@ -15,7 +15,7 @@ class OrganizationRepo {
 	public async listOrganizations(offset = 0, limit = 20): Promise<OrganizationEntity[]> {
 		const orgs = await this.db.select().from(OrganizationsTable).limit(limit).offset(offset);
 
-		return orgs.map(org => OrganizationEntity.fromRow(org));
+		return orgs.map(org => OrganizationEntity.fromRecord(org));
 	}
 
 	public async getOrganization(id: OrgID): Promise<OrganizationEntity> {
@@ -27,7 +27,7 @@ class OrganizationRepo {
 		if (!orgs.length) {
 			throw new NotFoundError(`Organization with id ${id.toString()} not found`);
 		}
-		return OrganizationEntity.fromRow(orgs[0]);
+		return OrganizationEntity.fromRecord(orgs[0]);
 	}
 
 	public async createOrganization(record: OrganizationEntity): Promise<OrganizationEntity> {
@@ -40,7 +40,7 @@ class OrganizationRepo {
 					description: record.description,
 				})
 				.returning();
-			return OrganizationEntity.fromRow(organization);
+			return OrganizationEntity.fromRecord(organization);
 		} catch (error: unknown) {
 			if (error instanceof LedgerError) {
 				throw error;
@@ -56,7 +56,9 @@ class OrganizationRepo {
 				) {
 					const cause = errorWithCause.cause as { code?: string };
 					if (cause.code === "23505") {
-						throw new ConflictError(`Organization with id ${record.id.toString()} already exists`);
+						throw new ConflictError({
+							message: `Organization with id ${record.id.toString()} already exists`,
+						});
 					}
 				}
 			}
@@ -64,7 +66,9 @@ class OrganizationRepo {
 			// Also check direct DatabaseError instances (backwards compatibility)
 			if (error instanceof DatabaseError) {
 				if (error.code === "23505") {
-					throw new ConflictError(`Organization with id ${record.id.toString()} already exists`);
+					throw new ConflictError({
+						message: `Organization with id ${record.id.toString()} already exists`,
+					});
 				}
 				throw new InternalServerError(error.message);
 			}
@@ -73,7 +77,9 @@ class OrganizationRepo {
 			if (error && typeof error === "object" && "code" in error) {
 				const dbError = error as { code?: string; message?: string };
 				if (dbError.code === "23505") {
-					throw new ConflictError(`Organization with id ${record.id.toString()} already exists`);
+					throw new ConflictError({
+						message: `Organization with id ${record.id.toString()} already exists`,
+					});
 				}
 			}
 
@@ -102,7 +108,7 @@ class OrganizationRepo {
 			if (organization === undefined) {
 				throw new NotFoundError(`Organization with id ${id.toString()} not found`);
 			}
-			return OrganizationEntity.fromRow(organization);
+			return OrganizationEntity.fromRecord(organization);
 		} catch (error: unknown) {
 			if (error instanceof LedgerError) {
 				throw error;

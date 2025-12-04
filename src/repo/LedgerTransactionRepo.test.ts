@@ -1,12 +1,17 @@
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { retry } from "radash";
 import { TypeID } from "typeid-js";
 import { vi } from "vitest";
 import { Config } from "@/config";
 import { NotFoundError } from "@/errors";
 import { LedgerTransactionEntity } from "@/services/entities";
-import { createLedgerEntity } from "./fixtures";
+import {
+	createLedgerEntity,
+	createLedgerTransactionEntity,
+	createLedgerTransactionEntryEntity,
+} from "./fixtures";
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
 import * as schema from "./schema";
 import {
@@ -33,8 +38,8 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 	const testOrgId = new TypeID("org");
 	const testLedger = createLedgerEntity({ organizationId: testOrgId });
 	const testLedgerId = testLedger.id.toString();
-	const testAccount1Id = new TypeID("lac").toString();
-	const testAccount2Id = new TypeID("lac").toString();
+	const testAccount1Id = new TypeID("lat").toString();
+	const testAccount2Id = new TypeID("lat").toString();
 
 	beforeAll(async () => {
 		// Create organization first (foreign key requirement)
@@ -185,12 +190,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries,
-				"Test transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Test transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			// Act
 			const result = await repo.createTransaction(transactionEntity);
@@ -237,12 +252,23 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 
 			// Act & Assert - createWithEntries should throw during entity creation
 			expect(() => {
-				LedgerTransactionEntity.createWithEntries(
-					testOrgId,
-					testLedger.id,
-					unbalancedEntries,
-					"Unbalanced transaction"
-				);
+				(() => {
+					const txId = new TypeID("ltr");
+					return createLedgerTransactionEntity({
+						organizationId: testOrgId,
+						ledgerId: testLedger.id,
+						description: "Unbalanced transaction",
+						entries: unbalancedEntries.map(e =>
+							createLedgerTransactionEntryEntity({
+								organizationId: testOrgId,
+								transactionId: txId,
+								accountId: TypeID.fromString<"lat">(e.accountId),
+								direction: e.direction,
+								amount: e.amount,
+							})
+						),
+					});
+				})();
 			}).toThrow("Double-entry validation failed");
 
 			// Verify no changes were made (rollback)
@@ -280,12 +306,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				wrongOrgId,
-				testLedger.id,
-				entries,
-				"Test transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: wrongOrgId,
+				ledgerId: testLedger.id,
+				description: "Test transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: wrongOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			// Act & Assert
 			await expect(repo.createTransaction(transactionEntity)).rejects.toThrow(NotFoundError);
@@ -308,20 +344,30 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries,
-				"Test transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Test transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			const createdTransaction = await repo.createTransaction(transactionEntity);
 
 			// Act
 			const postedTransaction = await repo.postTransaction(
-				testOrgId.toString(),
-				testLedgerId,
-				createdTransaction.id.toString()
+				testOrgId,
+				TypeID.fromString<"lgr">(testLedgerId),
+				createdTransaction.id
 			);
 
 			// Assert
@@ -344,23 +390,37 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries,
-				"Test transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Test transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			const createdTransaction = await repo.createTransaction(transactionEntity);
 
 			// Post once
-			await repo.postTransaction(testOrgId.toString(), testLedgerId, createdTransaction.id.toString());
+			await repo.postTransaction(
+				testOrgId,
+				TypeID.fromString<"lgr">(testLedgerId),
+				createdTransaction.id
+			);
 
 			// Act - Post again
 			const postedAgain = await repo.postTransaction(
-				testOrgId.toString(),
-				testLedgerId,
-				createdTransaction.id.toString()
+				testOrgId,
+				TypeID.fromString<"lgr">(testLedgerId),
+				createdTransaction.id
 			);
 
 			// Assert
@@ -384,21 +444,31 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries,
-				"Test transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Test transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			const createdTransaction = await repo.createTransaction(transactionEntity);
 
 			// Act & Assert
 			await expect(
 				repo.postTransaction(
-					wrongOrgId, // Wrong organization
-					testLedgerId,
-					createdTransaction.id.toString()
+					TypeID.fromString<"org">(wrongOrgId), // Wrong organization
+					TypeID.fromString<"lgr">(testLedgerId),
+					createdTransaction.id
 				)
 			).rejects.toThrow(NotFoundError);
 		});
@@ -420,12 +490,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries,
-				"Test transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Test transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			const createdTransaction = await repo.createTransaction(transactionEntity);
 
@@ -458,12 +538,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries,
-				"Test transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Test transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			const createdTransaction = await repo.createTransaction(transactionEntity);
 
@@ -494,12 +584,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 
 			// Create multiple transactions
 			for (let i = 0; i < 5; i++) {
-				const transactionEntity = LedgerTransactionEntity.createWithEntries(
-					testOrgId,
-					testLedger.id,
-					entries,
-					`Test transaction ${i}`
-				);
+				const transactionEntityId = new TypeID("ltr");
+				const transactionEntity = createLedgerTransactionEntity({
+					id: transactionEntityId,
+					organizationId: testOrgId,
+					ledgerId: testLedger.id,
+					description: `Test transaction ${i}`,
+					entries: entries.map(e =>
+						createLedgerTransactionEntryEntity({
+							organizationId: testOrgId,
+							transactionId: transactionEntityId,
+							accountId: TypeID.fromString<"lat">(e.accountId),
+							direction: e.direction,
+							amount: e.amount,
+						})
+					),
+				});
 
 				await repo.createTransaction(transactionEntity);
 			}
@@ -554,24 +654,48 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity1 = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries1,
-				"Concurrent tx 1"
-			);
+			const transactionEntity1Id = new TypeID("ltr");
+			const transactionEntity1 = createLedgerTransactionEntity({
+				id: transactionEntity1Id,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Concurrent tx 1",
+				entries: entries1.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntity1Id,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
-			const transactionEntity2 = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries2,
-				"Concurrent tx 2"
-			);
+			const transactionEntity2Id = new TypeID("ltr");
+			const transactionEntity2 = createLedgerTransactionEntity({
+				id: transactionEntity2Id,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Concurrent tx 2",
+				entries: entries2.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntity2Id,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
-			// Act - Execute concurrent transactions
+			// Act - Execute concurrent transactions with retry on conflict (exponential backoff + jitter)
 			const [tx1, tx2] = await Promise.all([
-				repo.createTransaction(transactionEntity1),
-				repo.createTransaction(transactionEntity2),
+				retry({ times: 5, backoff: count => 10 * 2 ** count + Math.random() * 10 }, async _exit => {
+					return await repo.createTransaction(transactionEntity1);
+				}),
+				retry({ times: 5, backoff: count => 10 * 2 ** count + Math.random() * 10 }, async _exit => {
+					return await repo.createTransaction(transactionEntity2);
+				}),
 			]);
 
 			// Assert
@@ -612,12 +736,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries,
-				"Setup transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Test transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			await repo.createTransaction(transactionEntity);
 
@@ -645,14 +779,29 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 					},
 				];
 
-				const concurrentTransactionEntity = LedgerTransactionEntity.createWithEntries(
-					testOrgId,
-					testLedger.id,
-					concurrentEntries,
-					`Concurrent transaction ${index}`
-				);
+				const concurrentTransactionEntityId = new TypeID("ltr");
+				const concurrentTransactionEntity = createLedgerTransactionEntity({
+					id: concurrentTransactionEntityId,
+					organizationId: testOrgId,
+					ledgerId: testLedger.id,
+					description: `Concurrent transaction ${index}`,
+					entries: concurrentEntries.map(e =>
+						createLedgerTransactionEntryEntity({
+							organizationId: testOrgId,
+							transactionId: concurrentTransactionEntityId,
+							accountId: TypeID.fromString<"lat">(e.accountId),
+							direction: e.direction,
+							amount: e.amount,
+						})
+					),
+				});
 
-				return repo.createTransaction(concurrentTransactionEntity);
+				return retry(
+					{ times: 5, backoff: count => 10 * 2 ** count + Math.random() * 10 },
+					async _exit => {
+						return await repo.createTransaction(concurrentTransactionEntity);
+					}
+				);
 			});
 
 			const results = await Promise.all(concurrentPromises);
@@ -689,12 +838,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries,
-				"Invalid account transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Invalid account transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			// Get initial state
 			const initialAccount2 = await database
@@ -733,12 +892,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				TypeID.fromString<"lgr">(wrongLedgerId), // Wrong ledger
-				entries,
-				"Wrong ledger transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: TypeID.fromString<"lgr">(wrongLedgerId),
+				description: "Wrong ledger transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			// Get initial state
 			const initialAccount1 = await database
@@ -786,12 +955,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 					},
 				];
 
-				const transactionEntity = LedgerTransactionEntity.createWithEntries(
-					testOrgId,
-					testLedger.id,
-					entries,
-					`Balance test transaction ${index}`
-				);
+				const transactionEntityId = new TypeID("ltr");
+				const transactionEntity = createLedgerTransactionEntity({
+					id: transactionEntityId,
+					organizationId: testOrgId,
+					ledgerId: testLedger.id,
+					description: `Balance test transaction ${index}`,
+					entries: entries.map(e =>
+						createLedgerTransactionEntryEntity({
+							organizationId: testOrgId,
+							transactionId: transactionEntityId,
+							accountId: TypeID.fromString<"lat">(e.accountId),
+							direction: e.direction,
+							amount: e.amount,
+						})
+					),
+				});
 
 				await repo.createTransaction(transactionEntity);
 			}
@@ -830,12 +1009,22 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 				},
 			];
 
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				testOrgId,
-				testLedger.id,
-				entries,
-				"Precision test transaction"
-			);
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Setup transaction",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
 
 			// Act
 			await repo.createTransaction(transactionEntity);

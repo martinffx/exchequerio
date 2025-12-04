@@ -1,190 +1,109 @@
-import { TypeID } from "typeid-js";
-import { NotImplementedError } from "@/errors";
+import { ConflictError, NotFoundError } from "@/errors";
+import type { LedgerRepo } from "@/repo/LedgerRepo";
 import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
-import { LedgerTransactionEntity, type LedgerTransactionEntryEntity } from "./entities";
-
-// Transaction entry interface for creating transactions
-interface TransactionEntryInput {
-	accountId: string;
-	direction: "debit" | "credit";
-	amount: number; // Integer minor units
-}
-
-// Transaction creation interface
-interface CreateTransactionInput {
-	organizationId: string;
-	ledgerId: string;
-	description?: string;
-	entries: TransactionEntryInput[];
-	idempotencyKey?: string;
-	effectiveAt?: Date;
-}
+import type { LedgerTransactionRequest } from "@/routes/ledgers/schema";
+import {
+	type LedgerID,
+	LedgerTransactionEntity,
+	type LedgerTransactionID,
+	type OrgID,
+} from "./entities";
 
 class LedgerTransactionService {
-	constructor(private readonly ledgerTransactionRepo: LedgerTransactionRepo) {}
+	constructor(
+		private readonly ledgerTransactionRepo: LedgerTransactionRepo,
+		private readonly ledgerRepo: LedgerRepo
+	) {}
+
+	public async listTransactions(
+		orgId: OrgID,
+		ledgerId: LedgerID,
+		offset = 0,
+		limit = 20
+	): Promise<LedgerTransactionEntity[]> {
+		return this.ledgerTransactionRepo.listLedgerTransactions(
+			orgId.toString(),
+			ledgerId.toString(),
+			offset,
+			limit
+		);
+	}
+
+	public async getLedgerTransaction(
+		orgId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID
+	): Promise<LedgerTransactionEntity> {
+		return this.ledgerTransactionRepo.getLedgerTransaction(
+			orgId.toString(),
+			ledgerId.toString(),
+			transactionId.toString()
+		);
+	}
 
 	// Core transaction operations - entity enforces double-entry invariants
-	public async createTransactionWithEntries(
-		input: CreateTransactionInput
+	public async createTransaction(
+		orgId: OrgID,
+		ledgerId: LedgerID,
+		rq: LedgerTransactionRequest
 	): Promise<LedgerTransactionEntity> {
-		try {
-			// Create transaction entity - constructor validates all invariants
-			const transactionEntity = LedgerTransactionEntity.createWithEntries(
-				TypeID.fromString<"org">(input.organizationId),
-				TypeID.fromString<"lgr">(input.ledgerId),
-				input.entries,
-				input.description,
-				input.idempotencyKey
-			);
+		// Fetch ledger to get currency information
+		const ledger = await this.ledgerRepo.getLedger(orgId, ledgerId);
 
-			// Repository validates accounts exist and belong to ledger
-			const result = await this.ledgerTransactionRepo.createTransaction(transactionEntity);
-
-			return result;
-		} catch (error: unknown) {
-			// Handle idempotency key conflicts
-			if (error instanceof Error && error.message?.includes("duplicate key") && input.idempotencyKey) {
-				throw new Error(`Transaction with idempotency key '${input.idempotencyKey}' already exists`);
-			}
-			throw error;
+		if (!ledger) {
+			throw new NotFoundError(`Ledger ${ledgerId.toString()} not found`, {
+				organizationId: orgId.toString(),
+				ledgerId: ledgerId.toString(),
+			});
 		}
+
+		// Create transaction entity - constructor validates all invariants
+		const transactionEntity = LedgerTransactionEntity.fromRequest({
+			rq,
+			ledger,
+		});
+
+		// Repository validates accounts exist and belong to ledger
+		const result = await this.ledgerTransactionRepo.createTransaction(transactionEntity);
+
+		return result;
 	}
 
 	// Post (confirm) a pending transaction
-	public async postTransaction(transactionId: string): Promise<LedgerTransactionEntity> {
-		// TODO: Get organizationId and ledgerId from context/auth
-		// For now, use placeholder values
-		const organizationId = "org123"; // TODO: Get from context/auth
-		const ledgerId = "ledger456"; // TODO: Get from context/auth
-
+	public async postTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID
+	): Promise<LedgerTransactionEntity> {
 		return await this.ledgerTransactionRepo.postTransaction(organizationId, ledgerId, transactionId);
 	}
 
-	// Settlement workflow for PSP operations (US2: Accurate settlement processing)
-	public async createSettlement(
-		organizationId: string,
-		ledgerId: string,
-		settledAccountId: string,
-		contraAccountId: string,
-		amount: number, // Integer minor units
-		description?: string
-	): Promise<LedgerTransactionEntity> {
-		// Create settlement transaction entries (amount already in integer minor units)
-		const settledAccount = {
-			accountId: settledAccountId,
-			direction: "debit" as const,
-			amount,
-		};
+	/**
+	 * Deletes a transaction with balance updates.
+	 * Posted transactions can only be deleted in test environment.
+	 *
+	 * @throws {ConflictError} If transaction is posted and not in test environment
+	 */
+	public async deleteTransaction(
+		orgId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID
+	): Promise<void> {
+		const existing = await this.getLedgerTransaction(orgId, ledgerId, transactionId);
 
-		const contraAccount = {
-			accountId: contraAccountId,
-			direction: "credit" as const,
-			amount,
-		};
+		// Cannot delete posted transactions in production
+		if (existing.status === "posted" && process.env.NODE_ENV !== "test") {
+			throw new ConflictError({
+				message: "Cannot delete a posted transaction outside of test environment",
+			});
+		}
 
-		const entries = [settledAccount, contraAccount];
-
-		return this.createTransactionWithEntries({
-			organizationId,
+		await this.ledgerTransactionRepo.deleteTransactionWithBalanceUpdate(
+			orgId,
 			ledgerId,
-			description: description ?? `Settlement: ${settledAccountId} -> ${contraAccountId}`,
-			entries,
-		});
-	}
-
-	// Balance queries for account monitoring
-	public getAccountBalances(
-		_accountId: string,
-		_ledgerId: string
-	): Promise<Record<string, unknown>> {
-		// TODO: Implement balance calculation
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	public getAccountBalancesFast(
-		_accountId: string,
-		_ledgerId: string
-	): Promise<Record<string, unknown>> {
-		// TODO: Implement fast balance calculation
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	// Transaction history and reporting
-	public getTransactionHistory(
-		_accountId: string,
-		_limit: number,
-		_offset: number
-	): Promise<LedgerTransactionEntity[]> {
-		// TODO: Implement transaction history
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	// CRUD operations for transactions
-	public listLedgerTransactions(
-		_offset: number,
-		_limit: number
-	): Promise<LedgerTransactionEntity[]> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	public getLedgerTransaction(_id: string): Promise<LedgerTransactionEntity> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	public createLedgerTransaction(
-		_entity: LedgerTransactionEntity
-	): Promise<LedgerTransactionEntity> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	public updateLedgerTransaction(
-		_id: string,
-		_entity: LedgerTransactionEntity
-	): Promise<LedgerTransactionEntity> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	public deleteLedgerTransaction(_id: string): Promise<void> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	// Transaction entry operations
-	public listLedgerTransactionEntries(
-		_offset: number,
-		_limit: number
-	): Promise<LedgerTransactionEntryEntity[]> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	public getLedgerTransactionEntry(_id: string): Promise<LedgerTransactionEntryEntity> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	public createLedgerTransactionEntry(
-		_entity: LedgerTransactionEntryEntity
-	): Promise<LedgerTransactionEntryEntity> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	public updateLedgerTransactionEntry(
-		_id: string,
-		_entity: LedgerTransactionEntryEntity
-	): Promise<LedgerTransactionEntryEntity> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
-	}
-
-	public deleteLedgerTransactionEntry(_id: string): Promise<void> {
-		// TODO: Implement with proper organization tenancy
-		throw new NotImplementedError("Feature not yet implemented");
+			transactionId,
+			existing
+		);
 	}
 }
 

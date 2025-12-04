@@ -18,16 +18,17 @@ import {
 	type CreateLedgerAccountRequest,
 	type DeleteLedgerAccountRequest,
 	type GetLedgerAccountRequest,
-	LedgerAccountIdParams as LedgerAccountIdParameters,
 	LedgerAccountRequest,
 	LedgerAccountResponse,
+	LedgerIdParams as LedgerIdParameters,
+	LedgerIdWithAccountIdParams,
 	type ListLedgerAccountsRequest,
 	type UpdateLedgerAccountRequest,
 } from "./schema";
 
 const TAGS = ["Ledger Accounts"];
-const LedgerAccountRoutes: FastifyPluginAsync = async server => {
-	server.get(
+const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> => {
+	server.get<{ Params: LedgerIdParameters; Querystring: PaginationQuery }>(
 		"/",
 		{
 			schema: {
@@ -35,6 +36,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "List Ledger Accounts",
 				description: "List ledger accounts",
+				params: LedgerIdParameters,
 				querystring: PaginationQuery,
 				response: {
 					200: Type.Array(LedgerAccountResponse),
@@ -46,17 +48,19 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:read"]),
 		},
 		async (rq: ListLedgerAccountsRequest): Promise<LedgerAccountResponse[]> => {
+			const orgId = rq.token.orgId;
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
+
 			// Fetch ledger to get currency info
-			const ledger = await rq.server.services.ledgerService.getLedger(
-				TypeID.fromString<"org">(rq.query.orgId),
-				TypeID.fromString<"lgr">(rq.query.ledgerId)
-			);
+			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
 
 			const accounts = await rq.server.services.ledgerAccountService.listLedgerAccounts(
-				TypeID.fromString<"org">(rq.query.orgId),
-				TypeID.fromString<"lgr">(rq.query.ledgerId),
+				orgId,
+				ledgerId,
 				rq.query.offset,
 				rq.query.limit
 			);
@@ -64,7 +68,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.get(
+	server.get<{ Params: LedgerIdWithAccountIdParams }>(
 		"/:ledgerAccountId",
 		{
 			schema: {
@@ -72,7 +76,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Get Ledger Account",
 				description: "Get ledger account",
-				params: LedgerAccountIdParameters,
+				params: LedgerIdWithAccountIdParams,
 				response: {
 					200: LedgerAccountResponse,
 					400: BadRequestErrorResponse,
@@ -84,12 +88,13 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:read"]),
 		},
 		async (rq: GetLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			// TODO: Get orgId and ledgerId from request context or params
-			// For now, using placeholder values - this needs to be fixed based on route structure
-			const orgId = TypeID.fromString<"org">("placeholder");
-			const ledgerId = TypeID.fromString<"lgr">("placeholder");
+			const orgId = rq.token.orgId;
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
+			const accountId = TypeID.fromString<"lat">(rq.params.ledgerAccountId);
 
 			// Get ledger for currency info
 			const ledgerEntity = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
@@ -97,13 +102,13 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 			const account = await rq.server.services.ledgerAccountService.getLedgerAccount(
 				orgId,
 				ledgerId,
-				TypeID.fromString<"lat">(rq.params.ledgerAccountId)
+				accountId
 			);
 			return account.toResponse(ledgerEntity.currency, ledgerEntity.currencyExponent);
 		}
 	);
 
-	server.post(
+	server.post<{ Params: LedgerIdParameters; Body: LedgerAccountRequest }>(
 		"/",
 		{
 			schema: {
@@ -111,6 +116,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Create Ledger Account",
 				description: "Create ledger account",
+				params: LedgerIdParameters,
 				body: LedgerAccountRequest,
 				response: {
 					200: LedgerAccountResponse,
@@ -123,11 +129,12 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:write"]),
 		},
 		async (rq: CreateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			// TODO: Get orgId from request context or auth
-			const orgId = TypeID.fromString<"org">("placeholder");
-			const ledgerId = TypeID.fromString<"lgr">("placeholder");
+			const orgId = rq.token.orgId;
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 
 			// Get ledger for currency info
 			const ledgerEntity = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
@@ -138,7 +145,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.put(
+	server.put<{ Params: LedgerIdWithAccountIdParams; Body: LedgerAccountRequest }>(
 		"/:ledgerAccountId",
 		{
 			schema: {
@@ -146,7 +153,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Update Ledger Account",
 				description: "Update ledger account",
-				params: LedgerAccountIdParameters,
+				params: LedgerIdWithAccountIdParams,
 				body: LedgerAccountRequest,
 				response: {
 					200: LedgerAccountResponse,
@@ -160,20 +167,29 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:write"]),
 		},
 		async (rq: UpdateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			// TODO: Get orgId and ledgerId from request context
-			const orgId = TypeID.fromString<"org">("placeholder");
-			const ledgerId = TypeID.fromString<"lgr">("placeholder");
+			const orgId = rq.token.orgId;
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
+			const accountId = TypeID.fromString<"lat">(rq.params.ledgerAccountId);
 
 			// Get ledger for currency info
 			const ledgerEntity = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
+
+			// Fetch existing account to preserve normalBalance
+			const existingAccount = await rq.server.services.ledgerAccountService.getLedgerAccount(
+				orgId,
+				ledgerId,
+				accountId
+			);
 
 			const entity = LedgerAccountEntity.fromRequest(
 				rq.body,
 				orgId,
 				ledgerId,
-				"debit", // Default normal balance - should come from existing account
+				existingAccount.normalBalance,
 				rq.params.ledgerAccountId
 			);
 			const account = await rq.server.services.ledgerAccountService.updateLedgerAccount(
@@ -185,7 +201,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.delete(
+	server.delete<{ Params: LedgerIdWithAccountIdParams }>(
 		"/:ledgerAccountId",
 		{
 			schema: {
@@ -193,7 +209,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Delete Ledger Account",
 				description: "Delete ledger account",
-				params: LedgerAccountIdParameters,
+				params: LedgerIdWithAccountIdParams,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -206,16 +222,15 @@ const LedgerAccountRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:delete"]),
 		},
 		async (rq: DeleteLedgerAccountRequest): Promise<void> => {
-			// TODO: Get orgId and ledgerId from request context
-			const orgId = TypeID.fromString<"org">("placeholder");
-			const ledgerId = TypeID.fromString<"lgr">("placeholder");
-			await rq.server.services.ledgerAccountService.deleteLedgerAccount(
-				orgId,
-				ledgerId,
-				TypeID.fromString<"lat">(rq.params.ledgerAccountId)
-			);
+			const orgId = rq.token.orgId;
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
+			const accountId = TypeID.fromString<"lat">(rq.params.ledgerAccountId);
+
+			await rq.server.services.ledgerAccountService.deleteLedgerAccount(orgId, ledgerId, accountId);
 		}
 	);
 };

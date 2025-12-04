@@ -184,9 +184,10 @@ class LedgerAccountRepo {
 				.returning();
 
 			if (result.length === 0) {
-				throw new ConflictError(
-					"Account not found, was modified by another transaction, or immutable fields (organizationId/ledgerId) were changed"
-				);
+				throw new ConflictError({
+					message:
+						"Account not found, was modified by another transaction, or immutable fields (organizationId/ledgerId) were changed",
+				});
 			}
 
 			return LedgerAccountEntity.fromRecord(result[0]);
@@ -254,7 +255,7 @@ class LedgerAccountRepo {
 		} catch (error) {
 			// PostgreSQL foreign key violation (account has dependent transaction entries)
 			if (error instanceof Error && "code" in error && error.code === "23503") {
-				throw new ConflictError("Cannot delete account with existing transaction entries");
+				throw new ConflictError({ message: "Cannot delete account with existing transaction entries" });
 			}
 			throw error;
 		}

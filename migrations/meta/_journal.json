@@ -29,6 +29,13 @@
       "when": 1764514803172,
       "tag": "0004_milky_boom_boom",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1764783439358,
+      "tag": "0004_premium_serpent_society",
+      "breakpoints": true
     }
   ]
 }

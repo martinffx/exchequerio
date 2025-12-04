@@ -187,6 +187,7 @@ export {
 	OrganizationRequest,
 	ProblemDetail,
 	ProblemDetailError,
+	ErrorContext,
 	type ErrorResponse,
 	type ListOrganizationsRequest,
 	type GetOrganizationRequest,

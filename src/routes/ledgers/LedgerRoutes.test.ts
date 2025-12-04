@@ -316,7 +316,7 @@ describe("LedgerRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerService.createLedger.mockImplementation(async () => {
-				throw new ConflictError("Ledger already exists");
+				throw new ConflictError({ message: "Ledger already exists" });
 			});
 
 			const rs = await server.inject({
@@ -454,7 +454,7 @@ describe("LedgerRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerService.updateLedger.mockImplementation(async () => {
-				throw new ConflictError("Ledger conflict");
+				throw new ConflictError({ message: "Ledger conflict" });
 			});
 
 			const rs = await server.inject({
@@ -577,7 +577,7 @@ describe("LedgerRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerService.deleteLedger.mockImplementation(async () => {
-				throw new ConflictError("Cannot delete ledger with active accounts");
+				throw new ConflictError({ message: "Cannot delete ledger with active accounts" });
 			});
 
 			const rs = await server.inject({

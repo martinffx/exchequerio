@@ -26,7 +26,7 @@ import {
 
 const TAGS = ["Ledgers"];
 const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
-	server.get(
+	server.get<{ Querystring: PaginationQuery }>(
 		"/",
 		{
 			schema: {
@@ -45,7 +45,8 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["ledger:read"]) as any,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:read"]),
 		},
 		async (rq: ListLedgersRequest): Promise<LedgerResponse[]> => {
 			const ledgers = await rq.server.services.ledgerService.listLedgers(
@@ -57,7 +58,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 		}
 	);
 
-	server.get(
+	server.get<{ Params: LedgerIdParameters }>(
 		"/:ledgerId",
 		{
 			schema: {
@@ -77,7 +78,8 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["ledger:read"]) as any,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:read"]),
 		},
 		async (rq: GetLedgerRequest): Promise<LedgerResponse> => {
 			const orgId = rq.token.orgId;
@@ -87,7 +89,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 		}
 	);
 
-	server.post(
+	server.post<{ Body: LedgerRequest }>(
 		"/",
 		{
 			schema: {
@@ -107,7 +109,8 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["ledger:write"]) as any,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:write"]),
 		},
 		async (rq: CreateLedgerRequest): Promise<LedgerResponse> => {
 			const ledger = await rq.server.services.ledgerService.createLedger(
@@ -118,7 +121,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 		}
 	);
 
-	server.put(
+	server.put<{ Params: LedgerIdParameters; Body: LedgerRequest }>(
 		"/:ledgerId",
 		{
 			schema: {
@@ -140,7 +143,8 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["ledger:write"]) as any,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:write"]),
 		},
 		async (rq: UpdateLedgerRequest): Promise<LedgerResponse> => {
 			const org = await rq.server.services.ledgerService.updateLedger(
@@ -151,7 +155,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 		}
 	);
 
-	server.delete(
+	server.delete<{ Params: LedgerIdParameters }>(
 		"/:ledgerId",
 		{
 			schema: {
@@ -172,7 +176,8 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			preHandler: server.hasPermissions(["ledger:delete"]) as any,
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:delete"]),
 		},
 		async (rq: DeleteLedgerRequest): Promise<void> => {
 			const orgId = rq.token.orgId;

@@ -29,7 +29,7 @@ class OrganizationEntity {
 		this.updated = updated;
 	}
 
-	public static fromRow(row: OrgRecord): OrganizationEntity {
+	public static fromRecord(row: OrgRecord): OrganizationEntity {
 		const created = DateTime.fromJSDate(row.created, { zone: "utc" });
 		if (!created.isValid) {
 			throw new Error(`Invalid created date: ${created.toString()}`);

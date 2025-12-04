@@ -200,6 +200,11 @@ const LedgerAccountIdParameters = Type.Object({
 	ledgerAccountId: LedgerAccountId,
 });
 type LedgerAccountIdParameters = Static<typeof LedgerAccountIdParameters>;
+const LedgerIdWithAccountIdParams = Type.Object({
+	ledgerId: LedgerId,
+	ledgerAccountId: LedgerAccountId,
+});
+type LedgerIdWithAccountIdParams = Static<typeof LedgerIdWithAccountIdParams>;
 const LedgerAccountResponse = Type.Object(
 	{
 		id: LedgerAccountId,
@@ -233,23 +238,22 @@ const LedgerAccountRequest = Type.Object(
 type LedgerAccountRequest = Static<typeof LedgerAccountRequest>;
 
 type ListLedgerAccountsRequest = FastifyRequest<{
-	Querystring: PaginationQuery & {
-		orgId: string;
-		ledgerId: string;
-	};
+	Params: LedgerIdParameters;
+	Querystring: PaginationQuery;
 }>;
 type GetLedgerAccountRequest = FastifyRequest<{
-	Params: LedgerAccountIdParameters;
+	Params: LedgerIdWithAccountIdParams;
 }>;
 type CreateLedgerAccountRequest = FastifyRequest<{
+	Params: LedgerIdParameters;
 	Body: LedgerAccountRequest;
 }>;
 type UpdateLedgerAccountRequest = FastifyRequest<{
-	Params: LedgerAccountIdParameters;
+	Params: LedgerIdWithAccountIdParams;
 	Body: LedgerAccountRequest;
 }>;
 type DeleteLedgerAccountRequest = FastifyRequest<{
-	Params: LedgerAccountIdParameters;
+	Params: LedgerIdWithAccountIdParams;
 }>;
 
 /**
@@ -386,16 +390,18 @@ const LedgerTransactionEntry = Type.Object(
 		currencyExponent: Type.Number({
 			description: "The currency exponent of the ledger account",
 		}),
-		resultingBalance: Type.Object(
-			{
-				pendingBalance: PendingBalance,
-				postedBalance: PostedBalance,
-				availableBalance: AvailableBalance,
-			},
-			{
-				description:
-					"The resulting pending, posted, and available balances for this ledger account. The posted balance is the sum of all posted entries on the account. The pending balance is the sum of all pending and posted entries on the account. The available balance is the posted incoming entries minus the sum of the pending and posted outgoing amounts.",
-			}
+		resultingBalance: Type.Optional(
+			Type.Object(
+				{
+					pendingBalance: PendingBalance,
+					postedBalance: PostedBalance,
+					availableBalance: AvailableBalance,
+				},
+				{
+					description:
+						"The resulting pending, posted, and available balances for this ledger account. The posted balance is the sum of all posted entries on the account. The pending balance is the sum of all pending and posted entries on the account. The available balance is the posted incoming entries minus the sum of the pending and posted outgoing amounts.",
+				}
+			)
 		),
 		status: BalanceStatus,
 		metadata: Type.Optional(Metadata),
@@ -452,6 +458,11 @@ const LedgerTransactionIdParameters = Type.Object({
 	ledgerTransactionId: LedgerTransactionId,
 });
 type LedgerTransactionIdParameters = Static<typeof LedgerTransactionIdParameters>;
+const LedgerIdWithTransactionIdParams = Type.Object({
+	ledgerId: LedgerId,
+	ledgerTransactionId: LedgerTransactionId,
+});
+type LedgerIdWithTransactionIdParams = Static<typeof LedgerIdWithTransactionIdParams>;
 const LedgerTransactionResponse = Type.Object(
 	{
 		id: LedgerTransactionId,
@@ -528,20 +539,25 @@ const LedgerTransactionRequest = Type.Object(
 type LedgerTransactionRequest = Static<typeof LedgerTransactionRequest>;
 
 type ListLedgerTransactionsRequest = FastifyRequest<{
+	Params: LedgerIdParameters;
 	Querystring: PaginationQuery;
 }>;
 type GetLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerTransactionIdParameters;
+	Params: LedgerIdWithTransactionIdParams;
 }>;
 type CreateLedgerTransactionRequest = FastifyRequest<{
+	Params: LedgerIdParameters;
 	Body: LedgerTransactionRequest;
 }>;
 type UpdateLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerTransactionIdParameters;
+	Params: LedgerIdWithTransactionIdParams;
 	Body: LedgerTransactionRequest;
 }>;
 type DeleteLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerTransactionIdParameters;
+	Params: LedgerIdWithTransactionIdParams;
+}>;
+type PostLedgerTransactionRequest = FastifyRequest<{
+	Params: LedgerIdWithTransactionIdParams;
 }>;
 
 /**
@@ -821,6 +837,7 @@ export {
 	LedgerResponse,
 	LedgerRequest,
 	LedgerAccountIdParameters as LedgerAccountIdParams,
+	LedgerIdWithAccountIdParams,
 	LedgerAccountResponse,
 	LedgerAccountRequest,
 	LedgerAccountCategoryIdParameters as LedgerAccountCategoryIdParams,
@@ -837,6 +854,7 @@ export {
 	LedgerAccountBalanceMonitorRequest,
 	LedgerAccountBalanceMonitorResponse,
 	LedgerTransactionIdParameters as LedgerTransactionIdParams,
+	LedgerIdWithTransactionIdParams,
 	LedgerTransactionResponse,
 	LedgerTransactionRequest,
 	LedgerTransactionEntryIdParameters as LedgerTransactionEntryIdParams,
@@ -880,6 +898,7 @@ export {
 	CreateLedgerTransactionRequest,
 	UpdateLedgerTransactionRequest,
 	DeleteLedgerTransactionRequest,
+	PostLedgerTransactionRequest,
 	ListLedgerTransactionEntriesRequest,
 	GetLedgerTransactionEntryRequest,
 	UpdateLedgerTransactionEntryRequest,

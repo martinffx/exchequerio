@@ -118,7 +118,9 @@ class LedgerRepo {
 				.returning();
 
 			if (result.length === 0) {
-				throw new ConflictError("Ledger not found or immutable fields (organizationId) were changed");
+				throw new ConflictError({
+					message: "Ledger not found or immutable fields (organizationId) were changed",
+				});
 			}
 
 			return LedgerEntity.fromRecord(result[0]);
@@ -175,7 +177,7 @@ class LedgerRepo {
 		} catch (error) {
 			// PostgreSQL foreign key violation (ledger has dependent accounts)
 			if (error instanceof Error && "code" in error && error.code === "23503") {
-				throw new ConflictError("Cannot delete ledger with existing accounts");
+				throw new ConflictError({ message: "Cannot delete ledger with existing accounts" });
 			}
 			throw error;
 		}

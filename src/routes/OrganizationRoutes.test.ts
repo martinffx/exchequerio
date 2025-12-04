@@ -294,7 +294,7 @@ describe("OrganizationRoutes", () => {
 
 		it("should handle a conflict error", async () => {
 			mockOrganizationService.createOrganization.mockImplementation(async () => {
-				throw new ConflictError("Organization already exists");
+				throw new ConflictError({ message: "Organization already exists" });
 			});
 			const rs = await server.inject({
 				method: "POST",
@@ -434,7 +434,7 @@ describe("OrganizationRoutes", () => {
 
 		it("should handle a conflict error", async () => {
 			mockOrganizationService.updateOrganization.mockImplementation(async () => {
-				throw new ConflictError("Organization already exists");
+				throw new ConflictError({ message: "Organization already exists" });
 			});
 			const rs = await server.inject({
 				method: "PUT",
@@ -558,7 +558,7 @@ describe("OrganizationRoutes", () => {
 
 		it("should handle a conflict error", async () => {
 			mockOrganizationService.deleteOrganization.mockImplementation(async () => {
-				throw new ConflictError("Organization already exists");
+				throw new ConflictError({ message: "Organization already exists" });
 			});
 			const rs = await server.inject({
 				method: "DELETE",
