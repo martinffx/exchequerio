@@ -6,14 +6,21 @@ import type {
 	LedgerAccountSettlementEntity,
 	LedgerAccountStatementEntity,
 } from "@/repo/entities";
-import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
+import type {
+	LedgerAccountCategoryID,
+	LedgerAccountID,
+	LedgerID,
+	OrgID,
+} from "@/repo/entities/types";
+import type { LedgerAccountCategoryRepo } from "@/repo/LedgerAccountCategoryRepo";
 import type { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
 import type { LedgerRepo } from "@/repo/LedgerRepo";
 
 class LedgerAccountService {
 	constructor(
 		private readonly ledgerAccountRepo: LedgerAccountRepo,
-		private readonly ledgerRepo: LedgerRepo
+		private readonly ledgerRepo: LedgerRepo,
+		private readonly ledgerAccountCategoryRepo: LedgerAccountCategoryRepo
 	) {}
 
 	// Ledger Account - Core CRUD operations
@@ -59,65 +66,81 @@ class LedgerAccountService {
 	}
 
 	// Ledger Account Category
-	public listLedgerAccountCategories(
-		_offset: number,
-		_limit: number
+	public async listLedgerAccountCategories(
+		ledgerId: LedgerID,
+		offset: number,
+		limit: number
 	): Promise<LedgerAccountCategoryEntity[]> {
-		throw new NotImplementedError(
-			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		);
+		return this.ledgerAccountCategoryRepo.listLedgerAccountCategories(ledgerId, offset, limit);
 	}
 
-	public getLedgerAccountCategory(_id: string): Promise<LedgerAccountCategoryEntity> {
-		throw new NotImplementedError(
-			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		);
-	}
-
-	public createLedgerAccountCategory(
-		_entity: LedgerAccountCategoryEntity
+	public async getLedgerAccountCategory(
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID
 	): Promise<LedgerAccountCategoryEntity> {
-		throw new NotImplementedError(
-			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		);
+		return this.ledgerAccountCategoryRepo.getLedgerAccountCategory(ledgerId, categoryId);
 	}
 
-	public updateLedgerAccountCategory(
-		_id: string,
-		_entity: LedgerAccountCategoryEntity
+	public async createLedgerAccountCategory(
+		entity: LedgerAccountCategoryEntity
 	): Promise<LedgerAccountCategoryEntity> {
-		throw new NotImplementedError(
-			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
+		return this.ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity);
+	}
+
+	public async updateLedgerAccountCategory(
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID,
+		entity: LedgerAccountCategoryEntity
+	): Promise<LedgerAccountCategoryEntity> {
+		// Verify exists first
+		await this.ledgerAccountCategoryRepo.getLedgerAccountCategory(ledgerId, categoryId);
+		return this.ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity);
+	}
+
+	public async deleteLedgerAccountCategory(
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID
+	): Promise<void> {
+		return this.ledgerAccountCategoryRepo.deleteLedgerAccountCategory(ledgerId, categoryId);
+	}
+
+	public async linkLedgerAccountToCategory(
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID,
+		accountId: LedgerAccountID
+	): Promise<void> {
+		return this.ledgerAccountCategoryRepo.linkAccountToCategory(ledgerId, categoryId, accountId);
+	}
+
+	public async unlinkLedgerAccountToCategory(
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID,
+		accountId: LedgerAccountID
+	): Promise<void> {
+		return this.ledgerAccountCategoryRepo.unlinkAccountFromCategory(ledgerId, categoryId, accountId);
+	}
+
+	public async linkLedgerAccountCategoryToCategory(
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID,
+		parentCategoryId: LedgerAccountCategoryID
+	): Promise<void> {
+		return this.ledgerAccountCategoryRepo.linkCategoryToParent(
+			ledgerId,
+			categoryId,
+			parentCategoryId
 		);
 	}
 
-	public deleteLedgerAccountCategory(_id: string): Promise<void> {
-		throw new NotImplementedError(
-			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		);
-	}
-
-	public linkLedgerAccountToCategory(_id: string, _accountId: string): Promise<void> {
-		throw new NotImplementedError(
-			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		);
-	}
-
-	public unlinkLedgerAccountToCategory(_id: string, _accountId: string): Promise<void> {
-		throw new NotImplementedError(
-			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		);
-	}
-
-	public linkLedgerAccountCategoryToCategory(_id: string, _categoryId: string): Promise<void> {
-		throw new NotImplementedError(
-			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
-		);
-	}
-
-	public unlinkLedgerAccountCategoryToCategory(_id: string, _categoryId: string): Promise<void> {
-		throw new NotImplementedError(
-			"Account categories require LedgerAccountCategoriesTable and LedgerAccountCategoryEntity implementation"
+	public async unlinkLedgerAccountCategoryToCategory(
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID,
+		parentCategoryId: LedgerAccountCategoryID
+	): Promise<void> {
+		return this.ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+			ledgerId,
+			categoryId,
+			parentCategoryId
 		);
 	}
 

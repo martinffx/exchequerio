@@ -95,4 +95,4 @@ function handleDBError(error: DBError, context: ErrorContext = {}): Error {
 	}
 }
 
-export { handleDBError, isDBError, type DBError };
+export { handleDBError, isDBError, getDBErrorCode, type DBError };

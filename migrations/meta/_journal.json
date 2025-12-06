@@ -36,6 +36,13 @@
       "when": 1764783439358,
       "tag": "0004_premium_serpent_society",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1765019609684,
+      "tag": "0005_black_exiles",
+      "breakpoints": true
     }
   ]
 }

@@ -312,7 +312,6 @@ const LedgerAccountCategoryResponse = Type.Object(
 type LedgerAccountCategoryResponse = Static<typeof LedgerAccountCategoryResponse>;
 const LedgerAccountCategoryRequest = Type.Object(
 	{
-		ledgerId: LedgerId,
 		name: Type.String({
 			description: "The name of the ledger account category.",
 		}),
@@ -322,11 +321,7 @@ const LedgerAccountCategoryRequest = Type.Object(
 			})
 		),
 		normalBalance: NormalBalance,
-		balances: Balances,
 		metadata: Type.Optional(Metadata),
-		parentAccountCategoryIds: Type.Optional(
-			Type.Array(Type.String({ description: "The ID of the parent category." }))
-		),
 	},
 	{
 		$id: "LedgerAccountCategoryRequest",
@@ -335,32 +330,34 @@ const LedgerAccountCategoryRequest = Type.Object(
 type LedgerAccountCategoryRequest = Static<typeof LedgerAccountCategoryRequest>;
 
 type ListLedgerAccountCategoriesRequest = FastifyRequest<{
+	Params: LedgerIdParameters;
 	Querystring: PaginationQuery;
 }>;
 type GetLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerAccountCategoryIdParameters;
+	Params: LedgerIdParameters & LedgerAccountCategoryIdParameters;
 }>;
 type CreateLedgerAccountCategoryRequest = FastifyRequest<{
+	Params: LedgerIdParameters;
 	Body: LedgerAccountCategoryRequest;
 }>;
 type UpdateLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerAccountCategoryIdParameters;
+	Params: LedgerIdParameters & LedgerAccountCategoryIdParameters;
 	Body: LedgerAccountCategoryRequest;
 }>;
 type DeleteLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerAccountCategoryIdParameters;
+	Params: LedgerIdParameters & LedgerAccountCategoryIdParameters;
 }>;
 type LinkLedgerAccountToCategoryRequest = FastifyRequest<{
-	Params: LinkAccountToCategoryParameters;
+	Params: LedgerIdParameters & LinkAccountToCategoryParameters;
 }>;
 type UnlinkLedgerAccountToCategoryRequest = FastifyRequest<{
-	Params: LinkAccountToCategoryParameters;
+	Params: LedgerIdParameters & LinkAccountToCategoryParameters;
 }>;
 type LinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
-	Params: LinkCategoryToCategoryParameters;
+	Params: LedgerIdParameters & LinkCategoryToCategoryParameters;
 }>;
 type UnlinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
-	Params: LinkCategoryToCategoryParameters;
+	Params: LedgerIdParameters & LinkCategoryToCategoryParameters;
 }>;
 
 /**

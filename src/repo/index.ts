@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
+import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
 import { LedgerRepo } from "./LedgerRepo";
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
@@ -20,11 +21,14 @@ const RepoPlugin: FastifyPluginAsync<RepoPluginOptions> = fp(
 		const organizationRepo = opts.repos?.organizationRepo ?? new OrganizationRepo(db);
 		const ledgerRepo = opts.repos?.ledgerRepo ?? new LedgerRepo(db);
 		const ledgerAccountRepo = opts.repos?.ledgerAccountRepo ?? new LedgerAccountRepo(db);
+		const ledgerAccountCategoryRepo =
+			opts.repos?.ledgerAccountCategoryRepo ?? new LedgerAccountCategoryRepo(db);
 		const ledgerTransactionRepo = opts.repos?.ledgerTransactionRepo ?? new LedgerTransactionRepo(db);
 		const repos: Repos = {
 			organizationRepo,
 			ledgerRepo,
 			ledgerAccountRepo,
+			ledgerAccountCategoryRepo,
 			ledgerTransactionRepo,
 		};
 		server.decorate("repo", repos);

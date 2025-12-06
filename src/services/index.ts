@@ -29,7 +29,11 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 		const ledgerService = opts.services?.ledgerService ?? new LedgerService(server.repo.ledgerRepo);
 		const ledgerAccountService =
 			opts.services?.ledgerAccountService ??
-			new LedgerAccountService(server.repo.ledgerAccountRepo, server.repo.ledgerRepo);
+			new LedgerAccountService(
+				server.repo.ledgerAccountRepo,
+				server.repo.ledgerRepo,
+				server.repo.ledgerAccountCategoryRepo
+			);
 		const ledgerTransactionService =
 			opts.services?.ledgerTransactionService ??
 			new LedgerTransactionService(server.repo.ledgerTransactionRepo, server.repo.ledgerRepo);
@@ -43,4 +47,8 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 );
 
 export * from "@/repo/entities";
+export { LedgerAccountService } from "./LedgerAccountService";
+export { LedgerService } from "./LedgerService";
+export { LedgerTransactionService } from "./LedgerTransactionService";
+export { OrganizationService } from "./OrganizationService";
 export { ServicePlugin, type ServicePluginOpts };

@@ -1,6 +1,11 @@
 import { faker } from "@faker-js/faker";
 import { TypeID } from "typeid-js";
-import { LedgerAccountEntity, LedgerEntity, OrganizationEntity } from "@/services";
+import {
+	LedgerAccountCategoryEntity,
+	LedgerAccountEntity,
+	LedgerEntity,
+	OrganizationEntity,
+} from "@/services";
 
 function createOrganizationFixture(): OrganizationEntity {
 	return new OrganizationEntity({
@@ -72,4 +77,35 @@ function createLedgerAccountFixture(
 	});
 }
 
-export { createOrganizationFixture, createLedgerFixture, createLedgerAccountFixture };
+function createLedgerAccountCategoryFixture(
+	overrides?: Partial<{
+		id: TypeID<"lac">;
+		ledgerId: TypeID<"lgr">;
+		name: string;
+		description?: string;
+		normalBalance: "debit" | "credit";
+		metadata?: Record<string, unknown>;
+		created: Date;
+		updated: Date;
+	}>
+): LedgerAccountCategoryEntity {
+	const now = new Date();
+	return new LedgerAccountCategoryEntity({
+		id: new TypeID("lac"),
+		ledgerId: new TypeID("lgr"),
+		name: faker.finance.accountName(),
+		description: faker.lorem.sentence(),
+		normalBalance: "debit",
+		metadata: undefined,
+		created: now,
+		updated: now,
+		...overrides,
+	});
+}
+
+export {
+	createOrganizationFixture,
+	createLedgerFixture,
+	createLedgerAccountFixture,
+	createLedgerAccountCategoryFixture,
+};

@@ -7,6 +7,7 @@ import {
 	numeric,
 	pgEnum,
 	pgTable,
+	primaryKey,
 	text,
 	timestamp,
 	uniqueIndex,
@@ -166,6 +167,43 @@ const LedgerAccountCategoriesTable = pgTable("ledger_account_categories", {
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Junction: Category parent relationships (many-to-many)
+const LedgerAccountCategoryParentsTable = pgTable(
+	"ledger_account_category_parents",
+	{
+		categoryId: text("category_id")
+			.notNull()
+			.references(() => LedgerAccountCategoriesTable.id, { onDelete: "cascade" }),
+		parentCategoryId: text("parent_category_id")
+			.notNull()
+			.references(() => LedgerAccountCategoriesTable.id, { onDelete: "cascade" }),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => ({
+		pk: primaryKey({ columns: [table.categoryId, table.parentCategoryId] }),
+		noSelfRef: check("no_self_reference", sql`${table.categoryId} <> ${table.parentCategoryId}`),
+		parentIdx: index("idx_category_parents_parent").on(table.parentCategoryId),
+	})
+);
+
+// Junction: Account-to-category membership (many-to-many)
+const LedgerAccountCategoryAccountsTable = pgTable(
+	"ledger_account_category_accounts",
+	{
+		categoryId: text("category_id")
+			.notNull()
+			.references(() => LedgerAccountCategoriesTable.id, { onDelete: "cascade" }),
+		accountId: text("account_id")
+			.notNull()
+			.references(() => LedgerAccountsTable.id, { onDelete: "cascade" }),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => ({
+		pk: primaryKey({ columns: [table.categoryId, table.accountId] }),
+		accountIdx: index("idx_category_accounts_account").on(table.accountId),
+	})
+);
+
 // Account Balance Monitors: Real-time balance tracking with alerts
 const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monitors", {
 	id: text("id").primaryKey(),
@@ -272,6 +310,19 @@ const ledgerTransactionEntriesRelations = relations(LedgerTransactionEntriesTabl
 	}),
 }));
 
+const ledgerAccountCategoriesRelations = relations(
+	LedgerAccountCategoriesTable,
+	({ one, many }) => ({
+		ledger: one(LedgersTable, {
+			fields: [LedgerAccountCategoriesTable.ledgerId],
+			references: [LedgersTable.id],
+		}),
+		parentLinks: many(LedgerAccountCategoryParentsTable, { relationName: "childCategory" }),
+		childLinks: many(LedgerAccountCategoryParentsTable, { relationName: "parentCategory" }),
+		accountLinks: many(LedgerAccountCategoryAccountsTable),
+	})
+);
+
 export {
 	// Tables
 	OrganizationsTable,
@@ -280,6 +331,8 @@ export {
 	LedgerTransactionsTable,
 	LedgerTransactionEntriesTable,
 	LedgerAccountCategoriesTable,
+	LedgerAccountCategoryParentsTable,
+	LedgerAccountCategoryAccountsTable,
 	LedgerAccountBalanceMonitorsTable,
 	LedgerAccountStatementsTable,
 	LedgerAccountSettlementsTable,
@@ -289,6 +342,7 @@ export {
 	ledgerAccountsRelations,
 	ledgerTransactionsRelations,
 	ledgerTransactionEntriesRelations,
+	ledgerAccountCategoriesRelations,
 	// Enums
 	ledgerNormalBalance,
 	ledgerTransactionStatus,
