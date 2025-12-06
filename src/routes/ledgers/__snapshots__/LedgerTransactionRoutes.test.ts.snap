@@ -1,0 +1,131 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LedgerTransactionRoutes > Create Ledger Transaction > should create a ledger transaction 1`] = `
+{
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test transaction",
+  "effectiveAt": "2025-01-01T00:00:00.000Z",
+  "id": "ltr_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "ledgerEntries": [
+    {
+      "amount": 10000,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "direction": "debit",
+      "id": "lte_01h2x3y4z5a6b7c8d9e0f1g2h9",
+      "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2j0",
+      "status": "pending",
+    },
+    {
+      "amount": 10000,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "direction": "credit",
+      "id": "lte_01h2x3y4z5a6b7c8d9e0f1g2j1",
+      "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2j2",
+      "status": "pending",
+    },
+  ],
+  "ledgerId": "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4",
+  "status": "pending",
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerTransactionRoutes > Get Ledger Transaction > should return a ledger transaction 1`] = `
+{
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test transaction",
+  "effectiveAt": "2025-01-01T00:00:00.000Z",
+  "id": "ltr_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "ledgerEntries": [
+    {
+      "amount": 10000,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "direction": "debit",
+      "id": "lte_01h2x3y4z5a6b7c8d9e0f1g2h9",
+      "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2j0",
+      "status": "pending",
+    },
+    {
+      "amount": 10000,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "direction": "credit",
+      "id": "lte_01h2x3y4z5a6b7c8d9e0f1g2j1",
+      "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2j2",
+      "status": "pending",
+    },
+  ],
+  "ledgerId": "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4",
+  "status": "pending",
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerTransactionRoutes > List Ledger Transactions > should return a list of ledger transactions 1`] = `
+[
+  {
+    "created": "2025-01-01T00:00:00.000Z",
+    "description": "Test transaction",
+    "effectiveAt": "2025-01-01T00:00:00.000Z",
+    "id": "ltr_01h2x3y4z5a6b7c8d9e0f1g2h5",
+    "ledgerEntries": [
+      {
+        "amount": 10000,
+        "currency": "USD",
+        "currencyExponent": 2,
+        "direction": "debit",
+        "id": "lte_01h2x3y4z5a6b7c8d9e0f1g2h9",
+        "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2j0",
+        "status": "pending",
+      },
+      {
+        "amount": 10000,
+        "currency": "USD",
+        "currencyExponent": 2,
+        "direction": "credit",
+        "id": "lte_01h2x3y4z5a6b7c8d9e0f1g2j1",
+        "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2j2",
+        "status": "pending",
+      },
+    ],
+    "ledgerId": "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4",
+    "status": "pending",
+    "updated": "2025-01-01T00:00:00.000Z",
+  },
+]
+`;
+
+exports[`LedgerTransactionRoutes > Post Ledger Transaction > should post a pending transaction 1`] = `
+{
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test transaction",
+  "effectiveAt": "2025-01-01T00:00:00.000Z",
+  "id": "ltr_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "ledgerEntries": [
+    {
+      "amount": 10000,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "direction": "debit",
+      "id": "lte_01h2x3y4z5a6b7c8d9e0f1g2h9",
+      "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2j0",
+      "status": "posted",
+    },
+    {
+      "amount": 10000,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "direction": "credit",
+      "id": "lte_01h2x3y4z5a6b7c8d9e0f1g2j1",
+      "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2j2",
+      "status": "posted",
+    },
+  ],
+  "ledgerId": "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4",
+  "status": "posted",
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;

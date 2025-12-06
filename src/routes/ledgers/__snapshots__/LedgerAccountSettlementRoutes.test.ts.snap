@@ -1,0 +1,88 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LedgerAccountSettlementRoutes > Create Ledger Account Settlement > should create a settlement 1`] = `
+{
+  "amount": 0,
+  "contraLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h8",
+  "created": "2025-01-01T00:00:00.000Z",
+  "currency": "USD",
+  "currencyExponent": 2,
+  "description": "Test settlement",
+  "id": "las_01h2x3y4z5a6b7c8d9e0f1g2h7",
+  "ledgerTransactionId": "",
+  "normalBalance": "debit",
+  "settledLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "status": "drafting",
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerAccountSettlementRoutes > Get Ledger Account Settlement > should return a settlement 1`] = `
+{
+  "amount": 0,
+  "contraLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h8",
+  "created": "2025-01-01T00:00:00.000Z",
+  "currency": "USD",
+  "currencyExponent": 2,
+  "description": "Test settlement",
+  "id": "las_01h2x3y4z5a6b7c8d9e0f1g2h7",
+  "ledgerTransactionId": "",
+  "normalBalance": "debit",
+  "settledLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "status": "drafting",
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerAccountSettlementRoutes > List Ledger Account Settlements > should return a list of settlements 1`] = `
+[
+  {
+    "amount": 0,
+    "contraLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h8",
+    "created": "2025-01-01T00:00:00.000Z",
+    "currency": "USD",
+    "currencyExponent": 2,
+    "description": "Test settlement",
+    "id": "las_01h2x3y4z5a6b7c8d9e0f1g2h7",
+    "ledgerTransactionId": "",
+    "normalBalance": "debit",
+    "settledLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+    "status": "drafting",
+    "updated": "2025-01-01T00:00:00.000Z",
+  },
+]
+`;
+
+exports[`LedgerAccountSettlementRoutes > Transition Settlement Status > should transition settlement status to processing 1`] = `
+{
+  "amount": 0,
+  "contraLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h8",
+  "created": "2025-01-01T00:00:00.000Z",
+  "currency": "USD",
+  "currencyExponent": 2,
+  "description": "Test settlement",
+  "id": "las_01h2x3y4z5a6b7c8d9e0f1g2h7",
+  "ledgerTransactionId": "",
+  "normalBalance": "debit",
+  "settledLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "status": "processing",
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerAccountSettlementRoutes > Update Ledger Account Settlement > should update a settlement 1`] = `
+{
+  "amount": 0,
+  "contraLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h8",
+  "created": "2025-01-01T00:00:00.000Z",
+  "currency": "USD",
+  "currencyExponent": 2,
+  "description": "Test settlement",
+  "id": "las_01h2x3y4z5a6b7c8d9e0f1g2h7",
+  "ledgerTransactionId": "",
+  "normalBalance": "debit",
+  "settledLedgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "status": "drafting",
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;

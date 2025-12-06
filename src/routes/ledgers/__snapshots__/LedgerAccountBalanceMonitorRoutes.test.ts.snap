@@ -1,0 +1,49 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LedgerAccountBalanceMonitorRoutes > DELETE /:ledgerAccountBalanceMonitorId > should return 404 if monitor not found 1`] = `
+{
+  "error": "Not Found",
+  "message": "Route DELETE:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
+  "statusCode": 404,
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes > GET /:ledgerAccountBalanceMonitorId > should return 404 if monitor not found 1`] = `
+{
+  "error": "Not Found",
+  "message": "Route GET:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
+  "statusCode": 404,
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes > PUT /:ledgerAccountBalanceMonitorId > should return 404 if monitor not found 1`] = `
+{
+  "error": "Not Found",
+  "message": "Route PUT:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
+  "statusCode": 404,
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes GET /:ledgerAccountBalanceMonitorId should return 404 if monitor not found 1`] = `
+{
+  "error": "Not Found",
+  "message": "Route GET:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
+  "statusCode": 404,
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes PUT /:ledgerAccountBalanceMonitorId should return 404 if monitor not found 1`] = `
+{
+  "error": "Not Found",
+  "message": "Route PUT:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
+  "statusCode": 404,
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes DELETE /:ledgerAccountBalanceMonitorId should return 404 if monitor not found 1`] = `
+{
+  "error": "Not Found",
+  "message": "Route DELETE:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
+  "statusCode": 404,
+}
+`;

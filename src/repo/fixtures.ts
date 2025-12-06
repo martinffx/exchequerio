@@ -210,6 +210,7 @@ function createLedgerTransactionEntity(
 		idempotencyKey: options.idempotencyKey,
 		description: options.description ?? "Test transaction",
 		status: options.status ?? "pending",
+		effectiveAt: options.effectiveAt ?? now,
 		metadata: options.metadata,
 		created: options.created ?? now,
 		updated: options.updated ?? now,

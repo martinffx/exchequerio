@@ -634,6 +634,12 @@ const LedgerAccountSettlementRequest = Type.Object(
 			description:
 				"The Ledger Account that sends to or receives funds from the settled ledger account. The settled ledger account and the contra ledger account must belong to the same ledger.",
 		}),
+		effectiveAtUpperBound: Type.Optional(
+			Type.String({
+				description:
+					"Upper bound for auto-gathering entries by effective date. When status is pending/posted, entries with effective_at <= this bound will be automatically gathered. Optional - defaults to current time if not specified.",
+			})
+		),
 		externalReference: Type.Optional(
 			Type.String({
 				description: "External reference for reconciliation with external systems.",

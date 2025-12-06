@@ -129,6 +129,7 @@ class LedgerTransactionEntity {
 			idempotencyKey: this.idempotencyKey,
 			description: this.description,
 			status: "posted",
+			effectiveAt: this.effectiveAt,
 			metadata: this.metadata,
 			created: this.created,
 			updated: now,
@@ -150,6 +151,7 @@ class LedgerTransactionEntity {
 		id,
 	}: LedgerTransactionRequestOpts): LedgerTransactionEntity {
 		const transactionId = id ? TypeID.fromString<"ltr">(id) : new TypeID("ltr");
+		const created = new Date(rq.created);
 
 		// Convert API entries to entry entities (amount is already integer minor units)
 		const entries = rq.ledgerEntries.map(
@@ -164,7 +166,7 @@ class LedgerTransactionEntity {
 					currency: ledger.currency,
 					currencyExponent: ledger.currencyExponent,
 					status: rq.status,
-					created: new Date(rq.created),
+					created,
 					updated: new Date(rq.updated),
 				})
 		);
@@ -176,8 +178,9 @@ class LedgerTransactionEntity {
 			entries,
 			description: rq.description,
 			status: rq.status,
+			effectiveAt: rq.effectiveAt ? new Date(rq.effectiveAt) : created,
 			metadata: rq.metadata,
-			created: new Date(rq.created),
+			created,
 			updated: new Date(rq.updated),
 		});
 	}
@@ -205,6 +208,7 @@ class LedgerTransactionEntity {
 			idempotencyKey: record.idempotencyKey ?? undefined,
 			description: record.description ?? undefined,
 			status: record.status,
+			effectiveAt: record.effectiveAt,
 			metadata,
 			created: record.created,
 			updated: record.updated,
@@ -220,6 +224,7 @@ class LedgerTransactionEntity {
 			idempotencyKey: this.idempotencyKey ?? undefined,
 			description: this.description ?? undefined,
 			status: this.status,
+			effectiveAt: this.effectiveAt,
 			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
 			created: this.created,
 			updated: this.updated,
@@ -233,6 +238,7 @@ class LedgerTransactionEntity {
 			ledgerId: this.ledgerId.toString(),
 			description: this.description,
 			status: this.status,
+			effectiveAt: this.effectiveAt.toISOString(),
 			metadata: this.metadata,
 			ledgerEntries: this.entries.map(entry => entry.toResponse()),
 			created: this.created.toISOString(),

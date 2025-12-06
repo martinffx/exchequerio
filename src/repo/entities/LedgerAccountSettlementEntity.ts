@@ -31,6 +31,7 @@ type LedgerAccountSettlementEntityOptions = {
 	status: SettlementStatus;
 	description?: string;
 	externalReference?: string;
+	effectiveAtUpperBound?: Date;
 	metadata?: Record<string, unknown>;
 	created: Date;
 	updated: Date;
@@ -49,6 +50,7 @@ class LedgerAccountSettlementEntity {
 	public readonly status: SettlementStatus;
 	public readonly description?: string;
 	public readonly externalReference?: string;
+	public readonly effectiveAtUpperBound?: Date;
 	public readonly metadata?: Record<string, unknown>;
 	public readonly created: Date;
 	public readonly updated: Date;
@@ -66,6 +68,7 @@ class LedgerAccountSettlementEntity {
 		this.status = options.status;
 		this.description = options.description;
 		this.externalReference = options.externalReference;
+		this.effectiveAtUpperBound = options.effectiveAtUpperBound;
 		this.metadata = options.metadata;
 		this.created = options.created;
 		this.updated = options.updated;
@@ -98,6 +101,7 @@ class LedgerAccountSettlementEntity {
 			status: rq.status,
 			description: rq.description,
 			externalReference: rq.externalReference,
+			effectiveAtUpperBound: rq.effectiveAtUpperBound ? new Date(rq.effectiveAtUpperBound) : undefined,
 			metadata: rq.metadata,
 			created: now,
 			updated: now,
@@ -133,6 +137,7 @@ class LedgerAccountSettlementEntity {
 			status: record.status,
 			description: record.description ?? undefined,
 			externalReference: record.externalReference ?? undefined,
+			effectiveAtUpperBound: record.effectiveAtUpperBound ?? undefined,
 			metadata,
 			created: record.created,
 			updated: record.updated,
@@ -156,6 +161,7 @@ class LedgerAccountSettlementEntity {
 			status: this.status,
 			description: this.description ?? undefined,
 			externalReference: this.externalReference ?? undefined,
+			effectiveAtUpperBound: this.effectiveAtUpperBound ?? undefined,
 			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
 			created: this.created,
 			updated: this.updated,

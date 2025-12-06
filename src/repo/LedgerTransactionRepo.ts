@@ -205,6 +205,7 @@ class LedgerTransactionRepo {
 							organizationId: transactionRecord.organizationId,
 							description: transactionRecord.description,
 							status: transactionRecord.status,
+							effectiveAt: transactionRecord.effectiveAt,
 							metadata: transactionRecord.metadata,
 							updated: transactionRecord.updated,
 						},
