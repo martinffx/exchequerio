@@ -1,6 +1,7 @@
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import type { LedgerAccountRepo } from "./LedgerAccountRepo";
+import type { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
 import type { LedgerRepo } from "./LedgerRepo";
 import type { LedgerTransactionRepo } from "./LedgerTransactionRepo";
 import type { OrganizationRepo } from "./OrganizationRepo";
@@ -11,6 +12,7 @@ type Repos = {
 	ledgerRepo: LedgerRepo;
 	ledgerAccountRepo: LedgerAccountRepo;
 	ledgerAccountCategoryRepo: LedgerAccountCategoryRepo;
+	ledgerAccountSettlementRepo: LedgerAccountSettlementRepo;
 	ledgerTransactionRepo: LedgerTransactionRepo;
 };
 

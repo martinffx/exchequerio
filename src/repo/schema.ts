@@ -109,6 +109,8 @@ const LedgerTransactionsTable = pgTable(
 		idempotencyKey: text("idempotency_key").unique(),
 		description: text("description"),
 		status: ledgerTransactionStatus("status").notNull().default("pending"),
+		// When transaction happened for reporting purposes (defaults to created time)
+		effectiveAt: timestamp("effective_at", { withTimezone: true }).defaultNow().notNull(),
 		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
@@ -116,6 +118,7 @@ const LedgerTransactionsTable = pgTable(
 	table => ({
 		statusIdx: index("idx_ledger_transactions_status").on(table.status),
 		createdIdx: index("idx_ledger_transactions_created").on(table.created),
+		effectiveAtIdx: index("idx_ledger_transactions_effective_at").on(table.effectiveAt),
 	})
 );
 
@@ -236,32 +239,60 @@ const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Settlement Batches: Automated settlement processing
+// Ledger Account Settlements: Modern Treasury-style settlement transactions
 const LedgerAccountSettlementsTable = pgTable(
 	"ledger_account_settlements",
 	{
 		id: text("id").primaryKey(),
-		accountId: text("account_id")
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => OrganizationsTable.id),
+		ledgerTransactionId: text("ledger_transaction_id").references(() => LedgerTransactionsTable.id),
+		settledLedgerAccountId: text("settled_ledger_account_id")
 			.notNull()
 			.references(() => LedgerAccountsTable.id),
-		batchId: text("batch_id").notNull(),
-		settlementDate: timestamp("settlement_date", { withTimezone: true }).defaultNow().notNull(),
-		settlementAmount: numeric("settlement_amount", {
-			precision: 20,
-			scale: 4,
-		})
+		contraLedgerAccountId: text("contra_ledger_account_id")
 			.notNull()
-			.default("0"),
+			.references(() => LedgerAccountsTable.id),
+		amount: bigint("amount", { mode: "number" }).notNull().default(0),
+		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
+		currency: text("currency").notNull(),
+		currencyExponent: integer("currency_exponent").notNull().default(2),
 		status: ledgerSettlementStatus("status").notNull().default("drafting"),
+		description: text("description"),
 		externalReference: text("external_reference"),
+		// Upper bound for auto-gathering entries by effective date (null = manual mode or use current time)
+		effectiveAtUpperBound: timestamp("effective_at_upper_bound", { withTimezone: true }),
 		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
-		batchIdx: index("idx_ledger_account_settlements_batch").on(table.batchId),
-		statusIdx: index("idx_ledger_account_settlements_status").on(table.status),
-		dateIdx: index("idx_ledger_account_settlements_date").on(table.settlementDate),
+		orgIdx: index("idx_settlements_org").on(table.organizationId),
+		statusIdx: index("idx_settlements_status").on(table.status),
+		settledAccountIdx: index("idx_settlements_settled_account").on(table.settledLedgerAccountId),
+		noSelfSettle: check(
+			"no_self_settle",
+			sql`${table.settledLedgerAccountId} <> ${table.contraLedgerAccountId}`
+		),
+	})
+);
+
+// Junction table for settlement entries
+const LedgerAccountSettlementEntriesTable = pgTable(
+	"ledger_account_settlement_entries",
+	{
+		settlementId: text("settlement_id")
+			.notNull()
+			.references(() => LedgerAccountSettlementsTable.id, { onDelete: "cascade" }),
+		entryId: text("entry_id")
+			.notNull()
+			.references(() => LedgerTransactionEntriesTable.id, { onDelete: "cascade" }),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => ({
+		pk: primaryKey({ columns: [table.settlementId, table.entryId] }),
+		entryIdx: index("idx_settlement_entries_entry").on(table.entryId),
 	})
 );
 
@@ -288,7 +319,12 @@ const ledgerAccountsRelations = relations(LedgerAccountsTable, ({ one, many }) =
 	entries: many(LedgerTransactionEntriesTable),
 	monitors: many(LedgerAccountBalanceMonitorsTable),
 	statements: many(LedgerAccountStatementsTable),
-	settlements: many(LedgerAccountSettlementsTable),
+	settlementsAsSettled: many(LedgerAccountSettlementsTable, {
+		relationName: "settledAccount",
+	}),
+	settlementsAsContra: many(LedgerAccountSettlementsTable, {
+		relationName: "contraAccount",
+	}),
 }));
 
 const ledgerTransactionsRelations = relations(LedgerTransactionsTable, ({ one, many }) => ({
@@ -323,6 +359,31 @@ const ledgerAccountCategoriesRelations = relations(
 	})
 );
 
+const ledgerAccountSettlementsRelations = relations(
+	LedgerAccountSettlementsTable,
+	({ one, many }) => ({
+		organization: one(OrganizationsTable, {
+			fields: [LedgerAccountSettlementsTable.organizationId],
+			references: [OrganizationsTable.id],
+		}),
+		settledAccount: one(LedgerAccountsTable, {
+			fields: [LedgerAccountSettlementsTable.settledLedgerAccountId],
+			references: [LedgerAccountsTable.id],
+			relationName: "settledAccount",
+		}),
+		contraAccount: one(LedgerAccountsTable, {
+			fields: [LedgerAccountSettlementsTable.contraLedgerAccountId],
+			references: [LedgerAccountsTable.id],
+			relationName: "contraAccount",
+		}),
+		transaction: one(LedgerTransactionsTable, {
+			fields: [LedgerAccountSettlementsTable.ledgerTransactionId],
+			references: [LedgerTransactionsTable.id],
+		}),
+		settlementEntries: many(LedgerAccountSettlementEntriesTable),
+	})
+);
+
 export {
 	// Tables
 	OrganizationsTable,
@@ -336,6 +397,7 @@ export {
 	LedgerAccountBalanceMonitorsTable,
 	LedgerAccountStatementsTable,
 	LedgerAccountSettlementsTable,
+	LedgerAccountSettlementEntriesTable,
 	// Relations
 	organizationsRelations,
 	ledgersRelations,
@@ -343,6 +405,7 @@ export {
 	ledgerTransactionsRelations,
 	ledgerTransactionEntriesRelations,
 	ledgerAccountCategoriesRelations,
+	ledgerAccountSettlementsRelations,
 	// Enums
 	ledgerNormalBalance,
 	ledgerTransactionStatus,

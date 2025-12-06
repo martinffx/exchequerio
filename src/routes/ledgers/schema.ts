@@ -597,6 +597,11 @@ const LedgerAccountSettlementResponse = Type.Object(
 		currencyExponent: Type.Number({
 			description: "The currency exponent of the ledger account settlement.",
 		}),
+		externalReference: Type.Optional(
+			Type.String({
+				description: "External reference for reconciliation with external systems.",
+			})
+		),
 		metadata: Type.Optional(Metadata),
 		created: Type.String({
 			description: "Timestamp of when the ledger account category was created.",
@@ -629,6 +634,11 @@ const LedgerAccountSettlementRequest = Type.Object(
 			description:
 				"The Ledger Account that sends to or receives funds from the settled ledger account. The settled ledger account and the contra ledger account must belong to the same ledger.",
 		}),
+		externalReference: Type.Optional(
+			Type.String({
+				description: "External reference for reconciliation with external systems.",
+			})
+		),
 		metadata: Type.Optional(Metadata),
 	},
 	{
@@ -641,28 +651,33 @@ const LedgerAccountSettlementEntriesRequest = Type.Object({
 });
 type LedgerAccountSettlementEntriesRequest = Static<typeof LedgerAccountSettlementEntriesRequest>;
 type ListLedgerAccountSettlementsRequest = FastifyRequest<{
+	Params: LedgerIdParameters;
 	Querystring: PaginationQuery;
 }>;
 type GetLedgerAccountSettlementRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParameters;
+	Params: LedgerIdParameters & LedgerAccountSettlementIdParameters;
 }>;
 type CreateLedgerAccountSettlementRequest = FastifyRequest<{
+	Params: LedgerIdParameters;
 	Body: LedgerAccountSettlementRequest;
 }>;
 type UpdateLedgerAccountSettlementRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParameters;
+	Params: LedgerIdParameters & LedgerAccountSettlementIdParameters;
 	Body: LedgerAccountSettlementRequest;
 }>;
 type DeleteLedgerAccountSettlementRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParameters;
+	Params: LedgerIdParameters & LedgerAccountSettlementIdParameters;
 }>;
 type AddLedgerAccountSettlementEntryRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParameters;
+	Params: LedgerIdParameters & LedgerAccountSettlementIdParameters;
 	Body: LedgerAccountSettlementEntriesRequest;
 }>;
 type RemoveLedgerAccountSettlementEntryRequest = FastifyRequest<{
-	Params: LedgerAccountSettlementIdParameters;
+	Params: LedgerIdParameters & LedgerAccountSettlementIdParameters;
 	Body: LedgerAccountSettlementEntriesRequest;
+}>;
+type TransitionLedgerAccountSettlementStatusRequest = FastifyRequest<{
+	Params: LedgerIdParameters & LedgerAccountSettlementIdParameters & { status: SettlementStatus };
 }>;
 
 /**
@@ -883,6 +898,7 @@ export {
 	DeleteLedgerAccountSettlementRequest,
 	AddLedgerAccountSettlementEntryRequest,
 	RemoveLedgerAccountSettlementEntryRequest,
+	TransitionLedgerAccountSettlementStatusRequest,
 	CreateLedgerAccountStatementRequest,
 	GetLedgerAccountStatementRequest,
 	ListLedgerAccountBalanceMonitorsRequest,
@@ -906,11 +922,11 @@ export {
 	PendingBalance,
 	PostedBalance,
 	AvailableBalance,
+	SettlementStatus,
 	// Export unused types to silence Biome warnings
 	type Metadata,
 	type NormalBalance,
 	type Balance,
-	type SettlementStatus,
 	type AlertOperator,
 	type AlertField,
 	type AlertCondition,

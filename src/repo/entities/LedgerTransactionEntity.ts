@@ -31,6 +31,7 @@ type LedgerTransactionEntityOptions = {
 	idempotencyKey?: string;
 	description?: string;
 	status: BalanceStatus;
+	effectiveAt: Date; // When transaction happened for reporting purposes
 	metadata?: Record<string, unknown>;
 	created: Date;
 	updated: Date;
@@ -50,6 +51,7 @@ class LedgerTransactionEntity {
 	public readonly idempotencyKey?: string;
 	public readonly description?: string;
 	public readonly status: BalanceStatus;
+	public readonly effectiveAt: Date;
 	public readonly metadata?: Record<string, unknown>;
 	public readonly created: Date;
 	public readonly updated: Date;
@@ -65,6 +67,7 @@ class LedgerTransactionEntity {
 		this.idempotencyKey = options.idempotencyKey;
 		this.description = options.description;
 		this.status = options.status;
+		this.effectiveAt = options.effectiveAt;
 		this.metadata = options.metadata;
 		this.created = options.created;
 		this.updated = options.updated;

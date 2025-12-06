@@ -9,18 +9,22 @@ import type {
 import type {
 	LedgerAccountCategoryID,
 	LedgerAccountID,
+	LedgerAccountSettlementID,
 	LedgerID,
 	OrgID,
 } from "@/repo/entities/types";
 import type { LedgerAccountCategoryRepo } from "@/repo/LedgerAccountCategoryRepo";
 import type { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
+import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlementRepo";
 import type { LedgerRepo } from "@/repo/LedgerRepo";
+import type { SettlementStatus } from "@/routes/ledgers/schema";
 
 class LedgerAccountService {
 	constructor(
 		private readonly ledgerAccountRepo: LedgerAccountRepo,
 		private readonly ledgerRepo: LedgerRepo,
-		private readonly ledgerAccountCategoryRepo: LedgerAccountCategoryRepo
+		private readonly ledgerAccountCategoryRepo: LedgerAccountCategoryRepo,
+		private readonly ledgerAccountSettlementRepo: LedgerAccountSettlementRepo
 	) {}
 
 	// Ledger Account - Core CRUD operations
@@ -145,46 +149,106 @@ class LedgerAccountService {
 	}
 
 	// Ledger Account Settlement
-	public listLedgerAccountSettlements(
-		_offset: number,
-		_limit: number
+	public async listLedgerAccountSettlements(
+		orgId: OrgID,
+		ledgerId: LedgerID,
+		offset: number,
+		limit: number
 	): Promise<LedgerAccountSettlementEntity[]> {
-		throw new NotImplementedError(
-			"Account settlements require LedgerAccountSettlementsTable and LedgerAccountSettlementEntity implementation"
-		);
+		// Verify ledger exists
+		await this.ledgerRepo.getLedger(orgId, ledgerId);
+		return this.ledgerAccountSettlementRepo.listSettlements(orgId, ledgerId, offset, limit);
 	}
 
-	public getLedgerAccountSettlement(_id: string): Promise<LedgerAccountSettlementEntity> {
-		throw new NotImplementedError(
-			"Account settlements require LedgerAccountSettlementsTable and LedgerAccountSettlementEntity implementation"
-		);
-	}
-
-	public createLedgerAccountSettlement(
-		_entity: LedgerAccountSettlementEntity
+	public async getLedgerAccountSettlement(
+		orgId: OrgID,
+		id: LedgerAccountSettlementID
 	): Promise<LedgerAccountSettlementEntity> {
-		throw new NotImplementedError(
-			"Account settlements require LedgerAccountSettlementsTable and LedgerAccountSettlementEntity implementation"
-		);
+		return this.ledgerAccountSettlementRepo.getSettlement(orgId, id);
 	}
 
-	public updateLedgerAccountSettlement(
-		_id: string,
-		_entity: LedgerAccountSettlementEntity
+	public async createLedgerAccountSettlement(
+		_orgId: OrgID,
+		entity: LedgerAccountSettlementEntity
 	): Promise<LedgerAccountSettlementEntity> {
-		throw new NotImplementedError("Feature not yet implemented");
+		// Note: Database foreign keys ensure both accounts exist
+		// TODO: Add validation that both accounts belong to the same ledger
+		return this.ledgerAccountSettlementRepo.createSettlement(entity);
 	}
 
-	public deleteLedgerAccountSettlement(_id: string): Promise<void> {
-		throw new NotImplementedError("Feature not yet implemented");
+	public async updateLedgerAccountSettlement(
+		orgId: OrgID,
+		id: LedgerAccountSettlementID,
+		entity: LedgerAccountSettlementEntity
+	): Promise<LedgerAccountSettlementEntity> {
+		// Verify settlement exists
+		await this.ledgerAccountSettlementRepo.getSettlement(orgId, id);
+		return this.ledgerAccountSettlementRepo.updateSettlement(entity);
 	}
 
-	public addLedgerAccountSettlementEntries(_id: string, _entries: string[]): Promise<void> {
-		throw new NotImplementedError("Feature not yet implemented");
+	public async deleteLedgerAccountSettlement(
+		orgId: OrgID,
+		id: LedgerAccountSettlementID
+	): Promise<void> {
+		return this.ledgerAccountSettlementRepo.deleteSettlement(orgId, id);
 	}
 
-	public removeLedgerAccountSettlementEntries(_id: string, _entries: string[]): Promise<void> {
-		throw new NotImplementedError("Feature not yet implemented");
+	public async addLedgerAccountSettlementEntries(
+		orgId: OrgID,
+		id: LedgerAccountSettlementID,
+		entries: string[]
+	): Promise<void> {
+		return this.ledgerAccountSettlementRepo.addEntriesToSettlement(orgId, id, entries);
+	}
+
+	public async removeLedgerAccountSettlementEntries(
+		orgId: OrgID,
+		id: LedgerAccountSettlementID,
+		entries: string[]
+	): Promise<void> {
+		return this.ledgerAccountSettlementRepo.removeEntriesFromSettlement(orgId, id, entries);
+	}
+
+	public async transitionSettlementStatus(
+		orgId: OrgID,
+		id: LedgerAccountSettlementID,
+		targetStatus: SettlementStatus
+	): Promise<LedgerAccountSettlementEntity> {
+		const settlement = await this.ledgerAccountSettlementRepo.getSettlement(orgId, id);
+
+		// Validate transition
+		this.validateStatusTransition(settlement.status, targetStatus);
+
+		// Handle transition-specific logic
+		if (targetStatus === "pending" && settlement.status === "processing") {
+			// Calculate and update amount
+			const amount = await this.ledgerAccountSettlementRepo.calculateAmount(id);
+			const updatedSettlement = settlement.withAmount(amount);
+			await this.ledgerAccountSettlementRepo.updateSettlement(updatedSettlement);
+		}
+
+		// TODO: For pending → posted transition, create the ledger transaction
+		// This will be implemented in a follow-up task
+
+		return this.ledgerAccountSettlementRepo.updateStatus(orgId, id, targetStatus);
+	}
+
+	private validateStatusTransition(
+		currentStatus: SettlementStatus,
+		newStatus: SettlementStatus
+	): void {
+		const validTransitions: Record<SettlementStatus, SettlementStatus[]> = {
+			drafting: ["processing"],
+			processing: ["pending", "drafting"],
+			pending: ["posted", "drafting"],
+			posted: ["archiving"],
+			archiving: ["archived"],
+			archived: [],
+		};
+
+		if (!validTransitions[currentStatus].includes(newStatus)) {
+			throw new NotImplementedError(`Invalid transition from ${currentStatus} to ${newStatus}`);
+		}
 	}
 
 	// Ledger Account Statement

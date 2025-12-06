@@ -12,7 +12,7 @@ const LedgerRouterPlugin: FastifyPluginAsync = async server => {
 		prefix: "/:ledgerId/accounts/categories",
 	});
 	await server.register(LedgerAccountSettlementRoutes, {
-		prefix: "/:ledgerId/accounts/:accountId/settlements",
+		prefix: "/:ledgerId/settlements",
 	});
 	await server.register(LedgerAccountStatementRoutes, {
 		prefix: "/:ledgerId/accounts/:accountId/statements",

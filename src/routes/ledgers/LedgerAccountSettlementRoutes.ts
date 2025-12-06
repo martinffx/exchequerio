@@ -1,5 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyPluginAsync } from "fastify";
+import { TypeID } from "typeid-js";
 import { LedgerAccountSettlementEntity } from "@/services";
 import {
 	BadRequestErrorResponse,
@@ -18,11 +19,14 @@ import {
 	type DeleteLedgerAccountSettlementRequest,
 	type GetLedgerAccountSettlementRequest,
 	LedgerAccountSettlementEntriesRequest,
-	LedgerAccountSettlementIdParams as LedgerAccountSettlementIdParameters,
+	LedgerAccountSettlementIdParams,
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
+	LedgerIdParams,
 	type ListLedgerAccountSettlementsRequest,
 	type RemoveLedgerAccountSettlementEntryRequest,
+	SettlementStatus,
+	type TransitionLedgerAccountSettlementStatusRequest,
 	type UpdateLedgerAccountSettlementRequest,
 } from "./schema";
 
@@ -35,7 +39,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				operationId: "listLedgerAccountSettlements",
 				tags: TAGS,
 				summary: "List Ledger Account Settlements",
-				description: "List Ledger Account Settlements",
+				description: "List all settlements for a ledger",
+				params: LedgerIdParams,
 				querystring: PaginationQuery,
 				response: {
 					200: Type.Array(LedgerAccountSettlementResponse),
@@ -49,7 +54,11 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: ListLedgerAccountSettlementsRequest): Promise<LedgerAccountSettlementResponse[]> => {
+			const orgId = rq.token.orgId;
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const settlements = await rq.server.services.ledgerAccountService.listLedgerAccountSettlements(
+				orgId,
+				ledgerId,
 				rq.query.offset,
 				rq.query.limit
 			);
@@ -64,8 +73,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				operationId: "getLedgerAccountSettlement",
 				tags: TAGS,
 				summary: "Get Ledger Account Settlement",
-				description: "Get Ledger Account Settlement",
-				params: LedgerAccountSettlementIdParameters,
+				description: "Get a single settlement by ID",
+				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
 				response: {
 					200: LedgerAccountSettlementResponse,
 					400: BadRequestErrorResponse,
@@ -79,10 +88,13 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: GetLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
-			const category = await rq.server.services.ledgerAccountService.getLedgerAccountSettlement(
-				rq.params.ledgerAccountSettlementId
+			const orgId = rq.token.orgId;
+			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+			const settlement = await rq.server.services.ledgerAccountService.getLedgerAccountSettlement(
+				orgId,
+				settlementId
 			);
-			return category.toResponse();
+			return settlement.toResponse();
 		}
 	);
 
@@ -93,7 +105,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				operationId: "createLedgerAccountSettlement",
 				tags: TAGS,
 				summary: "Create Ledger Account Settlement",
-				description: "Create Ledger Account Settlement",
+				description: "Create a new settlement in drafting status",
+				params: LedgerIdParams,
 				body: LedgerAccountSettlementRequest,
 				response: {
 					200: LedgerAccountSettlementResponse,
@@ -108,10 +121,33 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: CreateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
-			const category = await rq.server.services.ledgerAccountService.createLedgerAccountSettlement(
-				LedgerAccountSettlementEntity.fromRequest(rq.body)
+			const orgId = rq.token.orgId;
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
+
+			// Get the ledger to retrieve currency information
+			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
+
+			// Determine normal balance from settled account (debit or credit)
+			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledLedgerAccountId);
+			const settledAccount = await rq.server.services.ledgerAccountService.getLedgerAccount(
+				orgId,
+				ledgerId,
+				settledAccountId
 			);
-			return category.toResponse();
+
+			const settlement = LedgerAccountSettlementEntity.fromRequest(
+				rq.body,
+				orgId,
+				ledger.currency,
+				ledger.currencyExponent,
+				settledAccount.normalBalance
+			);
+
+			const created = await rq.server.services.ledgerAccountService.createLedgerAccountSettlement(
+				orgId,
+				settlement
+			);
+			return created.toResponse();
 		}
 	);
 
@@ -122,8 +158,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				operationId: "updateLedgerAccountSettlement",
 				tags: TAGS,
 				summary: "Update Ledger Account Settlement",
-				description: "Update Ledger Account Settlement",
-				params: LedgerAccountSettlementIdParameters,
+				description: "Update a settlement (only in drafting status)",
+				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
 				body: LedgerAccountSettlementRequest,
 				response: {
 					200: LedgerAccountSettlementResponse,
@@ -139,11 +175,36 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: UpdateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
-			const org = await rq.server.services.ledgerAccountService.updateLedgerAccountSettlement(
-				rq.params.ledgerAccountSettlementId,
-				LedgerAccountSettlementEntity.fromRequest(rq.body)
+			const orgId = rq.token.orgId;
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
+			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+
+			// Get the ledger to retrieve currency information
+			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
+
+			// Determine normal balance from settled account
+			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledLedgerAccountId);
+			const settledAccount = await rq.server.services.ledgerAccountService.getLedgerAccount(
+				orgId,
+				ledgerId,
+				settledAccountId
 			);
-			return org.toResponse();
+
+			const settlement = LedgerAccountSettlementEntity.fromRequest(
+				rq.body,
+				orgId,
+				ledger.currency,
+				ledger.currencyExponent,
+				settledAccount.normalBalance,
+				settlementId.toString()
+			);
+
+			const updated = await rq.server.services.ledgerAccountService.updateLedgerAccountSettlement(
+				orgId,
+				settlementId,
+				settlement
+			);
+			return updated.toResponse();
 		}
 	);
 
@@ -154,8 +215,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				operationId: "deleteLedgerAccountSettlement",
 				tags: TAGS,
 				summary: "Delete Ledger Account Settlement",
-				description: "Delete Ledger Account Settlement",
-				params: LedgerAccountSettlementIdParameters,
+				description: "Delete a settlement (only in drafting status)",
+				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -170,9 +231,9 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: DeleteLedgerAccountSettlementRequest): Promise<void> => {
-			await rq.server.services.ledgerAccountService.deleteLedgerAccountSettlement(
-				rq.params.ledgerAccountSettlementId
-			);
+			const orgId = rq.token.orgId;
+			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+			await rq.server.services.ledgerAccountService.deleteLedgerAccountSettlement(orgId, settlementId);
 		}
 	);
 
@@ -184,8 +245,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Add Ledger Account Settlement Entries",
 				description:
-					"This API allows attaching Ledger Entries to a drafting Ledger Account Settlement.",
-				params: LedgerAccountSettlementIdParameters,
+					"Attach ledger entries to a drafting settlement. Only entries from the settled account that are posted can be attached.",
+				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
 				body: LedgerAccountSettlementEntriesRequest,
 				response: {
 					200: {},
@@ -201,8 +262,11 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: AddLedgerAccountSettlementEntryRequest): Promise<void> => {
+			const orgId = rq.token.orgId;
+			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
 			await rq.server.services.ledgerAccountService.addLedgerAccountSettlementEntries(
-				rq.params.ledgerAccountSettlementId,
+				orgId,
+				settlementId,
 				rq.body.entries
 			);
 		}
@@ -215,9 +279,9 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				operationId: "removeLedgerAccountSettlementEntries",
 				tags: TAGS,
 				summary: "Remove Ledger Account Settlement Entries",
-				description:
-					"This API allows removing Ledger Entries from a drafting Ledger Account Settlement.",
-				params: LedgerAccountSettlementIdParameters,
+				description: "Remove ledger entries from a drafting settlement.",
+				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
+				body: LedgerAccountSettlementEntriesRequest, // FIXED: Added missing body schema
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -232,10 +296,55 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 		},
 		async (rq: RemoveLedgerAccountSettlementEntryRequest): Promise<void> => {
+			const orgId = rq.token.orgId;
+			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
 			await rq.server.services.ledgerAccountService.removeLedgerAccountSettlementEntries(
-				rq.params.ledgerAccountSettlementId,
+				orgId,
+				settlementId,
 				rq.body.entries
 			);
+		}
+	);
+
+	server.post(
+		"/:ledgerAccountSettlementId/:status",
+		{
+			schema: {
+				operationId: "transitionLedgerAccountSettlementStatus",
+				tags: TAGS,
+				summary: "Transition Settlement Status",
+				description: "Transition a settlement to a new status following the state machine rules",
+				params: Type.Composite([
+					LedgerIdParams,
+					LedgerAccountSettlementIdParams,
+					Type.Object({ status: SettlementStatus }),
+				]),
+				response: {
+					200: LedgerAccountSettlementResponse,
+					400: BadRequestErrorResponse,
+					401: UnauthorizedErrorResponse,
+					403: ForbiddenErrorResponse,
+					404: NotFoundErrorResponse,
+					409: ConflictErrorResponse,
+					429: TooManyRequestsErrorResponse,
+					500: InternalServerErrorResponse,
+					503: ServiceUnavailableErrorResponse,
+				},
+			},
+		},
+		async (
+			rq: TransitionLedgerAccountSettlementStatusRequest
+		): Promise<LedgerAccountSettlementResponse> => {
+			const orgId = rq.token.orgId;
+			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+			const targetStatus = rq.params.status;
+
+			const settlement = await rq.server.services.ledgerAccountService.transitionSettlementStatus(
+				orgId,
+				settlementId,
+				targetStatus
+			);
+			return settlement.toResponse();
 		}
 	);
 };

@@ -17,6 +17,7 @@ import type { LedgerTransactionEntryEntityOpts } from "@/repo/entities/LedgerTra
 import type { OrgEntityOpts } from "@/repo/entities/OrganizationEntity";
 import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
+import { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
 import { LedgerRepo } from "./LedgerRepo";
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
 import { OrganizationRepo } from "./OrganizationRepo";
@@ -37,6 +38,7 @@ function getRepos(): Repos {
 	const ledgerRepo = new LedgerRepo(db);
 	const ledgerAccountRepo = new LedgerAccountRepo(db);
 	const ledgerAccountCategoryRepo = new LedgerAccountCategoryRepo(db);
+	const ledgerAccountSettlementRepo = new LedgerAccountSettlementRepo(db);
 	const ledgerTransactionRepo = new LedgerTransactionRepo(db);
 
 	repos = {
@@ -44,6 +46,7 @@ function getRepos(): Repos {
 		ledgerRepo,
 		ledgerAccountRepo,
 		ledgerAccountCategoryRepo,
+		ledgerAccountSettlementRepo,
 		ledgerTransactionRepo,
 	};
 
