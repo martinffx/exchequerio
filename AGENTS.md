@@ -20,9 +20,9 @@
 ### **CI/CD Pipeline**
 - `mise run ci` - **Complete CI pipeline** (docker_up + format + lint + types + test)
 
-### **Drizzle ORM**
-- `drizzle-kit generate` - Generate migrations from schema
-- `drizzle-kit migrate` - Apply migrations to database
+### **Database Migrations**
+- `bun run db:gen` - Generate migrations from schema (drizzle-kit generate)
+- `bun run db:migrate` - Apply migrations to database (with environment config)
 
 ### **Database Schema Documentation**
 - **ERD Reference**: See `docs/product/erd.md` for complete Entity Relationship Diagram

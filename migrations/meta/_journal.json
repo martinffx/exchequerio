@@ -5,43 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1762933862316,
-      "tag": "0000_overjoyed_genesis",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1764495958488,
-      "tag": "0001_luxuriant_frog_thor",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1764514476255,
-      "tag": "0003_absurd_nicolaos",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1764514803172,
-      "tag": "0004_milky_boom_boom",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1764783439358,
-      "tag": "0004_premium_serpent_society",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1765019609684,
-      "tag": "0005_black_exiles",
+      "when": 1765043854730,
+      "tag": "0000_normal_retro_girl",
       "breakpoints": true
     }
   ]

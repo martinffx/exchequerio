@@ -1,2 +1,0 @@
-CREATE INDEX "idx_ledger_accounts_posted_balance" ON "ledger_accounts" USING btree ("ledger_id","posted_amount");--> statement-breakpoint
-CREATE INDEX "idx_ledger_accounts_available_balance" ON "ledger_accounts" USING btree ("ledger_id","available_amount");
