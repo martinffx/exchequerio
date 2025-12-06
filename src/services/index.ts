@@ -42,5 +42,5 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 	}
 );
 
-export * from "./entities";
+export * from "@/repo/entities";
 export { ServicePlugin, type ServicePluginOpts };

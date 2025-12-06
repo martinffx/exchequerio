@@ -1,6 +1,6 @@
 import { TypeID } from "typeid-js";
-import { LedgerEntity } from "@/services/entities/LedgerEntity";
-import type { LedgerID, OrgID } from "@/services/entities/types";
+import { LedgerEntity } from "@/repo/entities/LedgerEntity";
+import type { LedgerID, OrgID } from "@/repo/entities/types";
 import { createLedgerEntity, createOrganizationEntity, getRepos } from "./fixtures";
 
 describe("LedgerRepo", () => {

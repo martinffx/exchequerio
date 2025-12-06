@@ -6,7 +6,7 @@ import { TypeID } from "typeid-js";
 import { vi } from "vitest";
 import { Config } from "@/config";
 import { NotFoundError } from "@/errors";
-import { LedgerTransactionEntity } from "@/services/entities";
+import { LedgerTransactionEntity } from "@/repo/entities";
 import {
 	createLedgerEntity,
 	createLedgerTransactionEntity,

@@ -1,14 +1,14 @@
 import { NotImplementedError } from "@/errors";
-import type { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
-import type { LedgerRepo } from "@/repo/LedgerRepo";
 import type {
 	LedgerAccountBalanceMonitorEntity,
 	LedgerAccountCategoryEntity,
 	LedgerAccountEntity,
 	LedgerAccountSettlementEntity,
 	LedgerAccountStatementEntity,
-} from "./entities";
-import type { LedgerAccountID, LedgerID, OrgID } from "./entities/types";
+} from "@/repo/entities";
+import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
+import type { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
+import type { LedgerRepo } from "@/repo/LedgerRepo";
 
 class LedgerAccountService {
 	constructor(

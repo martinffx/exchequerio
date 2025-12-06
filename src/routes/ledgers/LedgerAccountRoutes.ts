@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyPluginAsync } from "fastify";
 import { TypeID } from "typeid-js";
-
+import { LedgerAccountEntity } from "@/repo/entities";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -13,7 +13,6 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/routes/schema";
-import { LedgerAccountEntity } from "@/services/entities";
 import {
 	type CreateLedgerAccountRequest,
 	type DeleteLedgerAccountRequest,

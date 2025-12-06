@@ -12,7 +12,7 @@ import {
 	LedgerTransactionEntryEntity,
 	type LedgerTransactionID,
 	type OrgID,
-} from "@/services/entities";
+} from "@/repo/entities";
 import { handleDBError, isDBError } from "./errors";
 import {
 	LedgerAccountsTable,

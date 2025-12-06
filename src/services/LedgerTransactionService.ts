@@ -1,13 +1,13 @@
 import { ConflictError, NotFoundError } from "@/errors";
-import type { LedgerRepo } from "@/repo/LedgerRepo";
-import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
-import type { LedgerTransactionRequest } from "@/routes/ledgers/schema";
 import {
 	type LedgerID,
 	LedgerTransactionEntity,
 	type LedgerTransactionID,
 	type OrgID,
-} from "./entities";
+} from "@/repo/entities";
+import type { LedgerRepo } from "@/repo/LedgerRepo";
+import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
+import type { LedgerTransactionRequest } from "@/routes/ledgers/schema";
 
 class LedgerTransactionService {
 	constructor(

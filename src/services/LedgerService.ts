@@ -1,5 +1,5 @@
+import type { LedgerEntity, LedgerID, OrgID } from "@/repo/entities";
 import type { LedgerRepo } from "@/repo/LedgerRepo";
-import type { LedgerEntity, LedgerID, OrgID } from "./entities";
 
 class LedgerService {
 	constructor(private readonly ledgerRepo: LedgerRepo) {}

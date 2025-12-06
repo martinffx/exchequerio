@@ -9,12 +9,12 @@ import {
 	LedgerTransactionEntity,
 	LedgerTransactionEntryEntity,
 	OrganizationEntity,
-} from "@/services/entities";
-import type { LedgerAccountEntityOpts } from "@/services/entities/LedgerAccountEntity";
-import type { LedgerEntityOpts } from "@/services/entities/LedgerEntity";
-import type { LedgerTransactionEntityOpts } from "@/services/entities/LedgerTransactionEntity";
-import type { LedgerTransactionEntryEntityOpts } from "@/services/entities/LedgerTransactionEntryEntity";
-import type { OrgEntityOpts } from "@/services/entities/OrganizationEntity";
+} from "@/repo/entities";
+import type { LedgerAccountEntityOpts } from "@/repo/entities/LedgerAccountEntity";
+import type { LedgerEntityOpts } from "@/repo/entities/LedgerEntity";
+import type { LedgerTransactionEntityOpts } from "@/repo/entities/LedgerTransactionEntity";
+import type { LedgerTransactionEntryEntityOpts } from "@/repo/entities/LedgerTransactionEntryEntity";
+import type { OrgEntityOpts } from "@/repo/entities/OrganizationEntity";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
 import { LedgerRepo } from "./LedgerRepo";
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo";

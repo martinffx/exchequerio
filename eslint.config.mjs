@@ -65,7 +65,7 @@ export default [
       "boundaries/elements": [
         { type: "routes", pattern: "src/routes/**/*" },
         { type: "services", pattern: "src/services/**/*" },
-        { type: "entities", pattern: "src/services/entities/**/*" },
+        { type: "entities", pattern: "src/repo/entities/**/*" },
         { type: "repo", pattern: "src/repo/**/*" },
         { type: "config", pattern: "src/config.ts" },
         { type: "server", pattern: "src/server.ts" },
@@ -95,7 +95,7 @@ export default [
             },
             {
               from: ["repo"],
-              allow: ["repo"],
+              allow: ["repo", "entities"],
             },
             {
               from: ["config"],
