@@ -1047,6 +1047,221 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 		});
 	});
 
+	describe("deleteTransactionWithBalanceUpdate", () => {
+		it("should delete transaction and reverse balance updates", async () => {
+			// Arrange - Create and post a transaction
+			const entries = [
+				{
+					accountId: testAccount1Id,
+					direction: "debit" as const,
+					amount: 5000,
+				},
+				{
+					accountId: testAccount2Id,
+					direction: "credit" as const,
+					amount: 5000,
+				},
+			];
+
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Transaction to delete",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
+
+			const created = await repo.createTransaction(transactionEntity);
+
+			// Verify balances were updated
+			const account1Before = await database
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, testAccount1Id))
+				.limit(1);
+
+			const account2Before = await database
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, testAccount2Id))
+				.limit(1);
+
+			expect(account1Before[0].postedAmount).toBe(5000);
+			expect(account2Before[0].postedAmount).toBe(5000);
+			const lockVersion1Before = account1Before[0].lockVersion;
+			const lockVersion2Before = account2Before[0].lockVersion;
+
+			// Act - Delete the transaction with balance reversal
+			await repo.deleteTransactionWithBalanceUpdate(
+				testOrgId,
+				testLedger.id,
+				transactionEntityId,
+				created
+			);
+
+			// Assert - Verify transaction and entries are deleted
+			await expect(
+				repo.getLedgerTransaction(
+					testOrgId.toString(),
+					testLedger.id.toString(),
+					transactionEntityId.toString()
+				)
+			).rejects.toThrow(NotFoundError);
+
+			// Verify balances were reversed
+			const account1After = await database
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, testAccount1Id))
+				.limit(1);
+
+			const account2After = await database
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, testAccount2Id))
+				.limit(1);
+
+			expect(account1After[0].postedAmount).toBe(0);
+			expect(account2After[0].postedAmount).toBe(0);
+			expect(account1After[0].lockVersion).toBe(lockVersion1Before + 1);
+			expect(account2After[0].lockVersion).toBe(lockVersion2Before + 1);
+		});
+
+		it("should throw NotFoundError when account doesn't exist", async () => {
+			// Arrange - Create a transaction
+			const fakeAccountId = new TypeID("lat").toString();
+			const transactionEntityId = new TypeID("ltr");
+
+			const entries = [
+				createLedgerTransactionEntryEntity({
+					organizationId: testOrgId,
+					transactionId: transactionEntityId,
+					accountId: TypeID.fromString<"lat">(fakeAccountId),
+					direction: "debit",
+					amount: 5000,
+				}),
+				createLedgerTransactionEntryEntity({
+					organizationId: testOrgId,
+					transactionId: transactionEntityId,
+					accountId: TypeID.fromString<"lat">(testAccount2Id),
+					direction: "credit",
+					amount: 5000,
+				}),
+			];
+
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Transaction with fake account",
+				entries,
+			});
+
+			// Act & Assert - Should throw NotFoundError
+			await expect(
+				repo.deleteTransactionWithBalanceUpdate(
+					testOrgId,
+					testLedger.id,
+					transactionEntityId,
+					transactionEntity
+				)
+			).rejects.toThrow(NotFoundError);
+		});
+
+		it("should verify balance reversal accuracy (debit→credit, credit→debit)", async () => {
+			// Arrange - Create a transaction with specific amounts
+			const entries = [
+				{
+					accountId: testAccount1Id,
+					direction: "debit" as const,
+					amount: 12345,
+				},
+				{
+					accountId: testAccount2Id,
+					direction: "credit" as const,
+					amount: 12345,
+				},
+			];
+
+			const transactionEntityId = new TypeID("ltr");
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedger.id,
+				description: "Precise reversal test",
+				entries: entries.map(e =>
+					createLedgerTransactionEntryEntity({
+						organizationId: testOrgId,
+						transactionId: transactionEntityId,
+						accountId: TypeID.fromString<"lat">(e.accountId),
+						direction: e.direction,
+						amount: e.amount,
+					})
+				),
+			});
+
+			const created = await repo.createTransaction(transactionEntity);
+
+			// Get initial balances after creation
+			const account1After = await database
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, testAccount1Id))
+				.limit(1);
+
+			const account2After = await database
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, testAccount2Id))
+				.limit(1);
+
+			expect(account1After[0].postedAmount).toBe(12345);
+			expect(account2After[0].postedAmount).toBe(12345);
+			const account1DebitsBefore = account1After[0].postedDebits;
+			const account2CreditsBefore = account2After[0].postedCredits;
+
+			// Act - Delete with balance reversal
+			await repo.deleteTransactionWithBalanceUpdate(
+				testOrgId,
+				testLedger.id,
+				transactionEntityId,
+				created
+			);
+
+			// Assert - Verify perfect reversal
+			const account1Final = await database
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, testAccount1Id))
+				.limit(1);
+
+			const account2Final = await database
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, testAccount2Id))
+				.limit(1);
+
+			// Amounts should be back to 0
+			expect(account1Final[0].postedAmount).toBe(0);
+			expect(account2Final[0].postedAmount).toBe(0);
+
+			// Debits/credits should reflect the reversal (credit reverses a debit)
+			expect(account1Final[0].postedDebits).toBe(account1DebitsBefore);
+			expect(account1Final[0].postedCredits).toBe(12345); // Reversal adds credit
+			expect(account2Final[0].postedCredits).toBe(account2CreditsBefore);
+			expect(account2Final[0].postedDebits).toBe(12345); // Reversal adds debit
+		});
+	});
+
 	// Note: Transaction handling is now internal via this.db.transaction()
 	// Tests for atomic operations are covered in createTransaction and postTransaction tests
 });

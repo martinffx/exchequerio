@@ -144,7 +144,7 @@ describe("LedgerAccountStatementRoutes", () => {
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/statements`,
 				payload: {
 					ledgerId: new TypeID("lgr").toString(),
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					startDatetime: fixedDate.toISOString(),
 					endDatetime: fixedDate.toISOString(),
 					description: "Test statement",
@@ -163,7 +163,7 @@ describe("LedgerAccountStatementRoutes", () => {
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/statements`,
 				payload: {
 					ledgerId: new TypeID("lgr").toString(),
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					startDatetime: fixedDate.toISOString(),
 					endDatetime: fixedDate.toISOString(),
 				},
@@ -181,7 +181,7 @@ describe("LedgerAccountStatementRoutes", () => {
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/statements`,
 				payload: {
 					ledgerId: new TypeID("lgr").toString(),
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					startDatetime: fixedDate.toISOString(),
 					endDatetime: fixedDate.toISOString(),
 				},
@@ -216,7 +216,7 @@ describe("LedgerAccountStatementRoutes", () => {
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/statements`,
 				payload: {
 					ledgerId: new TypeID("lgr").toString(),
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					startDatetime: fixedDate.toISOString(),
 					endDatetime: fixedDate.toISOString(),
 				},
@@ -238,7 +238,7 @@ describe("LedgerAccountStatementRoutes", () => {
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/statements`,
 				payload: {
 					ledgerId: new TypeID("lgr").toString(),
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					startDatetime: fixedDate.toISOString(),
 					endDatetime: fixedDate.toISOString(),
 				},

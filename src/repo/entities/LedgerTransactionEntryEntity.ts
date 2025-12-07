@@ -109,7 +109,7 @@ class LedgerTransactionEntryEntity {
 	public toResponse(): Omit<LedgerTransactionEntryResponse, "resultingBalance"> {
 		return {
 			id: this.id.toString(),
-			ledgerAccountId: this.accountId.toString(),
+			accountId: this.accountId.toString(),
 			direction: this.direction,
 			amount: this.amount, // Already a number (integer minor units)
 			currency: this.currency,

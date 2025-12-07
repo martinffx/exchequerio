@@ -3,6 +3,7 @@
 exports[`LedgerAccountBalanceMonitorRoutes > GET / > should return a list of monitors 1`] = `
 [
   {
+    "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
     "alertCondition": [],
     "balances": [
       {
@@ -33,7 +34,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > GET / > should return a list of mon
     "created": "2025-01-01T00:00:00.000Z",
     "description": "Test balance monitor",
     "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-    "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
     "lockVersion": 0,
     "updated": "2025-01-01T00:00:00.000Z",
   },
@@ -42,6 +42,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > GET / > should return a list of mon
 
 exports[`LedgerAccountBalanceMonitorRoutes > GET /:ledgerAccountBalanceMonitorId > should return a monitor 1`] = `
 {
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "alertCondition": [],
   "balances": [
     {
@@ -72,7 +73,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > GET /:ledgerAccountBalanceMonitorId
   "created": "2025-01-01T00:00:00.000Z",
   "description": "Test balance monitor",
   "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "lockVersion": 0,
   "updated": "2025-01-01T00:00:00.000Z",
 }
@@ -80,6 +80,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > GET /:ledgerAccountBalanceMonitorId
 
 exports[`LedgerAccountBalanceMonitorRoutes > POST / > should create a monitor 1`] = `
 {
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "alertCondition": [],
   "balances": [
     {
@@ -110,7 +111,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > POST / > should create a monitor 1`
   "created": "2025-01-01T00:00:00.000Z",
   "description": "Test balance monitor",
   "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "lockVersion": 0,
   "updated": "2025-01-01T00:00:00.000Z",
 }
@@ -118,6 +118,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > POST / > should create a monitor 1`
 
 exports[`LedgerAccountBalanceMonitorRoutes > PUT /:ledgerAccountBalanceMonitorId > should update a monitor 1`] = `
 {
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "alertCondition": [],
   "balances": [
     {
@@ -148,7 +149,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > PUT /:ledgerAccountBalanceMonitorId
   "created": "2025-01-01T00:00:00.000Z",
   "description": "Test balance monitor",
   "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "lockVersion": 0,
   "updated": "2025-01-01T00:00:00.000Z",
 }

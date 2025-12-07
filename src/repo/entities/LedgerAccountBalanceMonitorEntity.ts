@@ -61,7 +61,7 @@ class LedgerAccountBalanceMonitorEntity {
 			id: id
 				? (TypeID.fromString<"lbm">(id) as LedgerAccountBalanceMonitorID)
 				: (new TypeID("lbm") as LedgerAccountBalanceMonitorID),
-			accountId: TypeID.fromString<"lat">(rq.ledgerAccountId) as LedgerAccountID,
+			accountId: TypeID.fromString<"lat">(rq.accountId) as LedgerAccountID,
 			name: rq.description || "Balance Monitor",
 			description: rq.description,
 			alertThreshold: 0,
@@ -114,7 +114,7 @@ class LedgerAccountBalanceMonitorEntity {
 	public toResponse(): LedgerAccountBalanceMonitorResponse {
 		return {
 			id: this.id.toString(),
-			ledgerAccountId: this.accountId.toString(),
+			accountId: this.accountId.toString(),
 			description: this.description,
 			alertCondition: [],
 			balances: [

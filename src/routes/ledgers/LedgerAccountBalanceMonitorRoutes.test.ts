@@ -231,7 +231,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Test balance monitor",
 					alertCondition: [],
 					metadata: {},
@@ -251,7 +251,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: "Bearer invalid_token" },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Test balance monitor",
 					alertCondition: [],
 				},
@@ -268,7 +268,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: `Bearer ${tokenReadOnly}` },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Test balance monitor",
 					alertCondition: [],
 				},
@@ -302,7 +302,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Test balance monitor",
 					alertCondition: [],
 				},
@@ -323,7 +323,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Test balance monitor",
 					alertCondition: [],
 				},
@@ -346,7 +346,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Updated monitor",
 					alertCondition: [],
 					metadata: {},
@@ -370,7 +370,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Updated monitor",
 					alertCondition: [],
 				},
@@ -387,7 +387,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: "Bearer invalid_token" },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Updated monitor",
 					alertCondition: [],
 				},
@@ -404,7 +404,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: `Bearer ${tokenReadOnly}` },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Updated monitor",
 					alertCondition: [],
 				},
@@ -438,7 +438,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Updated monitor",
 					alertCondition: [],
 				},
@@ -459,7 +459,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 				payload: {
-					ledgerAccountId: accountIdStr,
+					accountId: accountIdStr,
 					description: "Updated monitor",
 					alertCondition: [],
 				},

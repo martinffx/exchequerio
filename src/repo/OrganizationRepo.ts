@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import { DateTime } from "luxon";
-import { DatabaseError } from "pg";
 import { typeid } from "typeid-js";
-import { ConflictError, InternalServerError, LedgerError, NotFoundError } from "@/errors";
+import { ConflictError, NotFoundError } from "@/errors";
 import { OrganizationEntity, type OrgID } from "@/services";
+import { getDBErrorCode, isDBError } from "./errors";
 import { OrganizationsTable } from "./schema";
 import type { DrizzleDB } from "./types";
 
@@ -41,53 +41,14 @@ class OrganizationRepo {
 				})
 				.returning();
 			return OrganizationEntity.fromRecord(organization);
-		} catch (error: unknown) {
-			if (error instanceof LedgerError) {
-				throw error;
+		} catch (error) {
+			// PostgreSQL unique constraint violation (duplicate organization ID)
+			if (isDBError(error) && getDBErrorCode(error) === "23505") {
+				throw new ConflictError({
+					message: `Organization with id ${record.id.toString()} already exists`,
+				});
 			}
-
-			// Drizzle wraps PostgreSQL errors, check the cause for the original error
-			if (error && typeof error === "object" && "cause" in error) {
-				const errorWithCause = error as { cause?: unknown };
-				if (
-					errorWithCause.cause &&
-					typeof errorWithCause.cause === "object" &&
-					"code" in errorWithCause.cause
-				) {
-					const cause = errorWithCause.cause as { code?: string };
-					if (cause.code === "23505") {
-						throw new ConflictError({
-							message: `Organization with id ${record.id.toString()} already exists`,
-						});
-					}
-				}
-			}
-
-			// Also check direct DatabaseError instances (backwards compatibility)
-			if (error instanceof DatabaseError) {
-				if (error.code === "23505") {
-					throw new ConflictError({
-						message: `Organization with id ${record.id.toString()} already exists`,
-					});
-				}
-				throw new InternalServerError(error.message);
-			}
-
-			// Check if error has a 'code' property (for other wrapped errors)
-			if (error && typeof error === "object" && "code" in error) {
-				const dbError = error as { code?: string; message?: string };
-				if (dbError.code === "23505") {
-					throw new ConflictError({
-						message: `Organization with id ${record.id.toString()} already exists`,
-					});
-				}
-			}
-
-			if (error instanceof Error) {
-				throw new InternalServerError(error.message);
-			}
-
-			throw new InternalServerError("Unknown error");
+			throw error;
 		}
 	}
 
@@ -109,16 +70,8 @@ class OrganizationRepo {
 				throw new NotFoundError(`Organization with id ${id.toString()} not found`);
 			}
 			return OrganizationEntity.fromRecord(organization);
-		} catch (error: unknown) {
-			if (error instanceof LedgerError) {
-				throw error;
-			}
-
-			if (error instanceof Error) {
-				throw new InternalServerError(error.message);
-			}
-
-			throw new InternalServerError("Unknown error");
+		} catch (error) {
+			throw error;
 		}
 	}
 

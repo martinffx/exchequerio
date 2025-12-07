@@ -3,6 +3,7 @@ import { ConflictError, NotFoundError } from "@/errors";
 import type { LedgerAccountID, LedgerID } from "@/repo/entities/LedgerAccountEntity";
 import { LedgerAccountEntity } from "@/repo/entities/LedgerAccountEntity";
 import type { OrgID } from "@/services";
+import { getDBErrorCode, isDBError } from "./errors";
 import { LedgerAccountsTable, LedgersTable } from "./schema";
 import type { DrizzleDB } from "./types";
 
@@ -193,7 +194,7 @@ class LedgerAccountRepo {
 			return LedgerAccountEntity.fromRecord(result[0]);
 		} catch (error) {
 			// PostgreSQL foreign key violation (ledger doesn't exist or doesn't match organization)
-			if (error instanceof Error && "code" in error && error.code === "23503") {
+			if (isDBError(error) && getDBErrorCode(error) === "23503") {
 				throw new NotFoundError(
 					`Ledger not found or does not belong to organization: ${entity.ledgerId.toString()}`
 				);
@@ -254,7 +255,7 @@ class LedgerAccountRepo {
 			}
 		} catch (error) {
 			// PostgreSQL foreign key violation (account has dependent transaction entries)
-			if (error instanceof Error && "code" in error && error.code === "23503") {
+			if (isDBError(error) && getDBErrorCode(error) === "23503") {
 				throw new ConflictError({ message: "Cannot delete account with existing transaction entries" });
 			}
 			throw error;

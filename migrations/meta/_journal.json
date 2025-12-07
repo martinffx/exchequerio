@@ -8,6 +8,13 @@
       "when": 1765043854730,
       "tag": "0000_normal_retro_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1765110070692,
+      "tag": "0001_narrow_tigra",
+      "breakpoints": true
     }
   ]
 }

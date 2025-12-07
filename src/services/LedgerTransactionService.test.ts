@@ -191,7 +191,7 @@ describe("LedgerTransactionService", () => {
 			ledgerEntries: [
 				{
 					id: entryId1.toString(),
-					ledgerAccountId: accountId1.toString(),
+					accountId: accountId1.toString(),
 					currency: "USD",
 					currencyExponent: 2,
 					amount: 10000,
@@ -200,7 +200,7 @@ describe("LedgerTransactionService", () => {
 				},
 				{
 					id: entryId2.toString(),
-					ledgerAccountId: accountId2.toString(),
+					accountId: accountId2.toString(),
 					currency: "USD",
 					currencyExponent: 2,
 					amount: 10000,
@@ -228,7 +228,7 @@ describe("LedgerTransactionService", () => {
 							id: TypeID.fromString(e.id) as LedgerTransactionEntryID,
 							organizationId: orgId,
 							transactionId,
-							accountId: TypeID.fromString(e.ledgerAccountId) as LedgerAccountID,
+							accountId: TypeID.fromString(e.accountId) as LedgerAccountID,
 							currency: e.currency,
 							currencyExponent: e.currencyExponent,
 							amount: e.amount,
@@ -269,7 +269,7 @@ describe("LedgerTransactionService", () => {
 				ledgerEntries: [
 					{
 						id: entryId1.toString(),
-						ledgerAccountId: accountId1.toString(),
+						accountId: accountId1.toString(),
 						currency: "USD",
 						currencyExponent: 2,
 						amount: 10000,
@@ -278,7 +278,7 @@ describe("LedgerTransactionService", () => {
 					},
 					{
 						id: entryId2.toString(),
-						ledgerAccountId: accountId2.toString(),
+						accountId: accountId2.toString(),
 						currency: "USD",
 						currencyExponent: 2,
 						amount: 5000, // Unbalanced

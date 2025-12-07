@@ -21,6 +21,7 @@ import {
 	LedgerAccountCategoryIdParams as LedgerAccountCategoryIdParameters,
 	LedgerAccountCategoryRequest,
 	LedgerAccountCategoryResponse,
+	LedgerIdParams as LedgerIdParameters,
 	LinkAccountToCategoryParams as LinkAccountToCategoryParameters,
 	LinkCategoryToCategoryParams as LinkCategoryToCategoryParameters,
 	type LinkLedgerAccountCategoryToCategoryRequest,
@@ -34,7 +35,7 @@ import {
 const TAGS = ["Ledger Account Categories"];
 const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 	const { ledgerAccountCategoryService } = server.services;
-	server.get<{ Params: { ledgerId: string }; Querystring: PaginationQuery }>(
+	server.get<{ Params: LedgerIdParameters; Querystring: PaginationQuery }>(
 		"/",
 		{
 			schema: {
@@ -42,6 +43,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "List Ledger Account Categories",
 				description: "List Ledger Account Categories",
+				params: LedgerIdParameters,
 				querystring: PaginationQuery,
 				response: {
 					200: Type.Array(LedgerAccountCategoryResponse),
@@ -67,15 +69,17 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.get<{ Params: { ledgerId: string; ledgerAccountCategoryId: string } }>(
-		"/:ledgerAccountCategoryId",
+	server.get<{
+		Params: LedgerIdParameters & LedgerAccountCategoryIdParameters;
+	}>(
+		"/:categoryId",
 		{
 			schema: {
 				operationId: "getLedgerAccountCategory",
 				tags: TAGS,
 				summary: "Get Ledger Account Category",
 				description: "Get Ledger Account Category",
-				params: LedgerAccountCategoryIdParameters,
+				params: Type.Composite([LedgerIdParameters, LedgerAccountCategoryIdParameters]),
 				response: {
 					200: LedgerAccountCategoryResponse,
 					400: BadRequestErrorResponse,
@@ -92,7 +96,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: GetLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
+			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const category = await ledgerAccountCategoryService.getLedgerAccountCategory(
 				ledgerId,
 				categoryId
@@ -101,7 +105,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.post<{ Params: { ledgerId: string }; Body: LedgerAccountCategoryRequest }>(
+	server.post<{ Params: LedgerIdParameters; Body: LedgerAccountCategoryRequest }>(
 		"/",
 		{
 			schema: {
@@ -109,6 +113,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 				tags: TAGS,
 				summary: "Create Ledger Account Category",
 				description: "Create Ledger Account Category",
+				params: LedgerIdParameters,
 				body: LedgerAccountCategoryRequest,
 				response: {
 					200: LedgerAccountCategoryResponse,
@@ -134,17 +139,17 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.put<{
-		Params: { ledgerId: string; ledgerAccountCategoryId: string };
+		Params: LedgerIdParameters & LedgerAccountCategoryIdParameters;
 		Body: LedgerAccountCategoryRequest;
 	}>(
-		"/:ledgerAccountCategoryId",
+		"/:categoryId",
 		{
 			schema: {
 				operationId: "updateLedgerAccountCategory",
 				tags: TAGS,
 				summary: "Update Ledger Account Category",
 				description: "Update Ledger Account Category",
-				params: LedgerAccountCategoryIdParameters,
+				params: Type.Composite([LedgerIdParameters, LedgerAccountCategoryIdParameters]),
 				body: LedgerAccountCategoryRequest,
 				response: {
 					200: LedgerAccountCategoryResponse,
@@ -163,25 +168,27 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: UpdateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
+			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const category = await ledgerAccountCategoryService.updateLedgerAccountCategory(
 				ledgerId,
 				categoryId,
-				LedgerAccountCategoryEntity.fromRequest(rq.body, ledgerId, rq.params.ledgerAccountCategoryId)
+				LedgerAccountCategoryEntity.fromRequest(rq.body, ledgerId, rq.params.categoryId)
 			);
 			return category.toResponse();
 		}
 	);
 
-	server.delete<{ Params: { ledgerId: string; ledgerAccountCategoryId: string } }>(
-		"/:ledgerAccountCategoryId",
+	server.delete<{
+		Params: LedgerIdParameters & LedgerAccountCategoryIdParameters;
+	}>(
+		"/:categoryId",
 		{
 			schema: {
 				operationId: "deleteLedgerAccountCategory",
 				tags: TAGS,
 				summary: "Delete Ledger Account Category",
 				description: "Delete Ledger Account Category",
-				params: LedgerAccountCategoryIdParameters,
+				params: Type.Composite([LedgerIdParameters, LedgerAccountCategoryIdParameters]),
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -199,20 +206,22 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: DeleteLedgerAccountCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
+			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			await ledgerAccountCategoryService.deleteLedgerAccountCategory(ledgerId, categoryId);
 		}
 	);
 
-	server.patch<{ Params: { ledgerId: string; ledgerAccountCategoryId: string; accountId: string } }>(
-		"/:ledgerAccountCategoryId/accounts/:accountId",
+	server.patch<{
+		Params: LedgerIdParameters & LinkAccountToCategoryParameters;
+	}>(
+		"/:categoryId/accounts/:accountId",
 		{
 			schema: {
 				operationId: "linkLedgerAccountToCategory",
 				tags: TAGS,
 				summary: "Link Ledger Account to Category",
 				description: "Add a Ledger Account to a Ledger Account Category.",
-				params: LinkAccountToCategoryParameters,
+				params: Type.Composite([LedgerIdParameters, LinkAccountToCategoryParameters]),
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -230,23 +239,23 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: LinkLedgerAccountToCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
+			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
 			await ledgerAccountCategoryService.linkLedgerAccountToCategory(ledgerId, categoryId, accountId);
 		}
 	);
 
 	server.delete<{
-		Params: { ledgerId: string; ledgerAccountCategoryId: string; accountId: string };
+		Params: LedgerIdParameters & LinkAccountToCategoryParameters;
 	}>(
-		"/:ledgerAccountCategoryId/accounts/:accountId",
+		"/:categoryId/accounts/:accountId",
 		{
 			schema: {
 				operationId: "unlinkLedgerAccountToCategory",
 				tags: TAGS,
 				summary: "Unlink Ledger Account to Category",
 				description: "Remove a Ledger Account from a Ledger Account Category",
-				params: LinkAccountToCategoryParameters,
+				params: Type.Composite([LedgerIdParameters, LinkAccountToCategoryParameters]),
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -264,7 +273,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: UnlinkLedgerAccountToCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
+			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
 			await ledgerAccountCategoryService.unlinkLedgerAccountToCategory(
 				ledgerId,
@@ -275,16 +284,16 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.patch<{
-		Params: { ledgerId: string; ledgerAccountCategoryId: string; categoryId: string };
+		Params: LedgerIdParameters & LinkCategoryToCategoryParameters;
 	}>(
-		"/:ledgerAccountCategoryId/categories/:categoryId",
+		"/:categoryId/categories/:parentCategoryId",
 		{
 			schema: {
 				operationId: "linkLedgerAccountCategoryToCategory",
 				tags: TAGS,
 				summary: "Link Ledger Account Category to Category",
 				description: "Nest a Ledger Account Category within a higher-level Ledger Account Category.",
-				params: LinkCategoryToCategoryParameters,
+				params: Type.Composite([LedgerIdParameters, LinkCategoryToCategoryParameters]),
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -302,8 +311,8 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: LinkLedgerAccountCategoryToCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
-			const parentCategoryId = TypeID.fromString<"lac">(rq.params.categoryId);
+			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
+			const parentCategoryId = TypeID.fromString<"lac">(rq.params.parentCategoryId);
 			await ledgerAccountCategoryService.linkLedgerAccountCategoryToCategory(
 				ledgerId,
 				categoryId,
@@ -313,16 +322,16 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.delete<{
-		Params: { ledgerId: string; ledgerAccountCategoryId: string; categoryId: string };
+		Params: LedgerIdParameters & LinkCategoryToCategoryParameters;
 	}>(
-		"/:ledgerAccountCategoryId/categories/:categoryId",
+		"/:categoryId/categories/:parentCategoryId",
 		{
 			schema: {
 				operationId: "unlinkLedgerAccountCategoryToCategory",
 				tags: TAGS,
 				summary: "Unlink Ledger Account Category to Category",
 				description: "Remove a Ledger Account Category from a higher-level Ledger Account Category",
-				params: LinkCategoryToCategoryParameters,
+				params: Type.Composite([LedgerIdParameters, LinkCategoryToCategoryParameters]),
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -340,8 +349,8 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: UnlinkLedgerAccountCategoryToCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
-			const parentCategoryId = TypeID.fromString<"lac">(rq.params.categoryId);
+			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
+			const parentCategoryId = TypeID.fromString<"lac">(rq.params.parentCategoryId);
 			await ledgerAccountCategoryService.unlinkLedgerAccountCategoryToCategory(
 				ledgerId,
 				categoryId,

@@ -32,7 +32,7 @@ import {
 
 const TAGS = ["Ledger Account Settlements"];
 const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
-	server.get<{ Params: { ledgerId: string }; Querystring: { offset: number; limit: number } }>(
+	server.get<{ Params: LedgerIdParams; Querystring: PaginationQuery }>(
 		"/",
 		{
 			schema: {
@@ -70,9 +70,9 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.get<{
-		Params: { ledgerId: string; ledgerAccountSettlementId: string };
+		Params: LedgerIdParams & LedgerAccountSettlementIdParams;
 	}>(
-		"/:ledgerAccountSettlementId",
+		"/:settlementId",
 		{
 			schema: {
 				operationId: "getLedgerAccountSettlement",
@@ -96,7 +96,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: GetLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
 			const orgId = rq.token.orgId;
-			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			const settlement =
 				await rq.server.services.ledgerAccountSettlementService.getLedgerAccountSettlement(
 					orgId,
@@ -107,17 +107,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.post<{
-		Params: { ledgerId: string };
-		Body: {
-			description?: string;
-			externalReference?: string;
-			metadata?: Record<string, string>;
-			effectiveAtUpperBound?: string;
-			ledgerTransactionId: string;
-			status: "drafting" | "processing" | "pending" | "posted" | "archiving" | "archived";
-			settledLedgerAccountId: string;
-			contraLedgerAccountId: string;
-		};
+		Params: LedgerIdParams;
+		Body: LedgerAccountSettlementRequest;
 	}>(
 		"/",
 		{
@@ -150,7 +141,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
 
 			// Determine normal balance from settled account (debit or credit)
-			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledLedgerAccountId);
+			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledAccountId);
 			const settledAccount = await rq.server.services.ledgerAccountService.getLedgerAccount(
 				orgId,
 				ledgerId,
@@ -174,19 +165,10 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.put<{
-		Params: { ledgerId: string; ledgerAccountSettlementId: string };
-		Body: {
-			description?: string;
-			externalReference?: string;
-			metadata?: Record<string, string>;
-			effectiveAtUpperBound?: string;
-			ledgerTransactionId: string;
-			status: "drafting" | "processing" | "pending" | "posted" | "archiving" | "archived";
-			settledLedgerAccountId: string;
-			contraLedgerAccountId: string;
-		};
+		Params: LedgerIdParams & LedgerAccountSettlementIdParams;
+		Body: LedgerAccountSettlementRequest;
 	}>(
-		"/:ledgerAccountSettlementId",
+		"/:settlementId",
 		{
 			schema: {
 				operationId: "updateLedgerAccountSettlement",
@@ -213,13 +195,13 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		async (rq: UpdateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 
 			// Get the ledger to retrieve currency information
 			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
 
 			// Determine normal balance from settled account
-			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledLedgerAccountId);
+			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledAccountId);
 			const settledAccount = await rq.server.services.ledgerAccountService.getLedgerAccount(
 				orgId,
 				ledgerId,
@@ -246,9 +228,9 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.delete<{
-		Params: { ledgerId: string; ledgerAccountSettlementId: string };
+		Params: LedgerIdParams & LedgerAccountSettlementIdParams;
 	}>(
-		"/:ledgerAccountSettlementId",
+		"/:settlementId",
 		{
 			schema: {
 				operationId: "deleteLedgerAccountSettlement",
@@ -273,7 +255,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: DeleteLedgerAccountSettlementRequest): Promise<void> => {
 			const orgId = rq.token.orgId;
-			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			await rq.server.services.ledgerAccountSettlementService.deleteLedgerAccountSettlement(
 				orgId,
 				settlementId
@@ -282,10 +264,10 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.patch<{
-		Params: { ledgerId: string; ledgerAccountSettlementId: string };
-		Body: { entries: string[] };
+		Params: LedgerIdParams & LedgerAccountSettlementIdParams;
+		Body: LedgerAccountSettlementEntriesRequest;
 	}>(
-		"/:ledgerAccountSettlementId/entries",
+		"/:settlementId/entries",
 		{
 			schema: {
 				operationId: "addLedgerAccountSettlementEntries",
@@ -312,7 +294,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: AddLedgerAccountSettlementEntryRequest): Promise<void> => {
 			const orgId = rq.token.orgId;
-			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			await rq.server.services.ledgerAccountSettlementService.addLedgerAccountSettlementEntries(
 				orgId,
 				settlementId,
@@ -322,10 +304,10 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.delete<{
-		Params: { ledgerId: string; ledgerAccountSettlementId: string };
-		Body: { entries: string[] };
+		Params: LedgerIdParams & LedgerAccountSettlementIdParams;
+		Body: LedgerAccountSettlementEntriesRequest;
 	}>(
-		"/:ledgerAccountSettlementId/entries",
+		"/:settlementId/entries",
 		{
 			schema: {
 				operationId: "removeLedgerAccountSettlementEntries",
@@ -333,7 +315,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				summary: "Remove Ledger Account Settlement Entries",
 				description: "Remove ledger entries from a drafting settlement.",
 				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
-				body: LedgerAccountSettlementEntriesRequest, // FIXED: Added missing body schema
+				body: LedgerAccountSettlementEntriesRequest,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -351,7 +333,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: RemoveLedgerAccountSettlementEntryRequest): Promise<void> => {
 			const orgId = rq.token.orgId;
-			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			await rq.server.services.ledgerAccountSettlementService.removeLedgerAccountSettlementEntries(
 				orgId,
 				settlementId,
@@ -361,13 +343,9 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.post<{
-		Params: {
-			ledgerId: string;
-			ledgerAccountSettlementId: string;
-			status: "drafting" | "processing" | "pending" | "posted" | "archiving" | "archived";
-		};
+		Params: LedgerIdParams & LedgerAccountSettlementIdParams & { status: SettlementStatus };
 	}>(
-		"/:ledgerAccountSettlementId/:status",
+		"/:settlementId/:status",
 		{
 			schema: {
 				operationId: "transitionLedgerAccountSettlementStatus",
@@ -398,7 +376,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			rq: TransitionLedgerAccountSettlementStatusRequest
 		): Promise<LedgerAccountSettlementResponse> => {
 			const orgId = rq.token.orgId;
-			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
+			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			const targetStatus = rq.params.status;
 
 			const settlement =

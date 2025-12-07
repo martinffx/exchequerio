@@ -69,7 +69,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 	);
 
 	server.get<{ Params: LedgerIdWithAccountIdParams }>(
-		"/:ledgerAccountId",
+		"/:accountId",
 		{
 			schema: {
 				operationId: "getLedgerAccount",
@@ -94,7 +94,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 		async (rq: GetLedgerAccountRequest): Promise<LedgerAccountResponse> => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const accountId = TypeID.fromString<"lat">(rq.params.ledgerAccountId);
+			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
 
 			// Get ledger for currency info
 			const ledgerEntity = await ledgerService.getLedger(orgId, ledgerId);
@@ -145,7 +145,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 		Params: LedgerIdWithAccountIdParams;
 		Body: LedgerAccountRequest;
 	}>(
-		"/:ledgerAccountId",
+		"/:accountId",
 		{
 			schema: {
 				operationId: "updateLedgerAccount",
@@ -172,7 +172,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 		async (rq: UpdateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const accountId = TypeID.fromString<"lat">(rq.params.ledgerAccountId);
+			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
 
 			// Get ledger for currency info
 			const ledgerEntity = await ledgerService.getLedger(orgId, ledgerId);
@@ -185,7 +185,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 				orgId,
 				ledgerId,
 				existingAccount.normalBalance,
-				rq.params.ledgerAccountId
+				rq.params.accountId
 			);
 			const account = await ledgerAccountService.updateLedgerAccount(entity);
 			return account.toResponse(ledgerEntity.currency, ledgerEntity.currencyExponent);
@@ -193,7 +193,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 	);
 
 	server.delete<{ Params: LedgerIdWithAccountIdParams }>(
-		"/:ledgerAccountId",
+		"/:accountId",
 		{
 			schema: {
 				operationId: "deleteLedgerAccount",
@@ -219,7 +219,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 		async (rq: DeleteLedgerAccountRequest): Promise<void> => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const accountId = TypeID.fromString<"lat">(rq.params.ledgerAccountId);
+			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
 
 			await ledgerAccountService.deleteLedgerAccount(orgId, ledgerId, accountId);
 		}

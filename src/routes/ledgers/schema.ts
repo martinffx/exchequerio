@@ -197,12 +197,12 @@ const LedgerAccountId = Type.String({
 });
 type LedgerAccountId = Static<typeof LedgerAccountId>;
 const LedgerAccountIdParameters = Type.Object({
-	ledgerAccountId: LedgerAccountId,
+	accountId: LedgerAccountId,
 });
 type LedgerAccountIdParameters = Static<typeof LedgerAccountIdParameters>;
 const LedgerIdWithAccountIdParams = Type.Object({
 	ledgerId: LedgerId,
-	ledgerAccountId: LedgerAccountId,
+	accountId: LedgerAccountId,
 });
 type LedgerIdWithAccountIdParams = Static<typeof LedgerIdWithAccountIdParams>;
 const LedgerAccountResponse = Type.Object(
@@ -265,19 +265,19 @@ const LedgerAccountCategoryId = Type.String({
 });
 type LedgerAccountCategoryId = Static<typeof LedgerAccountCategoryId>;
 const LedgerAccountCategoryIdParameters = Type.Object({
-	ledgerAccountCategoryId: LedgerAccountCategoryId,
+	categoryId: LedgerAccountCategoryId,
 });
 type LedgerAccountCategoryIdParameters = Static<typeof LedgerAccountCategoryIdParameters>;
 
 const LinkAccountToCategoryParameters = Type.Object({
-	ledgerAccountCategoryId: LedgerAccountCategoryId,
+	categoryId: LedgerAccountCategoryId,
 	accountId: LedgerAccountId,
 });
 type LinkAccountToCategoryParameters = Static<typeof LinkAccountToCategoryParameters>;
 
 const LinkCategoryToCategoryParameters = Type.Object({
-	ledgerAccountCategoryId: LedgerAccountCategoryId,
 	categoryId: LedgerAccountCategoryId,
+	parentCategoryId: LedgerAccountCategoryId,
 });
 type LinkCategoryToCategoryParameters = Static<typeof LinkCategoryToCategoryParameters>;
 
@@ -375,7 +375,7 @@ type LedgerTransactionEntryIdParameters = Static<typeof LedgerTransactionEntryId
 const LedgerTransactionEntry = Type.Object(
 	{
 		id: LedgerTransactionEntryId,
-		ledgerAccountId: LedgerAccountId,
+		accountId: LedgerAccountId,
 		direction: Direction,
 		amount: Type.Number({
 			description:
@@ -452,12 +452,12 @@ const LedgerTransactionId = Type.String({
 });
 type LedgerTransactionId = Static<typeof LedgerTransactionId>;
 const LedgerTransactionIdParameters = Type.Object({
-	ledgerTransactionId: LedgerTransactionId,
+	transactionId: LedgerTransactionId,
 });
 type LedgerTransactionIdParameters = Static<typeof LedgerTransactionIdParameters>;
 const LedgerIdWithTransactionIdParams = Type.Object({
 	ledgerId: LedgerId,
-	ledgerTransactionId: LedgerTransactionId,
+	transactionId: LedgerTransactionId,
 });
 type LedgerIdWithTransactionIdParams = Static<typeof LedgerIdWithTransactionIdParams>;
 const LedgerTransactionResponse = Type.Object(
@@ -566,13 +566,13 @@ const LedgerAccountSettlementId = Type.String({
 });
 type LedgerAccountSettlementId = Static<typeof LedgerAccountSettlementId>;
 const LedgerAccountSettlementIdParameters = Type.Object({
-	ledgerAccountSettlementId: LedgerAccountSettlementId,
+	settlementId: LedgerAccountSettlementId,
 });
 type LedgerAccountSettlementIdParameters = Static<typeof LedgerAccountSettlementIdParameters>;
 const LedgerAccountSettlementResponse = Type.Object(
 	{
 		id: LedgerAccountSettlementId,
-		ledgerTransactionId: LedgerTransactionId,
+		transactionId: LedgerTransactionId,
 		description: Type.Optional(
 			Type.String({
 				description: "An optional free-form description for internal use.",
@@ -580,11 +580,11 @@ const LedgerAccountSettlementResponse = Type.Object(
 		),
 		status: SettlementStatus,
 		normalBalance: NormalBalance,
-		settledLedgerAccountId: Type.String({
+		settledAccountId: Type.String({
 			description:
 				"The Ledger Account that we will query the Entries against, and its balance is reduced as a result. The settled ledger account and the contra ledger account must belong to the same ledger.",
 		}),
-		contraLedgerAccountId: Type.String({
+		contraAccountId: Type.String({
 			description:
 				"The Ledger Account that sends to or receives funds from the settled ledger account. The settled ledger account and the contra ledger account must belong to the same ledger.",
 		}),
@@ -619,18 +619,18 @@ const LedgerAccountSettlementResponse = Type.Object(
 type LedgerAccountSettlementResponse = Static<typeof LedgerAccountSettlementResponse>;
 const LedgerAccountSettlementRequest = Type.Object(
 	{
-		ledgerTransactionId: LedgerTransactionId,
+		transactionId: LedgerTransactionId,
 		description: Type.Optional(
 			Type.String({
 				description: "An optional free-form description for internal use.",
 			})
 		),
 		status: SettlementStatus,
-		settledLedgerAccountId: Type.String({
+		settledAccountId: Type.String({
 			description:
 				"The Ledger Account that we will query the Entries against, and its balance is reduced as a result. The settled ledger account and the contra ledger account must belong to the same ledger.",
 		}),
-		contraLedgerAccountId: Type.String({
+		contraAccountId: Type.String({
 			description:
 				"The Ledger Account that sends to or receives funds from the settled ledger account. The settled ledger account and the contra ledger account must belong to the same ledger.",
 		}),
@@ -695,14 +695,14 @@ const LedgerAccountStatementId = Type.String({
 });
 type LedgerAccountStatementId = Static<typeof LedgerAccountStatementId>;
 const LedgerAccountStatementIdParameters = Type.Object({
-	ledgerAccountStatementId: LedgerAccountStatementId,
+	statementId: LedgerAccountStatementId,
 });
 type LedgerAccountStatementIdParameters = Static<typeof LedgerAccountStatementIdParameters>;
 const LedgerAccountStatementResponse = Type.Object(
 	{
 		id: LedgerAccountStatementId,
 		ledgerId: LedgerId,
-		ledgerAccountId: LedgerAccountId,
+		accountId: LedgerAccountId,
 		description: Type.Optional(
 			Type.String({
 				description: "An optional free-form description for internal use.",
@@ -746,7 +746,7 @@ type LedgerAccountStatementResponse = Static<typeof LedgerAccountStatementRespon
 const LedgerAccountStatementRequest = Type.Object(
 	{
 		ledgerId: LedgerId,
-		ledgerAccountId: LedgerAccountId,
+		accountId: LedgerAccountId,
 		description: Type.Optional(
 			Type.String({
 				description: "An optional free-form description for internal use.",
@@ -782,7 +782,7 @@ const LedgerAccountBalanceMonitorId = Type.String({
 });
 type LedgerAccountBalanceMonitorId = Static<typeof LedgerAccountBalanceMonitorId>;
 const LedgerAccountBalanceMonitorIdParameters = Type.Object({
-	ledgerAccountBalanceMonitorId: LedgerAccountBalanceMonitorId,
+	balanceMonitorId: LedgerAccountBalanceMonitorId,
 });
 type LedgerAccountBalanceMonitorIdParameters = Static<
 	typeof LedgerAccountBalanceMonitorIdParameters
@@ -790,7 +790,7 @@ type LedgerAccountBalanceMonitorIdParameters = Static<
 const LedgerAccountBalanceMonitorResponse = Type.Object(
 	{
 		id: LedgerAccountBalanceMonitorId,
-		ledgerAccountId: LedgerAccountId,
+		accountId: LedgerAccountId,
 		description: Type.Optional(
 			Type.String({
 				description: "An optional free-form description for internal use.",
@@ -812,7 +812,7 @@ const LedgerAccountBalanceMonitorResponse = Type.Object(
 type LedgerAccountBalanceMonitorResponse = Static<typeof LedgerAccountBalanceMonitorResponse>;
 const LedgerAccountBalanceMonitorRequest = Type.Object(
 	{
-		ledgerAccountId: Type.String({
+		accountId: Type.String({
 			description: "The ledger account associated with this balance monitor.",
 		}),
 		description: Type.Optional(

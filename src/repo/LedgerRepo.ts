@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "@/errors";
 import type { LedgerID, OrgID } from "@/services";
 import { LedgerEntity } from "@/services";
+import { getDBErrorCode, isDBError } from "./errors";
 import { LedgersTable } from "./schema";
 import type { DrizzleDB } from "./types";
 
@@ -126,7 +127,7 @@ class LedgerRepo {
 			return LedgerEntity.fromRecord(result[0]);
 		} catch (error) {
 			// PostgreSQL foreign key violation (organization doesn't exist)
-			if (error instanceof Error && "code" in error && error.code === "23503") {
+			if (isDBError(error) && getDBErrorCode(error) === "23503") {
 				throw new NotFoundError(`Organization not found: ${entity.organizationId.toString()}`);
 			}
 			throw error;
@@ -176,7 +177,7 @@ class LedgerRepo {
 			}
 		} catch (error) {
 			// PostgreSQL foreign key violation (ledger has dependent accounts)
-			if (error instanceof Error && "code" in error && error.code === "23503") {
+			if (isDBError(error) && getDBErrorCode(error) === "23503") {
 				throw new ConflictError({ message: "Cannot delete ledger with existing accounts" });
 			}
 			throw error;

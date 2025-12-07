@@ -247,11 +247,11 @@ const LedgerAccountSettlementsTable = pgTable(
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		ledgerTransactionId: text("ledger_transaction_id").references(() => LedgerTransactionsTable.id),
-		settledLedgerAccountId: text("settled_ledger_account_id")
+		transactionId: text("transaction_id").references(() => LedgerTransactionsTable.id),
+		settledAccountId: text("settled_account_id")
 			.notNull()
 			.references(() => LedgerAccountsTable.id),
-		contraLedgerAccountId: text("contra_ledger_account_id")
+		contraAccountId: text("contra_account_id")
 			.notNull()
 			.references(() => LedgerAccountsTable.id),
 		amount: bigint("amount", { mode: "number" }).notNull().default(0),
@@ -270,11 +270,8 @@ const LedgerAccountSettlementsTable = pgTable(
 	table => ({
 		orgIdx: index("idx_settlements_org").on(table.organizationId),
 		statusIdx: index("idx_settlements_status").on(table.status),
-		settledAccountIdx: index("idx_settlements_settled_account").on(table.settledLedgerAccountId),
-		noSelfSettle: check(
-			"no_self_settle",
-			sql`${table.settledLedgerAccountId} <> ${table.contraLedgerAccountId}`
-		),
+		settledAccountIdx: index("idx_settlements_settled_account").on(table.settledAccountId),
+		noSelfSettle: check("no_self_settle", sql`${table.settledAccountId} <> ${table.contraAccountId}`),
 	})
 );
 
@@ -367,17 +364,17 @@ const ledgerAccountSettlementsRelations = relations(
 			references: [OrganizationsTable.id],
 		}),
 		settledAccount: one(LedgerAccountsTable, {
-			fields: [LedgerAccountSettlementsTable.settledLedgerAccountId],
+			fields: [LedgerAccountSettlementsTable.settledAccountId],
 			references: [LedgerAccountsTable.id],
 			relationName: "settledAccount",
 		}),
 		contraAccount: one(LedgerAccountsTable, {
-			fields: [LedgerAccountSettlementsTable.contraLedgerAccountId],
+			fields: [LedgerAccountSettlementsTable.contraAccountId],
 			references: [LedgerAccountsTable.id],
 			relationName: "contraAccount",
 		}),
 		transaction: one(LedgerTransactionsTable, {
-			fields: [LedgerAccountSettlementsTable.ledgerTransactionId],
+			fields: [LedgerAccountSettlementsTable.transactionId],
 			references: [LedgerTransactionsTable.id],
 		}),
 		settlementEntries: many(LedgerAccountSettlementEntriesTable),

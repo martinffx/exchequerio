@@ -21,9 +21,9 @@ type LedgerAccountSettlementInsert = InferInsertModel<typeof LedgerAccountSettle
 type LedgerAccountSettlementEntityOptions = {
 	id: LedgerAccountSettlementID;
 	organizationId: OrgID;
-	ledgerTransactionId?: LedgerTransactionID;
-	settledLedgerAccountId: LedgerAccountID;
-	contraLedgerAccountId: LedgerAccountID;
+	transactionId?: LedgerTransactionID;
+	settledAccountId: LedgerAccountID;
+	contraAccountId: LedgerAccountID;
 	amount: number; // Integer minor units
 	normalBalance: NormalBalance;
 	currency: string;
@@ -40,9 +40,9 @@ type LedgerAccountSettlementEntityOptions = {
 class LedgerAccountSettlementEntity {
 	public readonly id: LedgerAccountSettlementID;
 	public readonly organizationId: OrgID;
-	public readonly ledgerTransactionId?: LedgerTransactionID;
-	public readonly settledLedgerAccountId: LedgerAccountID;
-	public readonly contraLedgerAccountId: LedgerAccountID;
+	public readonly transactionId?: LedgerTransactionID;
+	public readonly settledAccountId: LedgerAccountID;
+	public readonly contraAccountId: LedgerAccountID;
 	public readonly amount: number; // Integer minor units
 	public readonly normalBalance: NormalBalance;
 	public readonly currency: string;
@@ -58,9 +58,9 @@ class LedgerAccountSettlementEntity {
 	constructor(options: LedgerAccountSettlementEntityOptions) {
 		this.id = options.id;
 		this.organizationId = options.organizationId;
-		this.ledgerTransactionId = options.ledgerTransactionId;
-		this.settledLedgerAccountId = options.settledLedgerAccountId;
-		this.contraLedgerAccountId = options.contraLedgerAccountId;
+		this.transactionId = options.transactionId;
+		this.settledAccountId = options.settledAccountId;
+		this.contraAccountId = options.contraAccountId;
 		this.amount = options.amount;
 		this.normalBalance = options.normalBalance;
 		this.currency = options.currency;
@@ -89,11 +89,9 @@ class LedgerAccountSettlementEntity {
 		return new LedgerAccountSettlementEntity({
 			id: id ? TypeID.fromString<"las">(id) : new TypeID("las"),
 			organizationId: orgId,
-			ledgerTransactionId: rq.ledgerTransactionId
-				? TypeID.fromString<"ltr">(rq.ledgerTransactionId)
-				: undefined,
-			settledLedgerAccountId: TypeID.fromString<"lat">(rq.settledLedgerAccountId),
-			contraLedgerAccountId: TypeID.fromString<"lat">(rq.contraLedgerAccountId),
+			transactionId: rq.transactionId ? TypeID.fromString<"ltr">(rq.transactionId) : undefined,
+			settledAccountId: TypeID.fromString<"lat">(rq.settledAccountId),
+			contraAccountId: TypeID.fromString<"lat">(rq.contraAccountId),
 			amount: 0, // Calculated from entries
 			normalBalance,
 			currency,
@@ -125,11 +123,9 @@ class LedgerAccountSettlementEntity {
 		return new LedgerAccountSettlementEntity({
 			id: TypeID.fromString<"las">(record.id),
 			organizationId: TypeID.fromString<"org">(record.organizationId),
-			ledgerTransactionId: record.ledgerTransactionId
-				? TypeID.fromString<"ltr">(record.ledgerTransactionId)
-				: undefined,
-			settledLedgerAccountId: TypeID.fromString<"lat">(record.settledLedgerAccountId),
-			contraLedgerAccountId: TypeID.fromString<"lat">(record.contraLedgerAccountId),
+			transactionId: record.transactionId ? TypeID.fromString<"ltr">(record.transactionId) : undefined,
+			settledAccountId: TypeID.fromString<"lat">(record.settledAccountId),
+			contraAccountId: TypeID.fromString<"lat">(record.contraAccountId),
 			amount: record.amount,
 			normalBalance: record.normalBalance,
 			currency: record.currency,
@@ -151,9 +147,9 @@ class LedgerAccountSettlementEntity {
 		return {
 			id: this.id.toString(),
 			organizationId: this.organizationId.toString(),
-			ledgerTransactionId: this.ledgerTransactionId?.toString() ?? undefined,
-			settledLedgerAccountId: this.settledLedgerAccountId.toString(),
-			contraLedgerAccountId: this.contraLedgerAccountId.toString(),
+			transactionId: this.transactionId?.toString() ?? undefined,
+			settledAccountId: this.settledAccountId.toString(),
+			contraAccountId: this.contraAccountId.toString(),
 			amount: this.amount,
 			normalBalance: this.normalBalance,
 			currency: this.currency,
@@ -174,9 +170,9 @@ class LedgerAccountSettlementEntity {
 	public toResponse(): LedgerAccountSettlementResponse {
 		return {
 			id: this.id.toString(),
-			ledgerTransactionId: this.ledgerTransactionId?.toString() ?? "",
-			settledLedgerAccountId: this.settledLedgerAccountId.toString(),
-			contraLedgerAccountId: this.contraLedgerAccountId.toString(),
+			transactionId: this.transactionId?.toString() ?? "",
+			settledAccountId: this.settledAccountId.toString(),
+			contraAccountId: this.contraAccountId.toString(),
 			amount: this.amount,
 			normalBalance: this.normalBalance,
 			currency: this.currency,
@@ -217,7 +213,7 @@ class LedgerAccountSettlementEntity {
 	public withTransactionId(txId: LedgerTransactionID): LedgerAccountSettlementEntity {
 		return new LedgerAccountSettlementEntity({
 			...this,
-			ledgerTransactionId: txId,
+			transactionId: txId,
 			updated: new Date(),
 		});
 	}

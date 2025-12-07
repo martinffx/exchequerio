@@ -61,7 +61,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 	);
 
 	server.get<{ Params: LedgerIdWithTransactionIdParams }>(
-		"/:ledgerTransactionId",
+		"/:transactionId",
 		{
 			schema: {
 				operationId: "getLedgerTransaction",
@@ -87,7 +87,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 			const transaction = await rq.server.services.ledgerTransactionService.getLedgerTransaction(
 				rq.token.orgId,
 				TypeID.fromString<"lgr">(rq.params.ledgerId),
-				TypeID.fromString<"ltr">(rq.params.ledgerTransactionId)
+				TypeID.fromString<"ltr">(rq.params.transactionId)
 			);
 			return transaction.toResponse();
 		}
@@ -129,7 +129,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 	);
 
 	server.post<{ Params: LedgerIdWithTransactionIdParams }>(
-		"/:ledgerTransactionId/post",
+		"/:transactionId/post",
 		{
 			schema: {
 				operationId: "postLedgerTransaction",
@@ -156,7 +156,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 			const transaction = await rq.server.services.ledgerTransactionService.postTransaction(
 				rq.token.orgId,
 				TypeID.fromString<"lgr">(rq.params.ledgerId),
-				TypeID.fromString<"ltr">(rq.params.ledgerTransactionId)
+				TypeID.fromString<"ltr">(rq.params.transactionId)
 			);
 			return transaction.toResponse();
 		}
@@ -193,7 +193,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 	// );
 
 	server.delete<{ Params: LedgerIdWithTransactionIdParams }>(
-		"/:ledgerTransactionId",
+		"/:transactionId",
 		{
 			schema: {
 				operationId: "deleteLedgerTransaction",
@@ -220,7 +220,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 			await rq.server.services.ledgerTransactionService.deleteTransaction(
 				rq.token.orgId,
 				TypeID.fromString<"lgr">(rq.params.ledgerId),
-				TypeID.fromString<"ltr">(rq.params.ledgerTransactionId)
+				TypeID.fromString<"ltr">(rq.params.transactionId)
 			);
 		}
 	);

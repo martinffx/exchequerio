@@ -91,7 +91,7 @@ function handleDBError(error: DBError, context: ErrorContext = {}): Error {
 			return new ServiceUnavailableError("Schema conflict - please retry", true, context);
 
 		default:
-			return new InternalServerError(error.message || "Database error", context);
+			return new InternalServerError(error.message || "Database error", error, context);
 	}
 }
 

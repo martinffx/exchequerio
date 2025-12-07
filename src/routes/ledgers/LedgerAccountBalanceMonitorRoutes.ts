@@ -60,7 +60,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.get<{ Params: LedgerAccountBalanceMonitorIdParameters }>(
-		"/:ledgerAccountBalanceMonitorId",
+		"/:balanceMonitorId",
 		{
 			schema: {
 				operationId: "getLedgerAccountBalanceMonitor",
@@ -87,7 +87,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 		): Promise<LedgerAccountBalanceMonitorResponse> => {
 			const monitor =
 				await rq.server.services.ledgerAccountBalanceMonitorService.getLedgerAccountBalanceMonitor(
-					rq.params.ledgerAccountBalanceMonitorId
+					rq.params.balanceMonitorId
 				);
 			return monitor.toResponse();
 		}
@@ -131,7 +131,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 		Params: LedgerAccountBalanceMonitorIdParameters;
 		Body: LedgerAccountBalanceMonitorRequest;
 	}>(
-		"/:ledgerAccountBalanceMonitorId",
+		"/:balanceMonitorId",
 		{
 			schema: {
 				operationId: "updateLedgerAccountBalanceMonitor",
@@ -160,7 +160,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 		): Promise<LedgerAccountBalanceMonitorResponse> => {
 			const monitor =
 				await rq.server.services.ledgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor(
-					rq.params.ledgerAccountBalanceMonitorId,
+					rq.params.balanceMonitorId,
 					LedgerAccountBalanceMonitorEntity.fromRequest(rq.body)
 				);
 			return monitor.toResponse();
@@ -168,7 +168,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 	);
 
 	server.delete<{ Params: LedgerAccountBalanceMonitorIdParameters }>(
-		"/:ledgerAccountBalanceMonitorId",
+		"/:balanceMonitorId",
 		{
 			schema: {
 				operationId: "deleteLedgerAccountBalanceMonitor",
@@ -193,7 +193,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: DeleteLedgerAccountBalanceMonitorRequest): Promise<void> => {
 			await rq.server.services.ledgerAccountBalanceMonitorService.deleteLedgerAccountBalanceMonitor(
-				rq.params.ledgerAccountBalanceMonitorId
+				rq.params.balanceMonitorId
 			);
 		}
 	);

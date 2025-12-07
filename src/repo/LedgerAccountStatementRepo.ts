@@ -41,6 +41,20 @@ class LedgerAccountStatementRepo {
 
 		return LedgerAccountStatementEntity.fromRecord(result[0]);
 	}
+
+	/**
+	 * Deletes a statement.
+	 */
+	public async deleteStatement(id: LedgerAccountStatementID): Promise<void> {
+		const result = await this.db
+			.delete(LedgerAccountStatementsTable)
+			.where(eq(LedgerAccountStatementsTable.id, id.toString()))
+			.returning({ id: LedgerAccountStatementsTable.id });
+
+		if (result.length === 0) {
+			throw new NotFoundError(`Statement not found: ${id.toString()}`);
+		}
+	}
 }
 
 export { LedgerAccountStatementRepo };

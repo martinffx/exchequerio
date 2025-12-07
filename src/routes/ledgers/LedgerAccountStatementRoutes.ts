@@ -20,8 +20,8 @@ import {
 
 const TAGS = ["Ledger Account Statements"];
 const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
-	server.get<{ Params: { ledgerAccountStatementId: string } }>(
-		"/:ledgerAccountStatementId",
+	server.get<{ Params: LedgerAccountStatementIdParameters }>(
+		"/:statementId",
 		{
 			schema: {
 				operationId: "getLedgerAccountStatement",
@@ -46,21 +46,13 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 		async (rq: GetLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
 			const statement =
 				await rq.server.services.ledgerAccountStatementService.getLedgerAccountStatement(
-					rq.params.ledgerAccountStatementId
+					rq.params.statementId
 				);
 			return statement.toResponse();
 		}
 	);
 
-	server.post<{
-		Body: {
-			description?: string;
-			ledgerId: string;
-			ledgerAccountId: string;
-			startDatetime: string;
-			endDatetime: string;
-		};
-	}>(
+	server.post<{ Body: LedgerAccountStatementRequest }>(
 		"/",
 		{
 			schema: {

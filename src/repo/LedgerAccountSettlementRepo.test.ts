@@ -10,6 +10,8 @@ import type {
 import {
 	createLedgerAccountEntity,
 	createLedgerEntity,
+	createLedgerTransactionEntity,
+	createLedgerTransactionEntryEntity,
 	createOrganizationEntity,
 	getRepos,
 } from "./fixtures";
@@ -117,8 +119,8 @@ describe("LedgerAccountSettlementRepo", () => {
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: testOrgId,
-				settledLedgerAccountId: settledAccountId,
-				contraLedgerAccountId: contraAccountId,
+				settledAccountId: settledAccountId,
+				contraAccountId: contraAccountId,
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
@@ -145,8 +147,8 @@ describe("LedgerAccountSettlementRepo", () => {
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: testOrgId,
-				settledLedgerAccountId: settledAccountId,
-				contraLedgerAccountId: settledAccountId, // Same as settled account
+				settledAccountId: settledAccountId,
+				contraAccountId: settledAccountId, // Same as settled account
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
@@ -170,8 +172,8 @@ describe("LedgerAccountSettlementRepo", () => {
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: testOrgId,
-				settledLedgerAccountId: settledAccountId,
-				contraLedgerAccountId: contraAccountId,
+				settledAccountId: settledAccountId,
+				contraAccountId: contraAccountId,
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
@@ -221,8 +223,8 @@ describe("LedgerAccountSettlementRepo", () => {
 				const settlement = new LedgerAccountSettlementEntity({
 					id,
 					organizationId: testOrgId,
-					settledLedgerAccountId: settledAccountId,
-					contraLedgerAccountId: contraAccountId,
+					settledAccountId: settledAccountId,
+					contraAccountId: contraAccountId,
 					amount: 0,
 					normalBalance: "debit",
 					currency: "USD",
@@ -277,8 +279,8 @@ describe("LedgerAccountSettlementRepo", () => {
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: testOrgId,
-				settledLedgerAccountId: settledAccountId,
-				contraLedgerAccountId: contraAccountId,
+				settledAccountId: settledAccountId,
+				contraAccountId: contraAccountId,
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
@@ -333,8 +335,8 @@ describe("LedgerAccountSettlementRepo", () => {
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: testOrgId,
-				settledLedgerAccountId: settledAccountId,
-				contraLedgerAccountId: contraAccountId,
+				settledAccountId: settledAccountId,
+				contraAccountId: contraAccountId,
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
@@ -357,8 +359,8 @@ describe("LedgerAccountSettlementRepo", () => {
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: testOrgId,
-				settledLedgerAccountId: settledAccountId,
-				contraLedgerAccountId: contraAccountId,
+				settledAccountId: settledAccountId,
+				contraAccountId: contraAccountId,
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
@@ -390,8 +392,8 @@ describe("LedgerAccountSettlementRepo", () => {
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: testOrgId,
-				settledLedgerAccountId: settledAccountId,
-				contraLedgerAccountId: contraAccountId,
+				settledAccountId: settledAccountId,
+				contraAccountId: contraAccountId,
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
@@ -427,6 +429,309 @@ describe("LedgerAccountSettlementRepo", () => {
 			await expect(
 				ledgerAccountSettlementRepo.updateStatus(testOrgId, fakeId, "processing")
 			).rejects.toThrow(NotFoundError);
+		});
+	});
+
+	describe("Settlement Entry Operations", () => {
+		const { ledgerTransactionRepo } = getRepos();
+		let settlementId: LedgerAccountSettlementID;
+		let transactionId: string;
+		let postedEntryIds: string[];
+
+		beforeAll(async () => {
+			// Create a settlement for entry operations
+			settlementId = new TypeID("las") as LedgerAccountSettlementID;
+			const settlement = new LedgerAccountSettlementEntity({
+				id: settlementId,
+				organizationId: testOrgId,
+				settledAccountId: settledAccountId,
+				contraAccountId: contraAccountId,
+				amount: 0,
+				normalBalance: "debit",
+				currency: "USD",
+				currencyExponent: 2,
+				status: "drafting",
+				created: new Date(),
+				updated: new Date(),
+			});
+			await ledgerAccountSettlementRepo.createSettlement(settlement);
+
+			// Create a transaction with posted entries on the settled account
+			const transactionEntityId = new TypeID("ltr");
+			const entries = [
+				createLedgerTransactionEntryEntity({
+					organizationId: testOrgId,
+					transactionId: transactionEntityId,
+					accountId: settledAccountId,
+					direction: "debit",
+					amount: 10000,
+					currency: "USD",
+					currencyExponent: 2,
+					status: "posted",
+				}),
+				createLedgerTransactionEntryEntity({
+					organizationId: testOrgId,
+					transactionId: transactionEntityId,
+					accountId: contraAccountId,
+					direction: "credit",
+					amount: 10000,
+					currency: "USD",
+					currencyExponent: 2,
+					status: "posted",
+				}),
+			];
+
+			const transactionEntity = createLedgerTransactionEntity({
+				id: transactionEntityId,
+				organizationId: testOrgId,
+				ledgerId: testLedgerId,
+				entries,
+				description: "Test settlement transaction",
+				status: "posted",
+			});
+
+			const created = await ledgerTransactionRepo.createTransaction(transactionEntity);
+			transactionId = created.id.toString();
+			postedEntryIds = created.entries.map(e => e.id.toString());
+		});
+
+		afterAll(async () => {
+			// Clean up transaction
+			try {
+				await ledgerTransactionRepo.deleteTransaction(
+					testOrgId.toString(),
+					testLedgerId.toString(),
+					transactionId
+				);
+			} catch {
+				// Ignore
+			}
+
+			// Clean up settlement
+			try {
+				await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
+			} catch {
+				// Ignore
+			}
+		});
+
+		describe("addEntriesToSettlement", () => {
+			afterEach(async () => {
+				// Clean up any entries attached during the test
+				const entryIds = await ledgerAccountSettlementRepo.getEntryIds(settlementId);
+				if (entryIds.length > 0) {
+					const settlement = await ledgerAccountSettlementRepo.getSettlement(testOrgId, settlementId);
+					if (settlement.status !== "drafting") {
+						await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "drafting");
+					}
+					await ledgerAccountSettlementRepo.removeEntriesFromSettlement(
+						testOrgId,
+						settlementId,
+						entryIds
+					);
+				}
+			});
+
+			it("should add entries to a drafting settlement", async () => {
+				// Get the entry that belongs to the settled account
+				const settledAccountEntry = postedEntryIds[0];
+
+				await ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [
+					settledAccountEntry,
+				]);
+
+				const entryIds = await ledgerAccountSettlementRepo.getEntryIds(settlementId);
+				expect(entryIds).toContain(settledAccountEntry);
+			});
+
+			it("should throw ConflictError when settlement is not in drafting status", async () => {
+				// Change status to processing
+				await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "processing");
+
+				const settledAccountEntry = postedEntryIds[0];
+
+				await expect(
+					ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [
+						settledAccountEntry,
+					])
+				).rejects.toThrow(ConflictError);
+
+				// Restore to drafting
+				await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "drafting");
+			});
+
+			it("should throw NotFoundError for non-existent entry", async () => {
+				const fakeEntryId = new TypeID("lte").toString();
+
+				await expect(
+					ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [fakeEntryId])
+				).rejects.toThrow(NotFoundError);
+			});
+
+			it("should throw ConflictError when entry belongs to different account", async () => {
+				// Try to add an entry from the contra account (should fail)
+				const contraAccountEntry = postedEntryIds[1];
+
+				await expect(
+					ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [
+						contraAccountEntry,
+					])
+				).rejects.toThrow(ConflictError);
+			});
+
+			it("should throw ConflictError when entry is already attached to settlement", async () => {
+				const settledAccountEntry = postedEntryIds[0];
+
+				// Add the entry first
+				await ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [
+					settledAccountEntry,
+				]);
+
+				// Try to add it again - should throw ConflictError
+				await expect(
+					ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [
+						settledAccountEntry,
+					])
+				).rejects.toThrow(ConflictError);
+			});
+		});
+
+		describe("removeEntriesFromSettlement", () => {
+			beforeEach(async () => {
+				// Ensure we're in drafting status
+				const settlement = await ledgerAccountSettlementRepo.getSettlement(testOrgId, settlementId);
+				if (settlement.status !== "drafting") {
+					await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "drafting");
+				}
+			});
+
+			afterEach(async () => {
+				// Clean up any entries attached during the test
+				const entryIds = await ledgerAccountSettlementRepo.getEntryIds(settlementId);
+				if (entryIds.length > 0) {
+					await ledgerAccountSettlementRepo.removeEntriesFromSettlement(
+						testOrgId,
+						settlementId,
+						entryIds
+					);
+				}
+			});
+
+			it("should remove entries from a drafting settlement", async () => {
+				const settledAccountEntry = postedEntryIds[0];
+
+				// First add an entry
+				await ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [
+					settledAccountEntry,
+				]);
+
+				// Then remove it
+				await ledgerAccountSettlementRepo.removeEntriesFromSettlement(testOrgId, settlementId, [
+					settledAccountEntry,
+				]);
+
+				const entryIds = await ledgerAccountSettlementRepo.getEntryIds(settlementId);
+				expect(entryIds).not.toContain(settledAccountEntry);
+			});
+
+			it("should throw ConflictError when settlement is not in drafting status", async () => {
+				// Change status to processing
+				await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "processing");
+
+				const settledAccountEntry = postedEntryIds[0];
+
+				await expect(
+					ledgerAccountSettlementRepo.removeEntriesFromSettlement(testOrgId, settlementId, [
+						settledAccountEntry,
+					])
+				).rejects.toThrow(ConflictError);
+
+				// Restore to drafting
+				await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "drafting");
+			});
+		});
+
+		describe("getEntryIds", () => {
+			beforeEach(async () => {
+				// Ensure we're in drafting status
+				const settlement = await ledgerAccountSettlementRepo.getSettlement(testOrgId, settlementId);
+				if (settlement.status !== "drafting") {
+					await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "drafting");
+				}
+			});
+
+			afterEach(async () => {
+				// Clean up any entries attached during the test
+				const entryIds = await ledgerAccountSettlementRepo.getEntryIds(settlementId);
+				if (entryIds.length > 0) {
+					await ledgerAccountSettlementRepo.removeEntriesFromSettlement(
+						testOrgId,
+						settlementId,
+						entryIds
+					);
+				}
+			});
+
+			it("should return empty array when no entries attached", async () => {
+				const entryIds = await ledgerAccountSettlementRepo.getEntryIds(settlementId);
+
+				expect(entryIds).toEqual([]);
+			});
+
+			it("should return all attached entry IDs", async () => {
+				const settledAccountEntry = postedEntryIds[0];
+
+				// Add an entry
+				await ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [
+					settledAccountEntry,
+				]);
+
+				const entryIds = await ledgerAccountSettlementRepo.getEntryIds(settlementId);
+
+				expect(entryIds).toHaveLength(1);
+				expect(entryIds).toContain(settledAccountEntry);
+			});
+		});
+
+		describe("calculateAmount", () => {
+			beforeEach(async () => {
+				// Ensure we're in drafting status
+				const settlement = await ledgerAccountSettlementRepo.getSettlement(testOrgId, settlementId);
+				if (settlement.status !== "drafting") {
+					await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "drafting");
+				}
+			});
+
+			afterEach(async () => {
+				// Clean up any entries attached during the test
+				const entryIds = await ledgerAccountSettlementRepo.getEntryIds(settlementId);
+				if (entryIds.length > 0) {
+					await ledgerAccountSettlementRepo.removeEntriesFromSettlement(
+						testOrgId,
+						settlementId,
+						entryIds
+					);
+				}
+			});
+
+			it("should return 0 when no entries attached", async () => {
+				const amount = await ledgerAccountSettlementRepo.calculateAmount(settlementId);
+
+				expect(amount).toBe(0);
+			});
+
+			it("should return sum of all attached entry amounts", async () => {
+				const settledAccountEntry = postedEntryIds[0];
+
+				// Add the entry (amount: 10000)
+				await ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [
+					settledAccountEntry,
+				]);
+
+				const amount = await ledgerAccountSettlementRepo.calculateAmount(settlementId);
+
+				expect(amount).toBe(10000);
+			});
 		});
 	});
 });

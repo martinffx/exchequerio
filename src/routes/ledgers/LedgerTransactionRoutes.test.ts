@@ -230,7 +230,7 @@ describe("LedgerTransactionRoutes", () => {
 					ledgerEntries: [
 						{
 							id: new TypeID("lte").toString(),
-							ledgerAccountId: new TypeID("lat").toString(),
+							accountId: new TypeID("lat").toString(),
 							direction: "debit",
 							amount: 10000,
 							currency: "USD",
@@ -239,7 +239,7 @@ describe("LedgerTransactionRoutes", () => {
 						},
 						{
 							id: new TypeID("lte").toString(),
-							ledgerAccountId: new TypeID("lat").toString(),
+							accountId: new TypeID("lat").toString(),
 							direction: "credit",
 							amount: 10000,
 							currency: "USD",
@@ -304,7 +304,7 @@ describe("LedgerTransactionRoutes", () => {
 					ledgerEntries: [
 						{
 							id: new TypeID("lte").toString(),
-							ledgerAccountId: new TypeID("lat").toString(),
+							accountId: new TypeID("lat").toString(),
 							direction: "debit",
 							amount: 10000,
 							currency: "USD",
@@ -313,7 +313,7 @@ describe("LedgerTransactionRoutes", () => {
 						},
 						{
 							id: new TypeID("lte").toString(),
-							ledgerAccountId: new TypeID("lat").toString(),
+							accountId: new TypeID("lat").toString(),
 							direction: "credit",
 							amount: 10000,
 							currency: "USD",
@@ -342,7 +342,7 @@ describe("LedgerTransactionRoutes", () => {
 					ledgerEntries: [
 						{
 							id: new TypeID("lte").toString(),
-							ledgerAccountId: new TypeID("lat").toString(),
+							accountId: new TypeID("lat").toString(),
 							direction: "debit",
 							amount: 10000,
 							currency: "USD",
@@ -351,7 +351,7 @@ describe("LedgerTransactionRoutes", () => {
 						},
 						{
 							id: new TypeID("lte").toString(),
-							ledgerAccountId: new TypeID("lat").toString(),
+							accountId: new TypeID("lat").toString(),
 							direction: "credit",
 							amount: 10000,
 							currency: "USD",
@@ -385,7 +385,7 @@ describe("LedgerTransactionRoutes", () => {
 					ledgerEntries: [
 						{
 							id: new TypeID("lte").toString(),
-							ledgerAccountId: new TypeID("lat").toString(),
+							accountId: new TypeID("lat").toString(),
 							direction: "debit",
 							amount: 10000,
 							currency: "USD",
@@ -394,7 +394,7 @@ describe("LedgerTransactionRoutes", () => {
 						},
 						{
 							id: new TypeID("lte").toString(),
-							ledgerAccountId: new TypeID("lat").toString(),
+							accountId: new TypeID("lat").toString(),
 							direction: "credit",
 							amount: 10000,
 							currency: "USD",

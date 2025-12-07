@@ -73,8 +73,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 	const mockSettlement = createLedgerAccountSettlementFixture({
 		id: settlementId,
 		organizationId: orgId,
-		settledLedgerAccountId: settledAccountId,
-		contraLedgerAccountId: contraAccountId,
+		settledAccountId: settledAccountId,
+		contraAccountId: contraAccountId,
 		description: "Test settlement",
 		created: fixedDate,
 		updated: fixedDate,
@@ -274,10 +274,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/settlements`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 					description: "Test settlement",
 				},
 			});
@@ -293,10 +293,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: "Bearer invalid_token" },
 				url: `/api/ledgers/${ledgerIdStr}/settlements`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 				},
 			});
 
@@ -311,10 +311,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: `Bearer ${tokenReadOnly}` },
 				url: `/api/ledgers/${ledgerIdStr}/settlements`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 				},
 			});
 
@@ -348,10 +348,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/settlements`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 				},
 			});
 
@@ -372,10 +372,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/settlements`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 				},
 			});
 
@@ -398,10 +398,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 					description: "Updated settlement",
 				},
 			});
@@ -423,10 +423,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 				},
 			});
 
@@ -441,10 +441,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: "Bearer invalid_token" },
 				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 				},
 			});
 
@@ -459,10 +459,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: `Bearer ${tokenReadOnly}` },
 				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 				},
 			});
 
@@ -496,10 +496,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 				},
 			});
 
@@ -520,10 +520,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 				headers: { Authorization: `Bearer ${token}` },
 				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}`,
 				payload: {
-					ledgerTransactionId: new TypeID("ltr").toString(),
+					transactionId: new TypeID("ltr").toString(),
 					status: "drafting",
-					settledLedgerAccountId: settledAccountId.toString(),
-					contraLedgerAccountId: contraAccountId.toString(),
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
 				},
 			});
 
@@ -876,8 +876,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 			const processingSettlement = createLedgerAccountSettlementFixture({
 				id: settlementId,
 				organizationId: orgId,
-				settledLedgerAccountId: settledAccountId,
-				contraLedgerAccountId: contraAccountId,
+				settledAccountId: settledAccountId,
+				contraAccountId: contraAccountId,
 				status: "processing",
 				description: "Test settlement",
 				created: fixedDate,

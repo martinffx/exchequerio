@@ -61,7 +61,7 @@ class LedgerAccountStatementEntity {
 			id: id
 				? (TypeID.fromString<"lst">(id) as LedgerAccountStatementID)
 				: (new TypeID("lst") as LedgerAccountStatementID),
-			accountId: TypeID.fromString<"lat">(rq.ledgerAccountId) as LedgerAccountID,
+			accountId: TypeID.fromString<"lat">(rq.accountId) as LedgerAccountID,
 			statementDate: new Date(rq.startDatetime),
 			openingBalance: 0,
 			closingBalance: 0,
@@ -146,7 +146,7 @@ class LedgerAccountStatementEntity {
 		return {
 			id: this.id.toString(),
 			ledgerId: "", // TODO: Need to fetch from account
-			ledgerAccountId: this.accountId.toString(),
+			accountId: this.accountId.toString(),
 			description: undefined,
 			startDatetime: this.statementDate.toISOString(),
 			endDatetime: this.statementDate.toISOString(),

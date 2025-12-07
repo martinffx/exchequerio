@@ -160,7 +160,7 @@ class LedgerTransactionEntity {
 					id: new TypeID("lte"),
 					organizationId: ledger.organizationId,
 					transactionId,
-					accountId: TypeID.fromString<"lat">(entry.ledgerAccountId),
+					accountId: TypeID.fromString<"lat">(entry.accountId),
 					direction: entry.direction,
 					amount: entry.amount, // Already integer minor units
 					currency: ledger.currency,

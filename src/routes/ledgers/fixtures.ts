@@ -185,9 +185,9 @@ function createLedgerAccountSettlementFixture(
 	overrides?: Partial<{
 		id: TypeID<"las">;
 		organizationId: TypeID<"org">;
-		ledgerTransactionId?: TypeID<"ltr">;
-		settledLedgerAccountId: TypeID<"lat">;
-		contraLedgerAccountId: TypeID<"lat">;
+		transactionId?: TypeID<"ltr">;
+		settledAccountId: TypeID<"lat">;
+		contraAccountId: TypeID<"lat">;
 		amount: number;
 		normalBalance: "debit" | "credit";
 		currency: string;
@@ -205,9 +205,9 @@ function createLedgerAccountSettlementFixture(
 	return new LedgerAccountSettlementEntity({
 		id: new TypeID("las"),
 		organizationId: new TypeID("org"),
-		ledgerTransactionId: undefined,
-		settledLedgerAccountId: new TypeID("lat"),
-		contraLedgerAccountId: new TypeID("lat"),
+		transactionId: undefined,
+		settledAccountId: new TypeID("lat"),
+		contraAccountId: new TypeID("lat"),
 		amount: 0,
 		normalBalance: "debit",
 		currency: "USD",

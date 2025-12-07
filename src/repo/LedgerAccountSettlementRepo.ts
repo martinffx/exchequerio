@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableColumns, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "@/errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities/LedgerAccountSettlementEntity";
 import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
@@ -34,7 +34,7 @@ class LedgerAccountSettlementRepo {
 			.from(LedgerAccountSettlementsTable)
 			.innerJoin(
 				LedgerAccountsTable,
-				eq(LedgerAccountSettlementsTable.settledLedgerAccountId, LedgerAccountsTable.id)
+				eq(LedgerAccountSettlementsTable.settledAccountId, LedgerAccountsTable.id)
 			)
 			.where(
 				and(
@@ -200,7 +200,7 @@ class LedgerAccountSettlementRepo {
 			}
 
 			// Verify entry belongs to the settled account
-			if (entryCheck[0].accountId !== settlement.settledLedgerAccountId.toString()) {
+			if (entryCheck[0].accountId !== settlement.settledAccountId.toString()) {
 				throw new ConflictError({
 					message: `Entry ${entryId} does not belong to the settled account`,
 				});
@@ -259,7 +259,7 @@ class LedgerAccountSettlementRepo {
 			.where(
 				and(
 					eq(LedgerAccountSettlementEntriesTable.settlementId, settlementId.toString()),
-					sql`${LedgerAccountSettlementEntriesTable.entryId} = ANY(${entryIds})`
+					inArray(LedgerAccountSettlementEntriesTable.entryId, entryIds)
 				)
 			);
 	}
@@ -283,7 +283,7 @@ class LedgerAccountSettlementRepo {
 	public async calculateAmount(settlementId: LedgerAccountSettlementID): Promise<number> {
 		const result = await this.db
 			.select({
-				total: sql<number>`COALESCE(SUM(${LedgerTransactionEntriesTable.amount}), 0)`,
+				total: sql<string>`COALESCE(SUM(${LedgerTransactionEntriesTable.amount}), 0)`,
 			})
 			.from(LedgerAccountSettlementEntriesTable)
 			.innerJoin(
@@ -292,7 +292,8 @@ class LedgerAccountSettlementRepo {
 			)
 			.where(eq(LedgerAccountSettlementEntriesTable.settlementId, settlementId.toString()));
 
-		return result[0]?.total ?? 0;
+		// PostgreSQL SUM returns string for bigint columns
+		return Number.parseInt(result[0]?.total ?? "0", 10);
 	}
 
 	/**

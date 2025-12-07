@@ -2,6 +2,7 @@
 
 exports[`LedgerAccountStatementRoutes > GET /:ledgerAccountStatementId > should return a statement 1`] = `
 {
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "created": "2025-01-01T00:00:00.000Z",
   "currency": "USD",
   "currencyExponent": 2,
@@ -33,7 +34,6 @@ exports[`LedgerAccountStatementRoutes > GET /:ledgerAccountStatementId > should 
     },
   ],
   "id": "lst_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "ledgerAccountVersion": 0,
   "ledgerId": "",
   "normalBalance": "debit",
@@ -70,6 +70,7 @@ exports[`LedgerAccountStatementRoutes > GET /:ledgerAccountStatementId > should 
 
 exports[`LedgerAccountStatementRoutes > POST / > should create a statement 1`] = `
 {
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "created": "2025-01-01T00:00:00.000Z",
   "currency": "USD",
   "currencyExponent": 2,
@@ -101,7 +102,6 @@ exports[`LedgerAccountStatementRoutes > POST / > should create a statement 1`] =
     },
   ],
   "id": "lst_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "ledgerAccountVersion": 0,
   "ledgerId": "",
   "normalBalance": "debit",
