@@ -56,23 +56,19 @@ class OrganizationRepo {
 		id: OrgID,
 		record: OrganizationEntity
 	): Promise<OrganizationEntity> {
-		try {
-			const [organization] = await this.db
-				.update(OrganizationsTable)
-				.set({
-					name: record.name,
-					description: record.description,
-					updated: record.updated?.toJSDate() ?? DateTime.utc().toJSDate(),
-				})
-				.where(eq(OrganizationsTable.id, id.toString()))
-				.returning();
-			if (organization === undefined) {
-				throw new NotFoundError(`Organization with id ${id.toString()} not found`);
-			}
-			return OrganizationEntity.fromRecord(organization);
-		} catch (error) {
-			throw error;
+		const [organization] = await this.db
+			.update(OrganizationsTable)
+			.set({
+				name: record.name,
+				description: record.description,
+				updated: record.updated?.toJSDate() ?? DateTime.utc().toJSDate(),
+			})
+			.where(eq(OrganizationsTable.id, id.toString()))
+			.returning();
+		if (organization === undefined) {
+			throw new NotFoundError(`Organization with id ${id.toString()} not found`);
 		}
+		return OrganizationEntity.fromRecord(organization);
 	}
 
 	public async deleteOrganization(id: OrgID): Promise<void> {

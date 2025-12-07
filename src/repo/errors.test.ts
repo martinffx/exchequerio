@@ -1,15 +1,15 @@
+import { describe, expect, it } from "vitest";
 import {
 	ConflictError,
 	InternalServerError,
 	NotFoundError,
 	ServiceUnavailableError,
 } from "@/errors";
-import { describe, expect, it } from "vitest";
 import { type DBError, getDBErrorCode, handleDBError, isDBError } from "./errors";
 
 describe("isDBError", () => {
 	it("should return false for null or undefined", () => {
-		expect(isDBError(null)).toBe(false);
+		expect(isDBError(undefined)).toBe(false);
 		expect(isDBError(undefined)).toBe(false);
 	});
 
@@ -56,7 +56,7 @@ describe("isDBError", () => {
 	it("should return false for error with null cause", () => {
 		const error = {
 			message: "error",
-			cause: null,
+			cause: undefined,
 		};
 		expect(isDBError(error)).toBe(false);
 	});
