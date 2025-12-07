@@ -6,16 +6,18 @@ import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/errors";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
 import { buildServer } from "@/server";
-import { LedgerAccountCategoryEntity, type LedgerAccountService } from "@/services";
+import { LedgerAccountCategoryEntity, type LedgerAccountCategoryService } from "@/services";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
+	ForbiddenErrorResponse,
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
+	UnauthorizedErrorResponse,
 } from "../schema";
 import { createLedgerAccountCategoryFixture } from "./fixtures";
 
-const mockLedgerAccountService = vi.mocked<LedgerAccountService>({
+const mockLedgerAccountCategoryService = vi.mocked<LedgerAccountCategoryService>({
 	listLedgerAccountCategories: vi.fn(),
 	getLedgerAccountCategory: vi.fn(),
 	createLedgerAccountCategory: vi.fn(),
@@ -25,7 +27,7 @@ const mockLedgerAccountService = vi.mocked<LedgerAccountService>({
 	unlinkLedgerAccountToCategory: vi.fn(),
 	linkLedgerAccountCategoryToCategory: vi.fn(),
 	unlinkLedgerAccountCategoryToCategory: vi.fn(),
-} as unknown as LedgerAccountService);
+} as unknown as LedgerAccountCategoryService);
 
 describe("LedgerAccountCategoryRoutes", () => {
 	let server: FastifyInstance;
@@ -34,12 +36,14 @@ describe("LedgerAccountCategoryRoutes", () => {
 	const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 	const categoryIdStr = categoryId.toString();
 	const mockCategory = createLedgerAccountCategoryFixture({ ledgerId, id: categoryId });
-	const token = signJWT({ sub: "org_01h2x9z3y5k8m6n4p0q1r2s3t4", scope: ["super_admin"] });
+	const orgId = "org_01h2x9z3y5k8m6n4p0q1r2s3t4";
+	const token = signJWT({ sub: orgId, scope: ["super_admin"] });
+	const tokenReadOnly = signJWT({ sub: orgId, scope: ["org_readonly"] });
 
 	beforeAll(async () => {
 		server = await buildServer({
 			servicePluginOpts: {
-				services: { ledgerAccountService: mockLedgerAccountService },
+				services: { ledgerAccountCategoryService: mockLedgerAccountCategoryService },
 			},
 		});
 	});
@@ -50,7 +54,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 	describe("List Ledger Account Categories", () => {
 		it("should return a list of categories", async () => {
-			mockLedgerAccountService.listLedgerAccountCategories.mockResolvedValue([mockCategory]);
+			mockLedgerAccountCategoryService.listLedgerAccountCategories.mockResolvedValue([mockCategory]);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -60,7 +64,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual([mockCategory.toResponse()]);
-			expect(mockLedgerAccountService.listLedgerAccountCategories).toHaveBeenCalledWith(
+			expect(mockLedgerAccountCategoryService.listLedgerAccountCategories).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "lgr" }),
 				0,
 				20
@@ -68,7 +72,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		});
 
 		it("should return a list with pagination", async () => {
-			mockLedgerAccountService.listLedgerAccountCategories.mockResolvedValue([mockCategory]);
+			mockLedgerAccountCategoryService.listLedgerAccountCategories.mockResolvedValue([mockCategory]);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -77,7 +81,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.listLedgerAccountCategories).toHaveBeenCalledWith(
+			expect(mockLedgerAccountCategoryService.listLedgerAccountCategories).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "lgr" }),
 				10,
 				5
@@ -85,7 +89,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountService.listLedgerAccountCategories.mockRejectedValue(
+			mockLedgerAccountCategoryService.listLedgerAccountCategories.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
@@ -111,11 +115,23 @@ describe("LedgerAccountCategoryRoutes", () => {
 			const response: BadRequestErrorResponse = rs.json();
 			expect(response.status).toEqual(400);
 		});
+
+		it("should return 401 for invalid token", async () => {
+			const rs = await server.inject({
+				method: "GET",
+				headers: { Authorization: "Bearer invalid_token" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories`,
+			});
+
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+		});
 	});
 
 	describe("Get Ledger Account Category", () => {
 		it("should return a category", async () => {
-			mockLedgerAccountService.getLedgerAccountCategory.mockResolvedValue(mockCategory);
+			mockLedgerAccountCategoryService.getLedgerAccountCategory.mockResolvedValue(mockCategory);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -125,14 +141,14 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(mockCategory.toResponse());
-			expect(mockLedgerAccountService.getLedgerAccountCategory).toHaveBeenCalledWith(
+			expect(mockLedgerAccountCategoryService.getLedgerAccountCategory).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" })
 			);
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.getLedgerAccountCategory.mockRejectedValue(
+			mockLedgerAccountCategoryService.getLedgerAccountCategory.mockRejectedValue(
 				new NotFoundError("Category not found")
 			);
 
@@ -158,11 +174,23 @@ describe("LedgerAccountCategoryRoutes", () => {
 			const response: BadRequestErrorResponse = rs.json();
 			expect(response.status).toEqual(400);
 		});
+
+		it("should return 401 for invalid token", async () => {
+			const rs = await server.inject({
+				method: "GET",
+				headers: { Authorization: "Bearer invalid_token" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+		});
 	});
 
 	describe("Create Ledger Account Category", () => {
 		it("should create a category", async () => {
-			mockLedgerAccountService.createLedgerAccountCategory.mockResolvedValue(mockCategory);
+			mockLedgerAccountCategoryService.createLedgerAccountCategory.mockResolvedValue(mockCategory);
 
 			const rs = await server.inject({
 				method: "POST",
@@ -177,7 +205,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(mockCategory.toResponse());
-			expect(mockLedgerAccountService.createLedgerAccountCategory).toHaveBeenCalledWith(
+			expect(mockLedgerAccountCategoryService.createLedgerAccountCategory).toHaveBeenCalledWith(
 				expect.any(LedgerAccountCategoryEntity)
 			);
 		});
@@ -199,7 +227,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerAccountService.createLedgerAccountCategory.mockRejectedValue(
+			mockLedgerAccountCategoryService.createLedgerAccountCategory.mockRejectedValue(
 				new ConflictError({ message: "Category already exists" })
 			);
 
@@ -217,6 +245,38 @@ describe("LedgerAccountCategoryRoutes", () => {
 			const response: ConflictErrorResponse = rs.json();
 			expect(response.status).toEqual(409);
 		});
+
+		it("should return 401 for invalid token", async () => {
+			const rs = await server.inject({
+				method: "POST",
+				headers: { Authorization: "Bearer invalid_token" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories`,
+				payload: {
+					name: "Test",
+					normalBalance: "debit",
+				},
+			});
+
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+		});
+
+		it("should return 403 for insufficient permissions", async () => {
+			const rs = await server.inject({
+				method: "POST",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories`,
+				payload: {
+					name: "Test",
+					normalBalance: "debit",
+				},
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
 	});
 
 	describe("Update Ledger Account Category", () => {
@@ -226,7 +286,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 				id: categoryId,
 				name: "Updated Assets",
 			});
-			mockLedgerAccountService.updateLedgerAccountCategory.mockResolvedValue(updatedCategory);
+			mockLedgerAccountCategoryService.updateLedgerAccountCategory.mockResolvedValue(updatedCategory);
 
 			const rs = await server.inject({
 				method: "PUT",
@@ -241,7 +301,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(updatedCategory.toResponse());
-			expect(mockLedgerAccountService.updateLedgerAccountCategory).toHaveBeenCalledWith(
+			expect(mockLedgerAccountCategoryService.updateLedgerAccountCategory).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" }),
 				expect.any(LedgerAccountCategoryEntity)
@@ -249,7 +309,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.updateLedgerAccountCategory.mockRejectedValue(
+			mockLedgerAccountCategoryService.updateLedgerAccountCategory.mockRejectedValue(
 				new NotFoundError("Category not found")
 			);
 
@@ -267,11 +327,43 @@ describe("LedgerAccountCategoryRoutes", () => {
 			const response: NotFoundErrorResponse = rs.json();
 			expect(response.status).toEqual(404);
 		});
+
+		it("should return 401 for invalid token", async () => {
+			const rs = await server.inject({
+				method: "PUT",
+				headers: { Authorization: "Bearer invalid_token" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}`,
+				payload: {
+					name: "Test",
+					normalBalance: "debit",
+				},
+			});
+
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+		});
+
+		it("should return 403 for insufficient permissions", async () => {
+			const rs = await server.inject({
+				method: "PUT",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}`,
+				payload: {
+					name: "Test",
+					normalBalance: "debit",
+				},
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
 	});
 
 	describe("Delete Ledger Account Category", () => {
 		it("should delete a category", async () => {
-			mockLedgerAccountService.deleteLedgerAccountCategory.mockResolvedValue();
+			mockLedgerAccountCategoryService.deleteLedgerAccountCategory.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "DELETE",
@@ -280,14 +372,14 @@ describe("LedgerAccountCategoryRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.deleteLedgerAccountCategory).toHaveBeenCalledWith(
+			expect(mockLedgerAccountCategoryService.deleteLedgerAccountCategory).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" })
 			);
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.deleteLedgerAccountCategory.mockRejectedValue(
+			mockLedgerAccountCategoryService.deleteLedgerAccountCategory.mockRejectedValue(
 				new NotFoundError("Category not found")
 			);
 
@@ -301,6 +393,30 @@ describe("LedgerAccountCategoryRoutes", () => {
 			const response: NotFoundErrorResponse = rs.json();
 			expect(response.status).toEqual(404);
 		});
+
+		it("should return 401 for invalid token", async () => {
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: "Bearer invalid_token" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+		});
+
+		it("should return 403 for insufficient permissions", async () => {
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
 	});
 
 	describe("Link Ledger Account to Category", () => {
@@ -308,7 +424,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		const accountIdStr = accountId.toString();
 
 		it("should link an account to a category", async () => {
-			mockLedgerAccountService.linkLedgerAccountToCategory.mockResolvedValue();
+			mockLedgerAccountCategoryService.linkLedgerAccountToCategory.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "PATCH",
@@ -317,7 +433,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.linkLedgerAccountToCategory).toHaveBeenCalledWith(
+			expect(mockLedgerAccountCategoryService.linkLedgerAccountToCategory).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" }),
 				expect.objectContaining({ prefix: "lat" })
@@ -325,7 +441,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.linkLedgerAccountToCategory.mockRejectedValue(
+			mockLedgerAccountCategoryService.linkLedgerAccountToCategory.mockRejectedValue(
 				new NotFoundError("Account not found")
 			);
 
@@ -351,6 +467,30 @@ describe("LedgerAccountCategoryRoutes", () => {
 			const response: BadRequestErrorResponse = rs.json();
 			expect(response.status).toEqual(400);
 		});
+
+		it("should return 401 for invalid token", async () => {
+			const rs = await server.inject({
+				method: "PATCH",
+				headers: { Authorization: "Bearer invalid_token" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/accounts/${accountIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+		});
+
+		it("should return 403 for insufficient permissions", async () => {
+			const rs = await server.inject({
+				method: "PATCH",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/accounts/${accountIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
 	});
 
 	describe("Unlink Ledger Account from Category", () => {
@@ -358,7 +498,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		const accountIdStr = accountId.toString();
 
 		it("should unlink an account from a category", async () => {
-			mockLedgerAccountService.unlinkLedgerAccountToCategory.mockResolvedValue();
+			mockLedgerAccountCategoryService.unlinkLedgerAccountToCategory.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "DELETE",
@@ -367,7 +507,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.unlinkLedgerAccountToCategory).toHaveBeenCalledWith(
+			expect(mockLedgerAccountCategoryService.unlinkLedgerAccountToCategory).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" }),
 				expect.objectContaining({ prefix: "lat" })
@@ -375,7 +515,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.unlinkLedgerAccountToCategory.mockRejectedValue(
+			mockLedgerAccountCategoryService.unlinkLedgerAccountToCategory.mockRejectedValue(
 				new NotFoundError("Link not found")
 			);
 
@@ -389,6 +529,30 @@ describe("LedgerAccountCategoryRoutes", () => {
 			const response: NotFoundErrorResponse = rs.json();
 			expect(response.status).toEqual(404);
 		});
+
+		it("should return 401 for invalid token", async () => {
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: "Bearer invalid_token" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/accounts/${accountIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+		});
+
+		it("should return 403 for insufficient permissions", async () => {
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/accounts/${accountIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
 	});
 
 	describe("Link Ledger Account Category to Category", () => {
@@ -396,7 +560,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		const parentCategoryIdStr = parentCategoryId.toString();
 
 		it("should link a category to a parent category", async () => {
-			mockLedgerAccountService.linkLedgerAccountCategoryToCategory.mockResolvedValue();
+			mockLedgerAccountCategoryService.linkLedgerAccountCategoryToCategory.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "PATCH",
@@ -405,7 +569,9 @@ describe("LedgerAccountCategoryRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.linkLedgerAccountCategoryToCategory).toHaveBeenCalledWith(
+			expect(
+				mockLedgerAccountCategoryService.linkLedgerAccountCategoryToCategory
+			).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" }),
 				expect.objectContaining({ prefix: "lac" })
@@ -413,7 +579,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.linkLedgerAccountCategoryToCategory.mockRejectedValue(
+			mockLedgerAccountCategoryService.linkLedgerAccountCategoryToCategory.mockRejectedValue(
 				new NotFoundError("Parent category not found")
 			);
 
@@ -427,6 +593,30 @@ describe("LedgerAccountCategoryRoutes", () => {
 			const response: NotFoundErrorResponse = rs.json();
 			expect(response.status).toEqual(404);
 		});
+
+		it("should return 401 for invalid token", async () => {
+			const rs = await server.inject({
+				method: "PATCH",
+				headers: { Authorization: "Bearer invalid_token" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/categories/${parentCategoryIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+		});
+
+		it("should return 403 for insufficient permissions", async () => {
+			const rs = await server.inject({
+				method: "PATCH",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/categories/${parentCategoryIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
 	});
 
 	describe("Unlink Ledger Account Category from Category", () => {
@@ -434,7 +624,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		const parentCategoryIdStr = parentCategoryId.toString();
 
 		it("should unlink a category from a parent category", async () => {
-			mockLedgerAccountService.unlinkLedgerAccountCategoryToCategory.mockResolvedValue();
+			mockLedgerAccountCategoryService.unlinkLedgerAccountCategoryToCategory.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "DELETE",
@@ -443,7 +633,9 @@ describe("LedgerAccountCategoryRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.unlinkLedgerAccountCategoryToCategory).toHaveBeenCalledWith(
+			expect(
+				mockLedgerAccountCategoryService.unlinkLedgerAccountCategoryToCategory
+			).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" }),
 				expect.objectContaining({ prefix: "lac" })
@@ -451,7 +643,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.unlinkLedgerAccountCategoryToCategory.mockRejectedValue(
+			mockLedgerAccountCategoryService.unlinkLedgerAccountCategoryToCategory.mockRejectedValue(
 				new NotFoundError("Link not found")
 			);
 
@@ -464,6 +656,30 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.statusCode).toBe(404);
 			const response: NotFoundErrorResponse = rs.json();
 			expect(response.status).toEqual(404);
+		});
+
+		it("should return 401 for invalid token", async () => {
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: "Bearer invalid_token" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/categories/${parentCategoryIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(401);
+			const response: UnauthorizedErrorResponse = rs.json();
+			expect(response.status).toEqual(401);
+		});
+
+		it("should return 403 for insufficient permissions", async () => {
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/categories/${parentCategoryIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
 		});
 	});
 });

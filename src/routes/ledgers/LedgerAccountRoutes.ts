@@ -136,7 +136,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 			const ledgerEntity = await ledgerService.getLedger(orgId, ledgerId);
 
 			const entity = LedgerAccountEntity.fromRequest(rq.body, orgId, ledgerId, "debit");
-			const account = await ledgerAccountService.createLedgerAccount(orgId, entity);
+			const account = await ledgerAccountService.createLedgerAccount(entity);
 			return account.toResponse(ledgerEntity.currency, ledgerEntity.currencyExponent);
 		}
 	);
@@ -187,7 +187,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 				existingAccount.normalBalance,
 				rq.params.ledgerAccountId
 			);
-			const account = await ledgerAccountService.updateLedgerAccount(orgId, ledgerId, entity);
+			const account = await ledgerAccountService.updateLedgerAccount(entity);
 			return account.toResponse(ledgerEntity.currency, ledgerEntity.currencyExponent);
 		}
 	);

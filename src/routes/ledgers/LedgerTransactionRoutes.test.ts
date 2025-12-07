@@ -8,6 +8,7 @@ import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
+	ForbiddenErrorResponse,
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
@@ -15,6 +16,14 @@ import type {
 import { buildServer } from "@/server";
 import type { LedgerTransactionService } from "@/services";
 import { createLedgerTransactionFixture } from "./fixtures";
+
+const mockLedgerTransactionService = vi.mocked<LedgerTransactionService>({
+	listTransactions: vi.fn(),
+	getLedgerTransaction: vi.fn(),
+	createTransaction: vi.fn(),
+	postTransaction: vi.fn(),
+	deleteTransaction: vi.fn(),
+} as unknown as LedgerTransactionService);
 
 describe("LedgerTransactionRoutes", () => {
 	let server: FastifyInstance;
@@ -24,14 +33,6 @@ describe("LedgerTransactionRoutes", () => {
 	const ledgerIdStr = ledgerId.toString();
 	const transactionIdStr = transactionId.toString();
 	const fixedDate = new Date("2025-01-01T00:00:00.000Z");
-
-	const mockLedgerTransactionService = vi.mocked<LedgerTransactionService>({
-		listTransactions: vi.fn(),
-		getLedgerTransaction: vi.fn(),
-		createTransaction: vi.fn(),
-		postTransaction: vi.fn(),
-		deleteTransaction: vi.fn(),
-	} as unknown as LedgerTransactionService);
 
 	const mockTransaction = createLedgerTransactionFixture({
 		id: transactionId,
@@ -43,6 +44,7 @@ describe("LedgerTransactionRoutes", () => {
 		effectiveAt: fixedDate,
 	});
 	const token = signJWT({ sub: orgId.toString(), scope: ["org_admin"] });
+	const tokenReadOnly = signJWT({ sub: orgId.toString(), scope: ["org_readonly"] });
 
 	beforeAll(async () => {
 		server = await buildServer({
@@ -329,6 +331,45 @@ describe("LedgerTransactionRoutes", () => {
 			expect(response.status).toEqual(409);
 		});
 
+		it("should handle forbidden error with readonly scope", async () => {
+			const rs = await server.inject({
+				method: "POST",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/transactions`,
+				payload: {
+					description: "Test transaction",
+					status: "pending",
+					ledgerEntries: [
+						{
+							id: new TypeID("lte").toString(),
+							ledgerAccountId: new TypeID("lat").toString(),
+							direction: "debit",
+							amount: 10000,
+							currency: "USD",
+							currencyExponent: 2,
+							status: "pending",
+						},
+						{
+							id: new TypeID("lte").toString(),
+							ledgerAccountId: new TypeID("lat").toString(),
+							direction: "credit",
+							amount: 10000,
+							currency: "USD",
+							currencyExponent: 2,
+							status: "pending",
+						},
+					],
+					created: new Date().toISOString(),
+					updated: new Date().toISOString(),
+				},
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+			expect(response.detail).toEqual("One of: ledger:transaction:write; permissions is required");
+		});
+
 		it("should handle internal server error", async () => {
 			mockLedgerTransactionService.createTransaction.mockRejectedValue(
 				new Error("Internal Server Error")
@@ -445,6 +486,19 @@ describe("LedgerTransactionRoutes", () => {
 			expect(response.status).toEqual(409);
 		});
 
+		it("should handle forbidden error with readonly scope", async () => {
+			const rs = await server.inject({
+				method: "POST",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/transactions/${transactionIdStr}/post`,
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+			expect(response.detail).toEqual("One of: ledger:transaction:write; permissions is required");
+		});
+
 		it("should handle internal server error", async () => {
 			mockLedgerTransactionService.postTransaction.mockRejectedValue(
 				new Error("Internal Server Error")
@@ -524,6 +578,19 @@ describe("LedgerTransactionRoutes", () => {
 			expect(rs.statusCode).toBe(409);
 			const response: ConflictErrorResponse = rs.json();
 			expect(response.status).toEqual(409);
+		});
+
+		it("should handle forbidden error with readonly scope", async () => {
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/transactions/${transactionIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+			expect(response.detail).toEqual("One of: ledger:transaction:delete; permissions is required");
 		});
 
 		it("should handle internal server error", async () => {

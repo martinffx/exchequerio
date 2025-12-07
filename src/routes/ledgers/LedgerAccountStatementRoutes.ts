@@ -20,8 +20,8 @@ import {
 
 const TAGS = ["Ledger Account Statements"];
 const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
-	server.get(
-		"/:ledgerAccountStatmentId",
+	server.get<{ Params: { ledgerAccountStatementId: string } }>(
+		"/:ledgerAccountStatementId",
 		{
 			schema: {
 				operationId: "getLedgerAccountStatement",
@@ -40,23 +40,34 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:statement:read"]),
 		},
 		async (rq: GetLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
-			const category = await rq.server.services.ledgerAccountService.getLedgerAccountStatement(
-				rq.params.ledgerAccountStatmentId
-			);
-			return category.toResponse();
+			const statement =
+				await rq.server.services.ledgerAccountStatementService.getLedgerAccountStatement(
+					rq.params.ledgerAccountStatementId
+				);
+			return statement.toResponse();
 		}
 	);
 
-	server.post(
+	server.post<{
+		Body: {
+			description?: string;
+			ledgerId: string;
+			ledgerAccountId: string;
+			startDatetime: string;
+			endDatetime: string;
+		};
+	}>(
 		"/",
 		{
 			schema: {
-				operationId: "createLedgerAccountSettlement",
+				operationId: "createLedgerAccountStatement",
 				tags: TAGS,
-				summary: "Create Ledger Account Settlement",
-				description: "Create Ledger Account Settlement",
+				summary: "Create Ledger Account Statement",
+				description: "Create Ledger Account Statement",
 				body: LedgerAccountStatementRequest,
 				response: {
 					200: LedgerAccountStatementResponse,
@@ -69,11 +80,14 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:statement:write"]),
 		},
 		async (rq: CreateLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
-			const statement = await rq.server.services.ledgerAccountService.createLedgerAccountStatement(
-				LedgerAccountStatementEntity.fromRequest(rq.body)
-			);
+			const statement =
+				await rq.server.services.ledgerAccountStatementService.createLedgerAccountStatement(
+					LedgerAccountStatementEntity.fromRequest(rq.body)
+				);
 			return statement.toResponse();
 		}
 	);

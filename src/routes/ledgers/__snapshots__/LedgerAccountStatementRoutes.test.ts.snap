@@ -1,0 +1,137 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LedgerAccountStatementRoutes > GET /:ledgerAccountStatementId > should return a statement 1`] = `
+{
+  "created": "2025-01-01T00:00:00.000Z",
+  "currency": "USD",
+  "currencyExponent": 2,
+  "endDatetime": "2025-01-01T00:00:00.000Z",
+  "endingBalances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "id": "lst_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "ledgerAccountVersion": 0,
+  "ledgerId": "",
+  "normalBalance": "debit",
+  "startDatetime": "2025-01-01T00:00:00.000Z",
+  "startingBalances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerAccountStatementRoutes > POST / > should create a statement 1`] = `
+{
+  "created": "2025-01-01T00:00:00.000Z",
+  "currency": "USD",
+  "currencyExponent": 2,
+  "endDatetime": "2025-01-01T00:00:00.000Z",
+  "endingBalances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "id": "lst_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "ledgerAccountVersion": 0,
+  "ledgerId": "",
+  "normalBalance": "debit",
+  "startDatetime": "2025-01-01T00:00:00.000Z",
+  "startingBalances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;

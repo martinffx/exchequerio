@@ -2,9 +2,11 @@ import { faker } from "@faker-js/faker";
 import { TypeID } from "typeid-js";
 import { LedgerTransactionEntryEntity } from "@/repo/entities/LedgerTransactionEntryEntity";
 import {
+	LedgerAccountBalanceMonitorEntity,
 	LedgerAccountCategoryEntity,
 	LedgerAccountEntity,
 	LedgerAccountSettlementEntity,
+	LedgerAccountStatementEntity,
 	LedgerEntity,
 	LedgerTransactionEntity,
 	OrganizationEntity,
@@ -221,6 +223,66 @@ function createLedgerAccountSettlementFixture(
 	});
 }
 
+function createLedgerAccountStatementFixture(
+	overrides?: Partial<{
+		id: TypeID<"lst">;
+		accountId: TypeID<"lat">;
+		statementDate: Date;
+		openingBalance: number;
+		closingBalance: number;
+		totalCredits: number;
+		totalDebits: number;
+		transactionCount: number;
+		metadata?: Record<string, unknown>;
+		created: Date;
+		updated: Date;
+	}>
+): LedgerAccountStatementEntity {
+	const now = new Date();
+	return new LedgerAccountStatementEntity({
+		id: new TypeID("lst"),
+		accountId: new TypeID("lat"),
+		statementDate: now,
+		openingBalance: 0,
+		closingBalance: 0,
+		totalCredits: 0,
+		totalDebits: 0,
+		transactionCount: 0,
+		metadata: undefined,
+		created: now,
+		updated: now,
+		...overrides,
+	});
+}
+
+function createLedgerAccountBalanceMonitorFixture(
+	overrides?: Partial<{
+		id: TypeID<"lbm">;
+		accountId: TypeID<"lat">;
+		name: string;
+		description?: string;
+		alertThreshold: number;
+		isActive: boolean;
+		metadata?: Record<string, unknown>;
+		created: Date;
+		updated: Date;
+	}>
+): LedgerAccountBalanceMonitorEntity {
+	const now = new Date();
+	return new LedgerAccountBalanceMonitorEntity({
+		id: new TypeID("lbm"),
+		accountId: new TypeID("lat"),
+		name: faker.lorem.words(3),
+		description: faker.lorem.sentence(),
+		alertThreshold: 100000, // $1,000.00
+		isActive: true,
+		metadata: undefined,
+		created: now,
+		updated: now,
+		...overrides,
+	});
+}
+
 export {
 	createOrganizationFixture,
 	createLedgerFixture,
@@ -228,4 +290,6 @@ export {
 	createLedgerAccountCategoryFixture,
 	createLedgerTransactionFixture,
 	createLedgerAccountSettlementFixture,
+	createLedgerAccountStatementFixture,
+	createLedgerAccountBalanceMonitorFixture,
 };

@@ -14,11 +14,7 @@ describe("OrganizationService", () => {
 		deleteOrganization: vi.fn().mockReturnThis(),
 		listOrganizations: vi.fn().mockReturnThis(),
 	} as unknown as OrganizationRepo);
-	let organizationService: OrganizationService;
-
-	beforeAll(() => {
-		organizationService = new OrganizationService(mockRepo);
-	});
+	const organizationService = new OrganizationService(mockRepo);
 
 	afterEach(() => {
 		vi.resetAllMocks();

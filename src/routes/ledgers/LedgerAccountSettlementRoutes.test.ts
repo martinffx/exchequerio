@@ -11,10 +11,15 @@ import type {
 	OrgID,
 } from "@/repo/entities/types";
 import { buildServer } from "@/server";
-import type { LedgerAccountService, LedgerService } from "@/services";
+import type {
+	LedgerAccountService,
+	LedgerAccountSettlementService,
+	LedgerService,
+} from "@/services";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
+	ForbiddenErrorResponse,
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
@@ -31,6 +36,9 @@ const mockLedgerService = vi.mocked<LedgerService>({
 
 const mockLedgerAccountService = vi.mocked<LedgerAccountService>({
 	getLedgerAccount: vi.fn(),
+} as unknown as LedgerAccountService);
+
+const mockLedgerAccountSettlementService = vi.mocked<LedgerAccountSettlementService>({
 	listLedgerAccountSettlements: vi.fn(),
 	getLedgerAccountSettlement: vi.fn(),
 	createLedgerAccountSettlement: vi.fn(),
@@ -39,7 +47,7 @@ const mockLedgerAccountService = vi.mocked<LedgerAccountService>({
 	addLedgerAccountSettlementEntries: vi.fn(),
 	removeLedgerAccountSettlementEntries: vi.fn(),
 	transitionSettlementStatus: vi.fn(),
-} as unknown as LedgerAccountService);
+} as unknown as LedgerAccountSettlementService);
 
 describe("LedgerAccountSettlementRoutes", () => {
 	let server: FastifyInstance;
@@ -73,6 +81,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 	});
 
 	const token = signJWT({ sub: orgId.toString(), scope: ["org_admin"] });
+	const tokenReadOnly = signJWT({
+		sub: orgId.toString(),
+		scope: ["org_readonly"],
+	});
 
 	beforeAll(async () => {
 		server = await buildServer({
@@ -80,6 +92,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 				services: {
 					ledgerService: mockLedgerService,
 					ledgerAccountService: mockLedgerAccountService,
+					ledgerAccountSettlementService: mockLedgerAccountSettlementService,
 				},
 			},
 		});
@@ -91,7 +104,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("List Ledger Account Settlements", () => {
 		it("should return a list of settlements", async () => {
-			mockLedgerAccountService.listLedgerAccountSettlements.mockResolvedValue([mockSettlement]);
+			mockLedgerAccountSettlementService.listLedgerAccountSettlements.mockResolvedValue([
+				mockSettlement,
+			]);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -101,7 +116,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountService.listLedgerAccountSettlements).toHaveBeenCalledWith(
+			expect(mockLedgerAccountSettlementService.listLedgerAccountSettlements).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				0,
@@ -110,7 +125,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should return a list with pagination", async () => {
-			mockLedgerAccountService.listLedgerAccountSettlements.mockResolvedValue([mockSettlement]);
+			mockLedgerAccountSettlementService.listLedgerAccountSettlements.mockResolvedValue([
+				mockSettlement,
+			]);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -119,7 +136,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.listLedgerAccountSettlements).toHaveBeenCalledWith(
+			expect(mockLedgerAccountSettlementService.listLedgerAccountSettlements).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				10,
@@ -153,7 +170,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountService.listLedgerAccountSettlements.mockRejectedValue(
+			mockLedgerAccountSettlementService.listLedgerAccountSettlements.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
@@ -171,7 +188,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Get Ledger Account Settlement", () => {
 		it("should return a settlement", async () => {
-			mockLedgerAccountService.getLedgerAccountSettlement.mockResolvedValue(mockSettlement);
+			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockResolvedValue(mockSettlement);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -181,14 +198,14 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountService.getLedgerAccountSettlement).toHaveBeenCalledWith(
+			expect(mockLedgerAccountSettlementService.getLedgerAccountSettlement).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" })
 			);
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.getLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockRejectedValue(
 				new NotFoundError("Settlement not found")
 			);
 
@@ -228,7 +245,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountService.getLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
@@ -248,7 +265,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 		it("should create a settlement", async () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
-			mockLedgerAccountService.createLedgerAccountSettlement.mockResolvedValue(mockSettlement);
+			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockResolvedValue(
+				mockSettlement
+			);
 
 			const rs = await server.inject({
 				method: "POST",
@@ -265,7 +284,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountService.createLedgerAccountSettlement).toHaveBeenCalled();
+			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).toHaveBeenCalled();
 		});
 
 		it("should handle unauthorized error", async () => {
@@ -286,6 +305,24 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(response.status).toEqual(401);
 		});
 
+		it("should handle forbidden error", async () => {
+			const rs = await server.inject({
+				method: "POST",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/settlements`,
+				payload: {
+					ledgerTransactionId: new TypeID("ltr").toString(),
+					status: "drafting",
+					settledLedgerAccountId: settledAccountId.toString(),
+					contraLedgerAccountId: contraAccountId.toString(),
+				},
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
+
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
 				method: "POST",
@@ -302,7 +339,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		it("should handle conflict error", async () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
-			mockLedgerAccountService.createLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockRejectedValue(
 				new ConflictError({ message: "Settlement already exists" })
 			);
 
@@ -326,7 +363,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		it("should handle internal server error", async () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
-			mockLedgerAccountService.createLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
@@ -352,7 +389,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 		it("should update a settlement", async () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
-			mockLedgerAccountService.updateLedgerAccountSettlement.mockResolvedValue(mockSettlement);
+			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockResolvedValue(
+				mockSettlement
+			);
 
 			const rs = await server.inject({
 				method: "PUT",
@@ -369,13 +408,13 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountService.updateLedgerAccountSettlement).toHaveBeenCalled();
+			expect(mockLedgerAccountSettlementService.updateLedgerAccountSettlement).toHaveBeenCalled();
 		});
 
 		it("should handle not found error", async () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
-			mockLedgerAccountService.updateLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
 				new NotFoundError("Settlement not found")
 			);
 
@@ -414,6 +453,24 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(response.status).toEqual(401);
 		});
 
+		it("should handle forbidden error", async () => {
+			const rs = await server.inject({
+				method: "PUT",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}`,
+				payload: {
+					ledgerTransactionId: new TypeID("ltr").toString(),
+					status: "drafting",
+					settledLedgerAccountId: settledAccountId.toString(),
+					contraLedgerAccountId: contraAccountId.toString(),
+				},
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
+
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
 				method: "PUT",
@@ -430,7 +487,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		it("should handle conflict error", async () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
-			mockLedgerAccountService.updateLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
 				new ConflictError({ message: "Cannot update posted settlement" })
 			);
 
@@ -454,7 +511,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		it("should handle internal server error", async () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
-			mockLedgerAccountService.updateLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
@@ -478,7 +535,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Delete Ledger Account Settlement", () => {
 		it("should delete a settlement", async () => {
-			mockLedgerAccountService.deleteLedgerAccountSettlement.mockResolvedValue();
+			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "DELETE",
@@ -487,14 +544,14 @@ describe("LedgerAccountSettlementRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.deleteLedgerAccountSettlement).toHaveBeenCalledWith(
+			expect(mockLedgerAccountSettlementService.deleteLedgerAccountSettlement).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" })
 			);
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.deleteLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockRejectedValue(
 				new NotFoundError("Settlement not found")
 			);
 
@@ -521,8 +578,20 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(response.status).toEqual(401);
 		});
 
+		it("should handle forbidden error", async () => {
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
+
 		it("should handle conflict error", async () => {
-			mockLedgerAccountService.deleteLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockRejectedValue(
 				new ConflictError({ message: "Cannot delete posted settlement" })
 			);
 
@@ -538,7 +607,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountService.deleteLedgerAccountSettlement.mockRejectedValue(
+			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
@@ -556,7 +625,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Add Settlement Entries", () => {
 		it("should add entries to a settlement", async () => {
-			mockLedgerAccountService.addLedgerAccountSettlementEntries.mockResolvedValue();
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "PATCH",
@@ -568,7 +637,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.addLedgerAccountSettlementEntries).toHaveBeenCalledWith(
+			expect(
+				mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries
+			).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" }),
 				expect.any(Array)
@@ -576,7 +647,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.addLedgerAccountSettlementEntries.mockRejectedValue(
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockRejectedValue(
 				new NotFoundError("Settlement not found")
 			);
 
@@ -609,6 +680,21 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(response.status).toEqual(401);
 		});
 
+		it("should handle forbidden error", async () => {
+			const rs = await server.inject({
+				method: "PATCH",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}/entries`,
+				payload: {
+					entries: [new TypeID("lte").toString()],
+				},
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
+
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
 				method: "PATCH",
@@ -623,7 +709,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerAccountService.addLedgerAccountSettlementEntries.mockRejectedValue(
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockRejectedValue(
 				new ConflictError({ message: "Cannot add entries to posted settlement" })
 			);
 
@@ -642,7 +728,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountService.addLedgerAccountSettlementEntries.mockRejectedValue(
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
@@ -663,7 +749,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Remove Settlement Entries", () => {
 		it("should remove entries from a settlement", async () => {
-			mockLedgerAccountService.removeLedgerAccountSettlementEntries.mockResolvedValue();
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "DELETE",
@@ -675,7 +761,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.removeLedgerAccountSettlementEntries).toHaveBeenCalledWith(
+			expect(
+				mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries
+			).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" }),
 				expect.any(Array)
@@ -683,7 +771,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.removeLedgerAccountSettlementEntries.mockRejectedValue(
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockRejectedValue(
 				new NotFoundError("Settlement not found")
 			);
 
@@ -716,6 +804,21 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(response.status).toEqual(401);
 		});
 
+		it("should handle forbidden error", async () => {
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}/entries`,
+				payload: {
+					entries: [new TypeID("lte").toString()],
+				},
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
+
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
 				method: "DELETE",
@@ -730,7 +833,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerAccountService.removeLedgerAccountSettlementEntries.mockRejectedValue(
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockRejectedValue(
 				new ConflictError({ message: "Cannot remove entries from posted settlement" })
 			);
 
@@ -749,7 +852,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountService.removeLedgerAccountSettlementEntries.mockRejectedValue(
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
@@ -780,7 +883,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 				created: fixedDate,
 				updated: fixedDate,
 			});
-			mockLedgerAccountService.transitionSettlementStatus.mockResolvedValue(processingSettlement);
+			mockLedgerAccountSettlementService.transitionSettlementStatus.mockResolvedValue(
+				processingSettlement
+			);
 
 			const rs = await server.inject({
 				method: "POST",
@@ -790,7 +895,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountService.transitionSettlementStatus).toHaveBeenCalledWith(
+			expect(mockLedgerAccountSettlementService.transitionSettlementStatus).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" }),
 				"processing"
@@ -798,7 +903,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.transitionSettlementStatus.mockRejectedValue(
+			mockLedgerAccountSettlementService.transitionSettlementStatus.mockRejectedValue(
 				new NotFoundError("Settlement not found")
 			);
 
@@ -825,6 +930,18 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(response.status).toEqual(401);
 		});
 
+		it("should handle forbidden error", async () => {
+			const rs = await server.inject({
+				method: "POST",
+				headers: { Authorization: `Bearer ${tokenReadOnly}` },
+				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}/processing`,
+			});
+
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
+		});
+
 		it("should handle bad request error with invalid status", async () => {
 			const rs = await server.inject({
 				method: "POST",
@@ -838,7 +955,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error for invalid transition", async () => {
-			mockLedgerAccountService.transitionSettlementStatus.mockRejectedValue(
+			mockLedgerAccountSettlementService.transitionSettlementStatus.mockRejectedValue(
 				new ConflictError({ message: "Invalid transition from posted to drafting" })
 			);
 
@@ -854,7 +971,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountService.transitionSettlementStatus.mockRejectedValue(
+			mockLedgerAccountSettlementService.transitionSettlementStatus.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 

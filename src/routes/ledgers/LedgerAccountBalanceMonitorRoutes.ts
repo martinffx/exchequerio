@@ -25,7 +25,7 @@ import {
 
 const TAGS = ["Ledger Account Balance Monitors"];
 const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
-	server.get(
+	server.get<{ Querystring: PaginationQuery }>(
 		"/",
 		{
 			schema: {
@@ -44,19 +44,22 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:balance_monitor:read"]),
 		},
 		async (
 			rq: ListLedgerAccountBalanceMonitorsRequest
 		): Promise<LedgerAccountBalanceMonitorResponse[]> => {
-			const monitors = await rq.server.services.ledgerAccountService.listLedgerAccountBalanceMonitors(
-				rq.query.offset,
-				rq.query.limit
-			);
+			const monitors =
+				await rq.server.services.ledgerAccountBalanceMonitorService.listLedgerAccountBalanceMonitors(
+					rq.query.offset,
+					rq.query.limit
+				);
 			return monitors.map(monitor => monitor.toResponse());
 		}
 	);
 
-	server.get(
+	server.get<{ Params: LedgerAccountBalanceMonitorIdParameters }>(
 		"/:ledgerAccountBalanceMonitorId",
 		{
 			schema: {
@@ -76,18 +79,21 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:balance_monitor:read"]),
 		},
 		async (
 			rq: GetLedgerAccountBalanceMonitorRequest
 		): Promise<LedgerAccountBalanceMonitorResponse> => {
-			const monitor = await rq.server.services.ledgerAccountService.getLedgerAccountBalanceMonitor(
-				rq.params.ledgerAccountBalanceMonitorId
-			);
+			const monitor =
+				await rq.server.services.ledgerAccountBalanceMonitorService.getLedgerAccountBalanceMonitor(
+					rq.params.ledgerAccountBalanceMonitorId
+				);
 			return monitor.toResponse();
 		}
 	);
 
-	server.post(
+	server.post<{ Body: LedgerAccountBalanceMonitorRequest }>(
 		"/",
 		{
 			schema: {
@@ -107,18 +113,24 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:balance_monitor:write"]),
 		},
 		async (
 			rq: CreateLedgerAccountBalanceMonitorRequest
 		): Promise<LedgerAccountBalanceMonitorResponse> => {
-			const ledger = await rq.server.services.ledgerAccountService.createLedgerAccountBalanceMonitor(
-				LedgerAccountBalanceMonitorEntity.fromRequest(rq.body)
-			);
+			const ledger =
+				await rq.server.services.ledgerAccountBalanceMonitorService.createLedgerAccountBalanceMonitor(
+					LedgerAccountBalanceMonitorEntity.fromRequest(rq.body)
+				);
 			return ledger.toResponse();
 		}
 	);
 
-	server.put(
+	server.put<{
+		Params: LedgerAccountBalanceMonitorIdParameters;
+		Body: LedgerAccountBalanceMonitorRequest;
+	}>(
 		"/:ledgerAccountBalanceMonitorId",
 		{
 			schema: {
@@ -140,19 +152,22 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:balance_monitor:write"]),
 		},
 		async (
 			rq: UpdateLedgerAccountBalanceMonitorRequest
 		): Promise<LedgerAccountBalanceMonitorResponse> => {
-			const monitor = await rq.server.services.ledgerAccountService.updateLedgerAccountBalanceMonitor(
-				rq.params.ledgerAccountBalanceMonitorId,
-				LedgerAccountBalanceMonitorEntity.fromRequest(rq.body)
-			);
+			const monitor =
+				await rq.server.services.ledgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor(
+					rq.params.ledgerAccountBalanceMonitorId,
+					LedgerAccountBalanceMonitorEntity.fromRequest(rq.body)
+				);
 			return monitor.toResponse();
 		}
 	);
 
-	server.delete(
+	server.delete<{ Params: LedgerAccountBalanceMonitorIdParameters }>(
 		"/:ledgerAccountBalanceMonitorId",
 		{
 			schema: {
@@ -173,9 +188,11 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:balance_monitor:delete"]),
 		},
 		async (rq: DeleteLedgerAccountBalanceMonitorRequest): Promise<void> => {
-			await rq.server.services.ledgerAccountService.deleteLedgerAccountBalanceMonitor(
+			await rq.server.services.ledgerAccountBalanceMonitorService.deleteLedgerAccountBalanceMonitor(
 				rq.params.ledgerAccountBalanceMonitorId
 			);
 		}

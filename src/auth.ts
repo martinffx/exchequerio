@@ -23,9 +23,9 @@ const Permissions = [
 	"ledger:account:statement:read",
 	"ledger:account:statement:write",
 	"ledger:account:statement:delete",
-	"ledger:account:balance_moniter:read",
-	"ledger:account:balance_moniter:write",
-	"ledger:account:balance_moniter:delete",
+	"ledger:account:balance_monitor:read",
+	"ledger:account:balance_monitor:write",
+	"ledger:account:balance_monitor:delete",
 	"ledger:transaction:read",
 	"ledger:transaction:write",
 	"ledger:transaction:delete",
@@ -47,7 +47,7 @@ const OrgReadonlyPermissions = new Set<Permissions>([
 	"ledger:account:category:read",
 	"ledger:account:settlement:read",
 	"ledger:account:statement:read",
-	"ledger:account:balance_moniter:read",
+	"ledger:account:balance_monitor:read",
 	"ledger:transaction:read",
 	"ledger:transaction:entry:read",
 ]);
@@ -60,7 +60,7 @@ const OrgUserPermissions = new Set<Permissions>([
 	"ledger:account:category:write",
 	"ledger:account:settlement:write",
 	"ledger:account:statement:write",
-	"ledger:account:balance_moniter:write",
+	"ledger:account:balance_monitor:write",
 ]);
 
 const OrgAdminPermissions = new Set<Permissions>([
@@ -75,7 +75,7 @@ const OrgAdminPermissions = new Set<Permissions>([
 	"ledger:account:category:delete",
 	"ledger:account:settlement:delete",
 	"ledger:account:statement:delete",
-	"ledger:account:balance_moniter:delete",
+	"ledger:account:balance_monitor:delete",
 ]);
 const SuperAdminPermissions = new Set<Permissions>([
 	...OrgAdminPermissions,

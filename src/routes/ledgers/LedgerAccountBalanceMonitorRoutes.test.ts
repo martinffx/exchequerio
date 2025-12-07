@@ -4,9 +4,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/errors";
-import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
+import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/repo/entities/types";
 import { buildServer } from "@/server";
-import { LedgerAccountEntity, type LedgerAccountService, type LedgerService } from "@/services";
+import type { LedgerAccountBalanceMonitorService } from "@/services";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -15,52 +15,48 @@ import type {
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
 } from "../schema";
-import { createLedgerAccountFixture, createLedgerFixture } from "./fixtures";
+import { createLedgerAccountBalanceMonitorFixture } from "./fixtures";
 
-const mockLedgerService = vi.mocked<LedgerService>({
-	getLedger: vi.fn(),
-} as unknown as LedgerService);
+const mockLedgerAccountBalanceMonitorService = vi.mocked<LedgerAccountBalanceMonitorService>({
+	listLedgerAccountBalanceMonitors: vi.fn(),
+	getLedgerAccountBalanceMonitor: vi.fn(),
+	createLedgerAccountBalanceMonitor: vi.fn(),
+	updateLedgerAccountBalanceMonitor: vi.fn(),
+	deleteLedgerAccountBalanceMonitor: vi.fn(),
+} as unknown as LedgerAccountBalanceMonitorService);
 
-const mockLedgerAccountService = vi.mocked<LedgerAccountService>({
-	listLedgerAccounts: vi.fn(),
-	getLedgerAccount: vi.fn(),
-	createLedgerAccount: vi.fn(),
-	updateLedgerAccount: vi.fn(),
-	deleteLedgerAccount: vi.fn(),
-} as unknown as LedgerAccountService);
-
-describe("LedgerAccountRoutes", () => {
+describe("LedgerAccountBalanceMonitorRoutes", () => {
 	let server: FastifyInstance;
 	const orgId = TypeID.fromString("org_01h2x3y4z5a6b7c8d9e0f1g2h3") as OrgID;
-	const ledgerId = TypeID.fromString("lgr_01h2x3y4z5a6b7c8d9e0f1g2h4") as LedgerID;
+	const ledgerId = TypeID.fromString("lgr_01h2x3y4z5a6b7c8d9e0f1g2h4");
+	const monitorId = TypeID.fromString(
+		"lbm_01h2x3y4z5a6b7c8d9e0f1g2h5"
+	) as LedgerAccountBalanceMonitorID;
 	const accountId = TypeID.fromString("lat_01h2x3y4z5a6b7c8d9e0f1g2h6") as LedgerAccountID;
 	const ledgerIdStr = ledgerId.toString();
+	const monitorIdStr = monitorId.toString();
 	const accountIdStr = accountId.toString();
 	const fixedDate = new Date("2025-01-01T00:00:00.000Z");
 
-	const mockLedger = createLedgerFixture();
-	const mockAccount = createLedgerAccountFixture({
-		id: accountId,
-		organizationId: orgId,
-		ledgerId,
-		name: "Test Account",
-		description: "Test account description",
+	const mockMonitor = createLedgerAccountBalanceMonitorFixture({
+		id: monitorId,
+		accountId,
+		name: "Test Monitor",
+		description: "Test balance monitor",
+		alertThreshold: 100000,
+		isActive: true,
 		created: fixedDate,
 		updated: fixedDate,
 	});
 
 	const token = signJWT({ sub: orgId.toString(), scope: ["org_admin"] });
-	const tokenReadOnly = signJWT({
-		sub: orgId.toString(),
-		scope: ["org_readonly"],
-	});
+	const tokenReadOnly = signJWT({ sub: orgId.toString(), scope: ["org_readonly"] });
 
 	beforeAll(async () => {
 		server = await buildServer({
 			servicePluginOpts: {
 				services: {
-					ledgerService: mockLedgerService,
-					ledgerAccountService: mockLedgerAccountService,
+					ledgerAccountBalanceMonitorService: mockLedgerAccountBalanceMonitorService,
 				},
 			},
 		});
@@ -70,51 +66,47 @@ describe("LedgerAccountRoutes", () => {
 		vi.clearAllMocks();
 	});
 
-	describe("List Ledger Accounts", () => {
-		it("should return a list of ledger accounts", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.listLedgerAccounts.mockResolvedValue([mockAccount]);
+	describe("GET /", () => {
+		it("should return a list of monitors", async () => {
+			mockLedgerAccountBalanceMonitorService.listLedgerAccountBalanceMonitors.mockResolvedValue([
+				mockMonitor,
+			]);
 
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 			});
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountService.listLedgerAccounts).toHaveBeenCalledWith(
-				expect.objectContaining({ prefix: "org" }),
-				expect.objectContaining({ prefix: "lgr" }),
-				0,
-				20
-			);
+			expect(
+				mockLedgerAccountBalanceMonitorService.listLedgerAccountBalanceMonitors
+			).toHaveBeenCalledWith(0, 20);
 		});
 
 		it("should return a list with pagination", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.listLedgerAccounts.mockResolvedValue([mockAccount]);
+			mockLedgerAccountBalanceMonitorService.listLedgerAccountBalanceMonitors.mockResolvedValue([
+				mockMonitor,
+			]);
 
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts?offset=10&limit=5`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors?offset=10&limit=5`,
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.listLedgerAccounts).toHaveBeenCalledWith(
-				expect.objectContaining({ prefix: "org" }),
-				expect.objectContaining({ prefix: "lgr" }),
-				10,
-				5
-			);
+			expect(
+				mockLedgerAccountBalanceMonitorService.listLedgerAccountBalanceMonitors
+			).toHaveBeenCalledWith(10, 5);
 		});
 
 		it("should handle unauthorized error", async () => {
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: "Bearer invalid_token" },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 			});
 
 			expect(rs.statusCode).toBe(401);
@@ -123,24 +115,11 @@ describe("LedgerAccountRoutes", () => {
 			expect(response.detail).toEqual("Invalid token");
 		});
 
-		it("should allow org_readonly to list ledger accounts", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.listLedgerAccounts.mockResolvedValue([mockAccount]);
-
-			const rs = await server.inject({
-				method: "GET",
-				headers: { Authorization: `Bearer ${tokenReadOnly}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
-			});
-
-			expect(rs.statusCode).toBe(200);
-		});
-
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts?offset=invalid`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors?offset=invalid`,
 			});
 
 			expect(rs.statusCode).toBe(400);
@@ -149,15 +128,14 @@ describe("LedgerAccountRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.listLedgerAccounts.mockRejectedValue(
+			mockLedgerAccountBalanceMonitorService.listLedgerAccountBalanceMonitors.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 			});
 
 			expect(rs.statusCode).toBe(500);
@@ -166,36 +144,34 @@ describe("LedgerAccountRoutes", () => {
 		});
 	});
 
-	describe("Get Ledger Account", () => {
-		it("should return a ledger account", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockAccount);
+	describe("GET /:ledgerAccountBalanceMonitorId", () => {
+		it("should return a monitor", async () => {
+			mockLedgerAccountBalanceMonitorService.getLedgerAccountBalanceMonitor.mockResolvedValue(
+				mockMonitor
+			);
 
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountService.getLedgerAccount).toHaveBeenCalledWith(
-				expect.objectContaining({ prefix: "org" }),
-				expect.objectContaining({ prefix: "lgr" }),
-				expect.objectContaining({ prefix: "lat" })
-			);
+			expect(
+				mockLedgerAccountBalanceMonitorService.getLedgerAccountBalanceMonitor
+			).toHaveBeenCalledWith(monitorIdStr);
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockRejectedValue(
-				new NotFoundError("Account not found")
+			mockLedgerAccountBalanceMonitorService.getLedgerAccountBalanceMonitor.mockRejectedValue(
+				new NotFoundError("Monitor not found")
 			);
 
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(404);
@@ -207,7 +183,7 @@ describe("LedgerAccountRoutes", () => {
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: "Bearer invalid_token" },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(401);
@@ -215,24 +191,11 @@ describe("LedgerAccountRoutes", () => {
 			expect(response.status).toEqual(401);
 		});
 
-		it("should allow org_readonly to get ledger account", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockAccount);
-
-			const rs = await server.inject({
-				method: "GET",
-				headers: { Authorization: `Bearer ${tokenReadOnly}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
-			});
-
-			expect(rs.statusCode).toBe(200);
-		});
-
 		it("should handle bad request error", async () => {
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/invalid`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/invalid`,
 			});
 
 			expect(rs.statusCode).toBe(400);
@@ -241,13 +204,14 @@ describe("LedgerAccountRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockRejectedValue(new Error("Internal Server Error"));
+			mockLedgerAccountBalanceMonitorService.getLedgerAccountBalanceMonitor.mockRejectedValue(
+				new Error("Internal Server Error")
+			);
 
 			const rs = await server.inject({
 				method: "GET",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(500);
@@ -256,34 +220,41 @@ describe("LedgerAccountRoutes", () => {
 		});
 	});
 
-	describe("Create Ledger Account", () => {
-		it("should create a ledger account", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.createLedgerAccount.mockResolvedValue(mockAccount);
+	describe("POST /", () => {
+		it("should create a monitor", async () => {
+			mockLedgerAccountBalanceMonitorService.createLedgerAccountBalanceMonitor.mockResolvedValue(
+				mockMonitor
+			);
 
 			const rs = await server.inject({
 				method: "POST",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 				payload: {
-					name: "Test Account",
-					description: "Test description",
+					ledgerAccountId: accountIdStr,
+					description: "Test balance monitor",
+					alertCondition: [],
+					metadata: {},
 				},
 			});
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountService.createLedgerAccount).toHaveBeenCalledWith(
-				expect.any(LedgerAccountEntity)
-			);
+			expect(
+				mockLedgerAccountBalanceMonitorService.createLedgerAccountBalanceMonitor
+			).toHaveBeenCalled();
 		});
 
 		it("should handle unauthorized error", async () => {
 			const rs = await server.inject({
 				method: "POST",
 				headers: { Authorization: "Bearer invalid_token" },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
-				payload: { name: "Test Account" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
+				payload: {
+					ledgerAccountId: accountIdStr,
+					description: "Test balance monitor",
+					alertCondition: [],
+				},
 			});
 
 			expect(rs.statusCode).toBe(401);
@@ -295,8 +266,12 @@ describe("LedgerAccountRoutes", () => {
 			const rs = await server.inject({
 				method: "POST",
 				headers: { Authorization: `Bearer ${tokenReadOnly}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
-				payload: { name: "Test Account" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
+				payload: {
+					ledgerAccountId: accountIdStr,
+					description: "Test balance monitor",
+					alertCondition: [],
+				},
 			});
 
 			expect(rs.statusCode).toBe(403);
@@ -308,7 +283,7 @@ describe("LedgerAccountRoutes", () => {
 			const rs = await server.inject({
 				method: "POST",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
 				payload: { foo: "bar" },
 			});
 
@@ -318,16 +293,19 @@ describe("LedgerAccountRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.createLedgerAccount.mockRejectedValue(
-				new ConflictError({ message: "Account already exists" })
+			mockLedgerAccountBalanceMonitorService.createLedgerAccountBalanceMonitor.mockRejectedValue(
+				new ConflictError({ message: "Monitor already exists" })
 			);
 
 			const rs = await server.inject({
 				method: "POST",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
-				payload: { name: "Test Account" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
+				payload: {
+					ledgerAccountId: accountIdStr,
+					description: "Test balance monitor",
+					alertCondition: [],
+				},
 			});
 
 			expect(rs.statusCode).toBe(409);
@@ -336,16 +314,19 @@ describe("LedgerAccountRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.createLedgerAccount.mockRejectedValue(
+			mockLedgerAccountBalanceMonitorService.createLedgerAccountBalanceMonitor.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
 			const rs = await server.inject({
 				method: "POST",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts`,
-				payload: { name: "Test Account" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors`,
+				payload: {
+					ledgerAccountId: accountIdStr,
+					description: "Test balance monitor",
+					alertCondition: [],
+				},
 			});
 
 			expect(rs.statusCode).toBe(500);
@@ -354,40 +335,45 @@ describe("LedgerAccountRoutes", () => {
 		});
 	});
 
-	describe("Update Ledger Account", () => {
-		it("should update a ledger account", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockAccount);
-			mockLedgerAccountService.updateLedgerAccount.mockResolvedValue(mockAccount);
+	describe("PUT /:ledgerAccountBalanceMonitorId", () => {
+		it("should update a monitor", async () => {
+			mockLedgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor.mockResolvedValue(
+				mockMonitor
+			);
 
 			const rs = await server.inject({
 				method: "PUT",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 				payload: {
-					name: "Updated Account",
-					description: "Updated description",
+					ledgerAccountId: accountIdStr,
+					description: "Updated monitor",
+					alertCondition: [],
+					metadata: {},
 				},
 			});
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountService.updateLedgerAccount).toHaveBeenCalledWith(
-				expect.any(LedgerAccountEntity)
-			);
+			expect(
+				mockLedgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor
+			).toHaveBeenCalled();
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockRejectedValue(
-				new NotFoundError("Account not found")
+			mockLedgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor.mockRejectedValue(
+				new NotFoundError("Monitor not found")
 			);
 
 			const rs = await server.inject({
 				method: "PUT",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
-				payload: { name: "Updated Account" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
+				payload: {
+					ledgerAccountId: accountIdStr,
+					description: "Updated monitor",
+					alertCondition: [],
+				},
 			});
 
 			expect(rs.statusCode).toBe(404);
@@ -399,8 +385,12 @@ describe("LedgerAccountRoutes", () => {
 			const rs = await server.inject({
 				method: "PUT",
 				headers: { Authorization: "Bearer invalid_token" },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
-				payload: { name: "Updated Account" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
+				payload: {
+					ledgerAccountId: accountIdStr,
+					description: "Updated monitor",
+					alertCondition: [],
+				},
 			});
 
 			expect(rs.statusCode).toBe(401);
@@ -412,8 +402,12 @@ describe("LedgerAccountRoutes", () => {
 			const rs = await server.inject({
 				method: "PUT",
 				headers: { Authorization: `Bearer ${tokenReadOnly}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
-				payload: { name: "Updated Account" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
+				payload: {
+					ledgerAccountId: accountIdStr,
+					description: "Updated monitor",
+					alertCondition: [],
+				},
 			});
 
 			expect(rs.statusCode).toBe(403);
@@ -425,7 +419,7 @@ describe("LedgerAccountRoutes", () => {
 			const rs = await server.inject({
 				method: "PUT",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 				payload: { foo: "bar" },
 			});
 
@@ -435,17 +429,19 @@ describe("LedgerAccountRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockAccount);
-			mockLedgerAccountService.updateLedgerAccount.mockRejectedValue(
-				new ConflictError({ message: "Account conflict" })
+			mockLedgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor.mockRejectedValue(
+				new ConflictError({ message: "Cannot update active monitor" })
 			);
 
 			const rs = await server.inject({
 				method: "PUT",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
-				payload: { name: "Updated Account" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
+				payload: {
+					ledgerAccountId: accountIdStr,
+					description: "Updated monitor",
+					alertCondition: [],
+				},
 			});
 
 			expect(rs.statusCode).toBe(409);
@@ -454,17 +450,19 @@ describe("LedgerAccountRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockAccount);
-			mockLedgerAccountService.updateLedgerAccount.mockRejectedValue(
+			mockLedgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
 			const rs = await server.inject({
 				method: "PUT",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
-				payload: { name: "Updated Account" },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
+				payload: {
+					ledgerAccountId: accountIdStr,
+					description: "Updated monitor",
+					alertCondition: [],
+				},
 			});
 
 			expect(rs.statusCode).toBe(500);
@@ -473,33 +471,31 @@ describe("LedgerAccountRoutes", () => {
 		});
 	});
 
-	describe("Delete Ledger Account", () => {
-		it("should delete a ledger account", async () => {
-			mockLedgerAccountService.deleteLedgerAccount.mockResolvedValue();
+	describe("DELETE /:ledgerAccountBalanceMonitorId", () => {
+		it("should delete a monitor", async () => {
+			mockLedgerAccountBalanceMonitorService.deleteLedgerAccountBalanceMonitor.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerAccountService.deleteLedgerAccount).toHaveBeenCalledWith(
-				expect.objectContaining({ prefix: "org" }),
-				expect.objectContaining({ prefix: "lgr" }),
-				expect.objectContaining({ prefix: "lat" })
-			);
+			expect(
+				mockLedgerAccountBalanceMonitorService.deleteLedgerAccountBalanceMonitor
+			).toHaveBeenCalledWith(monitorIdStr);
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountService.deleteLedgerAccount.mockRejectedValue(
-				new NotFoundError("Account not found")
+			mockLedgerAccountBalanceMonitorService.deleteLedgerAccountBalanceMonitor.mockRejectedValue(
+				new NotFoundError("Monitor not found")
 			);
 
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(404);
@@ -511,7 +507,7 @@ describe("LedgerAccountRoutes", () => {
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: { Authorization: "Bearer invalid_token" },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(401);
@@ -523,7 +519,7 @@ describe("LedgerAccountRoutes", () => {
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: { Authorization: `Bearer ${tokenReadOnly}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(403);
@@ -532,16 +528,14 @@ describe("LedgerAccountRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerAccountService.deleteLedgerAccount.mockRejectedValue(
-				new ConflictError({
-					message: "Cannot delete account with transactions",
-				})
+			mockLedgerAccountBalanceMonitorService.deleteLedgerAccountBalanceMonitor.mockRejectedValue(
+				new ConflictError({ message: "Cannot delete active monitor" })
 			);
 
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(409);
@@ -550,14 +544,14 @@ describe("LedgerAccountRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountService.deleteLedgerAccount.mockRejectedValue(
+			mockLedgerAccountBalanceMonitorService.deleteLedgerAccountBalanceMonitor.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
 
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}`,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/${accountIdStr}/balance-monitors/${monitorIdStr}`,
 			});
 
 			expect(rs.statusCode).toBe(500);

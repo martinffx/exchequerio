@@ -1,5 +1,5 @@
 import { TypeID } from "typeid-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ConflictError } from "../errors";
 import { LedgerEntity } from "../repo/entities/LedgerEntity";
 import { LedgerTransactionEntity } from "../repo/entities/LedgerTransactionEntity";
@@ -17,30 +17,24 @@ import type { LedgerTransactionRequest } from "../routes/ledgers/schema";
 import { LedgerTransactionService } from "./LedgerTransactionService";
 
 describe("LedgerTransactionService", () => {
-	let service: LedgerTransactionService;
-	let mockTransactionRepo: LedgerTransactionRepo;
-	let mockLedgerRepo: LedgerRepo;
-
 	const orgId = new TypeID("org") as OrgID;
 	const ledgerId = new TypeID("lgr") as LedgerID;
 	const transactionId = new TypeID("ltr") as LedgerTransactionID;
 
-	beforeEach(() => {
-		// Create mock repos
-		mockTransactionRepo = {
-			listLedgerTransactions: vi.fn(),
-			getLedgerTransaction: vi.fn(),
-			createTransaction: vi.fn(),
-			postTransaction: vi.fn(),
-			deleteTransactionWithBalanceUpdate: vi.fn(),
-		} as unknown as LedgerTransactionRepo;
+	const mockTransactionRepo = vi.mocked<LedgerTransactionRepo>({
+		listLedgerTransactions: vi.fn(),
+		getLedgerTransaction: vi.fn(),
+		createTransaction: vi.fn(),
+		postTransaction: vi.fn(),
+		deleteTransactionWithBalanceUpdate: vi.fn(),
+	} as unknown as LedgerTransactionRepo);
+	const mockLedgerRepo = vi.mocked<LedgerRepo>({
+		getLedger: vi.fn(),
+	} as unknown as LedgerRepo);
+	const service = new LedgerTransactionService(mockTransactionRepo, mockLedgerRepo);
 
-		mockLedgerRepo = {
-			getLedger: vi.fn(),
-		} as unknown as LedgerRepo;
-
-		// Create service with mocked dependencies
-		service = new LedgerTransactionService(mockTransactionRepo, mockLedgerRepo);
+	afterEach(() => {
+		vi.clearAllMocks();
 	});
 
 	describe("listTransactions", () => {
@@ -95,7 +89,7 @@ describe("LedgerTransactionService", () => {
 				}),
 			];
 
-			vi.mocked(mockTransactionRepo.listLedgerTransactions).mockResolvedValue(mockTransactions);
+			mockTransactionRepo.listLedgerTransactions.mockResolvedValue(mockTransactions);
 
 			const result = await service.listTransactions(orgId, ledgerId, 0, 10);
 
@@ -109,7 +103,7 @@ describe("LedgerTransactionService", () => {
 		});
 
 		it("should pass through offset and limit parameters", async () => {
-			vi.mocked(mockTransactionRepo.listLedgerTransactions).mockResolvedValue([]);
+			mockTransactionRepo.listLedgerTransactions.mockResolvedValue([]);
 
 			await service.listTransactions(orgId, ledgerId, 20, 50);
 
@@ -161,7 +155,7 @@ describe("LedgerTransactionService", () => {
 				entries: mockEntries,
 			});
 
-			vi.mocked(mockTransactionRepo.getLedgerTransaction).mockResolvedValue(mockTransaction);
+			mockTransactionRepo.getLedgerTransaction.mockResolvedValue(mockTransaction);
 
 			const result = await service.getLedgerTransaction(orgId, ledgerId, transactionId);
 
@@ -246,8 +240,8 @@ describe("LedgerTransactionService", () => {
 				),
 			});
 
-			vi.mocked(mockLedgerRepo.getLedger).mockResolvedValue(mockLedger);
-			vi.mocked(mockTransactionRepo.createTransaction).mockResolvedValue(mockCreatedTransaction);
+			mockLedgerRepo.getLedger.mockResolvedValue(mockLedger);
+			mockTransactionRepo.createTransaction.mockResolvedValue(mockCreatedTransaction);
 
 			const result = await service.createTransaction(orgId, ledgerId, validRequest);
 
@@ -260,7 +254,7 @@ describe("LedgerTransactionService", () => {
 
 		it("should throw NotFoundError when ledger not found", async () => {
 			// Mock getLedger to throw NotFoundError as the repo does
-			vi.mocked(mockLedgerRepo.getLedger).mockRejectedValue(new Error("Ledger not found"));
+			mockLedgerRepo.getLedger.mockRejectedValue(new Error("Ledger not found"));
 
 			await expect(service.createTransaction(orgId, ledgerId, validRequest)).rejects.toThrow("Ledger");
 
@@ -296,7 +290,7 @@ describe("LedgerTransactionService", () => {
 				updated: new Date().toISOString(),
 			};
 
-			vi.mocked(mockLedgerRepo.getLedger).mockResolvedValue(mockLedger);
+			mockLedgerRepo.getLedger.mockResolvedValue(mockLedger);
 
 			// LedgerTransactionEntity.fromRequest will throw validation error
 			await expect(service.createTransaction(orgId, ledgerId, unbalancedRequest)).rejects.toThrow();
@@ -342,7 +336,7 @@ describe("LedgerTransactionService", () => {
 				entries: mockEntries,
 			});
 
-			vi.mocked(mockTransactionRepo.postTransaction).mockResolvedValue(postedTransaction);
+			mockTransactionRepo.postTransaction.mockResolvedValue(postedTransaction);
 
 			const result = await service.postTransaction(orgId, ledgerId, transactionId);
 
@@ -390,8 +384,9 @@ describe("LedgerTransactionService", () => {
 				entries: mockEntries,
 			});
 
-			vi.mocked(mockTransactionRepo.getLedgerTransaction).mockResolvedValue(pendingTransaction);
-			vi.mocked(mockTransactionRepo.deleteTransactionWithBalanceUpdate).mockResolvedValue(undefined);
+			mockTransactionRepo.getLedgerTransaction.mockResolvedValue(pendingTransaction);
+
+			mockTransactionRepo.deleteTransactionWithBalanceUpdate.mockResolvedValue(undefined);
 
 			await service.deleteTransaction(orgId, ledgerId, transactionId);
 
@@ -446,7 +441,7 @@ describe("LedgerTransactionService", () => {
 				entries: mockEntries,
 			});
 
-			vi.mocked(mockTransactionRepo.getLedgerTransaction).mockResolvedValue(postedTransaction);
+			mockTransactionRepo.getLedgerTransaction.mockResolvedValue(postedTransaction);
 
 			// Save original NODE_ENV
 			const originalEnv = process.env.NODE_ENV;
@@ -504,8 +499,9 @@ describe("LedgerTransactionService", () => {
 				entries: mockEntries,
 			});
 
-			vi.mocked(mockTransactionRepo.getLedgerTransaction).mockResolvedValue(postedTransaction);
-			vi.mocked(mockTransactionRepo.deleteTransactionWithBalanceUpdate).mockResolvedValue(undefined);
+			mockTransactionRepo.getLedgerTransaction.mockResolvedValue(postedTransaction);
+
+			mockTransactionRepo.deleteTransactionWithBalanceUpdate.mockResolvedValue(undefined);
 
 			// Save original NODE_ENV
 			const originalEnv = process.env.NODE_ENV;

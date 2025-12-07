@@ -8,3 +8,5 @@ export type LedgerAccountCategoryID = TypeID<"lac">;
 export type LedgerTransactionID = TypeID<"ltr">;
 export type LedgerTransactionEntryID = TypeID<"lte">;
 export type LedgerAccountSettlementID = TypeID<"las">;
+export type LedgerAccountBalanceMonitorID = TypeID<"lbm">;
+export type LedgerAccountStatementID = TypeID<"lst">;

@@ -33,8 +33,8 @@ import {
 
 const TAGS = ["Ledger Account Categories"];
 const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
-	const { ledgerAccountService } = server.services;
-	server.get(
+	const { ledgerAccountCategoryService } = server.services;
+	server.get<{ Params: { ledgerId: string }; Querystring: PaginationQuery }>(
 		"/",
 		{
 			schema: {
@@ -53,10 +53,12 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:category:read"]),
 		},
 		async (rq: ListLedgerAccountCategoriesRequest): Promise<LedgerAccountCategoryResponse[]> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const categories = await ledgerAccountService.listLedgerAccountCategories(
+			const categories = await ledgerAccountCategoryService.listLedgerAccountCategories(
 				ledgerId,
 				rq.query.offset,
 				rq.query.limit
@@ -65,7 +67,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.get(
+	server.get<{ Params: { ledgerId: string; ledgerAccountCategoryId: string } }>(
 		"/:ledgerAccountCategoryId",
 		{
 			schema: {
@@ -85,16 +87,21 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:category:read"]),
 		},
 		async (rq: GetLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
-			const category = await ledgerAccountService.getLedgerAccountCategory(ledgerId, categoryId);
+			const category = await ledgerAccountCategoryService.getLedgerAccountCategory(
+				ledgerId,
+				categoryId
+			);
 			return category.toResponse();
 		}
 	);
 
-	server.post(
+	server.post<{ Params: { ledgerId: string }; Body: LedgerAccountCategoryRequest }>(
 		"/",
 		{
 			schema: {
@@ -114,17 +121,22 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: CreateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const category = await ledgerAccountService.createLedgerAccountCategory(
+			const category = await ledgerAccountCategoryService.createLedgerAccountCategory(
 				LedgerAccountCategoryEntity.fromRequest(rq.body, ledgerId)
 			);
 			return category.toResponse();
 		}
 	);
 
-	server.put(
+	server.put<{
+		Params: { ledgerId: string; ledgerAccountCategoryId: string };
+		Body: LedgerAccountCategoryRequest;
+	}>(
 		"/:ledgerAccountCategoryId",
 		{
 			schema: {
@@ -146,11 +158,13 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UpdateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
-			const category = await ledgerAccountService.updateLedgerAccountCategory(
+			const category = await ledgerAccountCategoryService.updateLedgerAccountCategory(
 				ledgerId,
 				categoryId,
 				LedgerAccountCategoryEntity.fromRequest(rq.body, ledgerId, rq.params.ledgerAccountCategoryId)
@@ -159,7 +173,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.delete(
+	server.delete<{ Params: { ledgerId: string; ledgerAccountCategoryId: string } }>(
 		"/:ledgerAccountCategoryId",
 		{
 			schema: {
@@ -180,15 +194,17 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:category:delete"]),
 		},
 		async (rq: DeleteLedgerAccountCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
-			await ledgerAccountService.deleteLedgerAccountCategory(ledgerId, categoryId);
+			await ledgerAccountCategoryService.deleteLedgerAccountCategory(ledgerId, categoryId);
 		}
 	);
 
-	server.patch(
+	server.patch<{ Params: { ledgerId: string; ledgerAccountCategoryId: string; accountId: string } }>(
 		"/:ledgerAccountCategoryId/accounts/:accountId",
 		{
 			schema: {
@@ -209,16 +225,20 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: LinkLedgerAccountToCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
 			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
-			await ledgerAccountService.linkLedgerAccountToCategory(ledgerId, categoryId, accountId);
+			await ledgerAccountCategoryService.linkLedgerAccountToCategory(ledgerId, categoryId, accountId);
 		}
 	);
 
-	server.delete(
+	server.delete<{
+		Params: { ledgerId: string; ledgerAccountCategoryId: string; accountId: string };
+	}>(
 		"/:ledgerAccountCategoryId/accounts/:accountId",
 		{
 			schema: {
@@ -239,16 +259,24 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UnlinkLedgerAccountToCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
 			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
-			await ledgerAccountService.unlinkLedgerAccountToCategory(ledgerId, categoryId, accountId);
+			await ledgerAccountCategoryService.unlinkLedgerAccountToCategory(
+				ledgerId,
+				categoryId,
+				accountId
+			);
 		}
 	);
 
-	server.patch(
+	server.patch<{
+		Params: { ledgerId: string; ledgerAccountCategoryId: string; categoryId: string };
+	}>(
 		"/:ledgerAccountCategoryId/categories/:categoryId",
 		{
 			schema: {
@@ -269,12 +297,14 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: LinkLedgerAccountCategoryToCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
 			const parentCategoryId = TypeID.fromString<"lac">(rq.params.categoryId);
-			await ledgerAccountService.linkLedgerAccountCategoryToCategory(
+			await ledgerAccountCategoryService.linkLedgerAccountCategoryToCategory(
 				ledgerId,
 				categoryId,
 				parentCategoryId
@@ -282,7 +312,9 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.delete(
+	server.delete<{
+		Params: { ledgerId: string; ledgerAccountCategoryId: string; categoryId: string };
+	}>(
 		"/:ledgerAccountCategoryId/categories/:categoryId",
 		{
 			schema: {
@@ -303,12 +335,14 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UnlinkLedgerAccountCategoryToCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.ledgerAccountCategoryId);
 			const parentCategoryId = TypeID.fromString<"lac">(rq.params.categoryId);
-			await ledgerAccountService.unlinkLedgerAccountCategoryToCategory(
+			await ledgerAccountCategoryService.unlinkLedgerAccountCategoryToCategory(
 				ledgerId,
 				categoryId,
 				parentCategoryId

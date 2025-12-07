@@ -32,7 +32,7 @@ import {
 
 const TAGS = ["Ledger Account Settlements"];
 const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
-	server.get(
+	server.get<{ Params: { ledgerId: string }; Querystring: { offset: number; limit: number } }>(
 		"/",
 		{
 			schema: {
@@ -52,21 +52,26 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:settlement:read"]),
 		},
 		async (rq: ListLedgerAccountSettlementsRequest): Promise<LedgerAccountSettlementResponse[]> => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const settlements = await rq.server.services.ledgerAccountService.listLedgerAccountSettlements(
-				orgId,
-				ledgerId,
-				rq.query.offset,
-				rq.query.limit
-			);
+			const settlements =
+				await rq.server.services.ledgerAccountSettlementService.listLedgerAccountSettlements(
+					orgId,
+					ledgerId,
+					rq.query.offset,
+					rq.query.limit
+				);
 			return settlements.map(settlement => settlement.toResponse());
 		}
 	);
 
-	server.get(
+	server.get<{
+		Params: { ledgerId: string; ledgerAccountSettlementId: string };
+	}>(
 		"/:ledgerAccountSettlementId",
 		{
 			schema: {
@@ -86,19 +91,34 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:settlement:read"]),
 		},
 		async (rq: GetLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
 			const orgId = rq.token.orgId;
 			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
-			const settlement = await rq.server.services.ledgerAccountService.getLedgerAccountSettlement(
-				orgId,
-				settlementId
-			);
+			const settlement =
+				await rq.server.services.ledgerAccountSettlementService.getLedgerAccountSettlement(
+					orgId,
+					settlementId
+				);
 			return settlement.toResponse();
 		}
 	);
 
-	server.post(
+	server.post<{
+		Params: { ledgerId: string };
+		Body: {
+			description?: string;
+			externalReference?: string;
+			metadata?: Record<string, string>;
+			effectiveAtUpperBound?: string;
+			ledgerTransactionId: string;
+			status: "drafting" | "processing" | "pending" | "posted" | "archiving" | "archived";
+			settledLedgerAccountId: string;
+			contraLedgerAccountId: string;
+		};
+	}>(
 		"/",
 		{
 			schema: {
@@ -119,6 +139,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: CreateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
 			const orgId = rq.token.orgId;
@@ -143,15 +165,27 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				settledAccount.normalBalance
 			);
 
-			const created = await rq.server.services.ledgerAccountService.createLedgerAccountSettlement(
-				orgId,
-				settlement
-			);
+			const created =
+				await rq.server.services.ledgerAccountSettlementService.createLedgerAccountSettlement(
+					settlement
+				);
 			return created.toResponse();
 		}
 	);
 
-	server.put(
+	server.put<{
+		Params: { ledgerId: string; ledgerAccountSettlementId: string };
+		Body: {
+			description?: string;
+			externalReference?: string;
+			metadata?: Record<string, string>;
+			effectiveAtUpperBound?: string;
+			ledgerTransactionId: string;
+			status: "drafting" | "processing" | "pending" | "posted" | "archiving" | "archived";
+			settledLedgerAccountId: string;
+			contraLedgerAccountId: string;
+		};
+	}>(
 		"/:ledgerAccountSettlementId",
 		{
 			schema: {
@@ -173,6 +207,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: UpdateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
 			const orgId = rq.token.orgId;
@@ -199,16 +235,19 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				settlementId.toString()
 			);
 
-			const updated = await rq.server.services.ledgerAccountService.updateLedgerAccountSettlement(
-				orgId,
-				settlementId,
-				settlement
-			);
+			const updated =
+				await rq.server.services.ledgerAccountSettlementService.updateLedgerAccountSettlement(
+					orgId,
+					settlementId,
+					settlement
+				);
 			return updated.toResponse();
 		}
 	);
 
-	server.delete(
+	server.delete<{
+		Params: { ledgerId: string; ledgerAccountSettlementId: string };
+	}>(
 		"/:ledgerAccountSettlementId",
 		{
 			schema: {
@@ -229,15 +268,23 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:settlement:delete"]),
 		},
 		async (rq: DeleteLedgerAccountSettlementRequest): Promise<void> => {
 			const orgId = rq.token.orgId;
 			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
-			await rq.server.services.ledgerAccountService.deleteLedgerAccountSettlement(orgId, settlementId);
+			await rq.server.services.ledgerAccountSettlementService.deleteLedgerAccountSettlement(
+				orgId,
+				settlementId
+			);
 		}
 	);
 
-	server.patch(
+	server.patch<{
+		Params: { ledgerId: string; ledgerAccountSettlementId: string };
+		Body: { entries: string[] };
+	}>(
 		"/:ledgerAccountSettlementId/entries",
 		{
 			schema: {
@@ -260,11 +307,13 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: AddLedgerAccountSettlementEntryRequest): Promise<void> => {
 			const orgId = rq.token.orgId;
 			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
-			await rq.server.services.ledgerAccountService.addLedgerAccountSettlementEntries(
+			await rq.server.services.ledgerAccountSettlementService.addLedgerAccountSettlementEntries(
 				orgId,
 				settlementId,
 				rq.body.entries
@@ -272,7 +321,10 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.delete(
+	server.delete<{
+		Params: { ledgerId: string; ledgerAccountSettlementId: string };
+		Body: { entries: string[] };
+	}>(
 		"/:ledgerAccountSettlementId/entries",
 		{
 			schema: {
@@ -294,11 +346,13 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: RemoveLedgerAccountSettlementEntryRequest): Promise<void> => {
 			const orgId = rq.token.orgId;
 			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
-			await rq.server.services.ledgerAccountService.removeLedgerAccountSettlementEntries(
+			await rq.server.services.ledgerAccountSettlementService.removeLedgerAccountSettlementEntries(
 				orgId,
 				settlementId,
 				rq.body.entries
@@ -306,7 +360,13 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.post(
+	server.post<{
+		Params: {
+			ledgerId: string;
+			ledgerAccountSettlementId: string;
+			status: "drafting" | "processing" | "pending" | "posted" | "archiving" | "archived";
+		};
+	}>(
 		"/:ledgerAccountSettlementId/:status",
 		{
 			schema: {
@@ -331,6 +391,8 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (
 			rq: TransitionLedgerAccountSettlementStatusRequest
@@ -339,11 +401,12 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			const settlementId = TypeID.fromString<"las">(rq.params.ledgerAccountSettlementId);
 			const targetStatus = rq.params.status;
 
-			const settlement = await rq.server.services.ledgerAccountService.transitionSettlementStatus(
-				orgId,
-				settlementId,
-				targetStatus
-			);
+			const settlement =
+				await rq.server.services.ledgerAccountSettlementService.transitionSettlementStatus(
+					orgId,
+					settlementId,
+					targetStatus
+				);
 			return settlement.toResponse();
 		}
 	);

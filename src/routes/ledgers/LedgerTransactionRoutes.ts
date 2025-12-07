@@ -26,7 +26,7 @@ import {
 
 const TAGS = ["Ledger Transactions"];
 const LedgerTransactionRoutes: FastifyPluginAsync = server => {
-	server.get(
+	server.get<{ Params: LedgerIdParameters; Querystring: PaginationQuery }>(
 		"/",
 		{
 			schema: {
@@ -46,6 +46,8 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:transaction:read"]),
 		},
 		async (rq: ListLedgerTransactionsRequest): Promise<LedgerTransactionResponse[]> => {
 			const transactions = await rq.server.services.ledgerTransactionService.listTransactions(
@@ -58,7 +60,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		}
 	);
 
-	server.get(
+	server.get<{ Params: LedgerIdWithTransactionIdParams }>(
 		"/:ledgerTransactionId",
 		{
 			schema: {
@@ -78,6 +80,8 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:transaction:read"]),
 		},
 		async (rq: GetLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
 			const transaction = await rq.server.services.ledgerTransactionService.getLedgerTransaction(
@@ -89,7 +93,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		}
 	);
 
-	server.post(
+	server.post<{ Params: LedgerIdParameters; Body: LedgerTransactionRequest }>(
 		"/",
 		{
 			schema: {
@@ -110,6 +114,8 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:transaction:write"]),
 		},
 		async (rq: CreateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
@@ -122,7 +128,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		}
 	);
 
-	server.post(
+	server.post<{ Params: LedgerIdWithTransactionIdParams }>(
 		"/:ledgerTransactionId/post",
 		{
 			schema: {
@@ -143,6 +149,8 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:transaction:write"]),
 		},
 		async (rq: PostLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
 			const transaction = await rq.server.services.ledgerTransactionService.postTransaction(
@@ -184,7 +192,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 	// 	}
 	// );
 
-	server.delete(
+	server.delete<{ Params: LedgerIdWithTransactionIdParams }>(
 		"/:ledgerTransactionId",
 		{
 			schema: {
@@ -205,6 +213,8 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:transaction:delete"]),
 		},
 		async (rq: DeleteLedgerTransactionRequest): Promise<void> => {
 			await rq.server.services.ledgerTransactionService.deleteTransaction(

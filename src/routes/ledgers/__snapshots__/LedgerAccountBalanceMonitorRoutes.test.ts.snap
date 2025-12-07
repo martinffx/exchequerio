@@ -1,49 +1,155 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`LedgerAccountBalanceMonitorRoutes > DELETE /:ledgerAccountBalanceMonitorId > should return 404 if monitor not found 1`] = `
+exports[`LedgerAccountBalanceMonitorRoutes > GET / > should return a list of monitors 1`] = `
+[
+  {
+    "alertCondition": [],
+    "balances": [
+      {
+        "amount": 0,
+        "balanceType": "pending",
+        "credits": 0,
+        "currency": "USD",
+        "currencyExponent": 2,
+        "debits": 0,
+      },
+      {
+        "amount": 0,
+        "balanceType": "posted",
+        "credits": 0,
+        "currency": "USD",
+        "currencyExponent": 2,
+        "debits": 0,
+      },
+      {
+        "amount": 0,
+        "balanceType": "availableBalance",
+        "credits": 0,
+        "currency": "USD",
+        "currencyExponent": 2,
+        "debits": 0,
+      },
+    ],
+    "created": "2025-01-01T00:00:00.000Z",
+    "description": "Test balance monitor",
+    "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+    "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+    "lockVersion": 0,
+    "updated": "2025-01-01T00:00:00.000Z",
+  },
+]
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes > GET /:ledgerAccountBalanceMonitorId > should return a monitor 1`] = `
 {
-  "error": "Not Found",
-  "message": "Route DELETE:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
-  "statusCode": 404,
+  "alertCondition": [],
+  "balances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test balance monitor",
+  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "lockVersion": 0,
+  "updated": "2025-01-01T00:00:00.000Z",
 }
 `;
 
-exports[`LedgerAccountBalanceMonitorRoutes > GET /:ledgerAccountBalanceMonitorId > should return 404 if monitor not found 1`] = `
+exports[`LedgerAccountBalanceMonitorRoutes > POST / > should create a monitor 1`] = `
 {
-  "error": "Not Found",
-  "message": "Route GET:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
-  "statusCode": 404,
+  "alertCondition": [],
+  "balances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test balance monitor",
+  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "lockVersion": 0,
+  "updated": "2025-01-01T00:00:00.000Z",
 }
 `;
 
-exports[`LedgerAccountBalanceMonitorRoutes > PUT /:ledgerAccountBalanceMonitorId > should return 404 if monitor not found 1`] = `
+exports[`LedgerAccountBalanceMonitorRoutes > PUT /:ledgerAccountBalanceMonitorId > should update a monitor 1`] = `
 {
-  "error": "Not Found",
-  "message": "Route PUT:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
-  "statusCode": 404,
-}
-`;
-
-exports[`LedgerAccountBalanceMonitorRoutes GET /:ledgerAccountBalanceMonitorId should return 404 if monitor not found 1`] = `
-{
-  "error": "Not Found",
-  "message": "Route GET:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
-  "statusCode": 404,
-}
-`;
-
-exports[`LedgerAccountBalanceMonitorRoutes PUT /:ledgerAccountBalanceMonitorId should return 404 if monitor not found 1`] = `
-{
-  "error": "Not Found",
-  "message": "Route PUT:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
-  "statusCode": 404,
-}
-`;
-
-exports[`LedgerAccountBalanceMonitorRoutes DELETE /:ledgerAccountBalanceMonitorId should return 404 if monitor not found 1`] = `
-{
-  "error": "Not Found",
-  "message": "Route DELETE:/ledgers/balance-monitors/lbm_01h2x3y4z5a6b7c8d9e0f1g2h3 not found",
-  "statusCode": 404,
+  "alertCondition": [],
+  "balances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test balance monitor",
+  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "ledgerAccountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "lockVersion": 0,
+  "updated": "2025-01-01T00:00:00.000Z",
 }
 `;

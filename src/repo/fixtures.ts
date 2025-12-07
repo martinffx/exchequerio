@@ -15,9 +15,11 @@ import type { LedgerEntityOpts } from "@/repo/entities/LedgerEntity";
 import type { LedgerTransactionEntityOpts } from "@/repo/entities/LedgerTransactionEntity";
 import type { LedgerTransactionEntryEntityOpts } from "@/repo/entities/LedgerTransactionEntryEntity";
 import type { OrgEntityOpts } from "@/repo/entities/OrganizationEntity";
+import { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
 import { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
+import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import { LedgerRepo } from "./LedgerRepo";
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
 import { OrganizationRepo } from "./OrganizationRepo";
@@ -39,6 +41,8 @@ function getRepos(): Repos {
 	const ledgerAccountRepo = new LedgerAccountRepo(db);
 	const ledgerAccountCategoryRepo = new LedgerAccountCategoryRepo(db);
 	const ledgerAccountSettlementRepo = new LedgerAccountSettlementRepo(db);
+	const ledgerAccountStatementRepo = new LedgerAccountStatementRepo(db);
+	const ledgerAccountBalanceMonitorRepo = new LedgerAccountBalanceMonitorRepo(db);
 	const ledgerTransactionRepo = new LedgerTransactionRepo(db);
 
 	repos = {
@@ -47,6 +51,8 @@ function getRepos(): Repos {
 		ledgerAccountRepo,
 		ledgerAccountCategoryRepo,
 		ledgerAccountSettlementRepo,
+		ledgerAccountStatementRepo,
+		ledgerAccountBalanceMonitorRepo,
 		ledgerTransactionRepo,
 	};
 

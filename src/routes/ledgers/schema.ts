@@ -695,7 +695,7 @@ const LedgerAccountStatementId = Type.String({
 });
 type LedgerAccountStatementId = Static<typeof LedgerAccountStatementId>;
 const LedgerAccountStatementIdParameters = Type.Object({
-	ledgerAccountStatmentId: LedgerAccountStatementId,
+	ledgerAccountStatementId: LedgerAccountStatementId,
 });
 type LedgerAccountStatementIdParameters = Static<typeof LedgerAccountStatementIdParameters>;
 const LedgerAccountStatementResponse = Type.Object(
