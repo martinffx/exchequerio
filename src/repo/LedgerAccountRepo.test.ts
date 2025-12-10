@@ -39,16 +39,14 @@ describe("LedgerAccountRepo", () => {
 
 	describe("listLedgerAccounts", () => {
 		let accountId: LedgerAccountID;
+		let skipCleanup = false;
 
 		afterEach(async () => {
 			// Clean up accounts created in tests
-			if (accountId) {
-				try {
-					await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-				} catch {
-					// Ignore if already deleted
-				}
+			if (accountId && !skipCleanup) {
+				await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
 			}
+			skipCleanup = false; // Reset flag
 		});
 
 		it("should return empty array when no accounts exist", async () => {
@@ -73,6 +71,7 @@ describe("LedgerAccountRepo", () => {
 		});
 
 		it("should throw error when ledger doesn't belong to organization", async () => {
+			skipCleanup = true; // No account created in this test
 			const differentOrgId = new TypeID("org") as OrgID;
 			await expect(
 				ledgerAccountRepo.listLedgerAccounts(differentOrgId, testLedgerId, 0, 10)
@@ -82,15 +81,13 @@ describe("LedgerAccountRepo", () => {
 
 	describe("getLedgerAccount", () => {
 		let accountId: LedgerAccountID;
+		let skipCleanup = false;
 
 		afterEach(async () => {
-			if (accountId) {
-				try {
-					await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-				} catch {
-					// Ignore if already deleted
-				}
+			if (accountId && !skipCleanup) {
+				await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
 			}
+			skipCleanup = false; // Reset flag
 		});
 
 		it("should throw error when account not found", async () => {
@@ -139,15 +136,13 @@ describe("LedgerAccountRepo", () => {
 
 	describe("upsertLedgerAccount", () => {
 		let accountId: LedgerAccountID;
+		let skipCleanup = false;
 
 		afterEach(async () => {
-			if (accountId) {
-				try {
-					await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-				} catch {
-					// Ignore if already deleted
-				}
+			if (accountId && !skipCleanup) {
+				await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
 			}
+			skipCleanup = false; // Reset flag
 		});
 
 		describe("create (insert) operations", () => {
@@ -170,6 +165,7 @@ describe("LedgerAccountRepo", () => {
 			});
 
 			it("should throw error when ledger doesn't exist", async () => {
+				skipCleanup = true; // Account creation will fail, nothing to clean up
 				accountId = new TypeID("lat") as LedgerAccountID;
 				const nonExistentLedgerId = new TypeID("lgr") as LedgerID;
 				const entity = LedgerAccountEntity.fromRequest(
@@ -334,6 +330,7 @@ describe("LedgerAccountRepo", () => {
 
 	describe("deleteLedgerAccount", () => {
 		let accountId: LedgerAccountID;
+		let skipCleanup = false;
 
 		beforeEach(async () => {
 			accountId = new TypeID("lat") as LedgerAccountID;
@@ -348,17 +345,15 @@ describe("LedgerAccountRepo", () => {
 		});
 
 		afterEach(async () => {
-			if (accountId) {
-				try {
-					await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-				} catch {
-					// Ignore if already deleted
-				}
+			if (accountId && !skipCleanup) {
+				await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
 			}
+			skipCleanup = false; // Reset flag
 		});
 
 		it("should delete account successfully", async () => {
 			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
+			skipCleanup = true; // Don't try to delete again in afterEach
 
 			await expect(
 				ledgerAccountRepo.getLedgerAccount(testOrgId, testLedgerId, accountId)

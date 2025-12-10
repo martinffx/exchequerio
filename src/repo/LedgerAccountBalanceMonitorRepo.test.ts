@@ -84,11 +84,7 @@ describe("LedgerAccountBalanceMonitorRepo", () => {
 		afterAll(async () => {
 			// Clean up monitors
 			for (const id of monitorIds) {
-				try {
-					await ledgerAccountBalanceMonitorRepo.deleteMonitor(id);
-				} catch {
-					// Ignore
-				}
+				await ledgerAccountBalanceMonitorRepo.deleteMonitor(id);
 			}
 			monitorIds = [];
 		});
@@ -135,11 +131,7 @@ describe("LedgerAccountBalanceMonitorRepo", () => {
 		});
 
 		afterAll(async () => {
-			try {
-				await ledgerAccountBalanceMonitorRepo.deleteMonitor(monitorId);
-			} catch {
-				// Ignore
-			}
+			await ledgerAccountBalanceMonitorRepo.deleteMonitor(monitorId);
 		});
 
 		it("should retrieve monitor by ID", async () => {
@@ -166,11 +158,7 @@ describe("LedgerAccountBalanceMonitorRepo", () => {
 
 		afterEach(async () => {
 			if (monitorId) {
-				try {
-					await ledgerAccountBalanceMonitorRepo.deleteMonitor(monitorId);
-				} catch {
-					// Ignore
-				}
+				await ledgerAccountBalanceMonitorRepo.deleteMonitor(monitorId);
 			}
 		});
 
@@ -233,11 +221,7 @@ describe("LedgerAccountBalanceMonitorRepo", () => {
 		});
 
 		afterEach(async () => {
-			try {
-				await ledgerAccountBalanceMonitorRepo.deleteMonitor(monitorId);
-			} catch {
-				// Ignore
-			}
+			await ledgerAccountBalanceMonitorRepo.deleteMonitor(monitorId);
 		});
 
 		it("should update an existing monitor", async () => {

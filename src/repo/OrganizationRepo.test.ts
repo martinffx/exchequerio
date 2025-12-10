@@ -26,11 +26,7 @@ describe("OrganizationRepo", () => {
 	afterAll(async () => {
 		// Only delete organizations created by this test file
 		for (const orgId of createdOrganizations) {
-			try {
-				await repo.deleteOrganization(TypeID.fromString<"org">(orgId));
-			} catch {
-				// Ignore errors if organization was already deleted
-			}
+			await repo.deleteOrganization(TypeID.fromString<"org">(orgId));
 		}
 		await pool.end();
 	});

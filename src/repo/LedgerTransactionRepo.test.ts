@@ -99,79 +99,72 @@ describe("LedgerTransactionRepo Integration Tests", () => {
 
 	afterAll(async () => {
 		// Clean up test data using direct database queries to avoid entity validation issues
-		try {
-			// Delete entries first, then transactions (respects FK constraints)
-			await database
-				.delete(LedgerTransactionEntriesTable)
-				.where(
-					inArray(
-						LedgerTransactionEntriesTable.transactionId,
-						database
-							.select({ id: LedgerTransactionsTable.id })
-							.from(LedgerTransactionsTable)
-							.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId))
-					)
-				);
+		// Delete entries first, then transactions (respects FK constraints)
+		await database
+			.delete(LedgerTransactionEntriesTable)
+			.where(
+				inArray(
+					LedgerTransactionEntriesTable.transactionId,
+					database
+						.select({ id: LedgerTransactionsTable.id })
+						.from(LedgerTransactionsTable)
+						.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId))
+				)
+			);
 
-			await database
-				.delete(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
+		await database
+			.delete(LedgerTransactionsTable)
+			.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
 
-			// Delete accounts (direct query since repo enforces no entries constraint)
-			await database.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
+		// Delete accounts (direct query since repo enforces no entries constraint)
+		await database.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
 
-			// Delete ledger (direct query to avoid account count check)
-			await database.delete(LedgersTable).where(eq(LedgersTable.id, testLedgerId));
+		// Delete ledger (direct query to avoid account count check)
+		await database.delete(LedgersTable).where(eq(LedgersTable.id, testLedgerId));
 
-			// Delete organization (direct query to avoid FK check)
-			await database.delete(OrganizationsTable).where(eq(OrganizationsTable.id, testOrgId.toString()));
-		} catch (error) {
-			console.error("Cleanup error:", error);
-		}
+		// Delete organization (direct query to avoid FK check)
+		await database.delete(OrganizationsTable).where(eq(OrganizationsTable.id, testOrgId.toString()));
+
 		await pool.end();
 	});
 
 	beforeEach(async () => {
 		// Clean up THIS test file's transactions only (scoped to testLedgerId)
 		// This won't affect other test files since they have different ledger IDs
-		try {
-			// Direct database cleanup to avoid entity validation issues with orphaned data
-			// Delete entries first, then transactions (respects FK constraints)
-			await database
-				.delete(LedgerTransactionEntriesTable)
-				.where(
-					inArray(
-						LedgerTransactionEntriesTable.transactionId,
-						database
-							.select({ id: LedgerTransactionsTable.id })
-							.from(LedgerTransactionsTable)
-							.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId))
-					)
-				);
+		// Direct database cleanup to avoid entity validation issues with orphaned data
+		// Delete entries first, then transactions (respects FK constraints)
+		await database
+			.delete(LedgerTransactionEntriesTable)
+			.where(
+				inArray(
+					LedgerTransactionEntriesTable.transactionId,
+					database
+						.select({ id: LedgerTransactionsTable.id })
+						.from(LedgerTransactionsTable)
+						.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId))
+				)
+			);
 
-			await database
-				.delete(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
+		await database
+			.delete(LedgerTransactionsTable)
+			.where(eq(LedgerTransactionsTable.ledgerId, testLedgerId));
 
-			// Reset account balances and lock versions after deleting transactions
-			await database
-				.update(LedgerAccountsTable)
-				.set({
-					pendingAmount: 0,
-					postedAmount: 0,
-					availableAmount: 0,
-					pendingCredits: 0,
-					pendingDebits: 0,
-					postedCredits: 0,
-					postedDebits: 0,
-					availableCredits: 0,
-					availableDebits: 0,
-					lockVersion: 1,
-				})
-				.where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
-		} catch (_error) {
-			// Ignore cleanup errors
-		}
+		// Reset account balances and lock versions after deleting transactions
+		await database
+			.update(LedgerAccountsTable)
+			.set({
+				pendingAmount: 0,
+				postedAmount: 0,
+				availableAmount: 0,
+				pendingCredits: 0,
+				pendingDebits: 0,
+				postedCredits: 0,
+				postedDebits: 0,
+				availableCredits: 0,
+				availableDebits: 0,
+				lockVersion: 1,
+			})
+			.where(eq(LedgerAccountsTable.ledgerId, testLedgerId));
 	});
 
 	describe("Transaction Creation with Entries", () => {

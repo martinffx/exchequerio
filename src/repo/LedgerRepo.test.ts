@@ -25,14 +25,6 @@ describe("LedgerRepo", () => {
 	});
 
 	describe("getLedger", () => {
-		let ledgerId: LedgerID;
-
-		afterEach(async () => {
-			if (ledgerId) {
-				await ledgerRepo.deleteLedger(testOrgId, ledgerId);
-			}
-		});
-
 		it("should throw error when ledger not found", async () => {
 			const nonExistentId = new TypeID("lgr") as LedgerID;
 			await expect(ledgerRepo.getLedger(testOrgId, nonExistentId)).rejects.toThrow(
@@ -41,7 +33,7 @@ describe("LedgerRepo", () => {
 		});
 
 		it("should return ledger when found", async () => {
-			ledgerId = new TypeID("lgr") as LedgerID;
+			const ledgerId = new TypeID("lgr") as LedgerID;
 			const entity = createLedgerEntity({
 				id: ledgerId,
 				organizationId: testOrgId,
@@ -57,10 +49,13 @@ describe("LedgerRepo", () => {
 			expect(ledger.id.toString()).toBe(ledgerId.toString());
 			expect(ledger.name).toBe("Test Ledger");
 			expect(ledger.currency).toBe("USD");
+
+			// Cleanup
+			await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 		});
 
 		it("should throw error when ledger belongs to different organization", async () => {
-			ledgerId = new TypeID("lgr") as LedgerID;
+			const ledgerId = new TypeID("lgr") as LedgerID;
 			const entity = createLedgerEntity({
 				id: ledgerId,
 				organizationId: testOrgId,
@@ -71,29 +66,20 @@ describe("LedgerRepo", () => {
 			// Try to access with different organization ID
 			const differentOrgId = new TypeID("org") as OrgID;
 			await expect(ledgerRepo.getLedger(differentOrgId, ledgerId)).rejects.toThrow("Ledger not found");
+
+			// Cleanup
+			await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 		});
 	});
 
 	describe("listLedgers", () => {
-		let ledgerId: LedgerID;
-
-		afterEach(async () => {
-			if (ledgerId) {
-				try {
-					await ledgerRepo.deleteLedger(testOrgId, ledgerId);
-				} catch {
-					// Ignore if already deleted
-				}
-			}
-		});
-
 		it("should return empty array when no ledgers exist", async () => {
 			const ledgers = await ledgerRepo.listLedgers(testOrgId, 0, 10);
 			expect(ledgers).toEqual([]);
 		});
 
 		it("should list ledgers with pagination", async () => {
-			ledgerId = new TypeID("lgr") as LedgerID;
+			const ledgerId = new TypeID("lgr") as LedgerID;
 			const entity = createLedgerEntity({
 				id: ledgerId,
 				organizationId: testOrgId,
@@ -106,10 +92,13 @@ describe("LedgerRepo", () => {
 			const ledgers = await ledgerRepo.listLedgers(testOrgId, 0, 10);
 			expect(ledgers).toHaveLength(1);
 			expect(ledgers[0].name).toBe("Ledger 1");
+
+			// Cleanup
+			await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 		});
 
 		it("should return only ledgers for the specified organization", async () => {
-			ledgerId = new TypeID("lgr") as LedgerID;
+			const ledgerId = new TypeID("lgr") as LedgerID;
 			const entity = createLedgerEntity({
 				id: ledgerId,
 				organizationId: testOrgId,
@@ -121,25 +110,16 @@ describe("LedgerRepo", () => {
 			const differentOrgId = new TypeID("org") as OrgID;
 			const ledgers = await ledgerRepo.listLedgers(differentOrgId, 0, 10);
 			expect(ledgers).toEqual([]);
+
+			// Cleanup
+			await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 		});
 	});
 
 	describe("upsertLedger", () => {
-		let ledgerId: LedgerID;
-
-		afterEach(async () => {
-			if (ledgerId) {
-				try {
-					await ledgerRepo.deleteLedger(testOrgId, ledgerId);
-				} catch {
-					// Ignore if already deleted
-				}
-			}
-		});
-
 		describe("create (insert) operations", () => {
 			it("should create new ledger with valid data", async () => {
-				ledgerId = new TypeID("lgr") as LedgerID;
+				const ledgerId = new TypeID("lgr") as LedgerID;
 				const entity = createLedgerEntity({
 					id: ledgerId,
 					organizationId: testOrgId,
@@ -156,10 +136,13 @@ describe("LedgerRepo", () => {
 				expect(created.name).toBe("New Ledger");
 				expect(created.currency).toBe("USD");
 				expect(created.currencyExponent).toBe(2);
+
+				// Cleanup
+				await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 			});
 
 			it("should throw error when organization doesn't exist", async () => {
-				ledgerId = new TypeID("lgr") as LedgerID;
+				const ledgerId = new TypeID("lgr") as LedgerID;
 				const nonExistentOrgId = new TypeID("org") as OrgID;
 				const entity = createLedgerEntity({
 					id: ledgerId,
@@ -169,10 +152,11 @@ describe("LedgerRepo", () => {
 
 				// Should throw an error (either FK violation or NotFoundError)
 				await expect(ledgerRepo.upsertLedger(entity)).rejects.toThrow();
+				// No cleanup needed - ledger was never created
 			});
 
 			it("should create ledger with metadata", async () => {
-				ledgerId = new TypeID("lgr") as LedgerID;
+				const ledgerId = new TypeID("lgr") as LedgerID;
 				const metadata = { purpose: "testing", region: "us-east" };
 				const entity = createLedgerEntity({
 					id: ledgerId,
@@ -183,13 +167,15 @@ describe("LedgerRepo", () => {
 
 				const created = await ledgerRepo.upsertLedger(entity);
 				expect(created.metadata).toEqual(metadata);
+
+				// Cleanup
+				await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 			});
 		});
 
 		describe("update operations", () => {
-			beforeEach(async () => {
-				// Create a base ledger for update tests
-				ledgerId = new TypeID("lgr") as LedgerID;
+			it("should update mutable fields (name, description, metadata)", async () => {
+				const ledgerId = new TypeID("lgr") as LedgerID;
 				const entity = createLedgerEntity({
 					id: ledgerId,
 					organizationId: testOrgId,
@@ -199,9 +185,7 @@ describe("LedgerRepo", () => {
 					currencyExponent: 2,
 				});
 				await ledgerRepo.upsertLedger(entity);
-			});
 
-			it("should update mutable fields (name, description, metadata)", async () => {
 				const existing = await ledgerRepo.getLedger(testOrgId, ledgerId);
 
 				const updated = new LedgerEntity({
@@ -216,9 +200,23 @@ describe("LedgerRepo", () => {
 				expect(result.name).toBe("Updated Name");
 				expect(result.description).toBe("Updated description");
 				expect(result.metadata).toEqual({ updated: true });
+
+				// Cleanup
+				await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 			});
 
 			it("should update currency fields", async () => {
+				const ledgerId = new TypeID("lgr") as LedgerID;
+				const entity = createLedgerEntity({
+					id: ledgerId,
+					organizationId: testOrgId,
+					name: "Original Name",
+					description: "Original description",
+					currency: "USD",
+					currencyExponent: 2,
+				});
+				await ledgerRepo.upsertLedger(entity);
+
 				const existing = await ledgerRepo.getLedger(testOrgId, ledgerId);
 
 				const updated = new LedgerEntity({
@@ -230,9 +228,23 @@ describe("LedgerRepo", () => {
 				const result = await ledgerRepo.upsertLedger(updated);
 				expect(result.currency).toBe("EUR");
 				expect(result.currencyExponent).toBe(2);
+
+				// Cleanup
+				await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 			});
 
 			it("should fail when trying to change immutable field (organizationId)", async () => {
+				const ledgerId = new TypeID("lgr") as LedgerID;
+				const entity = createLedgerEntity({
+					id: ledgerId,
+					organizationId: testOrgId,
+					name: "Original Name",
+					description: "Original description",
+					currency: "USD",
+					currencyExponent: 2,
+				});
+				await ledgerRepo.upsertLedger(entity);
+
 				const existing = await ledgerRepo.getLedger(testOrgId, ledgerId);
 
 				const differentOrgId = new TypeID("org") as OrgID;
@@ -242,12 +254,15 @@ describe("LedgerRepo", () => {
 				});
 
 				await expect(ledgerRepo.upsertLedger(updated)).rejects.toThrow();
+
+				// Cleanup
+				await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 			});
 		});
 
 		describe("idempotent create", () => {
 			it("should create ledger on first call, update on second call", async () => {
-				ledgerId = new TypeID("lgr") as LedgerID;
+				const ledgerId = new TypeID("lgr") as LedgerID;
 				const entity = createLedgerEntity({
 					id: ledgerId,
 					organizationId: testOrgId,
@@ -265,37 +280,27 @@ describe("LedgerRepo", () => {
 				});
 				const second = await ledgerRepo.upsertLedger(updated);
 				expect(second.name).toBe("Updated Ledger");
+
+				// Cleanup
+				await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 			});
 		});
 	});
 
 	describe("deleteLedger", () => {
-		let ledgerId: LedgerID;
-
-		beforeEach(async () => {
-			ledgerId = new TypeID("lgr") as LedgerID;
+		it("should delete ledger successfully", async () => {
+			const ledgerId = new TypeID("lgr") as LedgerID;
 			const entity = createLedgerEntity({
 				id: ledgerId,
 				organizationId: testOrgId,
 				name: "Ledger to Delete",
 			});
 			await ledgerRepo.upsertLedger(entity);
-		});
 
-		afterEach(async () => {
-			if (ledgerId) {
-				try {
-					await ledgerRepo.deleteLedger(testOrgId, ledgerId);
-				} catch {
-					// Ignore if already deleted
-				}
-			}
-		});
-
-		it("should delete ledger successfully", async () => {
 			await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 
 			await expect(ledgerRepo.getLedger(testOrgId, ledgerId)).rejects.toThrow("Ledger not found");
+			// No cleanup needed - resource was deleted
 		});
 
 		it("should throw error when ledger not found", async () => {
@@ -303,11 +308,23 @@ describe("LedgerRepo", () => {
 			await expect(ledgerRepo.deleteLedger(testOrgId, nonExistentId)).rejects.toThrow(
 				`Ledger not found: ${nonExistentId.toString()}`
 			);
+			// No cleanup needed - no resource was created
 		});
 
 		it("should throw error when deleting from different organization", async () => {
+			const ledgerId = new TypeID("lgr") as LedgerID;
+			const entity = createLedgerEntity({
+				id: ledgerId,
+				organizationId: testOrgId,
+				name: "Ledger to Delete",
+			});
+			await ledgerRepo.upsertLedger(entity);
+
 			const otherOrgId = new TypeID("org") as OrgID;
 			await expect(ledgerRepo.deleteLedger(otherOrgId, ledgerId)).rejects.toThrow("Ledger not found");
+
+			// Cleanup
+			await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 		});
 	});
 

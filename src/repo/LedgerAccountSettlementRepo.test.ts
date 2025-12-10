@@ -70,30 +70,6 @@ describe("LedgerAccountSettlementRepo", () => {
 
 	afterAll(async () => {
 		// Clean up test data
-		// Note: Settlements must be deleted before accounts due to foreign key constraints
-		// Delete any remaining settlements that tests might have left behind
-		try {
-			const remainingSettlements = await ledgerAccountSettlementRepo.listSettlements(
-				testOrgId,
-				testLedgerId,
-				0,
-				100
-			);
-			for (const settlement of remainingSettlements) {
-				try {
-					// Try to transition to drafting first if not already
-					if (settlement.status !== "drafting") {
-						await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlement.id, "drafting");
-					}
-					await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlement.id);
-				} catch {
-					// Ignore - settlement might not allow transitions
-				}
-			}
-		} catch {
-			// Ignore - settlements might not exist
-		}
-
 		await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, contraAccountId);
 		await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, settledAccountId);
 		await ledgerRepo.deleteLedger(testOrgId, testLedgerId);
@@ -101,21 +77,8 @@ describe("LedgerAccountSettlementRepo", () => {
 	});
 
 	describe("createSettlement", () => {
-		let settlementId: LedgerAccountSettlementID;
-
-		afterEach(async () => {
-			// Clean up settlements created in tests
-			if (settlementId) {
-				try {
-					await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
-				} catch {
-					// Ignore if already deleted
-				}
-			}
-		});
-
 		it("should create a settlement in drafting status", async () => {
-			settlementId = new TypeID("las") as LedgerAccountSettlementID;
+			const settlementId = new TypeID("las") as LedgerAccountSettlementID;
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: testOrgId,
@@ -140,10 +103,13 @@ describe("LedgerAccountSettlementRepo", () => {
 			expect(created.amount).toBe(0);
 			expect(created.description).toBe("Test settlement");
 			expect(created.externalReference).toBe("EXT-001");
+
+			// Cleanup
+			await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
 		});
 
 		it("should prevent settling an account to itself", async () => {
-			settlementId = new TypeID("las") as LedgerAccountSettlementID;
+			const settlementId = new TypeID("las") as LedgerAccountSettlementID;
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: testOrgId,
@@ -161,6 +127,7 @@ describe("LedgerAccountSettlementRepo", () => {
 			await expect(ledgerAccountSettlementRepo.createSettlement(settlement)).rejects.toThrow(
 				ConflictError
 			);
+			// No cleanup needed - settlement was never created
 		});
 	});
 
@@ -242,11 +209,7 @@ describe("LedgerAccountSettlementRepo", () => {
 		afterAll(async () => {
 			// Clean up all test settlements
 			for (const id of settlementIds) {
-				try {
-					await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, id);
-				} catch {
-					// Ignore
-				}
+				await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, id);
 			}
 			settlementIds = [];
 		});
@@ -273,6 +236,7 @@ describe("LedgerAccountSettlementRepo", () => {
 
 	describe("updateSettlement", () => {
 		let settlementId: LedgerAccountSettlementID;
+		let skipCleanup = false;
 
 		beforeEach(async () => {
 			settlementId = new TypeID("las") as LedgerAccountSettlementID;
@@ -294,11 +258,10 @@ describe("LedgerAccountSettlementRepo", () => {
 		});
 
 		afterEach(async () => {
-			try {
+			if (!skipCleanup) {
 				await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
-			} catch {
-				// Ignore
 			}
+			skipCleanup = false;
 		});
 
 		it("should update a settlement in drafting status", async () => {
@@ -326,6 +289,11 @@ describe("LedgerAccountSettlementRepo", () => {
 			await expect(ledgerAccountSettlementRepo.updateSettlement(updated)).rejects.toThrow(
 				ConflictError
 			);
+
+			// Cleanup: restore status and delete
+			await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "drafting");
+			await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
+			skipCleanup = true;
 		});
 	});
 
@@ -386,6 +354,7 @@ describe("LedgerAccountSettlementRepo", () => {
 
 	describe("updateStatus", () => {
 		let settlementId: LedgerAccountSettlementID;
+		let skipCleanup = false;
 
 		beforeEach(async () => {
 			settlementId = new TypeID("las") as LedgerAccountSettlementID;
@@ -406,11 +375,10 @@ describe("LedgerAccountSettlementRepo", () => {
 		});
 
 		afterEach(async () => {
-			try {
+			if (!skipCleanup) {
 				await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
-			} catch {
-				// Ignore - may have been transitioned out of drafting
 			}
+			skipCleanup = false;
 		});
 
 		it("should update settlement status", async () => {
@@ -421,6 +389,11 @@ describe("LedgerAccountSettlementRepo", () => {
 			);
 
 			expect(updated.status).toBe("processing");
+
+			// Cleanup: restore status and delete
+			await ledgerAccountSettlementRepo.updateStatus(testOrgId, settlementId, "drafting");
+			await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
+			skipCleanup = true;
 		});
 
 		it("should throw NotFoundError for non-existent settlement", async () => {
@@ -497,22 +470,14 @@ describe("LedgerAccountSettlementRepo", () => {
 
 		afterAll(async () => {
 			// Clean up transaction
-			try {
-				await ledgerTransactionRepo.deleteTransaction(
-					testOrgId.toString(),
-					testLedgerId.toString(),
-					transactionId
-				);
-			} catch {
-				// Ignore
-			}
+			await ledgerTransactionRepo.deleteTransaction(
+				testOrgId.toString(),
+				testLedgerId.toString(),
+				transactionId
+			);
 
 			// Clean up settlement
-			try {
-				await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
-			} catch {
-				// Ignore
-			}
+			await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
 		});
 
 		describe("addEntriesToSettlement", () => {

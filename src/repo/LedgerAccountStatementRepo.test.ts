@@ -60,11 +60,7 @@ describe("LedgerAccountStatementRepo", () => {
 		// Clean up test data in reverse order
 		// Delete all statements first using the repo
 		for (const statementId of allStatementIds) {
-			try {
-				await ledgerAccountStatementRepo.deleteStatement(statementId);
-			} catch {
-				// Ignore errors
-			}
+			await ledgerAccountStatementRepo.deleteStatement(statementId);
 		}
 
 		await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, testAccountId);
