@@ -13,7 +13,6 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/routes/schema";
-import { LedgerAccountCategoryEntity } from "@/services";
 import {
 	type CreateLedgerAccountCategoryRequest,
 	type DeleteLedgerAccountCategoryRequest,
@@ -130,9 +129,9 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: CreateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
-			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const category = await ledgerAccountCategoryService.createLedgerAccountCategory(
-				LedgerAccountCategoryEntity.fromRequest(rq.body, ledgerId)
+				rq.params.ledgerId,
+				rq.body
 			);
 			return category.toResponse();
 		}
@@ -167,12 +166,10 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UpdateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
-			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const category = await ledgerAccountCategoryService.updateLedgerAccountCategory(
-				ledgerId,
-				categoryId,
-				LedgerAccountCategoryEntity.fromRequest(rq.body, ledgerId, rq.params.categoryId)
+				rq.params.ledgerId,
+				rq.params.categoryId,
+				rq.body
 			);
 			return category.toResponse();
 		}

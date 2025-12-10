@@ -6,7 +6,7 @@ import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/errors";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
 import { buildServer } from "@/server";
-import { LedgerAccountCategoryEntity, type LedgerAccountCategoryService } from "@/services";
+import type { LedgerAccountCategoryService } from "@/services";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -206,7 +206,12 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(mockCategory.toResponse());
 			expect(mockLedgerAccountCategoryService.createLedgerAccountCategory).toHaveBeenCalledWith(
-				expect.any(LedgerAccountCategoryEntity)
+				ledgerIdStr,
+				expect.objectContaining({
+					name: "Assets",
+					description: "Asset accounts",
+					normalBalance: "debit",
+				})
 			);
 		});
 
@@ -302,9 +307,13 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(updatedCategory.toResponse());
 			expect(mockLedgerAccountCategoryService.updateLedgerAccountCategory).toHaveBeenCalledWith(
-				expect.objectContaining({ prefix: "lgr" }),
-				expect.objectContaining({ prefix: "lac" }),
-				expect.any(LedgerAccountCategoryEntity)
+				ledgerIdStr,
+				categoryIdStr,
+				expect.objectContaining({
+					name: "Updated Assets",
+					description: "Updated description",
+					normalBalance: "debit",
+				})
 			);
 		});
 

@@ -1,6 +1,5 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyPluginAsync } from "fastify";
-import { LedgerAccountBalanceMonitorEntity } from "@/services";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -119,11 +118,11 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 		async (
 			rq: CreateLedgerAccountBalanceMonitorRequest
 		): Promise<LedgerAccountBalanceMonitorResponse> => {
-			const ledger =
+			const monitor =
 				await rq.server.services.ledgerAccountBalanceMonitorService.createLedgerAccountBalanceMonitor(
-					LedgerAccountBalanceMonitorEntity.fromRequest(rq.body)
+					rq.body
 				);
-			return ledger.toResponse();
+			return monitor.toResponse();
 		}
 	);
 
@@ -161,7 +160,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 			const monitor =
 				await rq.server.services.ledgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor(
 					rq.params.balanceMonitorId,
-					LedgerAccountBalanceMonitorEntity.fromRequest(rq.body)
+					rq.body
 				);
 			return monitor.toResponse();
 		}

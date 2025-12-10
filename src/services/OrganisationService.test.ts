@@ -49,17 +49,23 @@ describe("OrganizationService", () => {
 	});
 
 	it("should create, update and delete an organization", async () => {
-		const record = OrganizationEntity.fromRequest({
+		const request = {
 			name: "Test Organization",
 			description: "Test description",
+		};
+
+		let createdOrg: OrganizationEntity;
+
+		mockRepo.createOrganization.mockImplementationOnce(entity => {
+			createdOrg = entity;
+			return Promise.resolve(entity);
 		});
-		mockRepo.createOrganization.mockImplementationOnce(entity => Promise.resolve(entity));
 		mockRepo.getOrganization.mockImplementationOnce(id => {
-			expect(id).toEqual(record.id);
-			return Promise.resolve(record);
+			expect(id).toEqual(createdOrg.id);
+			return Promise.resolve(createdOrg);
 		});
 		mockRepo.getOrganization.mockImplementationOnce(id => {
-			expect(id).toEqual(record.id);
+			expect(id).toEqual(createdOrg.id);
 			throw new NotFoundError(`Organization with id ${id.toString()} not found`);
 		});
 		mockRepo.updateOrganization.mockImplementationOnce((id, entity) => {
@@ -70,24 +76,17 @@ describe("OrganizationService", () => {
 			return Promise.resolve();
 		});
 
-		const rs = await organizationService.createOrganization(record);
-		expect(record.id).toEqual(rs.id);
-		expect(record.name).toEqual(rs.name);
-		expect(record.description).toEqual(rs.description);
+		const rs = await organizationService.createOrganization(request);
+		expect(rs.name).toEqual(request.name);
+		expect(rs.description).toEqual(request.description);
 
 		const rs1 = await organizationService.getOrganization(rs.id.toString());
 		expect(rs).toEqual(rs1);
 
-		const rs2 = await organizationService.updateOrganization(
-			rs.id.toString(),
-			OrganizationEntity.fromRequest(
-				{
-					name: "Updated Name",
-					description: "Updated Description",
-				},
-				rs.id.toString()
-			)
-		);
+		const rs2 = await organizationService.updateOrganization(rs.id.toString(), {
+			name: "Updated Name",
+			description: "Updated Description",
+		});
 		expect(rs2.id).toEqual(rs1.id);
 
 		void organizationService.deleteOrganization(rs.id.toString());

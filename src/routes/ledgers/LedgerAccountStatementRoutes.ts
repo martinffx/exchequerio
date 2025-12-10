@@ -1,5 +1,4 @@
 import type { FastifyPluginAsync } from "fastify";
-import { LedgerAccountStatementEntity } from "@/services";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -77,9 +76,7 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: CreateLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
 			const statement =
-				await rq.server.services.ledgerAccountStatementService.createLedgerAccountStatement(
-					LedgerAccountStatementEntity.fromRequest(rq.body)
-				);
+				await rq.server.services.ledgerAccountStatementService.createLedgerAccountStatement(rq.body);
 			return statement.toResponse();
 		}
 	);

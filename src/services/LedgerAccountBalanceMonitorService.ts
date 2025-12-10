@@ -1,7 +1,20 @@
 import { TypeID } from "typeid-js";
-import type { LedgerAccountBalanceMonitorEntity } from "@/repo/entities";
+import { LedgerAccountBalanceMonitorEntity } from "@/repo/entities";
 import type { LedgerAccountBalanceMonitorID } from "@/repo/entities/types";
 import type { LedgerAccountBalanceMonitorRepo } from "@/repo/LedgerAccountBalanceMonitorRepo";
+
+type AlertCondition = {
+	field: "balance" | "created" | "updated";
+	operator: "=" | "<" | ">" | "<=" | ">=" | "!=";
+	value: number;
+};
+
+interface LedgerAccountBalanceMonitorRequest {
+	accountId: string;
+	description?: string;
+	alertCondition: AlertCondition[];
+	metadata?: Record<string, unknown>;
+}
 
 class LedgerAccountBalanceMonitorService {
 	constructor(private readonly ledgerAccountBalanceMonitorRepo: LedgerAccountBalanceMonitorRepo) {}
@@ -21,16 +34,18 @@ class LedgerAccountBalanceMonitorService {
 	}
 
 	public async createLedgerAccountBalanceMonitor(
-		entity: LedgerAccountBalanceMonitorEntity
+		request: LedgerAccountBalanceMonitorRequest
 	): Promise<LedgerAccountBalanceMonitorEntity> {
+		const entity = LedgerAccountBalanceMonitorEntity.fromRequest(request);
 		return this.ledgerAccountBalanceMonitorRepo.createMonitor(entity);
 	}
 
 	public async updateLedgerAccountBalanceMonitor(
 		id: string,
-		entity: LedgerAccountBalanceMonitorEntity
+		request: LedgerAccountBalanceMonitorRequest
 	): Promise<LedgerAccountBalanceMonitorEntity> {
 		const monitorId = TypeID.fromString<"lbm">(id) as LedgerAccountBalanceMonitorID;
+		const entity = LedgerAccountBalanceMonitorEntity.fromRequest(request, id);
 		return this.ledgerAccountBalanceMonitorRepo.updateMonitor(monitorId, entity);
 	}
 

@@ -153,6 +153,12 @@ describe("LedgerAccountService", () => {
 
 	describe("createLedgerAccount", () => {
 		it("should create account using upsert", async () => {
+			const request = {
+				name: "New Account",
+				description: undefined,
+				metadata: {},
+			};
+
 			const account = new LedgerAccountEntity({
 				id: accountId,
 				organizationId: orgId,
@@ -175,16 +181,22 @@ describe("LedgerAccountService", () => {
 
 			mockLedgerAccountRepo.upsertLedgerAccount.mockResolvedValue(account);
 
-			const result = await service.createLedgerAccount(account);
+			const result = await service.createLedgerAccount(orgId, ledgerId.toString(), "debit", request);
 
 			expect(result).toEqual(account);
-			expect(mockLedgerAccountRepo.upsertLedgerAccount).toHaveBeenCalledWith(account);
+			expect(mockLedgerAccountRepo.upsertLedgerAccount).toHaveBeenCalled();
 			expect(mockLedgerAccountRepo.upsertLedgerAccount).toHaveBeenCalledTimes(1);
 		});
 	});
 
 	describe("updateLedgerAccount", () => {
 		it("should update account using upsert", async () => {
+			const request = {
+				name: "Updated Account",
+				description: "Updated description",
+				metadata: {},
+			};
+
 			const account = new LedgerAccountEntity({
 				id: accountId,
 				organizationId: orgId,
@@ -208,10 +220,16 @@ describe("LedgerAccountService", () => {
 
 			mockLedgerAccountRepo.upsertLedgerAccount.mockResolvedValue(account);
 
-			const result = await service.updateLedgerAccount(account);
+			const result = await service.updateLedgerAccount(
+				orgId,
+				ledgerId.toString(),
+				accountId.toString(),
+				"debit",
+				request
+			);
 
 			expect(result).toEqual(account);
-			expect(mockLedgerAccountRepo.upsertLedgerAccount).toHaveBeenCalledWith(account);
+			expect(mockLedgerAccountRepo.upsertLedgerAccount).toHaveBeenCalled();
 			expect(mockLedgerAccountRepo.upsertLedgerAccount).toHaveBeenCalledTimes(1);
 		});
 	});

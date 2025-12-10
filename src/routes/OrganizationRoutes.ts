@@ -1,6 +1,5 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyPluginCallback } from "fastify";
-import { OrganizationEntity } from "@/services";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -106,9 +105,7 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]),
 		},
 		async (rq: CreateOrganizationRequest): Promise<OrganizationResponse> => {
-			const org = await server.services.organizationService.createOrganization(
-				OrganizationEntity.fromRequest(rq.body)
-			);
+			const org = await server.services.organizationService.createOrganization(rq.body);
 			return org.toResponse();
 		}
 	);
@@ -141,7 +138,7 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 		async (rq: UpdateOrganizationRequest): Promise<OrganizationResponse> => {
 			const org = await rq.server.services.organizationService.updateOrganization(
 				rq.params.orgId,
-				OrganizationEntity.fromRequest(rq.body, rq.params.orgId)
+				rq.body
 			);
 			return org.toResponse();
 		}

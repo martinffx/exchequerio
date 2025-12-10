@@ -1,5 +1,11 @@
-import type { LedgerEntity, LedgerID, OrgID } from "@/repo/entities";
+import { LedgerEntity, type LedgerID, type OrgID } from "@/repo/entities";
 import type { LedgerRepo } from "@/repo/LedgerRepo";
+
+interface LedgerRequest {
+	name: string;
+	description?: string;
+	metadata?: Record<string, unknown>;
+}
 
 class LedgerService {
 	constructor(private readonly ledgerRepo: LedgerRepo) {}
@@ -12,11 +18,17 @@ class LedgerService {
 		return this.ledgerRepo.listLedgers(orgId, offset, limit);
 	}
 
-	public async createLedger(_orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
+	public async createLedger(orgId: OrgID, request: LedgerRequest): Promise<LedgerEntity> {
+		const entity = LedgerEntity.fromRequest(request, orgId);
 		return this.ledgerRepo.upsertLedger(entity);
 	}
 
-	public async updateLedger(_orgId: OrgID, entity: LedgerEntity): Promise<LedgerEntity> {
+	public async updateLedger(
+		orgId: OrgID,
+		request: LedgerRequest,
+		ledgerId: string
+	): Promise<LedgerEntity> {
+		const entity = LedgerEntity.fromRequest(request, orgId, ledgerId);
 		return this.ledgerRepo.upsertLedger(entity);
 	}
 

@@ -6,7 +6,7 @@ import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/errors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import { buildServer } from "@/server";
-import { LedgerAccountEntity, type LedgerAccountService, type LedgerService } from "@/services";
+import type { LedgerAccountService, LedgerService } from "@/services";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -274,7 +274,13 @@ describe("LedgerAccountRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
 			expect(mockLedgerAccountService.createLedgerAccount).toHaveBeenCalledWith(
-				expect.any(LedgerAccountEntity)
+				expect.any(Object), // orgId
+				ledgerIdStr,
+				"debit",
+				expect.objectContaining({
+					name: "Test Account",
+					description: "Test description",
+				})
 			);
 		});
 
@@ -373,7 +379,14 @@ describe("LedgerAccountRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
 			expect(mockLedgerAccountService.updateLedgerAccount).toHaveBeenCalledWith(
-				expect.any(LedgerAccountEntity)
+				expect.any(Object), // orgId
+				ledgerIdStr,
+				accountIdStr,
+				"debit",
+				expect.objectContaining({
+					name: "Updated Account",
+					description: "Updated description",
+				})
 			);
 		});
 

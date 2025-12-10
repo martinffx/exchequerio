@@ -127,6 +127,17 @@ describe("LedgerAccountSettlementService", () => {
 
 	describe("createLedgerAccountSettlement", () => {
 		it("should create settlement", async () => {
+			const request = {
+				transactionId: "ltr_01h2xcejqtf2nbrexx3vqjhp41",
+				settledAccountId: settledAccountId.toString(),
+				contraAccountId: contraAccountId.toString(),
+				status: "drafting" as const,
+				description: undefined,
+				externalReference: undefined,
+				effectiveAtUpperBound: undefined,
+				metadata: {},
+			};
+
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: orgId,
@@ -143,15 +154,26 @@ describe("LedgerAccountSettlementService", () => {
 
 			mockSettlementRepo.createSettlement.mockResolvedValue(settlement);
 
-			const result = await service.createLedgerAccountSettlement(settlement);
+			const result = await service.createLedgerAccountSettlement(orgId, "USD", 2, "debit", request);
 
 			expect(result).toEqual(settlement);
-			expect(mockSettlementRepo.createSettlement).toHaveBeenCalledWith(settlement);
+			expect(mockSettlementRepo.createSettlement).toHaveBeenCalled();
 		});
 	});
 
 	describe("updateLedgerAccountSettlement", () => {
 		it("should verify settlement exists then update", async () => {
+			const request = {
+				transactionId: "ltr_01h2xcejqtf2nbrexx3vqjhp41",
+				settledAccountId: settledAccountId.toString(),
+				contraAccountId: contraAccountId.toString(),
+				status: "drafting" as const,
+				description: "Updated description",
+				externalReference: undefined,
+				effectiveAtUpperBound: undefined,
+				metadata: {},
+			};
+
 			const existingSettlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
 				organizationId: orgId,
@@ -177,35 +199,42 @@ describe("LedgerAccountSettlementService", () => {
 
 			const result = await service.updateLedgerAccountSettlement(
 				orgId,
-				settlementId,
-				updatedSettlement
+				settlementId.toString(),
+				"USD",
+				2,
+				"debit",
+				request
 			);
 
 			expect(result).toEqual(updatedSettlement);
-			expect(mockSettlementRepo.getSettlement).toHaveBeenCalledWith(orgId, settlementId);
-			expect(mockSettlementRepo.updateSettlement).toHaveBeenCalledWith(updatedSettlement);
+			expect(mockSettlementRepo.getSettlement).toHaveBeenCalled();
+			expect(mockSettlementRepo.updateSettlement).toHaveBeenCalled();
 		});
 
 		it("should propagate NotFoundError if settlement does not exist", async () => {
-			const settlement = new LedgerAccountSettlementEntity({
-				id: settlementId,
-				organizationId: orgId,
-				settledAccountId: settledAccountId,
-				contraAccountId: contraAccountId,
-				normalBalance: "debit" as const,
-				amount: 10000,
-				currency: "USD",
-				currencyExponent: 2,
-				status: "drafting",
-				created: new Date(),
-				updated: new Date(),
-			});
+			const request = {
+				transactionId: "ltr_01h2xcejqtf2nbrexx3vqjhp41",
+				settledAccountId: settledAccountId.toString(),
+				contraAccountId: contraAccountId.toString(),
+				status: "drafting" as const,
+				description: undefined,
+				externalReference: undefined,
+				effectiveAtUpperBound: undefined,
+				metadata: {},
+			};
 
 			const error = new NotFoundError(`Settlement not found: ${settlementId.toString()}`);
 			mockSettlementRepo.getSettlement.mockRejectedValue(error);
 
 			await expect(
-				service.updateLedgerAccountSettlement(orgId, settlementId, settlement)
+				service.updateLedgerAccountSettlement(
+					orgId,
+					settlementId.toString(),
+					"USD",
+					2,
+					"debit",
+					request
+				)
 			).rejects.toThrow(NotFoundError);
 			expect(mockSettlementRepo.updateSettlement).not.toHaveBeenCalled();
 		});

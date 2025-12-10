@@ -1,7 +1,16 @@
-import type { LedgerAccountEntity } from "@/repo/entities";
+import { TypeID } from "typeid-js";
+import { LedgerAccountEntity } from "@/repo/entities";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
 import type { LedgerRepo } from "@/repo/LedgerRepo";
+
+type NormalBalance = "debit" | "credit";
+
+interface LedgerAccountRequest {
+	name: string;
+	description?: string;
+	metadata?: Record<string, unknown>;
+}
 
 class LedgerAccountService {
 	constructor(
@@ -28,11 +37,32 @@ class LedgerAccountService {
 		return this.ledgerAccountRepo.getLedgerAccount(orgId, ledgerId, id);
 	}
 
-	public async createLedgerAccount(entity: LedgerAccountEntity): Promise<LedgerAccountEntity> {
+	public async createLedgerAccount(
+		orgId: OrgID,
+		ledgerId: string,
+		normalBalance: NormalBalance,
+		request: LedgerAccountRequest
+	): Promise<LedgerAccountEntity> {
+		const ledgerIdTyped = TypeID.fromString<"lgr">(ledgerId) as LedgerID;
+		const entity = LedgerAccountEntity.fromRequest(request, orgId, ledgerIdTyped, normalBalance);
 		return this.ledgerAccountRepo.upsertLedgerAccount(entity);
 	}
 
-	public async updateLedgerAccount(entity: LedgerAccountEntity): Promise<LedgerAccountEntity> {
+	public async updateLedgerAccount(
+		orgId: OrgID,
+		ledgerId: string,
+		accountId: string,
+		normalBalance: NormalBalance,
+		request: LedgerAccountRequest
+	): Promise<LedgerAccountEntity> {
+		const ledgerIdTyped = TypeID.fromString<"lgr">(ledgerId) as LedgerID;
+		const entity = LedgerAccountEntity.fromRequest(
+			request,
+			orgId,
+			ledgerIdTyped,
+			normalBalance,
+			accountId
+		);
 		return this.ledgerAccountRepo.upsertLedgerAccount(entity);
 	}
 

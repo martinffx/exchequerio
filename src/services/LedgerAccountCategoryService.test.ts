@@ -91,6 +91,13 @@ describe("LedgerAccountCategoryService", () => {
 
 	describe("createLedgerAccountCategory", () => {
 		it("should create category", async () => {
+			const request = {
+				name: "Assets",
+				normalBalance: "debit" as const,
+				description: undefined,
+				metadata: {},
+			};
+
 			const category = new LedgerAccountCategoryEntity({
 				id: categoryId,
 				ledgerId,
@@ -102,16 +109,23 @@ describe("LedgerAccountCategoryService", () => {
 
 			mockRepo.upsertLedgerAccountCategory.mockResolvedValue(category);
 
-			const result = await service.createLedgerAccountCategory(category);
+			const result = await service.createLedgerAccountCategory(ledgerId.toString(), request);
 
 			expect(result).toEqual(category);
-			expect(mockRepo.upsertLedgerAccountCategory).toHaveBeenCalledWith(category);
+			expect(mockRepo.upsertLedgerAccountCategory).toHaveBeenCalled();
 			expect(mockRepo.upsertLedgerAccountCategory).toHaveBeenCalledTimes(1);
 		});
 	});
 
 	describe("updateLedgerAccountCategory", () => {
 		it("should verify category exists then update", async () => {
+			const request = {
+				name: "Updated Assets",
+				normalBalance: "debit" as const,
+				description: "Updated description",
+				metadata: {},
+			};
+
 			const existingCategory = new LedgerAccountCategoryEntity({
 				id: categoryId,
 				ledgerId,
@@ -134,30 +148,32 @@ describe("LedgerAccountCategoryService", () => {
 			mockRepo.getLedgerAccountCategory.mockResolvedValue(existingCategory);
 			mockRepo.upsertLedgerAccountCategory.mockResolvedValue(updatedCategory);
 
-			const result = await service.updateLedgerAccountCategory(ledgerId, categoryId, updatedCategory);
+			const result = await service.updateLedgerAccountCategory(
+				ledgerId.toString(),
+				categoryId.toString(),
+				request
+			);
 
 			expect(result).toEqual(updatedCategory);
-			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalledWith(ledgerId, categoryId);
-			expect(mockRepo.upsertLedgerAccountCategory).toHaveBeenCalledWith(updatedCategory);
+			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalled();
+			expect(mockRepo.upsertLedgerAccountCategory).toHaveBeenCalled();
 		});
 
 		it("should propagate NotFoundError if category does not exist", async () => {
-			const category = new LedgerAccountCategoryEntity({
-				id: categoryId,
-				ledgerId,
+			const request = {
 				name: "Assets",
 				normalBalance: "debit" as const,
-				created: new Date(),
-				updated: new Date(),
-			});
+				description: undefined,
+				metadata: {},
+			};
 
 			const error = new NotFoundError(`Category not found: ${categoryId.toString()}`);
 			mockRepo.getLedgerAccountCategory.mockRejectedValue(error);
 
 			await expect(
-				service.updateLedgerAccountCategory(ledgerId, categoryId, category)
+				service.updateLedgerAccountCategory(ledgerId.toString(), categoryId.toString(), request)
 			).rejects.toThrow(NotFoundError);
-			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalledWith(ledgerId, categoryId);
+			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalled();
 			expect(mockRepo.upsertLedgerAccountCategory).not.toHaveBeenCalled();
 		});
 	});

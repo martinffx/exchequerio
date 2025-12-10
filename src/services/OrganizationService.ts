@@ -1,6 +1,11 @@
 import { TypeID } from "typeid-js";
-import type { OrganizationEntity } from "@/repo/entities";
+import { OrganizationEntity } from "@/repo/entities";
 import type { OrganizationRepo } from "@/repo/OrganizationRepo";
+
+interface OrganizationRequest {
+	name: string;
+	description?: string;
+}
 
 class OrganizationService {
 	constructor(private readonly orgRepo: OrganizationRepo) {}
@@ -14,15 +19,17 @@ class OrganizationService {
 		return this.orgRepo.listOrganizations(offset, limit);
 	}
 
-	public async createOrganization(entity: OrganizationEntity): Promise<OrganizationEntity> {
+	public async createOrganization(request: OrganizationRequest): Promise<OrganizationEntity> {
+		const entity = OrganizationEntity.fromRequest(request);
 		return this.orgRepo.createOrganization(entity);
 	}
 
 	public async updateOrganization(
 		id: string,
-		entity: OrganizationEntity
+		request: OrganizationRequest
 	): Promise<OrganizationEntity> {
 		const orgId = TypeID.fromString<"org">(id);
+		const entity = OrganizationEntity.fromRequest(request, id);
 		return this.orgRepo.updateOrganization(orgId, entity);
 	}
 

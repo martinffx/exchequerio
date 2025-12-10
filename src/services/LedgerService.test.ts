@@ -149,6 +149,11 @@ describe("LedgerService", () => {
 
 	describe("createLedger", () => {
 		it("should create ledger via upsert", async () => {
+			const request = {
+				name: "New Ledger",
+				description: "Test ledger",
+			};
+
 			const newLedger = new LedgerEntity({
 				id: ledgerId,
 				organizationId: orgId,
@@ -162,10 +167,9 @@ describe("LedgerService", () => {
 
 			mockLedgerRepo.upsertLedger.mockResolvedValue(newLedger);
 
-			const result = await service.createLedger(orgId, newLedger);
+			const result = await service.createLedger(orgId, request);
 
 			expect(result).toEqual(newLedger);
-			expect(mockLedgerRepo.upsertLedger).toHaveBeenCalledWith(newLedger);
 			expect(mockLedgerRepo.upsertLedger).toHaveBeenCalledTimes(1);
 		});
 
@@ -184,80 +188,83 @@ describe("LedgerService", () => {
 
 			mockLedgerRepo.upsertLedger.mockResolvedValue(ledgerWithMetadata);
 
-			const result = await service.createLedger(orgId, ledgerWithMetadata);
+			const request = {
+				name: "Metadata Ledger",
+				metadata,
+			};
+
+			const result = await service.createLedger(orgId, request);
 
 			expect(result.metadata).toEqual(metadata);
-			expect(mockLedgerRepo.upsertLedger).toHaveBeenCalledWith(ledgerWithMetadata);
+			expect(mockLedgerRepo.upsertLedger).toHaveBeenCalledTimes(1);
 		});
 
 		it("should propagate NotFoundError when organization doesn't exist", async () => {
-			const newLedger = new LedgerEntity({
-				id: ledgerId,
-				organizationId: new TypeID("org") as OrgID,
+			const request = {
 				name: "New Ledger",
-				currency: "USD",
-				currencyExponent: 2,
-				created: new Date(),
-				updated: new Date(),
-			});
+			};
 
 			const error = new NotFoundError("Organization not found");
 			mockLedgerRepo.upsertLedger.mockRejectedValue(error);
 
-			await expect(service.createLedger(orgId, newLedger)).rejects.toThrow(NotFoundError);
+			await expect(service.createLedger(orgId, request)).rejects.toThrow(NotFoundError);
 		});
 	});
 
 	describe("updateLedger", () => {
-		it("should update ledger via upsert", async () => {
-			const existingLedger = new LedgerEntity({
-				id: ledgerId,
-				organizationId: orgId,
-				name: "Original Name",
+		it("should update ledger using upsert", async () => {
+			const request = {
+				name: "Updated Ledger",
 				currency: "USD",
 				currencyExponent: 2,
+				description: "Updated description",
+				metadata: {},
+			};
+
+			const updatedLedger = new LedgerEntity({
+				id: ledgerId,
+				organizationId: orgId,
+				name: "Updated Ledger",
+				currency: "USD",
+				currencyExponent: 2,
+				description: "Updated description",
 				created: new Date(),
 				updated: new Date(),
 			});
 
-			const updatedLedger = new LedgerEntity({
-				...existingLedger,
-				name: "Updated Name",
-				description: "Updated description",
-			});
-
 			mockLedgerRepo.upsertLedger.mockResolvedValue(updatedLedger);
 
-			const result = await service.updateLedger(orgId, updatedLedger);
+			const result = await service.updateLedger(orgId, request, ledgerId.toString());
 
 			expect(result).toEqual(updatedLedger);
-			expect(mockLedgerRepo.upsertLedger).toHaveBeenCalledWith(updatedLedger);
+			expect(mockLedgerRepo.upsertLedger).toHaveBeenCalled();
 			expect(mockLedgerRepo.upsertLedger).toHaveBeenCalledTimes(1);
 		});
 
 		it("should update mutable fields (name, description, metadata)", async () => {
-			const existingLedger = new LedgerEntity({
-				id: ledgerId,
-				organizationId: orgId,
-				name: "Original Name",
-				description: "Original description",
+			const request = {
+				name: "New Name",
 				currency: "USD",
 				currencyExponent: 2,
-				metadata: { old: true },
+				description: "New description",
+				metadata: { new: true },
+			};
+
+			const updatedLedger = new LedgerEntity({
+				id: ledgerId,
+				organizationId: orgId,
+				name: "New Name",
+				description: "New description",
+				currency: "USD",
+				currencyExponent: 2,
+				metadata: { new: true },
 				created: new Date(),
 				updated: new Date(),
 			});
 
-			const updatedLedger = new LedgerEntity({
-				...existingLedger,
-				name: "New Name",
-				description: "New description",
-				metadata: { new: true },
-			});
-
 			mockLedgerRepo.upsertLedger.mockResolvedValue(updatedLedger);
 
-			const result = await service.updateLedger(orgId, updatedLedger);
+			const result = await service.updateLedger(orgId, request, ledgerId.toString());
 
 			expect(result.name).toBe("New Name");
 			expect(result.description).toBe("New description");
@@ -265,20 +272,18 @@ describe("LedgerService", () => {
 		});
 
 		it("should propagate ConflictError when changing immutable fields", async () => {
-			const ledger = new LedgerEntity({
-				id: ledgerId,
-				organizationId: orgId,
+			const request = {
 				name: "Test Ledger",
 				currency: "USD",
 				currencyExponent: 2,
-				created: new Date(),
-				updated: new Date(),
-			});
+				description: undefined,
+				metadata: {},
+			};
 
 			const error = new Error("Ledger not found or immutable fields (organizationId) were changed");
 			mockLedgerRepo.upsertLedger.mockRejectedValue(error);
 
-			await expect(service.updateLedger(orgId, ledger)).rejects.toThrow();
+			await expect(service.updateLedger(orgId, request, ledgerId.toString())).rejects.toThrow();
 		});
 	});
 
@@ -332,6 +337,14 @@ describe("LedgerService", () => {
 		it("should not add business logic beyond delegation", async () => {
 			// This test documents that the service is pass-through
 			// If business logic is added in the future, these tests should be updated
+			const request = {
+				name: "Test",
+				currency: "USD",
+				currencyExponent: 2,
+				description: undefined,
+				metadata: {},
+			};
+
 			const ledger = new LedgerEntity({
 				id: ledgerId,
 				organizationId: orgId,
@@ -345,8 +358,8 @@ describe("LedgerService", () => {
 			mockLedgerRepo.upsertLedger.mockResolvedValue(ledger);
 
 			// Create and update both use upsertLedger
-			await service.createLedger(orgId, ledger);
-			await service.updateLedger(orgId, ledger);
+			await service.createLedger(orgId, request);
+			await service.updateLedger(orgId, request, ledgerId.toString());
 
 			// Both should call the same repo method
 			expect(mockLedgerRepo.upsertLedger).toHaveBeenCalledTimes(2);

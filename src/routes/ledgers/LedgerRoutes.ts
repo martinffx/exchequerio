@@ -12,7 +12,6 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/routes/schema";
-import { LedgerEntity } from "@/services";
 import {
 	type CreateLedgerRequest,
 	type DeleteLedgerRequest,
@@ -110,10 +109,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 			preHandler: server.hasPermissions(["ledger:write"]),
 		},
 		async (rq: CreateLedgerRequest): Promise<LedgerResponse> => {
-			const ledger = await ledgerService.createLedger(
-				rq.token.orgId,
-				LedgerEntity.fromRequest(rq.body, rq.token.orgId)
-			);
+			const ledger = await ledgerService.createLedger(rq.token.orgId, rq.body);
 			return ledger.toResponse();
 		}
 	);
@@ -144,10 +140,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 			preHandler: server.hasPermissions(["ledger:write"]),
 		},
 		async (rq: UpdateLedgerRequest): Promise<LedgerResponse> => {
-			const org = await ledgerService.updateLedger(
-				rq.token.orgId,
-				LedgerEntity.fromRequest(rq.body, rq.token.orgId, rq.params.ledgerId)
-			);
+			const org = await ledgerService.updateLedger(rq.token.orgId, rq.body, rq.params.ledgerId);
 			return org.toResponse();
 		}
 	);

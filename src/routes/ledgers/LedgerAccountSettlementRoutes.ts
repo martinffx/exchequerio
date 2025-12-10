@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyPluginAsync } from "fastify";
 import { TypeID } from "typeid-js";
-import { LedgerAccountSettlementEntity } from "@/services";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -148,17 +147,13 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				settledAccountId
 			);
 
-			const settlement = LedgerAccountSettlementEntity.fromRequest(
-				rq.body,
-				orgId,
-				ledger.currency,
-				ledger.currencyExponent,
-				settledAccount.normalBalance
-			);
-
 			const created =
 				await rq.server.services.ledgerAccountSettlementService.createLedgerAccountSettlement(
-					settlement
+					orgId,
+					ledger.currency,
+					ledger.currencyExponent,
+					settledAccount.normalBalance,
+					rq.body
 				);
 			return created.toResponse();
 		}
@@ -195,7 +190,6 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		async (rq: UpdateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 
 			// Get the ledger to retrieve currency information
 			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
@@ -208,20 +202,14 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				settledAccountId
 			);
 
-			const settlement = LedgerAccountSettlementEntity.fromRequest(
-				rq.body,
-				orgId,
-				ledger.currency,
-				ledger.currencyExponent,
-				settledAccount.normalBalance,
-				settlementId.toString()
-			);
-
 			const updated =
 				await rq.server.services.ledgerAccountSettlementService.updateLedgerAccountSettlement(
 					orgId,
-					settlementId,
-					settlement
+					rq.params.settlementId,
+					ledger.currency,
+					ledger.currencyExponent,
+					settledAccount.normalBalance,
+					rq.body
 				);
 			return updated.toResponse();
 		}

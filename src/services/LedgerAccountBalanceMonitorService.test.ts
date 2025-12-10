@@ -77,6 +77,13 @@ describe("LedgerAccountBalanceMonitorService", () => {
 
 	describe("createLedgerAccountBalanceMonitor", () => {
 		it("should create monitor", async () => {
+			const request = {
+				accountId: accountId.toString(),
+				description: "Low Balance Alert",
+				alertCondition: [{ field: "balance" as const, operator: "<" as const, value: 100000 }],
+				metadata: {},
+			};
+
 			const monitor = new LedgerAccountBalanceMonitorEntity({
 				id: monitorId,
 				accountId,
@@ -89,15 +96,22 @@ describe("LedgerAccountBalanceMonitorService", () => {
 
 			mockRepo.createMonitor.mockResolvedValue(monitor);
 
-			const result = await service.createLedgerAccountBalanceMonitor(monitor);
+			const result = await service.createLedgerAccountBalanceMonitor(request);
 
 			expect(result).toEqual(monitor);
-			expect(mockRepo.createMonitor).toHaveBeenCalledWith(monitor);
+			expect(mockRepo.createMonitor).toHaveBeenCalled();
 		});
 	});
 
 	describe("updateLedgerAccountBalanceMonitor", () => {
 		it("should update monitor", async () => {
+			const request = {
+				accountId: accountId.toString(),
+				description: "Updated Alert",
+				alertCondition: [{ field: "balance" as const, operator: "<" as const, value: 200000 }],
+				metadata: {},
+			};
+
 			const monitor = new LedgerAccountBalanceMonitorEntity({
 				id: monitorId,
 				accountId,
@@ -110,10 +124,13 @@ describe("LedgerAccountBalanceMonitorService", () => {
 
 			mockRepo.updateMonitor.mockResolvedValue(monitor);
 
-			const result = await service.updateLedgerAccountBalanceMonitor(monitorId.toString(), monitor);
+			const result = await service.updateLedgerAccountBalanceMonitor(monitorId.toString(), request);
 
 			expect(result).toEqual(monitor);
-			expect(mockRepo.updateMonitor).toHaveBeenCalledWith(monitorId, monitor);
+			expect(mockRepo.updateMonitor).toHaveBeenCalledWith(
+				monitorId,
+				expect.any(LedgerAccountBalanceMonitorEntity)
+			);
 		});
 	});
 

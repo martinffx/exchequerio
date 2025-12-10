@@ -1,9 +1,21 @@
+import { TypeID } from "typeid-js";
 import { ConflictError } from "@/errors";
-import type { LedgerAccountSettlementEntity } from "@/repo/entities";
+import { LedgerAccountSettlementEntity } from "@/repo/entities";
 import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlementRepo";
 import type { LedgerRepo } from "@/repo/LedgerRepo";
-import type { SettlementStatus } from "@/routes/ledgers/schema";
+import type { NormalBalance, SettlementStatus } from "@/routes/ledgers/schema";
+
+interface LedgerAccountSettlementRequest {
+	transactionId: string;
+	settledAccountId: string;
+	contraAccountId: string;
+	status: SettlementStatus;
+	description?: string;
+	externalReference?: string;
+	effectiveAtUpperBound?: string;
+	metadata?: Record<string, unknown>;
+}
 
 class LedgerAccountSettlementService {
 	constructor(
@@ -30,8 +42,19 @@ class LedgerAccountSettlementService {
 	}
 
 	public async createLedgerAccountSettlement(
-		entity: LedgerAccountSettlementEntity
+		orgId: OrgID,
+		currency: string,
+		currencyExponent: number,
+		normalBalance: NormalBalance,
+		request: LedgerAccountSettlementRequest
 	): Promise<LedgerAccountSettlementEntity> {
+		const entity = LedgerAccountSettlementEntity.fromRequest(
+			request,
+			orgId,
+			currency,
+			currencyExponent,
+			normalBalance
+		);
 		// Note: Database foreign keys ensure both accounts exist
 		// TODO: Add validation that both accounts belong to the same ledger
 		return this.ledgerAccountSettlementRepo.createSettlement(entity);
@@ -39,11 +62,23 @@ class LedgerAccountSettlementService {
 
 	public async updateLedgerAccountSettlement(
 		orgId: OrgID,
-		id: LedgerAccountSettlementID,
-		entity: LedgerAccountSettlementEntity
+		id: string,
+		currency: string,
+		currencyExponent: number,
+		normalBalance: NormalBalance,
+		request: LedgerAccountSettlementRequest
 	): Promise<LedgerAccountSettlementEntity> {
+		const settlementId = TypeID.fromString<"las">(id) as LedgerAccountSettlementID;
 		// Verify settlement exists
-		await this.ledgerAccountSettlementRepo.getSettlement(orgId, id);
+		await this.ledgerAccountSettlementRepo.getSettlement(orgId, settlementId);
+		const entity = LedgerAccountSettlementEntity.fromRequest(
+			request,
+			orgId,
+			currency,
+			currencyExponent,
+			normalBalance,
+			id
+		);
 		return this.ledgerAccountSettlementRepo.updateSettlement(entity);
 	}
 

@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyPluginAsync } from "fastify";
 import { TypeID } from "typeid-js";
-import { LedgerAccountEntity } from "@/repo/entities";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -135,8 +134,12 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 			// Get ledger for currency info
 			const ledgerEntity = await ledgerService.getLedger(orgId, ledgerId);
 
-			const entity = LedgerAccountEntity.fromRequest(rq.body, orgId, ledgerId, "debit");
-			const account = await ledgerAccountService.createLedgerAccount(entity);
+			const account = await ledgerAccountService.createLedgerAccount(
+				orgId,
+				rq.params.ledgerId,
+				"debit",
+				rq.body
+			);
 			return account.toResponse(ledgerEntity.currency, ledgerEntity.currencyExponent);
 		}
 	);
@@ -180,14 +183,13 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 			// Fetch existing account to preserve normalBalance
 			const existingAccount = await ledgerAccountService.getLedgerAccount(orgId, ledgerId, accountId);
 
-			const entity = LedgerAccountEntity.fromRequest(
-				rq.body,
+			const account = await ledgerAccountService.updateLedgerAccount(
 				orgId,
-				ledgerId,
+				rq.params.ledgerId,
+				rq.params.accountId,
 				existingAccount.normalBalance,
-				rq.params.accountId
+				rq.body
 			);
-			const account = await ledgerAccountService.updateLedgerAccount(entity);
 			return account.toResponse(ledgerEntity.currency, ledgerEntity.currencyExponent);
 		}
 	);
