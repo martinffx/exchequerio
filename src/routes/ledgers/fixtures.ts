@@ -226,6 +226,7 @@ function createLedgerAccountSettlementFixture(
 function createLedgerAccountStatementFixture(
 	overrides?: Partial<{
 		id: TypeID<"lst">;
+		ledgerId: TypeID<"lgr">;
 		accountId: TypeID<"lat">;
 		statementDate: Date;
 		openingBalance: number;
@@ -239,9 +240,13 @@ function createLedgerAccountStatementFixture(
 	}>
 ): LedgerAccountStatementEntity {
 	const now = new Date();
+	// Use fixed IDs for stable snapshots when created/updated are provided
+	const useFixedIds = overrides?.created !== undefined || overrides?.updated !== undefined;
+
 	return new LedgerAccountStatementEntity({
-		id: new TypeID("lst"),
-		accountId: new TypeID("lat"),
+		id: useFixedIds ? TypeID.fromString("lst_01h2x3y4z5a6b7c8d9e0f1g2h7") : new TypeID("lst"),
+		ledgerId: useFixedIds ? TypeID.fromString("lgr_01h2x3y4z5a6b7c8d9e0f1g2h4") : new TypeID("lgr"),
+		accountId: useFixedIds ? TypeID.fromString("lat_01h2x3y4z5a6b7c8d9e0f1g2h8") : new TypeID("lat"),
 		statementDate: now,
 		openingBalance: 0,
 		closingBalance: 0,

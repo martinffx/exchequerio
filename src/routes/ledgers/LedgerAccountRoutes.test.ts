@@ -66,6 +66,10 @@ describe("LedgerAccountRoutes", () => {
 		});
 	});
 
+	afterAll(async () => {
+		await server.close();
+	});
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});

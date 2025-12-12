@@ -2,12 +2,13 @@ import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundError } from "@/errors";
 import { LedgerAccountStatementEntity } from "@/repo/entities/LedgerAccountStatementEntity";
-import type { LedgerAccountID, LedgerAccountStatementID } from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/repo/entities/types";
 import type { LedgerAccountStatementRepo } from "@/repo/LedgerAccountStatementRepo";
 import { LedgerAccountStatementService } from "./LedgerAccountStatementService";
 
 describe("LedgerAccountStatementService", () => {
 	const statementId = new TypeID("lst") as LedgerAccountStatementID;
+	const ledgerId = new TypeID("lgr") as LedgerID;
 	const accountId = new TypeID("lat") as LedgerAccountID;
 	const mockRepo = vi.mocked<LedgerAccountStatementRepo>({
 		getStatement: vi.fn(),
@@ -23,6 +24,7 @@ describe("LedgerAccountStatementService", () => {
 		it("should return statement when found", async () => {
 			const mockStatement = new LedgerAccountStatementEntity({
 				id: statementId,
+				ledgerId,
 				accountId,
 				statementDate: new Date("2025-01-31"),
 				openingBalance: 0,
@@ -64,6 +66,7 @@ describe("LedgerAccountStatementService", () => {
 
 			const statement = new LedgerAccountStatementEntity({
 				id: statementId,
+				ledgerId,
 				accountId,
 				statementDate: new Date("2024-01-01"),
 				openingBalance: 0,

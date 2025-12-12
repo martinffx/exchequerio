@@ -77,6 +77,7 @@ describe("LedgerAccountStatementRepo", () => {
 
 			const statement = createLedgerAccountStatementEntity({
 				id: statementId,
+				ledgerId: testLedgerId,
 				accountId: testAccountId,
 				statementDate: new Date("2024-01-01"),
 				openingBalance: 0,
@@ -117,6 +118,7 @@ describe("LedgerAccountStatementRepo", () => {
 
 			const statement = createLedgerAccountStatementEntity({
 				id: statementId,
+				ledgerId: testLedgerId,
 				accountId: testAccountId,
 				statementDate: new Date("2024-02-01"),
 				openingBalance: 50000,
@@ -146,6 +148,7 @@ describe("LedgerAccountStatementRepo", () => {
 
 			const statement = createLedgerAccountStatementEntity({
 				id: statementId,
+				ledgerId: testLedgerId,
 				accountId: testAccountId,
 				statementDate: new Date("2024-03-01"),
 				openingBalance: 0,
@@ -172,6 +175,7 @@ describe("LedgerAccountStatementRepo", () => {
 
 			const statement = createLedgerAccountStatementEntity({
 				id: statementId,
+				ledgerId: testLedgerId,
 				accountId: testAccountId,
 				statementDate: new Date("2024-04-01"),
 				openingBalance: 0,
@@ -193,6 +197,7 @@ describe("LedgerAccountStatementRepo", () => {
 
 			const statement = createLedgerAccountStatementEntity({
 				id: statementId,
+				ledgerId: testLedgerId,
 				accountId: testAccountId,
 				statementDate: new Date("2024-05-01"),
 				openingBalance: 1000000000, // 1 billion cents = $10M

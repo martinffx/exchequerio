@@ -51,8 +51,8 @@ class LedgerEntity {
 			organizationId,
 			name: rq.name,
 			description: rq.description,
-			currency: "USD", // TODO: Make configurable
-			currencyExponent: 2, // TODO: Make configurable
+			currency: rq.currency ?? "USD",
+			currencyExponent: rq.currencyExponent ?? 2,
 			metadata: rq.metadata,
 			created: now,
 			updated: now,

@@ -238,6 +238,12 @@ const globalErrorHandler = (error: FastifyError, request: FastifyRequest, reply:
 		return;
 	}
 
+	if (error.code === "FST_UNDER_PRESSURE") {
+		const ex = new ServiceUnavailableError(error.message);
+		reply.status(ex.status).send(ex.toResponse());
+		return;
+	}
+
 	if (error instanceof LedgerError) {
 		reply.status(error.status).send(error.toResponse());
 		return;

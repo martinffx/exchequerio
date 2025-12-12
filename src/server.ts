@@ -44,12 +44,17 @@ const buildServer = async ({
 	server.decorate("config", config);
 	server.setErrorHandler(globalErrorHandler);
 
-	await server.register(fastifyUnderPressure, {
-		maxEventLoopDelay: 10000,
-		maxHeapUsedBytes: 1000000000,
-		maxRssBytes: 1000000000,
-		maxEventLoopUtilization: 0.98,
-	});
+	// Skip under-pressure in test environment to avoid interference with test execution
+	if (config.environment !== "test") {
+		await server.register(fastifyUnderPressure, {
+			maxEventLoopDelay: 1000,
+			maxHeapUsedBytes: 500_000_000,
+			maxRssBytes: 1_000_000_000,
+			maxEventLoopUtilization: 0.9,
+			retryAfter: 50,
+			exposeStatusRoute: true,
+		});
+	}
 
 	server.get("/health", (_request, reply) => {
 		reply.send({}).code(200);

@@ -1,4 +1,5 @@
 import { TypeID } from "typeid-js";
+import { ConflictError } from "@/errors";
 import { LedgerEntity } from "@/repo/entities/LedgerEntity";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
 import { createLedgerEntity, createOrganizationEntity, getRepos } from "./fixtures";
@@ -205,13 +206,13 @@ describe("LedgerRepo", () => {
 				await ledgerRepo.deleteLedger(testOrgId, ledgerId);
 			});
 
-			it("should update currency fields", async () => {
+			it("should fail when trying to change immutable currency fields", async () => {
 				const ledgerId = new TypeID("lgr") as LedgerID;
 				const entity = createLedgerEntity({
 					id: ledgerId,
 					organizationId: testOrgId,
-					name: "Original Name",
-					description: "Original description",
+					name: "Currency Test",
+					description: "Testing currency immutability",
 					currency: "USD",
 					currencyExponent: 2,
 				});
@@ -219,15 +220,19 @@ describe("LedgerRepo", () => {
 
 				const existing = await ledgerRepo.getLedger(testOrgId, ledgerId);
 
-				const updated = new LedgerEntity({
+				const updatedCurrency = new LedgerEntity({
 					...existing,
 					currency: "EUR",
-					currencyExponent: 2,
 				});
 
-				const result = await ledgerRepo.upsertLedger(updated);
-				expect(result.currency).toBe("EUR");
-				expect(result.currencyExponent).toBe(2);
+				await expect(ledgerRepo.upsertLedger(updatedCurrency)).rejects.toThrow(ConflictError);
+
+				const updatedExponent = new LedgerEntity({
+					...existing,
+					currencyExponent: 3,
+				});
+
+				await expect(ledgerRepo.upsertLedger(updatedExponent)).rejects.toThrow(ConflictError);
 
 				// Cleanup
 				await ledgerRepo.deleteLedger(testOrgId, ledgerId);

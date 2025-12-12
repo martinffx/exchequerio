@@ -5,6 +5,7 @@ import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities
 import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlementRepo";
 import type { LedgerRepo } from "@/repo/LedgerRepo";
 import type { NormalBalance, SettlementStatus } from "@/routes/ledgers/schema";
+import type { LedgerTransactionService } from "./LedgerTransactionService";
 
 interface LedgerAccountSettlementRequest {
 	transactionId: string;
@@ -20,7 +21,8 @@ interface LedgerAccountSettlementRequest {
 class LedgerAccountSettlementService {
 	constructor(
 		private readonly ledgerAccountSettlementRepo: LedgerAccountSettlementRepo,
-		private readonly ledgerRepo: LedgerRepo
+		private readonly ledgerRepo: LedgerRepo,
+		private readonly ledgerTransactionService: LedgerTransactionService
 	) {}
 
 	public async listLedgerAccountSettlements(
@@ -48,6 +50,7 @@ class LedgerAccountSettlementService {
 		normalBalance: NormalBalance,
 		request: LedgerAccountSettlementRequest
 	): Promise<LedgerAccountSettlementEntity> {
+		// Note: Validation that both accounts belong to the same ledger is done in the route layer
 		const entity = LedgerAccountSettlementEntity.fromRequest(
 			request,
 			orgId,
@@ -55,8 +58,6 @@ class LedgerAccountSettlementService {
 			currencyExponent,
 			normalBalance
 		);
-		// Note: Database foreign keys ensure both accounts exist
-		// TODO: Add validation that both accounts belong to the same ledger
 		return this.ledgerAccountSettlementRepo.createSettlement(entity);
 	}
 
@@ -107,6 +108,7 @@ class LedgerAccountSettlementService {
 
 	public async transitionSettlementStatus(
 		orgId: OrgID,
+		ledgerId: LedgerID,
 		id: LedgerAccountSettlementID,
 		targetStatus: SettlementStatus
 	): Promise<LedgerAccountSettlementEntity> {
@@ -123,8 +125,58 @@ class LedgerAccountSettlementService {
 			await this.ledgerAccountSettlementRepo.updateSettlement(updatedSettlement);
 		}
 
-		// TODO: For pending → posted transition, create the ledger transaction
-		// This will be implemented in a follow-up task
+		// For pending → posted transition, create the ledger transaction
+		if (targetStatus === "posted" && settlement.status === "pending") {
+			// Get the ledger to access currency information
+			const ledger = await this.ledgerRepo.getLedger(orgId, ledgerId);
+
+			// Create a ledger transaction with two entries:
+			// - Debit/Credit the settled account (reduces its balance)
+			// - Credit/Debit the contra account (receives the funds)
+			const transactionRequest = {
+				description: settlement.description ?? `Settlement ${id.toString()}`,
+				status: "posted" as const,
+				metadata: {
+					settlementId: id.toString(),
+					...settlement.metadata,
+				},
+				effectiveAt: settlement.effectiveAtUpperBound?.toISOString(),
+				ledgerEntries: [
+					{
+						id: new TypeID("lte").toString(),
+						accountId: settlement.settledAccountId.toString(),
+						direction: settlement.normalBalance === "debit" ? ("credit" as const) : ("debit" as const),
+						amount: settlement.amount,
+						currency: settlement.currency,
+						currencyExponent: settlement.currencyExponent,
+						status: "posted" as const,
+						metadata: {},
+					},
+					{
+						id: new TypeID("lte").toString(),
+						accountId: settlement.contraAccountId.toString(),
+						direction: settlement.normalBalance === "debit" ? ("debit" as const) : ("credit" as const),
+						amount: settlement.amount,
+						currency: settlement.currency,
+						currencyExponent: settlement.currencyExponent,
+						status: "posted" as const,
+						metadata: {},
+					},
+				],
+				created: new Date().toISOString(),
+				updated: new Date().toISOString(),
+			};
+
+			const transaction = await this.ledgerTransactionService.createTransaction(
+				orgId,
+				ledger.id,
+				transactionRequest
+			);
+
+			// Link the transaction to the settlement
+			const updatedSettlement = settlement.withTransactionId(transaction.id);
+			await this.ledgerAccountSettlementRepo.updateSettlement(updatedSettlement);
+		}
 
 		return this.ledgerAccountSettlementRepo.updateStatus(orgId, id, targetStatus);
 	}

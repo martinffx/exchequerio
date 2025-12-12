@@ -225,6 +225,9 @@ const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monito
 // Account Statements: Periodic balance snapshots and statements
 const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
 	id: text("id").primaryKey(),
+	ledgerId: text("ledger_id")
+		.notNull()
+		.references(() => LedgersTable.id),
 	accountId: text("account_id")
 		.notNull()
 		.references(() => LedgerAccountsTable.id),

@@ -139,13 +139,18 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			// Get the ledger to retrieve currency information
 			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
 
-			// Determine normal balance from settled account (debit or credit)
+			// Validate that both accounts belong to the same ledger
 			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledAccountId);
+			const contraAccountId = TypeID.fromString<"lat">(rq.body.contraAccountId);
+
 			const settledAccount = await rq.server.services.ledgerAccountService.getLedgerAccount(
 				orgId,
 				ledgerId,
 				settledAccountId
 			);
+
+			// This will throw NotFoundError if the contra account doesn't belong to the ledger
+			await rq.server.services.ledgerAccountService.getLedgerAccount(orgId, ledgerId, contraAccountId);
 
 			const created =
 				await rq.server.services.ledgerAccountSettlementService.createLedgerAccountSettlement(
@@ -194,13 +199,18 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			// Get the ledger to retrieve currency information
 			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
 
-			// Determine normal balance from settled account
+			// Validate that both accounts belong to the same ledger
 			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledAccountId);
+			const contraAccountId = TypeID.fromString<"lat">(rq.body.contraAccountId);
+
 			const settledAccount = await rq.server.services.ledgerAccountService.getLedgerAccount(
 				orgId,
 				ledgerId,
 				settledAccountId
 			);
+
+			// This will throw NotFoundError if the contra account doesn't belong to the ledger
+			await rq.server.services.ledgerAccountService.getLedgerAccount(orgId, ledgerId, contraAccountId);
 
 			const updated =
 				await rq.server.services.ledgerAccountSettlementService.updateLedgerAccountSettlement(
@@ -364,12 +374,14 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			rq: TransitionLedgerAccountSettlementStatusRequest
 		): Promise<LedgerAccountSettlementResponse> => {
 			const orgId = rq.token.orgId;
+			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			const targetStatus = rq.params.status;
 
 			const settlement =
 				await rq.server.services.ledgerAccountSettlementService.transitionSettlementStatus(
 					orgId,
+					ledgerId,
 					settlementId,
 					targetStatus
 				);

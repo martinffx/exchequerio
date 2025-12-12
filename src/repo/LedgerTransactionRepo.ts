@@ -298,6 +298,91 @@ class LedgerTransactionRepo {
 	}
 
 	/**
+	 * Updates a pending transaction's metadata fields.
+	 * Only description, metadata, and effectiveAt can be updated, and only for pending transactions.
+	 *
+	 * @param organizationId - Organization owning the transaction
+	 * @param ledgerId - Ledger ID for tenancy validation
+	 * @param transactionId - Transaction ID to update
+	 * @param updates - Object containing the fields to update
+	 * @returns The updated transaction entity
+	 * @throws {NotFoundError} When transaction doesn't exist
+	 * @throws {ConflictError} When transaction is not in pending status
+	 */
+	public async updateTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		updates: {
+			description?: string;
+			metadata?: Record<string, unknown>;
+			effectiveAt?: string;
+		}
+	): Promise<LedgerTransactionEntity> {
+		// Get the transaction to verify it exists and is pending
+		const transaction = await this.getLedgerTransaction(
+			organizationId.toString(),
+			ledgerId.toString(),
+			transactionId.toString()
+		);
+
+		// Only allow updates to pending transactions
+		if (transaction.status !== "pending") {
+			throw new ConflictError({
+				message: `Cannot update transaction with status '${transaction.status}'. Only pending transactions can be updated.`,
+			});
+		}
+
+		// Build the update object
+		const updateFields: {
+			description?: string;
+			metadata?: string;
+			effectiveAt?: Date;
+			updated: Date;
+		} = {
+			updated: new Date(),
+		};
+
+		if (updates.description !== undefined) {
+			updateFields.description = updates.description;
+		}
+
+		if (updates.metadata !== undefined) {
+			updateFields.metadata = JSON.stringify(updates.metadata);
+		}
+
+		if (updates.effectiveAt !== undefined) {
+			updateFields.effectiveAt = new Date(updates.effectiveAt);
+		}
+
+		// Update the transaction
+		const result = await this.db
+			.update(LedgerTransactionsTable)
+			.set(updateFields)
+			.where(
+				and(
+					eq(LedgerTransactionsTable.id, transactionId.toString()),
+					eq(LedgerTransactionsTable.ledgerId, ledgerId.toString())
+				)
+			)
+			.returning();
+
+		if (result.length === 0) {
+			throw new NotFoundError(`Transaction not found: ${transactionId.toString()}`);
+		}
+
+		// Fetch entries for the updated transaction
+		const entries = await this.db
+			.select()
+			.from(LedgerTransactionEntriesTable)
+			.where(eq(LedgerTransactionEntriesTable.transactionId, result[0].id));
+
+		const entryEntities = entries.map(e => LedgerTransactionEntryEntity.fromRecord(e));
+
+		return LedgerTransactionEntity.fromRecord(result[0], entryEntities);
+	}
+
+	/**
 	 * Posts (confirms) a pending transaction, updating its status and account balances.
 	 *
 	 * Similar to createTransaction but for existing pending transactions:

@@ -35,7 +35,7 @@ exports[`LedgerAccountStatementRoutes > GET /:ledgerAccountStatementId > should 
   ],
   "id": "lst_01h2x3y4z5a6b7c8d9e0f1g2h5",
   "ledgerAccountVersion": 0,
-  "ledgerId": "",
+  "ledgerId": "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4",
   "normalBalance": "debit",
   "startDatetime": "2025-01-01T00:00:00.000Z",
   "startingBalances": [
@@ -103,7 +103,7 @@ exports[`LedgerAccountStatementRoutes > POST / > should create a statement 1`] =
   ],
   "id": "lst_01h2x3y4z5a6b7c8d9e0f1g2h5",
   "ledgerAccountVersion": 0,
-  "ledgerId": "",
+  "ledgerId": "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4",
   "normalBalance": "debit",
   "startDatetime": "2025-01-01T00:00:00.000Z",
   "startingBalances": [

@@ -48,6 +48,10 @@ describe("LedgerAccountCategoryRoutes", () => {
 		});
 	});
 
+	afterAll(async () => {
+		await server.close();
+	});
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});

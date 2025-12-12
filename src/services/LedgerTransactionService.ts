@@ -69,6 +69,25 @@ class LedgerTransactionService {
 		return result;
 	}
 
+	// Update a pending transaction
+	public async updateTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		updates: {
+			description?: string;
+			metadata?: Record<string, unknown>;
+			effectiveAt?: string;
+		}
+	): Promise<LedgerTransactionEntity> {
+		return await this.ledgerTransactionRepo.updateTransaction(
+			organizationId,
+			ledgerId,
+			transactionId,
+			updates
+		);
+	}
+
 	// Post (confirm) a pending transaction
 	public async postTransaction(
 		organizationId: OrgID,

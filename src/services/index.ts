@@ -41,11 +41,15 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 		const ledgerAccountCategoryService =
 			opts.services?.ledgerAccountCategoryService ??
 			new LedgerAccountCategoryService(server.repo.ledgerAccountCategoryRepo);
+		const ledgerTransactionService =
+			opts.services?.ledgerTransactionService ??
+			new LedgerTransactionService(server.repo.ledgerTransactionRepo, server.repo.ledgerRepo);
 		const ledgerAccountSettlementService =
 			opts.services?.ledgerAccountSettlementService ??
 			new LedgerAccountSettlementService(
 				server.repo.ledgerAccountSettlementRepo,
-				server.repo.ledgerRepo
+				server.repo.ledgerRepo,
+				ledgerTransactionService
 			);
 		const ledgerAccountStatementService =
 			opts.services?.ledgerAccountStatementService ??
@@ -53,9 +57,6 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 		const ledgerAccountBalanceMonitorService =
 			opts.services?.ledgerAccountBalanceMonitorService ??
 			new LedgerAccountBalanceMonitorService(server.repo.ledgerAccountBalanceMonitorRepo);
-		const ledgerTransactionService =
-			opts.services?.ledgerTransactionService ??
-			new LedgerTransactionService(server.repo.ledgerTransactionRepo, server.repo.ledgerRepo);
 		server.decorate("services", {
 			organizationService,
 			ledgerService,

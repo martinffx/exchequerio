@@ -20,8 +20,10 @@ import {
 	LedgerIdWithTransactionIdParams,
 	LedgerTransactionRequest,
 	LedgerTransactionResponse,
+	LedgerTransactionUpdateRequest,
 	type ListLedgerTransactionsRequest,
 	type PostLedgerTransactionRequest,
+	type UpdateLedgerTransactionRequest,
 } from "./schema";
 
 const TAGS = ["Ledger Transactions"];
@@ -162,35 +164,42 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		}
 	);
 
-	// TODO: Implement update transaction
-	// server.put(
-	// 	"/:ledgerTransactionId",
-	// 	{
-	// 		schema: {
-	// 			operationId: "updateLedgerTransaction",
-	// 			tags: TAGS,
-	// 			summary: "Update Ledger Transaction",
-	// 			description: "Update ledger transaction",
-	// 			params: LedgerIdWithTransactionIdParams,
-	// 			body: LedgerTransactionRequest,
-	// 			response: {
-	// 				200: LedgerTransactionResponse,
-	// 				400: BadRequestErrorResponse,
-	// 				401: UnauthorizedErrorResponse,
-	// 				403: ForbiddenErrorResponse,
-	// 				404: NotFoundErrorResponse,
-	// 				409: ConflictErrorResponse,
-	// 				429: TooManyRequestsErrorResponse,
-	// 				500: InternalServerErrorResponse,
-	// 				503: ServiceUnavailableErrorResponse,
-	// 			},
-	// 		},
-	// 	},
-	// 	async (_rq: UpdateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
-	// 		// TODO: Implement proper entity creation from request body
-	// 		throw new NotImplementedError("Feature not yet implemented");
-	// 	}
-	// );
+	server.put<{ Params: LedgerIdWithTransactionIdParams; Body: LedgerTransactionUpdateRequest }>(
+		"/:transactionId",
+		{
+			schema: {
+				operationId: "updateLedgerTransaction",
+				tags: TAGS,
+				summary: "Update Ledger Transaction",
+				description:
+					"Update a pending ledger transaction's metadata (description, metadata, effectiveAt)",
+				params: LedgerIdWithTransactionIdParams,
+				body: LedgerTransactionUpdateRequest,
+				response: {
+					200: LedgerTransactionResponse,
+					400: BadRequestErrorResponse,
+					401: UnauthorizedErrorResponse,
+					403: ForbiddenErrorResponse,
+					404: NotFoundErrorResponse,
+					409: ConflictErrorResponse,
+					429: TooManyRequestsErrorResponse,
+					500: InternalServerErrorResponse,
+					503: ServiceUnavailableErrorResponse,
+				},
+			},
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises
+			preHandler: server.hasPermissions(["ledger:transaction:write"]),
+		},
+		async (rq: UpdateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
+			const transaction = await rq.server.services.ledgerTransactionService.updateTransaction(
+				rq.token.orgId,
+				TypeID.fromString<"lgr">(rq.params.ledgerId),
+				TypeID.fromString<"ltr">(rq.params.transactionId),
+				rq.body
+			);
+			return transaction.toResponse();
+		}
+	);
 
 	server.delete<{ Params: LedgerIdWithTransactionIdParams }>(
 		"/:transactionId",

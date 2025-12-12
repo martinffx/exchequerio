@@ -171,6 +171,18 @@ const LedgerRequest = Type.Object(
 	{
 		name: Type.String(),
 		description: Type.Optional(Type.String()),
+		currency: Type.Optional(
+			Type.String({
+				description: "Currency code (default: USD). Immutable after creation.",
+				default: "USD",
+			})
+		),
+		currencyExponent: Type.Optional(
+			Type.Number({
+				description: "Currency exponent (default: 2). Immutable after creation.",
+				default: 2,
+			})
+		),
 		metadata: Type.Optional(Metadata),
 	},
 	{ $id: "LedgerRequest" }
@@ -535,6 +547,24 @@ const LedgerTransactionRequest = Type.Object(
 );
 type LedgerTransactionRequest = Static<typeof LedgerTransactionRequest>;
 
+const LedgerTransactionUpdateRequest = Type.Object(
+	{
+		description: Type.Optional(
+			Type.String({
+				description: "An optional free-form description for internal use.",
+			})
+		),
+		metadata: Type.Optional(Metadata),
+		effectiveAt: Type.Optional(
+			Type.String({
+				description: "The time at which the ledger transaction happened for reporting purposes.",
+			})
+		),
+	},
+	{ $id: "LedgerTransactionUpdateRequest" }
+);
+type LedgerTransactionUpdateRequest = Static<typeof LedgerTransactionUpdateRequest>;
+
 type ListLedgerTransactionsRequest = FastifyRequest<{
 	Params: LedgerIdParameters;
 	Querystring: PaginationQuery;
@@ -548,7 +578,7 @@ type CreateLedgerTransactionRequest = FastifyRequest<{
 }>;
 type UpdateLedgerTransactionRequest = FastifyRequest<{
 	Params: LedgerIdWithTransactionIdParams;
-	Body: LedgerTransactionRequest;
+	Body: LedgerTransactionUpdateRequest;
 }>;
 type DeleteLedgerTransactionRequest = FastifyRequest<{
 	Params: LedgerIdWithTransactionIdParams;
@@ -874,6 +904,7 @@ export {
 	LedgerIdWithTransactionIdParams,
 	LedgerTransactionResponse,
 	LedgerTransactionRequest,
+	LedgerTransactionUpdateRequest,
 	LedgerTransactionEntryIdParameters as LedgerTransactionEntryIdParams,
 	LedgerTransactionEntryResponse,
 	LedgerTransactionEntryRequest,

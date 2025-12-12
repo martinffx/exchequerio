@@ -5,7 +5,7 @@ import type {
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,
 } from "@/routes/ledgers/schema";
-import type { LedgerAccountID, LedgerAccountStatementID } from "./types";
+import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "./types";
 
 // Infer types from Drizzle schema
 type LedgerAccountStatementRecord = InferSelectModel<typeof LedgerAccountStatementsTable>;
@@ -13,6 +13,7 @@ type LedgerAccountStatementInsert = InferInsertModel<typeof LedgerAccountStateme
 
 type LedgerAccountStatementEntityOptions = {
 	id: LedgerAccountStatementID;
+	ledgerId: LedgerID;
 	accountId: LedgerAccountID;
 	statementDate: Date;
 	openingBalance: number;
@@ -27,6 +28,7 @@ type LedgerAccountStatementEntityOptions = {
 
 class LedgerAccountStatementEntity {
 	public readonly id: LedgerAccountStatementID;
+	public readonly ledgerId: LedgerID;
 	public readonly accountId: LedgerAccountID;
 	public readonly statementDate: Date;
 	public readonly openingBalance: number;
@@ -40,6 +42,7 @@ class LedgerAccountStatementEntity {
 
 	constructor(options: LedgerAccountStatementEntityOptions) {
 		this.id = options.id;
+		this.ledgerId = options.ledgerId;
 		this.accountId = options.accountId;
 		this.statementDate = options.statementDate;
 		this.openingBalance = options.openingBalance;
@@ -61,6 +64,7 @@ class LedgerAccountStatementEntity {
 			id: id
 				? (TypeID.fromString<"lst">(id) as LedgerAccountStatementID)
 				: (new TypeID("lst") as LedgerAccountStatementID),
+			ledgerId: TypeID.fromString<"lgr">(rq.ledgerId) as LedgerID,
 			accountId: TypeID.fromString<"lat">(rq.accountId) as LedgerAccountID,
 			statementDate: new Date(rq.startDatetime),
 			openingBalance: 0,
@@ -87,6 +91,7 @@ class LedgerAccountStatementEntity {
 
 		return new LedgerAccountStatementEntity({
 			id: TypeID.fromString<"lst">(record.id) as LedgerAccountStatementID,
+			ledgerId: TypeID.fromString<"lgr">(record.ledgerId) as LedgerID,
 			accountId: TypeID.fromString<"lat">(record.accountId) as LedgerAccountID,
 			statementDate: record.statementDate,
 			openingBalance: Number.parseFloat(record.openingBalance),
@@ -103,6 +108,7 @@ class LedgerAccountStatementEntity {
 	public toRecord(): LedgerAccountStatementInsert {
 		return {
 			id: this.id.toString(),
+			ledgerId: this.ledgerId.toString(),
 			accountId: this.accountId.toString(),
 			statementDate: this.statementDate,
 			openingBalance: this.openingBalance.toString(),
@@ -145,7 +151,7 @@ class LedgerAccountStatementEntity {
 
 		return {
 			id: this.id.toString(),
-			ledgerId: "", // TODO: Need to fetch from account
+			ledgerId: this.ledgerId.toString(),
 			accountId: this.accountId.toString(),
 			description: undefined,
 			startDatetime: this.statementDate.toISOString(),

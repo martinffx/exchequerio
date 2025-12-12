@@ -78,8 +78,8 @@ class LedgerRepo {
 	 * - Validates organization FK constraint (throws NotFoundError if invalid)
 	 *
 	 * **On UPDATE (existing ledger):**
-	 * - Validates immutable fields haven't changed (organizationId)
-	 * - Only updates mutable fields: name, description, currency, currencyExponent, metadata
+	 * - Validates immutable fields haven't changed (organizationId, currency, currencyExponent)
+	 * - Only updates mutable fields: name, description, metadata
 	 * - Auto-updates timestamp
 	 *
 	 * **Conflict Handling:**
@@ -109,18 +109,21 @@ class LedgerRepo {
 					set: {
 						name: record.name,
 						description: record.description,
-						currency: record.currency,
-						currencyExponent: record.currencyExponent,
 						metadata: record.metadata,
 						updated: record.updated,
 					},
-					where: eq(LedgersTable.organizationId, entity.organizationId.toString()),
+					where: and(
+						eq(LedgersTable.organizationId, entity.organizationId.toString()),
+						eq(LedgersTable.currency, entity.currency),
+						eq(LedgersTable.currencyExponent, entity.currencyExponent)
+					),
 				})
 				.returning();
 
 			if (result.length === 0) {
 				throw new ConflictError({
-					message: "Ledger not found or immutable fields (organizationId) were changed",
+					message:
+						"Ledger not found or immutable fields (organizationId, currency, currencyExponent) were changed",
 				});
 			}
 

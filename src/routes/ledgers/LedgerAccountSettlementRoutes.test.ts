@@ -98,6 +98,10 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 	});
 
+	afterAll(async () => {
+		await server.close();
+	});
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
@@ -897,6 +901,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(rs.json()).toMatchSnapshot();
 			expect(mockLedgerAccountSettlementService.transitionSettlementStatus).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
+				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "las" }),
 				"processing"
 			);

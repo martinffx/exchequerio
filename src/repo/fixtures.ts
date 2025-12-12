@@ -19,6 +19,7 @@ import type { LedgerEntityOpts } from "@/repo/entities/LedgerEntity";
 import type { LedgerTransactionEntityOpts } from "@/repo/entities/LedgerTransactionEntity";
 import type { LedgerTransactionEntryEntityOpts } from "@/repo/entities/LedgerTransactionEntryEntity";
 import type { OrgEntityOpts } from "@/repo/entities/OrganizationEntity";
+import type { LedgerID } from "@/repo/entities/types";
 import { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
@@ -280,6 +281,7 @@ function createLedgerAccountStatementEntity(
 	const now = new Date();
 	return new LedgerAccountStatementEntity({
 		id: options.id ?? new TypeID("lst"),
+		ledgerId: options.ledgerId ?? (new TypeID("lgr") as LedgerID),
 		accountId: options.accountId ?? new TypeID("lat"),
 		statementDate: options.statementDate ?? now,
 		openingBalance: options.openingBalance ?? 0,

@@ -13,6 +13,7 @@ import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlement
 import type { LedgerRepo } from "@/repo/LedgerRepo";
 import type { SettlementStatus } from "@/routes/ledgers/schema";
 import { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
+import type { LedgerTransactionService } from "./LedgerTransactionService";
 
 describe("LedgerAccountSettlementService", () => {
 	const orgId = new TypeID("org") as OrgID;
@@ -35,7 +36,14 @@ describe("LedgerAccountSettlementService", () => {
 	const mockLedgerRepo = vi.mocked<LedgerRepo>({
 		getLedger: vi.fn(),
 	} as unknown as LedgerRepo);
-	const service = new LedgerAccountSettlementService(mockSettlementRepo, mockLedgerRepo);
+	const mockTransactionService = vi.mocked<LedgerTransactionService>({
+		createTransaction: vi.fn(),
+	} as unknown as LedgerTransactionService);
+	const service = new LedgerAccountSettlementService(
+		mockSettlementRepo,
+		mockLedgerRepo,
+		mockTransactionService
+	);
 
 	afterEach(() => {
 		vi.clearAllMocks();
@@ -304,7 +312,12 @@ describe("LedgerAccountSettlementService", () => {
 			mockSettlementRepo.getSettlement.mockResolvedValue(settlement);
 			mockSettlementRepo.updateStatus.mockResolvedValue(updatedSettlement);
 
-			const result = await service.transitionSettlementStatus(orgId, settlementId, "processing");
+			const result = await service.transitionSettlementStatus(
+				orgId,
+				ledgerId,
+				settlementId,
+				"processing"
+			);
 
 			expect(result.status).toBe("processing");
 			expect(mockSettlementRepo.getSettlement).toHaveBeenCalledWith(orgId, settlementId);
@@ -342,7 +355,12 @@ describe("LedgerAccountSettlementService", () => {
 			mockSettlementRepo.updateSettlement.mockResolvedValue(updatedSettlement);
 			mockSettlementRepo.updateStatus.mockResolvedValue(finalSettlement);
 
-			const result = await service.transitionSettlementStatus(orgId, settlementId, "pending");
+			const result = await service.transitionSettlementStatus(
+				orgId,
+				ledgerId,
+				settlementId,
+				"pending"
+			);
 
 			expect(result.status).toBe("pending");
 			expect(mockSettlementRepo.calculateAmount).toHaveBeenCalledWith(settlementId);
@@ -367,7 +385,7 @@ describe("LedgerAccountSettlementService", () => {
 			mockSettlementRepo.getSettlement.mockResolvedValue(settlement);
 
 			await expect(
-				service.transitionSettlementStatus(orgId, settlementId, "posted" as SettlementStatus)
+				service.transitionSettlementStatus(orgId, ledgerId, settlementId, "posted" as SettlementStatus)
 			).rejects.toThrow(ConflictError);
 			expect(mockSettlementRepo.updateStatus).not.toHaveBeenCalled();
 		});
@@ -390,7 +408,12 @@ describe("LedgerAccountSettlementService", () => {
 			mockSettlementRepo.getSettlement.mockResolvedValue(settlement);
 
 			await expect(
-				service.transitionSettlementStatus(orgId, settlementId, "drafting" as SettlementStatus)
+				service.transitionSettlementStatus(
+					orgId,
+					ledgerId,
+					settlementId,
+					"drafting" as SettlementStatus
+				)
 			).rejects.toThrow(ConflictError);
 		});
 
@@ -418,7 +441,12 @@ describe("LedgerAccountSettlementService", () => {
 			mockSettlementRepo.getSettlement.mockResolvedValue(settlement);
 			mockSettlementRepo.updateStatus.mockResolvedValue(updatedSettlement);
 
-			const result = await service.transitionSettlementStatus(orgId, settlementId, "drafting");
+			const result = await service.transitionSettlementStatus(
+				orgId,
+				ledgerId,
+				settlementId,
+				"drafting"
+			);
 
 			expect(result.status).toBe("drafting");
 		});
