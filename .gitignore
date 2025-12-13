@@ -141,3 +141,13 @@ node_modules
 
 # React Router
 .react-router/
+
+# Build outputs
+build/
+dist/
+
+# App-specific builds
+apps/*/build/
+apps/*/dist/
+apps/*/.react-router/
+apps/*/.docusaurus/
