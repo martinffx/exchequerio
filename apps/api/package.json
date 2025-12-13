@@ -13,7 +13,7 @@
 		"lint": "biome check ./src && eslint ./src --max-warnings 0",
 		"lint:fix": "biome check --write ./src",
 		"format": "biome format --write ./src",
-		"types": "tsc --noEmit",
+		"types": "tsgo --noEmit",
 		"db:gen": "drizzle-kit generate",
 		"db:migrate": "dotenvx run -- drizzle-kit migrate"
 	},

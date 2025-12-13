@@ -23,6 +23,7 @@
 		"ci": "bun run docker:up && turbo build lint types test:ci"
 	},
 	"devDependencies": {
+		"@typescript/native-preview": "^7.0.0-dev.20251213.1",
 		"turbo": "^2"
 	}
 }

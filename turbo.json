@@ -10,15 +10,25 @@
 			"persistent": true
 		},
 		"test": {
-			"outputs": []
+			"outputs": [],
+			"cache": true
 		},
 		"test:ci": {
-			"outputs": ["coverage/**"]
+			"outputs": ["coverage/**"],
+			"cache": true
 		},
-		"lint": {},
-		"format": {},
+		"lint": {
+			"outputs": [],
+			"cache": true
+		},
+		"format": {
+			"outputs": [],
+			"cache": false
+		},
 		"types": {
-			"dependsOn": ["^build"]
+			"dependsOn": ["^build"],
+			"outputs": [],
+			"cache": true
 		},
 		"db:gen": {
 			"cache": false
