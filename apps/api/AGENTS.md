@@ -11,22 +11,33 @@
 ## Commands
 
 ### **Development Workflow**
-- `mise run dev` - Start development server (auto-starts database)
-- `mise run test` - Run all tests (auto-starts database)
+- `bun run dev` - Start development server (auto-starts database)
+- `bun run test` - Run all tests with Vitest (auto-starts database)
+
+**Important:** Always use `bun run test` (NOT `bun test`). We use **Vitest** for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, etc.). The `bun test` command uses Bun's built-in test runner which lacks these features.
+
+**Testing Prerequisites:**
+- PostgreSQL database must be running (auto-started by `bun run test`)
+- Integration tests use real database with test schema
+
+### **Testing**
+- `bun run test` - Run all tests (Vitest)
+- `bun run test:watch` - Run tests in watch mode (Vitest)
+- `bun run test:ci` - Run tests with coverage (Vitest)
 
 ### **Code Quality**
-- `mise run format` - Format code with Prettier + oxc plugin
-- `mise run lint` - Type-aware linting with ESLint + architectural boundaries
-- `mise run types` - Type check without emitting
-- `mise run check` - **Run all code quality checks** (format + lint + types)
+- `bun run format` - Format code with Biome
+- `bun run lint` - Type-aware linting with Biome + ESLint
+- `bun run types` - Type check without emitting
+- `bun run check` - **Run all code quality checks** (format + lint + types)
 
 ### **Database Operations**
-- `mise run docker_up` - Start PostgreSQL database
-- `mise run docker_down` - Stop PostgreSQL database
-- `mise run docker_logs` - View database logs
+- `bun run docker:up` - Start PostgreSQL database
+- `bun run docker:down` - Stop PostgreSQL database
+- `bun run docker:logs` - View database logs
 
 ### **CI/CD Pipeline**
-- `mise run ci` - **Complete CI pipeline** (docker_up + format + lint + types + test)
+- `bun run ci` - **Complete CI pipeline** (docker:up + build + lint + types + test)
 
 ### **Database Migrations**
 - `bun run db:gen` - Generate migrations from schema (drizzle-kit generate)

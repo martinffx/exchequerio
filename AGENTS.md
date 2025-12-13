@@ -67,13 +67,23 @@ bun run dev:docs     # Docs only
 
 ### Testing
 
+**Important:** Always use `bun run test` (NOT `bun test`). We use **Vitest** as our test runner for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, etc.). The `bun test` command uses Bun's built-in test runner which lacks these features.
+
+**Prerequisites:** Database must be running for API tests (integration tests use real PostgreSQL).
+
 ```bash
-# Run all tests across all apps
+# Run all tests across all apps (auto-starts database, uses Vitest)
 bun run test
 
-# Test specific app
-bun --filter=@exchequerio/api test
+# Test specific app (uses Vitest)
+bun --filter=@exchequerio/api test    # Requires database
 bun --filter=@exchequerio/web test
+
+# Start database manually first (optional)
+bun run docker:up
+
+# Watch mode (from specific app directory)
+cd apps/api && bun run test:watch
 ```
 
 ### Code Quality

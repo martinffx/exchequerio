@@ -32,13 +32,16 @@ bun run dev              # Start development server
 ```
 
 ### **Testing**
+
+**Important:** Always use `bun run test` (NOT `bun test`). We use **Vitest** for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, etc.). The `bun test` command uses Bun's built-in test runner which lacks these features.
+
 ```bash
 # From monorepo root
 bun --filter=@exchequerio/web test
 
 # From apps/web directory
-bun run test             # Run all tests
-bun run test:watch       # Run tests in watch mode
+bun run test             # Run all tests (Vitest)
+bun run test:watch       # Run tests in watch mode (Vitest)
 ```
 
 ### **Code Quality**

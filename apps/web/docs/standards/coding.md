@@ -198,12 +198,16 @@ export function IconButton({ icon: Icon, ...props }: IconButtonProps) {
 
 ## Testing Standards
 
+**Test Framework:** We use **Vitest** (NOT Bun's built-in test runner) for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, `vi.spyOn()`, etc.).
+
+**Important:** Always run `bun run test` (NOT `bun test`). The `bun test` command uses Bun's built-in test runner which lacks Vitest features.
+
 ### Vitest + Testing Library
 
 ```typescript
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { LoginForm } from "./LoginForm"
 
 describe("LoginForm", () => {

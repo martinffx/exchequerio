@@ -233,6 +233,10 @@ export async function registerLedgerRoutes(server: FastifyInstance) {
 
 ## Testing Standards
 
+**Test Framework:** We use **Vitest** (NOT Bun's built-in test runner) for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, `vi.spyOn()`, etc.).
+
+**Important:** Always run `bun run test` (NOT `bun test`). The `bun test` command uses Bun's built-in test runner which lacks Vitest features.
+
 ### Test-Driven Development (TDD)
 
 #### TDD Cycle
@@ -242,13 +246,21 @@ export async function registerLedgerRoutes(server: FastifyInstance) {
 
 #### Unit Tests
 ```typescript
-// Test business logic in isolation
+// Test business logic in isolation with Vitest
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 describe("LedgerTransactionService", () => {
   let service: LedgerTransactionService
-  let mockRepo: jest.Mocked<LedgerRepo>
+  let mockRepo: LedgerRepo
 
   beforeEach(() => {
-    mockRepo = createMockRepo()
+    // Use vi.mocked<T>() for type-safe mocks
+    mockRepo = vi.mocked<LedgerRepo>({
+      createTransaction: vi.fn(),
+      getTransaction: vi.fn(),
+      updateTransaction: vi.fn()
+    } as unknown as LedgerRepo)
+
     service = new LedgerTransactionService(mockRepo)
   })
 

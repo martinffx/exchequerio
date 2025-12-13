@@ -213,63 +213,64 @@ class LedgerTransactionRepo {
 					.returning();
 
 				// 3b. Insert all entries in batch (idempotent via upsert)
-				const txEntriesPromises =
-					transaction.entries.map(async entry => {
-						const entryRecord = entry.toRecord();
-						await tx
-							.insert(LedgerTransactionEntriesTable)
-							.values(entryRecord)
-							.onConflictDoUpdate({
-								target: LedgerTransactionEntriesTable.id,
-								set: {
-									transactionId: entryRecord.transactionId,
-									accountId: entryRecord.accountId,
-									organizationId: entryRecord.organizationId,
-									direction: entryRecord.direction,
-									amount: entryRecord.amount,
-									currency: entryRecord.currency,
-									currencyExponent: entryRecord.currencyExponent,
-									status: entryRecord.status,
-									metadata: entryRecord.metadata,
-									updated: entryRecord.updated,
-								},
-							});
-					})
-
+				const txEntriesPromises = transaction.entries.map(async entry => {
+					const entryRecord = entry.toRecord();
+					await tx
+						.insert(LedgerTransactionEntriesTable)
+						.values(entryRecord)
+						.onConflictDoUpdate({
+							target: LedgerTransactionEntriesTable.id,
+							set: {
+								transactionId: entryRecord.transactionId,
+								accountId: entryRecord.accountId,
+								organizationId: entryRecord.organizationId,
+								direction: entryRecord.direction,
+								amount: entryRecord.amount,
+								currency: entryRecord.currency,
+								currencyExponent: entryRecord.currencyExponent,
+								status: entryRecord.status,
+								metadata: entryRecord.metadata,
+								updated: entryRecord.updated,
+							},
+						});
+				});
 
 				// 3c. Update all account balances in parallel with optimistic locking
-				const ledgerAccountsPromises =
-					ledgerAccounts.map(async account => {
-						const result = await tx
-							.update(LedgerAccountsTable)
-							.set(account.toRecord())
-							.where(
-								and(
-									eq(LedgerAccountsTable.id, account.id.toString()),
-									eq(LedgerAccountsTable.lockVersion, account.lockVersion)
-								)
+				const ledgerAccountsPromises = ledgerAccounts.map(async account => {
+					const result = await tx
+						.update(LedgerAccountsTable)
+						.set(account.toRecord())
+						.where(
+							and(
+								eq(LedgerAccountsTable.id, account.id.toString()),
+								eq(LedgerAccountsTable.lockVersion, account.lockVersion)
 							)
-							.returning();
+						)
+						.returning();
 
-						// No rows updated = optimistic lock failure
-						if (result.length === 0) {
-							throw new ConflictError({
-								message: `Account ${account.id.toString()} was modified by another transaction`,
-								retryable: true,
-							});
-						}
+					// No rows updated = optimistic lock failure
+					if (result.length === 0) {
+						throw new ConflictError({
+							message: `Account ${account.id.toString()} was modified by another transaction`,
+							retryable: true,
+						});
+					}
 
-						// More than one row updated = data integrity issue
-						if (result.length > 1) {
-							throw new ConflictError({
-								message: `Data integrity error: Updated ${result.length} rows for account ${account.id.toString()}, expected 1`,
-							});
-						}
+					// More than one row updated = data integrity issue
+					if (result.length > 1) {
+						throw new ConflictError({
+							message: `Data integrity error: Updated ${result.length} rows for account ${account.id.toString()}, expected 1`,
+						});
+					}
 
-						return LedgerAccountEntity.fromRecord(result[0]);
-					})
+					return LedgerAccountEntity.fromRecord(result[0]);
+				});
 
-				const [transactionResult] = await Promise.all([transactionResultPromise, ...txEntriesPromises, ...ledgerAccountsPromises])
+				const [transactionResult] = await Promise.all([
+					transactionResultPromise,
+					...txEntriesPromises,
+					...ledgerAccountsPromises,
+				]);
 				const createdTransaction = LedgerTransactionEntity.fromRecord(transactionResult[0], [
 					...transaction.entries,
 				]);
