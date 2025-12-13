@@ -1,260 +1,280 @@
-# Exchequer Ledger API
+# Exchequer Platform
 
-Double-entry ledger API enabling Financial Operations teams at Payment Service Providers (PSPs) and Marketplaces to track money flow, calculate balances, and automate settlement processes.
+Real-time double-entry ledger platform for Payment Service Providers (PSPs) and Marketplaces, enabling Financial Operations teams to track money flow, calculate balances, and automate settlement processes.
+
+## Monorepo Structure
+
+This is a Turborepo monorepo containing three applications:
+
+### 📦 Applications
+
+#### `apps/api/` - Ledger API
+Real-time double-entry ledger API with PostgreSQL persistence.
+
+**Tech Stack:** Fastify, Drizzle ORM, PostgreSQL, Vitest
+
+[View API Documentation →](apps/api/AGENTS.md)
+
+#### `apps/web/` - Customer Portal
+Customer-facing dashboard for ledger data visualization and management.
+
+**Tech Stack:** React Router v7, React 19, Tailwind CSS v4, shadcn/ui, TanStack React Query, Zustand
+
+[View Web Documentation →](apps/web/AGENTS.md)
+
+#### `apps/docs/` - Documentation Site
+Public documentation site built with Docusaurus.
+
+**Tech Stack:** Docusaurus, Markdown/MDX
+
+[View Docs Documentation →](apps/docs/AGENTS.md)
 
 ## Quick Start
 
 ### Prerequisites
 
-- Node.js 18+
-- pnpm
-- Docker & Docker Compose
+- **Node.js** 18+ (managed via mise: `mise install`)
+- **Bun** 1.2+ (package manager)
+- **Docker** (for PostgreSQL database)
 
-### Setup
+### Initial Setup
 
 ```bash
-# Clone repository
-git clone <repository-url>
-cd exchequerio
-
 # Install dependencies
-pnpm install
+bun install
 
-# Start database services
-pnpm docker
+# Start PostgreSQL database
+bun run docker:up
 
-# Run database migrations
-drizzle-kit migrate
+# Run database migrations (API)
+cd apps/api
+bun run db:migrate
+cd ../..
 
-# Start development server
-pnpm dev
+# Start all applications
+bun run dev
 ```
 
-The API will be available at `http://localhost:3000`
+The applications will be available at:
+- **API**: `http://localhost:3000`
+- **Web**: `http://localhost:5173`
+- **Docs**: `http://localhost:3000` (if running)
 
 ## Development Commands
 
+### Running Applications
+
 ```bash
-# Development
-pnpm dev              # Start development server with hot reload
-pnpm start            # Start production server
+# Start all apps
+bun run dev
 
-# Testing
-pnpm test             # Run all tests with verbose output
-pnpm test:watch       # Tests in watch mode
-pnpm test src/path/to/file.test.ts  # Run single test file
-
-# Code Quality
-pnpm typecheck        # Type check without emitting
-pnpm lint             # Lint with Biome
-pnpm format           # Format with Biome
-
-# Database
-drizzle-kit generate  # Generate migrations from schema
-drizzle-kit migrate   # Apply migrations to database
+# Start specific app
+bun run dev:api      # API only
+bun run dev:web      # Web only
+bun run dev:docs     # Docs only
 ```
+
+### Testing
+
+**Important:** Always use `bun run test` (NOT `bun test`). We use **Vitest** as our test runner for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, etc.). The `bun test` command uses Bun's built-in test runner which lacks these features.
+
+**Prerequisites:** Database must be running for API tests (integration tests use real PostgreSQL).
+
+```bash
+# Run all tests across all apps (auto-starts database, uses Vitest)
+bun run test
+
+# Test specific app (uses Vitest)
+bun --filter=@exchequerio/api test    # Requires database
+bun --filter=@exchequerio/web test
+
+# Start database manually first (optional)
+bun run docker:up
+
+# Watch mode (from specific app directory)
+cd apps/api && bun run test:watch
+```
+
+### Code Quality
+
+```bash
+# Run all quality checks (format + lint + types)
+bun run check
+
+# Individual checks
+bun run format       # Format all apps
+bun run lint         # Lint all apps
+bun run types        # Type check all apps
+```
+
+### Build
+
+```bash
+# Build all apps for production
+bun run build
+
+# Build specific app
+bun --filter=@exchequerio/api build
+bun --filter=@exchequerio/web build
+```
+
+### Database
+
+```bash
+# Start PostgreSQL database
+bun run docker:up
+
+# Stop database
+bun run docker:down
+
+# View database logs
+bun run docker:logs
+```
+
+### CI/CD
+
+```bash
+# Run complete CI pipeline
+bun run ci
+# Equivalent to: docker:up + build + lint + types + test
+```
+
+## Documentation
+
+### Product Documentation
+
+High-level product vision and roadmap:
+
+- [Product Overview](docs/product/product.md) - What we're building and why
+- [Roadmap](docs/product/roadmap.md) - Feature priorities and implementation plan
+
+### Architecture & Standards
+
+Shared architecture and coding standards:
+
+- [Architecture Standards](docs/standards/architecture.md) - Layered architecture, design patterns
+- [Coding Standards](docs/standards/coding.md) - TypeScript conventions, testing, best practices
+
+### App-Specific Documentation
+
+Each app has its own detailed documentation:
+
+- [API Development Guide](apps/api/AGENTS.md) - Fastify, Drizzle, PostgreSQL patterns
+- [Web Development Guide](apps/web/AGENTS.md) - React Router, Tailwind, React Query patterns
+- [Docs Guide](apps/docs/AGENTS.md) - Docusaurus content and structure
+
+### Getting Started
+
+New to the project? Start here:
+
+1. Read [AGENTS.md](AGENTS.md) for a complete overview
+2. Review [Architecture Standards](docs/standards/architecture.md)
+3. Check [Coding Standards](docs/standards/coding.md)
+4. Explore app-specific guides for your area of focus
+
+## Development Workflow
+
+This project uses **spec-driven development**. To build a new feature:
+
+1. `/spec-create [feature-name]` - Create feature specification
+2. `/spec-design [feature-name]` - Design technical architecture
+3. `/spec-plan [feature-name]` - Plan implementation tasks
+4. `/spec-implement [feature-name]` - Implement with stub-driven TDD
+5. `/spec-progress [feature-name]` - Track feature progress
+
+See [AGENTS.md](AGENTS.md) for complete workflow details.
 
 ## Architecture
 
-### Layered Architecture
+All applications follow consistent layered architecture:
 
+### Backend (API)
 ```
-Router → Service → Repository → Entity → Database
-```
-
-- **Router Layer**: Fastify routes with OpenAPI documentation
-- **Service Layer**: Business logic and transaction processing
-- **Repository Layer**: Data access and CRUD operations
-- **Entity Layer**: Data transformation and validation
-- **Database**: PostgreSQL with Drizzle ORM
-
-### Tech Stack
-
-- **Runtime**: Node.js with TypeScript
-- **Framework**: Fastify
-- **Database**: PostgreSQL with Drizzle ORM
-- **Testing**: Jest with ts-jest
-- **Code Quality**: Biome for linting and formatting
-- **Documentation**: OpenAPI/Swagger
-
-## API Documentation
-
-### Base URL
-
-```
-http://localhost:3000
+Routes → Services → Repositories → Entities → Database
 ```
 
-### Key Endpoints
-
-#### Ledgers
-
-- `POST /ledgers` - Create new ledger
-- `GET /ledgers/{id}` - Get ledger details
-
-#### Ledger Accounts
-
-- `POST /ledger_accounts` - Create account
-- `GET /ledger_accounts/{id}` - Get account with balances
-- `GET /ledger_accounts/{id}/statement` - Get account statement
-
-#### Transactions
-
-- `POST /ledger_transactions` - Create transaction
-- `PATCH /ledger_transactions/{id}` - Update transaction status
-
-### Interactive Documentation
-
-Visit `http://localhost:3000/docs` for interactive Swagger UI.
-
-## Database Schema
-
-### Entity Relationship Diagram
-
-**See the complete [Entity Relationship Diagram](docs/product/erd.md) for detailed schema visualization with all entities, relationships, and attributes.**
-
-### Core Entities
-
-#### Ledger
-
-Top-level container representing your accounting system.
-
-#### Ledger Account
-
-Individual accounts tracking specific value types (User Wallet, Revenue, Fees, etc.).
-
-#### Ledger Transaction
-
-Records money movement between accounts with double-entry validation.
-
-#### Ledger Entry
-
-Individual debit or credit within a transaction.
-
-### Relationships
-
+### Frontend (Web)
 ```
-Ledger (1)
-├── Ledger Accounts (many)
-└── Ledger Transactions (many)
-      └── Ledger Entries (2+)
+Pages → Components → Hooks/State → API Client → Services
 ```
 
-### Key Features
+Key principles:
+- **Separation of Concerns** - Each layer has a single responsibility
+- **Dependency Direction** - Dependencies flow inward toward domain
+- **Test-Driven Development** - Stub-driven TDD for all features
+- **Type Safety** - Strict TypeScript across all apps
 
-- **Double-Entry Accounting**: Every transaction must balance (debits = credits)
-- **Account Isolation**: Accounts only transact within the same ledger
-- **Transaction Atomicity**: All entries succeed or fail together
-- **Real-Time Balances**: Posted, pending, and available balance tracking
-- **Audit Trail**: Complete history of all money movements
+## Tech Stack
 
-## Balance Types
+### Shared Technologies
+- **Language:** TypeScript
+- **Package Manager:** Bun
+- **Build System:** Turborepo
+- **Testing:** Vitest
+- **Code Quality:** Biome + ESLint
 
-The system tracks three balance types for each account:
+### API
+- **Framework:** Fastify with TypeBox
+- **Database:** PostgreSQL with Drizzle ORM
+- **Auth:** JWT tokens
 
-- **Posted Balance**: Completed/settled transactions only
-- **Pending Balance**: Both pending and posted transactions
-- **Available Balance**: Posted balance minus pending outbound transactions
+### Web
+- **Framework:** React Router v7
+- **UI:** React 19, Tailwind CSS v4, shadcn/ui
+- **Data:** openapi-react-query, TanStack React Query
+- **State:** Zustand
 
-## Development Guidelines
-
-### Code Style
-
-- **Formatting**: Tab indentation, double quotes, no semicolons (Biome)
-- **Imports**: Use `@/*` path aliases for src/ directory
-- **Types**: Infer types from Drizzle schema, use `type` for type aliases
-- **Naming**: PascalCase for classes/types, camelCase for variables/functions
-- **Architecture**: Follow Router → Service → Repository → Entity → Database pattern
-- **Testing**: Jest with ts-jest, test files follow `*.test.ts` pattern in src/
-
-### Spec-Driven Development
-
-This project uses spec-driven development workflow:
-
-1. **Create Specification**: `/spec-create feature-name`
-2. **Design Architecture**: `/spec-design feature-name`
-3. **Plan Implementation**: `/spec-plan feature-name`
-4. **Implement Feature**: `/spec-implement feature-name`
-5. **Track Progress**: `/spec-progress feature-name`
-
-See `docs/spec/` for detailed feature specifications.
-
-## Environment Variables
-
-Create `.env` file for local development:
-
-```bash
-# Database
-DATABASE_URL=postgresql://postgres:password@localhost:5432/ledger
-
-# JWT
-JWT_SECRET=your-secret-key
-
-# Server
-PORT=3000
-HOST=0.0.0.0
-```
-
-## Testing
-
-### Running Tests
-
-```bash
-# All tests
-pnpm test
-
-# Specific test file
-pnpm test src/repo/LedgerAccountRepo.test.ts
-
-# Watch mode
-pnpm test:watch
-```
-
-### Test Structure
-
-- Unit tests: `*.unit.test.ts`
-- Integration tests: `*.test.ts`
-- Test files located alongside source files
-
-## Docker Development
-
-### Database Services
-
-```bash
-# Start PostgreSQL and Redis
-pnpm docker
-
-# Stop services
-docker-compose down
-```
-
-### Production Build
-
-```bash
-# Build Docker image
-docker build -t exchequer-ledger .
-
-# Run with Docker Compose
-docker-compose -f docker-compose.prod.yml up
-```
+### Docs
+- **Framework:** Docusaurus
+- **Content:** Markdown/MDX
 
 ## Contributing
 
-1. Follow the established code style and architecture patterns
-2. Write tests for all new features
-3. Use spec-driven development workflow for new features
-4. Ensure all tests pass before submitting PRs
-5. Follow conventional commit message format
+### Code Review Checklist
+
+- ✅ Follows layered architecture patterns
+- ✅ Includes comprehensive tests (unit + integration)
+- ✅ Passes all code quality checks (`bun run check`)
+- ✅ Updates documentation if needed
+- ✅ Follows spec-driven development workflow
+
+### Quality Gates
+
+All checks must pass before merging:
+
+```bash
+bun run format     # Code formatting
+bun run lint       # Linting
+bun run types      # Type checking
+bun run test       # All tests passing
+```
+
+## Project Structure
+
+```
+/
+├── AGENTS.md                    # Monorepo development guide
+├── README.md                    # This file
+├── docs/
+│   ├── product/                 # Product vision and roadmap
+│   └── standards/               # Shared architecture and coding standards
+├── apps/
+│   ├── api/                     # Ledger API (Fastify, Drizzle, PostgreSQL)
+│   ├── web/                     # Customer Portal (React Router, Tailwind)
+│   └── docs/                    # Documentation site (Docusaurus)
+└── packages/                    # Shared packages
+    ├── biome-config/            # Shared Biome configuration
+    ├── eslint-config/           # Shared ESLint configuration
+    └── typescript-config/       # Shared TypeScript configuration
+```
+
+## Support
+
+- **Product Questions:** See [docs/product/product.md](docs/product/product.md)
+- **Architecture Questions:** See [docs/standards/architecture.md](docs/standards/architecture.md)
+- **Coding Questions:** See [docs/standards/coding.md](docs/standards/coding.md)
+- **App-Specific Questions:** See `apps/*/AGENTS.md`
 
 ## License
 
 Private repository - All rights reserved.
-
-## Support
-
-For development questions or issues:
-
-- Reference `docs/` directory for detailed specifications
-- Check `AGENTS.md` for development guidelines
-- Review test files for usage examples
-

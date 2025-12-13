@@ -1,0 +1,41 @@
+{
+	"name": "@exchequerio/web",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "react-router dev",
+		"build": "react-router build",
+		"start": "react-router-serve ./build/server/index.js",
+		"lint": "biome check ./app && eslint ./app --max-warnings 0",
+		"format": "biome format --write ./app",
+		"types": "react-router typegen"
+	},
+	"dependencies": {
+		"@react-router/node": "^7",
+		"@react-router/serve": "^7",
+		"isbot": "^5",
+		"react": "^19",
+		"react-dom": "^19",
+		"react-router": "^7"
+	},
+	"devDependencies": {
+		"@exchequerio/biome-config": "workspace:*",
+		"@exchequerio/eslint-config": "workspace:*",
+		"@exchequerio/typescript-config": "workspace:*",
+		"@biomejs/biome": "2.3.7",
+		"@react-router/dev": "^7",
+		"@tailwindcss/vite": "^4",
+		"@types/node": "^24",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"autoprefixer": "^10",
+		"class-variance-authority": "^0.7",
+		"clsx": "^2",
+		"eslint": "^9.39.1",
+		"lucide-react": "^0.460",
+		"tailwind-merge": "^2",
+		"tailwindcss": "^4",
+		"typescript": "^5.9.3",
+		"vite": "^6"
+	}
+}

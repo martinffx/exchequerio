@@ -1,0 +1,14 @@
+{
+	"name": "@exchequerio/typescript-config",
+	"private": true,
+	"version": "0.0.0",
+	"exports": {
+		"./base.json": "./base.json",
+		"./node.json": "./node.json",
+		"./react.json": "./react.json"
+	},
+	"devDependencies": {
+		"@tsconfig/node-lts": "^22.0.4",
+		"@tsconfig/recommended": "^1.0.13"
+	}
+}

@@ -1,0 +1,8 @@
+{
+	"name": "@exchequerio/biome-config",
+	"private": true,
+	"version": "0.0.0",
+	"exports": {
+		"./biome.json": "./biome.json"
+	}
+}

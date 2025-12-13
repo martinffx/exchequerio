@@ -1,0 +1,10 @@
+{
+	"extends": "@exchequerio/typescript-config/node.json",
+	"compilerOptions": {
+		"paths": {
+			"@/*": ["./src/*"]
+		},
+		"types": ["vitest/globals"]
+	},
+	"include": ["src/**/*", "*.ts"]
+}
