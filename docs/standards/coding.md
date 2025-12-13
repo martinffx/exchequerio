@@ -1,233 +1,205 @@
-# TypeScript Coding Standards
-
-## Code Style & Formatting
-
-### ESLint + Biome Configuration
-- **Primary tools:** Biome for fast formatting and linting, ESLint for type-aware linting
-- **Indentation:** Tab characters (not spaces)
-- **Quotes:** Double quotes for strings
-- **Semicolons:** Always required (enforced by Biome)
-- **Line endings:** LF (Unix-style)
-
-### Commands
-- \`mise run lint\` - Run Biome + ESLint (hybrid linting approach)
-- \`mise run lint_fast\` - Run Biome only (fast formatting + syntax checks)
-- \`mise run lint_slow\` - Run ESLint only (type-aware + boundaries + unicorn)
-- \`mise run format\` - Format code with Biome
-- \`mise run check\` - Run all code quality checks (format + lint + types)
-- Run \`mise run format && mise run lint\` before committing
+# Coding Standards
 
 ## TypeScript Conventions
 
+All applications in this monorepo use TypeScript with strict type checking enabled.
+
 ### Type Definitions
+
 ```typescript
-// Use explicit types for public APIs
-export interface CreateLedgerRequest {
+// Use explicit types for public APIs and interfaces
+export interface CreateUserRequest {
   name: string
-  description?: string
-  currency: string
-  currencyExponent: number
+  email: string
+  role?: UserRole
 }
 
 // Use type inference for internal variables
-const ledger = await ledgerRepo.create(request) // Type inferred
+const user = await userRepo.create(request) // Type inferred from repository
 
 // Use const assertions for literal types
-const TRANSACTION_STATUSES = ["pending", "posted", "archived"] as const
-type TransactionStatus = typeof TRANSACTION_STATUSES[number]
+const USER_ROLES = ["admin", "user", "guest"] as const
+type UserRole = typeof USER_ROLES[number]
+
+// Prefer type over interface for unions and intersections
+type ID = string | number
+type UserWithMetadata = User & { metadata: Record<string, unknown> }
+
+// Use interface for object shapes that may be extended
+interface Entity {
+  id: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface User extends Entity {
+  name: string
+  email: string
+}
 ```
 
 ### Naming Conventions
-```typescript
-// PascalCase for types, interfaces, classes
-interface LedgerAccount { }
-class LedgerService { }
-type TransactionStatus = string
 
-// camelCase for variables, functions, methods
-const ledgerAccount = new LedgerAccount()
-function calculateBalance() { }
+```typescript
+// PascalCase for types, interfaces, classes, enums
+interface UserAccount { }
+class UserService { }
+type ResponseStatus = string
+enum TransactionStatus { }
+
+// camelCase for variables, functions, methods, parameters
+const userAccount = await fetchAccount()
+function calculateTotal(items: Item[]): number { }
+const handleSubmit = () => { }
 
 // SCREAMING_SNAKE_CASE for constants
-const DEFAULT_CURRENCY_EXPONENT = 2
 const MAX_RETRY_ATTEMPTS = 3
+const DEFAULT_PAGE_SIZE = 20
+const API_BASE_URL = "https://api.example.com"
 
-// kebab-case for file names
-ledger-service.ts
-transaction-repo.ts
+// kebab-case for file names (unless using PascalCase for components/classes)
+user-service.ts
+api-client.ts
+UserProfile.tsx  // Component files can use PascalCase
 ```
 
 ### Import/Export Patterns
-```typescript
-// Use path aliases
-import { LedgerRepo } from "@/repo/LedgerRepo"
-import { LedgerService } from "@/services/LedgerService"
 
+```typescript
 // Group imports: external → internal → relative
 import { FastifyInstance } from "fastify"
-import { Static, Type } from "@sinclair/typebox"
+import { useQuery } from "@tanstack/react-query"
 
 import { config } from "@/config"
-import { LedgerRepo } from "@/repo/LedgerRepo"
+import { UserService } from "@/services/UserService"
 
-import { validateRequest } from "./validation"
+import { validateInput } from "./validation"
+import type { User } from "./types"
 
 // Prefer named exports over default exports
-export { LedgerService }
-export type { CreateLedgerRequest }
+export { UserService }
+export type { User, CreateUserRequest }
+
+// Use type-only imports when importing only types
+import type { FC } from "react"
+import type { User } from "./types"
 ```
 
-## File Structure & Naming
+## Code Organization
+
+### File Structure
+
+```typescript
+// One primary export per file (class, function, component)
+// File name should match primary export
+
+// UserService.ts
+export class UserService {
+  // Implementation
+}
+
+// useUser.ts
+export function useUser(id: string) {
+  // Implementation
+}
+
+// UserProfile.tsx
+export function UserProfile() {
+  // Implementation
+}
+```
 
 ### Directory Organization
+
+Organize by feature/domain, not by technical layer:
+
 ```
+✅ Good (Feature-based):
 src/
-├── server.ts              # Fastify server setup
-├── index.ts              # Application entry point
-├── config.ts             # Environment configuration
-├── auth.ts              # JWT authentication
-├── errors.ts            # Global error handling
-├── repo/                # Database layer
-│   ├── schema.ts        # Database schema definitions
-│   ├── LedgerRepo.ts    # Repository classes
-│   └── migrations.ts    # Migration utilities
-├── services/            # Business logic layer
-│   ├── entities/        # Domain entities
-│   │   ├── LedgerEntity.ts
-│   │   └── TransactionEntity.ts
-│   ├── LedgerService.ts # Service classes
+├── users/
+│   ├── UserService.ts
+│   ├── UserRepository.ts
+│   ├── UserEntity.ts
+│   └── types.ts
+├── transactions/
+│   ├── TransactionService.ts
+│   ├── TransactionRepository.ts
+│   └── types.ts
+
+❌ Avoid (Layer-based for large projects):
+src/
+├── services/
+│   ├── UserService.ts
 │   └── TransactionService.ts
-└── routes/              # HTTP API layer
-    ├── ledgers/         # Feature-specific routes
-    │   ├── LedgerRoutes.ts
-    │   ├── schema.ts    # Request/response schemas
-    │   └── fixtures.ts  # Test data
-    └── schema.ts        # Global API schemas
+├── repositories/
+│   ├── UserRepository.ts
+│   └── TransactionRepository.ts
 ```
 
-### File Naming Rules
-- **PascalCase** for class files: `LedgerService.ts`, `TransactionRepo.ts`
-- **camelCase** for utility files: `config.ts`, `errors.ts`, `schema.ts`
-- **kebab-case** for feature directories: `ledger-accounts/`, `transaction-entries/`
+Note: Layer-based organization is acceptable for smaller projects or when mandated by framework conventions.
 
-### Test File Conventions
+## Error Handling
+
+### Error Types
+
 ```typescript
-// Test files use .test.ts suffix
-LedgerService.test.ts
-TransactionRepo.test.ts
-
-// Test structure mirrors source structure
-src/services/LedgerService.ts
-src/services/LedgerService.test.ts
-
-// Test naming patterns
-describe("LedgerService", () => {
-  describe("createTransaction", () => {
-    it("should create valid double-entry transaction", () => {
-      // Test implementation
-    })
-    
-    it("should reject unbalanced entries", () => {
-      // Test implementation
-    })
-  })
-})
-```
-
-## Code Organization Patterns
-
-### Entity Transformation Methods
-```typescript
-export class LedgerTransactionEntity {
-  // Standard transformation methods
-  static fromRequest(req: CreateTransactionRequest): LedgerTransactionEntity
-  static fromRecord(record: LedgerTransactionRecord): LedgerTransactionEntity
-  toRecord(): LedgerTransactionRecord
-  toResponse(): TransactionResponse
-  validate(): ValidationResult
-}
-```
-
-### Service Method Patterns
-```typescript
-export class LedgerService {
-  // Use dependency injection via constructor
+// Define custom error classes for domain errors
+export class ValidationError extends Error {
   constructor(
-    private readonly ledgerRepo: LedgerRepo,
-    private readonly logger: Logger
-  ) {}
+    message: string,
+    public readonly fields: Record<string, string[]>
+  ) {
+    super(message)
+    this.name = "ValidationError"
+  }
+}
 
-  // Public methods use async/await
-  async createTransaction(request: CreateTransactionRequest): Promise<Transaction> {
-    // Validate input
-    const validation = TransactionEntity.validate(request)
-    if (!validation.isValid) {
-      throw new ValidationError(validation.errors)
-    }
+export class NotFoundError extends Error {
+  constructor(
+    public readonly resource: string,
+    public readonly id: string
+  ) {
+    super(`${resource} with id ${id} not found`)
+    this.name = "NotFoundError"
+  }
+}
 
-    // Business logic
-    const transaction = TransactionEntity.fromRequest(request)
-    const result = await this.ledgerRepo.createTransaction(transaction.toRecord())
+// Use error types for control flow
+try {
+  const user = await userService.getUser(id)
+} catch (error) {
+  if (error instanceof NotFoundError) {
+    return { status: 404, message: error.message }
+  }
+  if (error instanceof ValidationError) {
+    return { status: 422, errors: error.fields }
+  }
+  throw error // Re-throw unexpected errors
+}
+```
+
+### Error Handling Patterns
+
+```typescript
+// Always handle errors at appropriate layer
+async function createUser(request: CreateUserRequest): Promise<User> {
+  try {
+    // Attempt operation
+    return await userRepository.create(request)
+  } catch (error) {
+    // Log error with context
+    logger.error("Failed to create user", { error, request })
     
-    // Return domain entity
-    return TransactionEntity.fromRecord(result)
-  }
-}
-```
-
-### Repository Method Patterns
-```typescript
-export class LedgerRepo {
-  constructor(private readonly db: Database) {}
-
-  // Use atomic transactions for financial operations
-  async createTransaction(transaction: TransactionRecord): Promise<TransactionRecord> {
-    return await this.db.transaction(async (trx) => {
-      // Use SELECT ... FOR UPDATE for balance updates
-      const accounts = await trx
-        .select()
-        .from(ledgerAccountsTable)
-        .where(inArray(ledgerAccountsTable.id, accountIds))
-        .for("update")
-
-      // Atomic operations within transaction
-      const result = await trx.insert(ledgerTransactionsTable)
-        .values(transaction)
-        .returning()
-
-      return result[0]
-    })
-  }
-}
-```
-
-### Route Handler Patterns
-```typescript
-// Use TypeBox for request/response validation
-const CreateTransactionSchema = Type.Object({
-  description: Type.String(),
-  entries: Type.Array(Type.Object({
-    accountId: Type.String(),
-    direction: Type.Union([Type.Literal("debit"), Type.Literal("credit")]),
-    amount: Type.Number({ minimum: 0 })
-  }))
-})
-
-export async function registerLedgerRoutes(server: FastifyInstance) {
-  server.post<{
-    Body: Static<typeof CreateTransactionSchema>
-    Reply: TransactionResponse
-  }>("/transactions", {
-    schema: {
-      body: CreateTransactionSchema,
-      response: {
-        201: TransactionResponseSchema
-      }
+    // Transform infrastructure errors to domain errors
+    if (error.code === "23505") { // Unique constraint violation
+      throw new ValidationError("User already exists", {
+        email: ["Email is already taken"]
+      })
     }
-  }, async (request, reply) => {
-    const transaction = await server.services.ledger.createTransaction(request.body)
-    return reply.code(201).send(transaction)
-  })
+    
+    // Re-throw unexpected errors
+    throw error
+  }
 }
 ```
 
@@ -235,403 +207,279 @@ export async function registerLedgerRoutes(server: FastifyInstance) {
 
 ### Test-Driven Development (TDD)
 
-#### TDD Cycle
-1. **Write Test** - Create failing test for new functionality
-2. **Write Code** - Implement minimal code to make test pass
-3. **Refactor** - Improve code quality while maintaining test coverage
+Follow the Red-Green-Refactor cycle:
 
-#### Unit Tests
+1. **Red**: Write a failing test that defines desired behavior
+2. **Green**: Write minimal code to make the test pass
+3. **Refactor**: Improve code quality while maintaining passing tests
+
+### Test Structure
+
 ```typescript
-// Test business logic in isolation
-describe("LedgerTransactionService", () => {
-  let service: LedgerTransactionService
-  let mockRepo: jest.Mocked<LedgerRepo>
+// Use describe blocks to organize tests by feature/method
+describe("UserService", () => {
+  describe("createUser", () => {
+    it("should create user with valid data", async () => {
+      // Arrange: Set up test data and dependencies
+      const request = { name: "John", email: "john@example.com" }
+      const mockRepo = createMockRepository()
+      const service = new UserService(mockRepo)
+
+      // Act: Execute the operation
+      const result = await service.createUser(request)
+
+      // Assert: Verify the outcome
+      expect(result).toMatchObject({
+        name: "John",
+        email: "john@example.com"
+      })
+      expect(mockRepo.create).toHaveBeenCalledWith(request)
+    })
+
+    it("should reject invalid email format", async () => {
+      const request = { name: "John", email: "invalid-email" }
+      const service = new UserService(mockRepo)
+
+      await expect(service.createUser(request))
+        .rejects.toThrow(ValidationError)
+    })
+  })
+})
+```
+
+### Testing Patterns
+
+```typescript
+// Unit Tests: Test in isolation with mocked dependencies
+describe("UserService (unit)", () => {
+  let service: UserService
+  let mockRepo: jest.Mocked<UserRepository>
 
   beforeEach(() => {
-    mockRepo = createMockRepo()
-    service = new LedgerTransactionService(mockRepo)
+    mockRepo = {
+      create: jest.fn(),
+      findById: jest.fn(),
+      update: jest.fn()
+    }
+    service = new UserService(mockRepo)
   })
 
-  it("should enforce double-entry accounting rules", async () => {
-    const request = {
-      entries: [
-        { accountId: "acc1", direction: "debit", amount: 100 },
-        { accountId: "acc2", direction: "credit", amount: 50 } // Unbalanced
-      ]
-    }
-
-    await expect(service.createTransaction(request))
-      .rejects.toThrow("Transaction entries must balance")
+  it("should call repository with correct data", async () => {
+    const request = { name: "John", email: "john@example.com" }
+    await service.createUser(request)
+    
+    expect(mockRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining(request)
+    )
   })
 })
-```
 
-#### Integration Tests
-```typescript
-// Test full request/response cycle
-describe("POST /api/ledgers/:id/transactions", () => {
-  let server: FastifyInstance
+// Integration Tests: Test with real dependencies
+describe("UserService (integration)", () => {
+  let service: UserService
+  let database: Database
 
   beforeEach(async () => {
-    server = await createTestServer()
+    database = await setupTestDatabase()
+    const repo = new UserRepository(database)
+    service = new UserService(repo)
   })
 
-  it("should create balanced transaction", async () => {
-    const response = await server.inject({
-      method: "POST",
-      url: "/api/ledgers/ledger-123/transactions",
-      headers: { authorization: `Bearer ${validToken}` },
-      payload: {
-        description: "Test transaction",
-        entries: [
-          { accountId: "acc1", direction: "debit", amount: 100 },
-          { accountId: "acc2", direction: "credit", amount: 100 }
-        ]
-      }
-    })
-
-    expect(response.statusCode).toBe(201)
-    expect(response.json()).toMatchObject({
-      id: expect.any(String),
-      status: "posted"
-    })
+  afterEach(async () => {
+    await database.cleanup()
   })
-})
-```
 
-#### Financial Accuracy Tests
-```typescript
-// Critical: Test concurrent operations and race conditions
-describe("Concurrent Balance Updates", () => {
-  it("should maintain balance accuracy under concurrent transactions", async () => {
-    const initialBalance = 1000
-    const transactionCount = 50
-    const transactionAmount = 10
-
-    // Create multiple concurrent transactions
-    const promises = Array(transactionCount).fill(null).map(() => 
-      service.createTransaction({
-        entries: [
-          { accountId: "test-account", direction: "debit", amount: transactionAmount },
-          { accountId: "contra-account", direction: "credit", amount: transactionAmount }
-        ]
-      })
-    )
-
-    await Promise.all(promises)
-
-    const finalBalance = await service.getAccountBalance("test-account")
-    expect(finalBalance.amount).toBe(initialBalance - (transactionCount * transactionAmount))
-  })
-})
-```
-
-## Development Workflow
-
-### Command Sequence
-```bash
-# 1. Start development environment
-pnpm docker              # Start PostgreSQL and Redis containers
-pnpm dev                # Start development server with hot reload
-
-# 2. Make changes following TDD
-# - Write failing test
-# - Implement feature
-# - Refactor code
-
-# 3. Validate changes
-pnpm test               # Run all tests
-pnpm typecheck          # Type check without emitting files
-mise run lint          # Type-aware linting with ESLint + architectural boundaries
-mise run format         # Format code with Prettier + oxc plugin
-
-# 4. Database changes (if needed)
-drizzle-kit generate   # Generate migration from schema changes
-drizzle-kit migrate    # Apply migrations to database
-```
-
-### Feature Development Process
-
-#### 1. Schema-First Development
-```bash
-# Update database schema first
-vim src/repo/schema.ts
-
-# Generate migration
-drizzle-kit generate
-
-# Apply migration
-drizzle-kit migrate
-
-# Verify schema in database
-drizzle-kit studio
-```
-
-#### 2. Repository Layer (Data Access)
-```typescript
-// Implement repository methods with proper error handling
-export class LedgerRepo {
-  async createTransaction(transaction: TransactionRecord): Promise<TransactionRecord> {
-    try {
-      return await this.db.transaction(async (trx) => {
-        // Atomic database operations
-        const result = await trx.insert(ledgerTransactionsTable)
-          .values(transaction)
-          .returning()
-        
-        return result[0]
-      })
-    } catch (error) {
-      if (error.code === "23505") { // Unique constraint violation
-        throw new DuplicateTransactionError(transaction.idempotencyKey)
-      }
-      throw error
-    }
-  }
-}
-```
-
-#### 3. Service Layer (Business Logic)
-```typescript
-// Implement business rules and validation
-export class LedgerService {
-  async createTransaction(request: CreateTransactionRequest): Promise<Transaction> {
-    // Input validation
-    const validation = this.validateTransactionRequest(request)
-    if (!validation.isValid) {
-      throw new ValidationError(validation.errors)
-    }
-
-    // Business logic
-    const transaction = TransactionEntity.fromRequest(request)
-    const record = await this.ledgerRepo.createTransaction(transaction.toRecord())
+  it("should persist user to database", async () => {
+    const request = { name: "John", email: "john@example.com" }
+    const user = await service.createUser(request)
     
-    return TransactionEntity.fromRecord(record)
-  }
-
-  private validateTransactionRequest(request: CreateTransactionRequest): ValidationResult {
-    const errors: string[] = []
-
-    // Validate double-entry accounting
-    const debits = request.entries
-      .filter(e => e.direction === "debit")
-      .reduce((sum, e) => sum + e.amount, 0)
-    
-    const credits = request.entries
-      .filter(e => e.direction === "credit")
-      .reduce((sum, e) => sum + e.amount, 0)
-
-    if (debits !== credits) {
-      errors.push("Transaction entries must balance (debits must equal credits)")
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors
-    }
-  }
-}
+    const found = await database.query("SELECT * FROM users WHERE id = ?", [user.id])
+    expect(found).toMatchObject(request)
+  })
+})
 ```
 
-#### 4. Route Layer (HTTP API)
+### Test File Conventions
+
 ```typescript
-// Connect service layer to HTTP endpoints
-export async function registerTransactionRoutes(server: FastifyInstance) {
-  server.post<{
-    Params: { ledgerId: string }
-    Body: Static<typeof CreateTransactionSchema>
-    Reply: TransactionResponse
-  }>("/ledgers/:ledgerId/transactions", {
-    schema: {
-      params: { ledgerId: Type.String() },
-      body: CreateTransactionSchema,
-      response: { 201: TransactionResponseSchema }
-    },
-    preHandler: server.auth([server.verifyJWT])
-  }, async (request, reply) => {
-    try {
-      const transaction = await server.services.ledger.createTransaction(request.body)
-      return reply.code(201).send(transaction.toResponse())
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        return reply.code(422).send({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Request validation failed",
-            details: error.errors
-          }
-        })
+// Test files use .test.ts or .spec.ts suffix
+UserService.test.ts
+UserService.spec.ts
+
+// Test files located alongside source files
+src/services/UserService.ts
+src/services/UserService.test.ts
+
+// Or in separate __tests__ directory
+src/services/UserService.ts
+src/services/__tests__/UserService.test.ts
+```
+
+## Code Quality
+
+### Linting and Formatting
+
+- Use consistent formatting tools across all apps (Biome, Prettier, ESLint)
+- Configure pre-commit hooks to enforce formatting
+- Enable auto-fix on save in your editor
+- Run linting before commits and in CI/CD
+
+### Code Reviews
+
+When reviewing code, check for:
+
+- **Architecture**: Does code respect layer boundaries?
+- **Testing**: Are new features covered by tests?
+- **Error Handling**: Are errors handled appropriately?
+- **Performance**: Are there obvious performance issues?
+- **Security**: Are inputs validated? Are there security risks?
+- **Documentation**: Are complex parts explained?
+
+### Complexity Management
+
+```typescript
+// Avoid deeply nested code
+❌ Avoid:
+if (user) {
+  if (user.isActive) {
+    if (user.hasPermission("write")) {
+      if (resource.isAvailable) {
+        // Do something
       }
-      throw error
-    }
-  })
-}
-```
-
-## Database Migration Strategy
-
-### Migration Best Practices
-```bash
-# 1. Generate migration from schema changes
-drizzle-kit generate
-
-# 2. Review generated migration file
-vim migrations/0002_add_transaction_tables.sql
-
-# 3. Add custom constraints or indexes if needed
-# 4. Apply migration to development database
-drizzle-kit migrate
-
-# 5. Test migration rollback strategy (if needed)
-# 6. Apply to staging/production environments
-```
-
-### Migration File Organization
-```
-migrations/
-├── 0001_initial_schema.sql         # Organizations table
-├── 0002_add_ledger_core_tables.sql # Core ledger tables
-├── 0003_add_psp_extensions.sql     # PSP-specific tables
-├── 0004_add_performance_indexes.sql # Optimization indexes
-└── meta/
-    ├── _journal.json               # Migration history
-    ├── 0001_snapshot.json          # Schema snapshots
-    └── 0002_snapshot.json
-```
-
-## Quality Standards
-
-### Code Quality Gates
-```bash
-# All checks must pass before committing
-pnpm typecheck  # No TypeScript errors
-pnpm lint       # No linting errors  
-pnpm test       # All tests passing
-pnpm test:ci    # Coverage thresholds met
-```
-
-### Performance Standards
-- **Sub-second response times** for balance queries
-- **Database query optimization** using EXPLAIN ANALYZE
-- **Connection pooling** configuration for production load
-- **Memory leak prevention** through proper resource cleanup
-
-### Financial Accuracy Requirements
-- **100% test coverage** for financial calculation logic
-- **Atomic operations** for all balance updates
-- **Race condition testing** for concurrent scenarios
-- **Idempotency validation** for safe retry operations
-
-### Error Handling Standards
-```typescript
-// Comprehensive error handling with proper logging
-async createTransaction(request: CreateTransactionRequest): Promise<Transaction> {
-  const startTime = Date.now()
-  
-  try {
-    this.logger.info("Creating transaction", { 
-      description: request.description,
-      entryCount: request.entries.length 
-    })
-
-    const result = await this.performTransaction(request)
-    
-    this.logger.info("Transaction created successfully", {
-      transactionId: result.id,
-      duration: Date.now() - startTime
-    })
-
-    return result
-  } catch (error) {
-    this.logger.error("Transaction creation failed", {
-      error: error.message,
-      request: request,
-      duration: Date.now() - startTime
-    })
-
-    // Re-throw with additional context
-    if (error instanceof ValidationError) {
-      throw error // Pass through validation errors
-    } else if (error.code === "23505") {
-      throw new DuplicateTransactionError("Transaction with this idempotency key already exists")
-    } else {
-      throw new TransactionProcessingError("Failed to process transaction", error)
     }
   }
 }
+
+✅ Prefer early returns:
+if (!user) return
+if (!user.isActive) return
+if (!user.hasPermission("write")) return
+if (!resource.isAvailable) return
+
+// Do something
 ```
 
-## Monitoring & Observability
-
-### Logging Standards
 ```typescript
-// Structured logging with correlation IDs
-this.logger.info("Balance calculation started", {
-  accountId: account.id,
-  correlationId: request.correlationId,
-  operation: "calculateBalance"
+// Extract complex logic to named functions
+❌ Avoid:
+const result = items
+  .filter(item => item.price > 100 && item.category === "electronics" && !item.isDiscounted)
+  .map(item => ({ ...item, finalPrice: item.price * 0.9 }))
+  .reduce((sum, item) => sum + item.finalPrice, 0)
+
+✅ Prefer:
+const isPremiumElectronics = (item: Item) => 
+  item.price > 100 && item.category === "electronics" && !item.isDiscounted
+
+const applyDiscount = (item: Item) => ({
+  ...item,
+  finalPrice: item.price * 0.9
 })
 
-// Performance logging for financial operations
-const startTime = performance.now()
-const balance = await this.calculateBalance(accountId)
-const duration = performance.now() - startTime
+const sumPrices = (items: Item[]) =>
+  items.reduce((sum, item) => sum + item.finalPrice, 0)
 
-this.logger.info("Balance calculation completed", {
-  accountId,
-  balance: balance.amount,
-  duration: `${duration}ms`,
-  correlationId: request.correlationId
-})
+const result = sumPrices(
+  items.filter(isPremiumElectronics).map(applyDiscount)
+)
 ```
 
-### Health Checks
-```typescript
-// Database connectivity and performance health checks
-server.get("/health", async (request, reply) => {
-  const checks = await Promise.allSettled([
-    this.checkDatabaseConnection(),
-    this.checkBalanceCalculationPerformance(),
-    this.checkMemoryUsage()
-  ])
-
-  const isHealthy = checks.every(check => check.status === "fulfilled")
-  
-  return reply.code(isHealthy ? 200 : 503).send({
-    status: isHealthy ? "healthy" : "unhealthy",
-    checks: checks.map(check => ({
-      name: check.name,
-      status: check.status,
-      message: check.status === "fulfilled" ? "OK" : check.reason
-    }))
-  })
-})
-```
-
-## Documentation Standards
+## Documentation
 
 ### Code Comments
+
 ```typescript
+// Use JSDoc for public APIs
 /**
- * Creates a new double-entry transaction with atomic balance updates.
- * Uses SELECT...FOR UPDATE to prevent race conditions on balance calculations.
+ * Creates a new user account with the provided information.
  * 
- * @param request - Transaction creation request with entries
- * @returns Created transaction with generated ID and timestamps
- * @throws ValidationError when entries don't balance or accounts don't exist
- * @throws ConcurrencyError when optimistic locking fails
+ * @param request - User creation request containing name and email
+ * @returns Created user with generated ID and timestamps
+ * @throws ValidationError when email format is invalid or email already exists
+ * @throws DatabaseError when database operation fails
  */
-async createTransaction(request: CreateTransactionRequest): Promise<Transaction>
+export async function createUser(request: CreateUserRequest): Promise<User>
+
+// Use inline comments to explain "why", not "what"
+❌ Avoid:
+// Loop through items
+for (const item of items) {
+  // Add item to cart
+  cart.add(item)
+}
+
+✅ Prefer:
+// Pre-populate cart with recommended items to improve conversion rate
+for (const item of recommendedItems) {
+  cart.add(item)
+}
 ```
 
-### README Patterns
-- Keep implementation-focused (not marketing-focused)
-- Include quick start commands and development workflow
-- Document environment setup and testing procedures
-- Reference architecture decisions and standards
+### README Documentation
 
-### API Documentation
-- Use TypeBox schemas for automatic OpenAPI generation
-- Include comprehensive examples in schema definitions
-- Document authentication requirements clearly
-- Provide error response examples for each endpoint
+Each application/package should include:
+
+- **Quick start**: How to run the app locally
+- **Architecture overview**: High-level structure and patterns
+- **Development workflow**: Commands, testing, common tasks
+- **Deployment**: How to build and deploy
+
+## Performance
+
+### General Guidelines
+
+- **Measure before optimizing**: Use profiling tools to identify bottlenecks
+- **Avoid premature optimization**: Write clear code first, optimize later
+- **Cache wisely**: Cache expensive operations, invalidate correctly
+- **Batch operations**: Group similar operations when possible
+
+### Common Patterns
+
+```typescript
+// Avoid N+1 queries
+❌ Avoid:
+const users = await getUsers()
+for (const user of users) {
+  user.posts = await getPostsByUserId(user.id) // N queries
+}
+
+✅ Prefer:
+const users = await getUsers()
+const userIds = users.map(u => u.id)
+const posts = await getPostsByUserIds(userIds) // 1 query
+const postsByUserId = groupBy(posts, 'userId')
+users.forEach(user => {
+  user.posts = postsByUserId[user.id] || []
+})
+```
+
+## Security
+
+### Input Validation
+
+- Validate all user input at entry points
+- Use schema validation libraries (Zod, TypeBox, Yup)
+- Sanitize data before using in queries or rendering
+- Never trust client-side validation alone
+
+### Authentication & Authorization
+
+- Verify authentication on every request
+- Check authorization before accessing resources
+- Use secure token storage and transmission
+- Implement proper session management
+
+### Data Protection
+
+- Hash passwords with strong algorithms (bcrypt, argon2)
+- Encrypt sensitive data at rest and in transit
+- Use environment variables for secrets
+- Never commit secrets to version control
+
+## App-Specific Standards
+
+Each application may extend these principles with technology-specific conventions:
+
+- **API App**: See `apps/api/docs/standards/coding.md` for Fastify, Drizzle, PostgreSQL conventions
+- **Web App**: See `apps/web/docs/standards/coding.md` for React, Tailwind, Vitest conventions
+- **Docs App**: See `apps/docs/docs/standards/coding.md` for Docusaurus content conventions

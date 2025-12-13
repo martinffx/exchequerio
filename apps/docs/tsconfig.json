@@ -1,0 +1,16 @@
+{
+  "extends": "@exchequerio/typescript-config/base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "target": "ES2022",
+    "jsx": "react-jsx",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@site/*": ["./*"]
+    },
+    "types": ["@docusaurus/module-type-aliases", "@docusaurus/types"]
+  },
+  "include": ["src/**/*", "*.ts", "*.tsx"]
+}

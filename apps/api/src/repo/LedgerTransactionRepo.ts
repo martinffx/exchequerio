@@ -195,7 +195,7 @@ class LedgerTransactionRepo {
 			return await this.db.transaction(async tx => {
 				// 3a. Insert transaction record (idempotent via upsert)
 				const transactionRecord = transaction.toRecord();
-				const transactionResult = await tx
+				const transactionResultPromise = tx
 					.insert(LedgerTransactionsTable)
 					.values(transactionRecord)
 					.onConflictDoUpdate({
@@ -211,12 +211,9 @@ class LedgerTransactionRepo {
 						},
 					})
 					.returning();
-				const createdTransaction = LedgerTransactionEntity.fromRecord(transactionResult[0], [
-					...transaction.entries,
-				]);
 
 				// 3b. Insert all entries in batch (idempotent via upsert)
-				await Promise.all(
+				const txEntriesPromises =
 					transaction.entries.map(async entry => {
 						const entryRecord = entry.toRecord();
 						await tx
@@ -238,10 +235,10 @@ class LedgerTransactionRepo {
 								},
 							});
 					})
-				);
+
 
 				// 3c. Update all account balances in parallel with optimistic locking
-				await Promise.all(
+				const ledgerAccountsPromises =
 					ledgerAccounts.map(async account => {
 						const result = await tx
 							.update(LedgerAccountsTable)
@@ -271,7 +268,11 @@ class LedgerTransactionRepo {
 
 						return LedgerAccountEntity.fromRecord(result[0]);
 					})
-				);
+
+				const [transactionResult] = await Promise.all([transactionResultPromise, ...txEntriesPromises, ...ledgerAccountsPromises])
+				const createdTransaction = LedgerTransactionEntity.fromRecord(transactionResult[0], [
+					...transaction.entries,
+				]);
 
 				// Return the created transaction with entries
 				return createdTransaction;

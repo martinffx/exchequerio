@@ -1,57 +1,28 @@
 {
-  "name": "ledger",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "start": "dotenvx run -- bun ./src/index.ts",
-    "dev": "dotenvx run -- bun --watch ./src/index.ts",
-    "docker": "docker-compose up -d",
-    "db:gen": "drizzle-kit generate",
-    "db:migrate": "dotenvx run -- drizzle-kit migrate",
-    "test": "NODE_ENV=test dotenvx run -f .env.test -- vitest run",
-    "test:watch": "NODE_ENV=test dotenvx run -f .env.test -- vitest",
-    "test:ci": "NODE_ENV=test dotenvx run -f .env.test -- vitest run --coverage",
-    "types": "tsc --noEmit",
-    "lint:fix": "biome check --write ./src",
-    "lint:slow": "eslint ./src --max-warnings 0 --quiet",
-    "lint": "biome check ./src && eslint ./src --max-warnings 0",
-    "format": "biome format --write ./src"
-  },
-  "dependencies": {
-    "@dotenvx/dotenvx": "^1.51.1",
-    "@fastify/auth": "^5.0.3",
-    "@fastify/jwt": "^10.0.0",
-    "@fastify/swagger": "^9.6.1",
-    "@fastify/swagger-ui": "^5.2.3",
-    "@fastify/type-provider-typebox": "^6.1.0",
-    "@fastify/under-pressure": "^9.0.3",
-    "@sinclair/typebox": "^0.34.41",
-    "drizzle-orm": "^0.44.7",
-    "fast-jwt": "^6.0.2",
-    "fastify": "^5.6.2",
-    "fastify-plugin": "^5.1.0",
-    "luxon": "^3.7.2",
-    "pg": "^8.16.3",
-    "pino-pretty": "^13.1.2",
-    "radash": "^12.1.1",
-    "typeid-js": "^1.2.0",
-    "uuid": "^13.0.0"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "2.3.7",
-    "@faker-js/faker": "^10.1.0",
-    "@tsconfig/node-lts": "^22.0.4",
-    "@tsconfig/recommended": "^1.0.13",
-    "@types/luxon": "^3.7.1",
-    "@types/node": "^24.10.1",
-    "@types/pg": "^8.15.6",
-    "@vitest/coverage-v8": "^4.0.14",
-    "drizzle-kit": "^0.31.7",
-    "eslint": "^9.39.1",
-    "eslint-plugin-boundaries": "^4.2.0",
-    "eslint-plugin-unicorn": "^62.0.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.48.0",
-    "vitest": "^4.0.14"
-  }
+	"name": "exchequerio",
+	"private": true,
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"packageManager": "bun@1.2.15",
+	"scripts": {
+		"docker:up": "docker-compose up -d",
+		"docker:down": "docker-compose down",
+		"docker:logs": "docker-compose logs -f db",
+		"dev": "bun run docker:up && turbo dev",
+		"dev:api": "bun run docker:up && turbo dev --filter=@exchequerio/api",
+		"dev:web": "turbo dev --filter=@exchequerio/web",
+		"dev:docs": "turbo dev --filter=@exchequerio/docs",
+		"build": "turbo build",
+		"test": "bun run docker:up && turbo test",
+		"lint": "turbo lint",
+		"format": "turbo format",
+		"types": "turbo types",
+		"check": "turbo run format lint types",
+		"ci": "bun run docker:up && turbo build lint types test"
+	},
+	"devDependencies": {
+		"turbo": "^2"
+	}
 }

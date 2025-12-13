@@ -1,0 +1,14 @@
+{
+	"extends": "@exchequerio/typescript-config/react.json",
+	"include": [
+		"app/**/*",
+		"**/*.ts",
+		"**/*.tsx",
+		".react-router/types/**/*"
+	],
+	"compilerOptions": {
+		"paths": {
+			"~/*": ["./app/*"]
+		}
+	}
+}

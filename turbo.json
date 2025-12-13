@@ -1,0 +1,27 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build"],
+			"outputs": ["dist/**", "build/**", ".react-router/**", ".docusaurus/**"]
+		},
+		"dev": {
+			"cache": false,
+			"persistent": true
+		},
+		"test": {
+			"outputs": ["coverage/**"]
+		},
+		"lint": {},
+		"format": {},
+		"types": {
+			"dependsOn": ["^build"]
+		},
+		"db:gen": {
+			"cache": false
+		},
+		"db:migrate": {
+			"cache": false
+		}
+	}
+}

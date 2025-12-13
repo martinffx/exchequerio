@@ -1,332 +1,220 @@
-# TypeScript Architecture Standards
-
-## Technology Stack
-
-### Core Stack
-- **Runtime:** Node.js with TypeScript
-- **API Framework:** Fastify with type-provider-typebox for runtime validation
-- **Database:** PostgreSQL with Drizzle ORM
-- **Authentication:** JWT tokens via @fastify/auth and @fastify/jwt
-- **Documentation:** Auto-generated OpenAPI/Swagger
-
-### Supporting Technologies
-- **Testing:** Jest with ts-jest transform
-- **Linting/Formatting:** Biome (not Prettier/ESLint)
-- **Environment:** @dotenvx/dotenvx for configuration
-- **Containerization:** Docker with docker-compose for development
+# Architecture Standards
 
 ## Layered Architecture Pattern
 
-### Architecture Flow
+All applications in this monorepo follow a layered architecture pattern with clear separation of concerns and unidirectional dependency flow.
+
+### Architecture Principles
+
+#### Separation of Concerns
+- Each layer has a single, well-defined responsibility
+- Layers communicate through defined interfaces
+- Business logic is isolated from infrastructure concerns
+- Data transformation happens at layer boundaries
+
+#### Dependency Direction
+- Dependencies flow inward toward the domain
+- Outer layers depend on inner layers, never the reverse
+- Infrastructure depends on domain, not vice versa
+- UI/API layers are replaceable without changing business logic
+
+#### Single Responsibility
+- Each layer handles one aspect of the application
+- Presentation layer: User interaction and data presentation
+- Service/Business layer: Domain logic and rules
+- Data layer: Data access and persistence
+- Entity/Domain layer: Data models and transformations
+
+### Common Layered Patterns
+
+#### Backend API Pattern
 ```
-JWT Auth → Routes → Services → Repositories → PostgreSQL Database
-```
-
-### Layer Responsibilities
-
-#### **Route Layer** (`src/routes/`)
-- HTTP request/response handling
-- Runtime type validation using TypeBox schemas
-- JWT authentication and authorization
-- OpenAPI documentation generation
-- Error response formatting
-
-**Standards:**
-- All routes prefixed with `/api`
-- Use TypeBox schemas for request/response validation
-- Implement proper HTTP status codes
-- Include comprehensive error handling
-
-#### **Service Layer** (`src/services/`)
-- Domain business logic implementation
-- Transaction orchestration and validation
-- Entity transformation and validation
-- Cross-cutting concerns (logging, monitoring)
-
-**Standards:**
-- Services injected via Fastify plugins
-- Available on `server.services` namespace
-- No direct HTTP concerns (request/response objects)
-- Implement comprehensive business rule validation
-
-#### **Repository Layer** (`src/repo/`)
-- Data access abstraction
-- Database query implementation
-- Transaction management
-- Data mapping between entities and database records
-
-**Standards:**
-- Use Drizzle ORM for type-safe database access
-- Implement atomic operations with proper locking
-- Abstract database implementation details
-- Handle database-specific error scenarios
-
-#### **Entity Layer** (`src/services/entities/`)
-- Domain model definitions
-- Data transformation methods
-- Input validation logic
-- Business rule enforcement
-
-**Standards:**
-- Implement transformation methods: `fromRequest`, `toRecord`, `toResponse`, `validate`
-- Encapsulate business logic within entities
-- Provide type-safe data contracts
-- Handle data normalization and validation
-
-## Plugin System Architecture
-
-### Core Plugins
-- **RepoPlugin** - Registers database repositories using Drizzle ORM
-- **ServicePlugin** - Registers business logic services with dependency injection
-- **RouterPlugin** - Registers HTTP route handlers with JWT authentication
-
-### Plugin Registration Pattern
-```typescript
-// All plugins extend Fastify instance via module declaration
-declare module "fastify" {
-  interface FastifyInstance {
-    repositories: RepositoryContainer
-    services: ServiceContainer
-  }
-}
+Routes/Controllers → Services → Repositories → Entities → Database
 ```
 
-## Database Design Standards
+**Layer Responsibilities:**
+- **Routes/Controllers**: HTTP handling, validation, auth
+- **Services**: Business logic, orchestration, domain rules
+- **Repositories**: Data access abstraction, queries
+- **Entities**: Domain models, transformations, validation
+- **Database**: Persistence, schema, constraints
 
-### PostgreSQL Configuration
-- **Primary Database:** PostgreSQL for ACID compliance
-- **ORM:** Drizzle ORM for type-safe database access
-- **Migrations:** Schema-driven with `drizzle-kit`
-- **Connection Pooling:** Configured for production load
-
-### Schema Visualization
-**See the complete [Entity Relationship Diagram](../product/erd.md) for detailed database schema visualization with all entities, relationships, and attributes.**
-
-### Schema Principles
-- **Schema-first approach** with TypeScript type inference
-- **ACID compliance** required for financial operations
-- **Immutable audit trails** for regulatory compliance
-- **Optimistic locking** for concurrent balance updates
-
-### Migration Strategy
-- Use `drizzle-kit generate` for schema-driven migrations
-- Migrations stored in `migrations/` directory
-- Apply migrations via `drizzle-kit migrate`
-- Include performance indexes in migration files
-
-### Financial Data Constraints
-```sql
--- Race condition prevention
-SELECT ... FOR UPDATE on balance updates
-
--- Double-entry accounting enforcement
-CHECK (SUM(debit_entries) = SUM(credit_entries)) per transaction
-
--- Immutable entries
-No UPDATEs allowed on transaction entries
-
--- Idempotency support
-UNIQUE constraints on idempotency keys
+#### Frontend Pattern
+```
+Pages/Routes → Components → Hooks/State → API Client → Services
 ```
 
-### Database Schema Design
-```sql
--- Double-entry accounting enforcement
-CREATE TABLE ledger_transactions (
-  id TEXT PRIMARY KEY,
-  ledger_id TEXT NOT NULL,
-  description TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'posted', 'archived')),
-  effective_at TIMESTAMP WITH TIME ZONE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+**Layer Responsibilities:**
+- **Pages/Routes**: Route handling, page-level state
+- **Components**: UI rendering, user interaction
+- **Hooks/State**: Client state, server state (react-query), global state (zustand)
+- **API Client**: Type-safe API communication
+- **Services**: Business logic, data transformation
 
--- Immutable transaction entries
-CREATE TABLE ledger_transaction_entries (
-  id TEXT PRIMARY KEY,
-  transaction_id TEXT NOT NULL REFERENCES ledger_transactions(id),
-  account_id TEXT NOT NULL REFERENCES ledger_accounts(id),
-  direction TEXT NOT NULL CHECK (direction IN ('debit', 'credit')),
-  amount NUMERIC(15, 2) NOT NULL CHECK (amount >= 0),
-  currency TEXT NOT NULL,
-  description TEXT,
-  effective_at TIMESTAMP WITH TIME ZONE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+### Cross-Cutting Concerns
 
--- Balance constraint enforcement
-ALTER TABLE ledger_transaction_entries 
-ADD CONSTRAINT check_transaction_balance 
-CHECK (
-  0 = (
-    SELECT COALESCE(SUM(CASE WHEN direction = 'debit' THEN amount ELSE -amount END), 0)
-    FROM ledger_transaction_entries 
-    WHERE transaction_id = ledger_transaction_entries.transaction_id
-  )
-);
-```
+#### Authentication & Authorization
+- Implemented at the outermost layer (Routes/Controllers, Pages)
+- Authorization rules may invoke service layer for complex decisions
+- Auth context propagated through layers as needed
 
-### Race Condition Prevention
-```sql
--- Optimistic locking for balance updates
-ALTER TABLE ledger_accounts 
-ADD COLUMN lock_version INTEGER NOT NULL DEFAULT 1;
+#### Error Handling
+- Domain errors defined in entity/service layer
+- Infrastructure errors handled at repository/API client layer
+- Presentation layer translates errors for user/API consumer
+- Logging at appropriate layer boundaries
 
--- Balance calculation with row locking
-SELECT 
-  account_id,
-  posted_balance,
-  pending_balance,
-  available_balance,
-  lock_version
-FROM ledger_accounts 
-WHERE id = $1
-FOR UPDATE;
-```
+#### Validation
+- Input validation at entry points (Routes, Forms)
+- Business rule validation in service layer
+- Data integrity validation at repository/database layer
+- Entity validation for data transformations
 
-### Performance Optimization
-```sql
--- Strategic indexing
-CREATE INDEX idx_ledger_accounts_ledger_id ON ledger_accounts(ledger_id);
-CREATE INDEX idx_ledger_transactions_ledger_id ON ledger_transactions(ledger_id);
-CREATE INDEX idx_ledger_transaction_entries_transaction_id ON ledger_transaction_entries(transaction_id);
-CREATE INDEX idx_ledger_transaction_entries_account_id ON ledger_transaction_entries(account_id);
+#### Logging & Monitoring
+- Request/response logging at API/Route layer
+- Business event logging at service layer
+- Database query logging at repository layer
+- Performance monitoring at layer boundaries
 
--- Time-based queries
-CREATE INDEX idx_ledger_transactions_effective_at ON ledger_transactions(effective_at DESC);
-CREATE INDEX idx_ledger_transaction_entries_effective_at ON ledger_transaction_entries(effective_at DESC);
+## Design Patterns
 
--- Status-based queries
-CREATE INDEX idx_ledger_transactions_status ON ledger_transactions(status) WHERE status IN ('pending', 'posted');
-CREATE INDEX idx_ledger_transaction_entries_status ON ledger_transaction_entries(status) WHERE status IN ('pending', 'posted');
-```
+### Dependency Injection
+- Constructor injection preferred over property injection
+- Interfaces define contracts between layers
+- Promotes testability and loose coupling
 
-### Data Consistency Standards
-```sql
--- Atomic transaction creation
-BEGIN;
+### Repository Pattern
+- Abstracts data access logic
+- Provides consistent interface for data operations
+- Enables testing without database dependencies
 
--- Lock accounts for balance updates
-SELECT lock_version FROM ledger_accounts WHERE id = $1 FOR UPDATE;
-SELECT lock_version FROM ledger_accounts WHERE id = $2 FOR UPDATE;
+### Service Pattern
+- Encapsulates business logic
+- Coordinates between repositories and entities
+- Handles transaction boundaries
 
--- Create transaction
-INSERT INTO ledger_transactions (id, ledger_id, description, status, effective_at)
-VALUES ($3, $4, $5, 'pending', $6);
+### Entity/Domain Model Pattern
+- Represents business concepts
+- Encapsulates data transformation logic
+- Validates business rules
 
--- Create entries
-INSERT INTO ledger_transaction_entries (id, transaction_id, account_id, direction, amount, currency, effective_at)
-VALUES 
-  ($7, $3, $1, 'debit', $8, $9, $6),
-  ($10, $3, $2, 'credit', $8, $9, $6);
+## Architecture Boundaries
 
--- Update account balances
-UPDATE ledger_accounts 
-SET 
-  posted_balance = posted_balance + CASE WHEN direction = 'credit' THEN amount ELSE -amount END,
-  pending_balance = pending_balance + CASE WHEN direction = 'credit' THEN amount ELSE -amount END,
-  lock_version = lock_version + 1
-FROM ledger_transaction_entries
-WHERE ledger_transaction_entries.account_id = ledger_accounts.id
-  AND ledger_transaction_entries.transaction_id = $3;
+### What Each Layer Can Do
 
-COMMIT;
-```
+#### Presentation Layer (Routes, Pages, Components)
+✅ **Can:**
+- Handle HTTP requests/responses or UI events
+- Validate input format and structure
+- Call service layer methods
+- Transform service responses for presentation
+- Manage authentication/authorization
+- Handle presentation-specific errors
 
-### Idempotency Support
-```sql
--- Idempotency key constraints
-ALTER TABLE ledger_transactions 
-ADD CONSTRAINT unique_idempotency_key 
-UNIQUE (idempotency_key);
+❌ **Cannot:**
+- Contain business logic
+- Access repositories directly
+- Access database directly
+- Implement domain rules
 
--- Safe retry handling
-INSERT INTO ledger_transactions (id, ledger_id, description, status, effective_at, idempotency_key)
-VALUES ($1, $2, $3, 'pending', $4, $5)
-ON CONFLICT (idempotency_key) 
-DO NOTHING
-RETURNING id;
-```
+#### Service/Business Layer
+✅ **Can:**
+- Implement business rules and domain logic
+- Orchestrate multiple repository calls
+- Manage transaction boundaries
+- Transform data using entities
+- Validate business constraints
+- Emit business events/logs
 
-### Security Standards
-```sql
--- Role-based access
-CREATE ROLE finops_read;
-CREATE ROLE finops_write;
-CREATE ROLE admin;
+❌ **Cannot:**
+- Access HTTP request/response objects
+- Access UI state directly
+- Access database directly (must use repositories)
+- Contain presentation logic
 
--- Grant permissions
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO finops_read;
-GRANT SELECT, INSERT ON ledger_transactions TO finops_write;
-GRANT SELECT, INSERT ON ledger_transaction_entries TO finops_write;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO admin;
-```
+#### Repository/Data Access Layer
+✅ **Can:**
+- Execute database queries
+- Map between database records and entities
+- Handle database-specific errors
+- Manage database connections
+- Implement caching strategies
 
-## Authentication & Security
+❌ **Cannot:**
+- Implement business logic
+- Validate business rules
+- Access HTTP objects
+- Transform data for presentation
 
-### JWT Implementation
-- **Token-based authentication** via @fastify/auth
-- **Multi-tenant isolation** at organization level
-- **Bearer token format** in Authorization header
-- **Configurable token expiration** via environment variables
+#### Entity/Domain Layer
+✅ **Can:**
+- Define domain models and types
+- Implement data transformations
+- Validate data structure and format
+- Encapsulate domain-specific logic
 
-### Security Standards
-- **Input validation** using TypeBox runtime validation
-- **SQL injection prevention** via Drizzle ORM parameterized queries
-- **Rate limiting** using @fastify/under-pressure
-- **Audit trail logging** for all financial operations
+❌ **Cannot:**
+- Access external dependencies (database, APIs)
+- Contain presentation logic
+- Contain infrastructure concerns
 
-## Performance Requirements
+## Testing Strategy
 
-### Response Time Targets
-- **Sub-second response times** for balance queries
-- **High-volume concurrent** transaction processing
-- **Optimized indexing** for PSP-specific query patterns
-- **Connection pooling** for database efficiency
+### Unit Tests
+- Test each layer in isolation
+- Mock dependencies from lower layers
+- Focus on business logic and transformations
+- Fast execution, no external dependencies
 
-### Optimization Strategies
-- **Pre-calculated balances** on account records with lock_version
-- **Strategic database indexes** for common query patterns
-- **Query optimization** using Drizzle ORM query builder
-- **Caching strategies** for frequently accessed data
+### Integration Tests
+- Test interaction between layers
+- Use real database or test doubles
+- Verify layer contracts and boundaries
+- Test transaction boundaries
 
-## Error Handling Standards
+### End-to-End Tests
+- Test complete user flows
+- Verify all layers work together
+- Use production-like environment
+- Cover critical business paths
 
-### Error Categories
-- **Validation Errors** - 400 Bad Request with detailed field errors
-- **Authentication Errors** - 401 Unauthorized with clear messaging
-- **Authorization Errors** - 403 Forbidden for resource access
-- **Business Logic Errors** - 422 Unprocessable Entity for domain violations
-- **System Errors** - 500 Internal Server Error with logging
+## Performance Considerations
 
-### Error Response Format
-```typescript
-{
-  error: {
-    code: "VALIDATION_ERROR",
-    message: "Request validation failed",
-    details: [
-      {
-        field: "amount",
-        message: "Amount must be greater than 0"
-      }
-    ]
-  }
-}
-```
+### Layer-Specific Optimizations
 
-## Development Environment
+#### Presentation Layer
+- Response caching and compression
+- Pagination for large datasets
+- Lazy loading and code splitting
+- Debouncing and throttling
 
-### Configuration Management
-- **Environment variables** loaded via @dotenvx/dotenvx
-- **Separate environments** (.env, .env.test, .env.production)
-- **Centralized config class** for environment variable access
-- **Type-safe configuration** with validation
+#### Service Layer
+- Batch operations where possible
+- Parallel execution for independent operations
+- In-memory caching for frequently accessed data
+- Event-driven async processing
 
-### Development Tools
-- **Hot reload** via tsx watch in development mode
-- **Database exploration** via Drizzle Studio
-- **API testing** via auto-generated Swagger UI
-- **Container orchestration** via docker-compose
+#### Repository Layer
+- Query optimization and indexing
+- Connection pooling
+- Prepared statements and query caching
+- Efficient data mapping
+
+## Migration Strategy
+
+When refactoring existing code to follow these patterns:
+
+1. **Identify layer violations** - Find code that crosses boundaries
+2. **Extract to appropriate layer** - Move logic to correct layer
+3. **Define interfaces** - Create contracts between layers
+4. **Add tests** - Ensure behavior is preserved
+5. **Refactor incrementally** - Small, safe changes
+6. **Document decisions** - Explain architectural choices
+
+## App-Specific Patterns
+
+Each application may extend these principles with technology-specific implementations:
+
+- **API App**: See `apps/api/docs/standards/architecture.md` for Fastify, Drizzle, PostgreSQL patterns
+- **Web App**: See `apps/web/docs/standards/architecture.md` for React Router, React Query, Zustand patterns
+- **Docs App**: See `apps/docs/AGENTS.md` for Docusaurus-specific patterns
