@@ -10,6 +10,9 @@
 			"persistent": true
 		},
 		"test": {
+			"outputs": []
+		},
+		"test:ci": {
 			"outputs": ["coverage/**"]
 		},
 		"lint": {},

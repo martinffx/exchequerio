@@ -193,9 +193,9 @@ class LedgerTransactionRepo {
 		//    in a single DB transaction
 		try {
 			return await this.db.transaction(async tx => {
-				// 3a. Insert transaction record (idempotent via upsert)
+				// 3a. Insert transaction record FIRST (entries depend on it via FK)
 				const transactionRecord = transaction.toRecord();
-				const transactionResultPromise = tx
+				const transactionResult = await tx
 					.insert(LedgerTransactionsTable)
 					.values(transactionRecord)
 					.onConflictDoUpdate({
@@ -266,11 +266,9 @@ class LedgerTransactionRepo {
 					return LedgerAccountEntity.fromRecord(result[0]);
 				});
 
-				const [transactionResult] = await Promise.all([
-					transactionResultPromise,
-					...txEntriesPromises,
-					...ledgerAccountsPromises,
-				]);
+				// 3d. Wait for entries and balance updates to complete (can run in parallel)
+				await Promise.all([...txEntriesPromises, ...ledgerAccountsPromises]);
+
 				const createdTransaction = LedgerTransactionEntity.fromRecord(transactionResult[0], [
 					...transaction.entries,
 				]);

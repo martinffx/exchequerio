@@ -20,7 +20,7 @@
 		"format": "turbo format",
 		"types": "turbo types",
 		"check": "turbo run format lint types",
-		"ci": "bun run docker:up && turbo build lint types test"
+		"ci": "bun run docker:up && turbo build lint types test:ci"
 	},
 	"devDependencies": {
 		"turbo": "^2"
