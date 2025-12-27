@@ -1,67 +1,29 @@
 # Exchequer Platform
 
-Real-time double-entry ledger platform for Payment Service Providers (PSPs) and Marketplaces, enabling Financial Operations teams to track money flow, calculate balances, and automate settlement processes.
+Real-time double-entry ledger systems for PSPs, Marketplaces, and anyone who needs to move and manage money at scale.
 
-## Monorepo Structure
+## Why Exchequer?
 
-This is a Turborepo monorepo containing three applications:
-
-### 📦 Applications
-
-#### `apps/api/` - Ledger API
-Real-time double-entry ledger API with PostgreSQL persistence.
-
-**Tech Stack:** Fastify, Drizzle ORM, PostgreSQL, Vitest
-
-[View API Documentation →](apps/api/AGENTS.md)
-
-#### `apps/web/` - Customer Portal
-Customer-facing dashboard for ledger data visualization and management.
-
-**Tech Stack:** React Router v7, React 19, Tailwind CSS v4, shadcn/ui, TanStack React Query, Zustand
-
-[View Web Documentation →](apps/web/AGENTS.md)
-
-#### `apps/docs/` - Documentation Site
-Public documentation site built with Docusaurus.
-
-**Tech Stack:** Docusaurus, Markdown/MDX
-
-[View Docs Documentation →](apps/docs/AGENTS.md)
+- **Kick-start your ledger** — Get a production-ready ledger system running in minutes, not months
+- **Simple by design** — Clean APIs, predictable patterns, no magic
+- **Real-time balances** — Know exactly where your money is, right now
+- **By devs, for devs** — Built with the developer experience you wish every financial tool had
 
 ## Quick Start
 
-### Prerequisites
-
-- **Node.js** 18+ (managed via mise: `mise install`)
-- **Bun** 1.2+ (package manager)
-- **Docker** (for PostgreSQL database)
-
-### Initial Setup
-
 ```bash
-# Install dependencies
+# Prerequisites: Node.js 18+, Bun 1.2+, Docker
+
 bun install
-
-# Start PostgreSQL database
 bun run docker:up
-
-# Run database migrations (API)
-cd apps/api
-bun run db:migrate
-cd ../..
-
-# Start all applications
 bun run dev
 ```
 
-The applications will be available at:
-- **API**: `http://localhost:3000`
-- **Web**: `http://localhost:5173`
-- **Docs**: `http://localhost:3000` (if running)
+API runs at `http://localhost:3000` • Web dashboard at `http://localhost:5173`
 
-## Development Commands
+## What's Inside
 
+<<<<<<< HEAD
 ### Running Applications
 
 ```bash
@@ -172,143 +134,30 @@ bun run docker:logs
 bun run ci
 # Equivalent to: docker:up + build + lint + types + test
 ```
+=======
+| App | Description | Stack |
+|-----|-------------|-------|
+| `apps/api` | Ledger API | Fastify, Drizzle, PostgreSQL |
+| `apps/web` | Dashboard | React Router v7, Tailwind |
+| `apps/docs` | Documentation | Docusaurus |
+>>>>>>> main
 
 ## Documentation
 
-### Product Documentation
-
-High-level product vision and roadmap:
-
-- [Product Overview](docs/product/product.md) - What we're building and why
-- [Roadmap](docs/product/roadmap.md) - Feature priorities and implementation plan
-
-### Architecture & Standards
-
-Shared architecture and coding standards:
-
-- [Architecture Standards](docs/standards/architecture.md) - Layered architecture, design patterns
-- [Coding Standards](docs/standards/coding.md) - TypeScript conventions, testing, best practices
-
-### App-Specific Documentation
-
-Each app has its own detailed documentation:
-
-- [API Development Guide](apps/api/AGENTS.md) - Fastify, Drizzle, PostgreSQL patterns
-- [Web Development Guide](apps/web/AGENTS.md) - React Router, Tailwind, React Query patterns
-- [Docs Guide](apps/docs/AGENTS.md) - Docusaurus content and structure
-
-### Getting Started
-
-New to the project? Start here:
-
-1. Read [AGENTS.md](AGENTS.md) for a complete overview
-2. Review [Architecture Standards](docs/standards/architecture.md)
-3. Check [Coding Standards](docs/standards/coding.md)
-4. Explore app-specific guides for your area of focus
-
-## Development Workflow
-
-This project uses **spec-driven development**. To build a new feature:
-
-1. `/spec-create [feature-name]` - Create feature specification
-2. `/spec-design [feature-name]` - Design technical architecture
-3. `/spec-plan [feature-name]` - Plan implementation tasks
-4. `/spec-implement [feature-name]` - Implement with stub-driven TDD
-5. `/spec-progress [feature-name]` - Track feature progress
-
-See [AGENTS.md](AGENTS.md) for complete workflow details.
-
-## Architecture
-
-All applications follow consistent layered architecture:
-
-### Backend (API)
-```
-Routes → Services → Repositories → Entities → Database
-```
-
-### Frontend (Web)
-```
-Pages → Components → Hooks/State → API Client → Services
-```
-
-Key principles:
-- **Separation of Concerns** - Each layer has a single responsibility
-- **Dependency Direction** - Dependencies flow inward toward domain
-- **Test-Driven Development** - Stub-driven TDD for all features
-- **Type Safety** - Strict TypeScript across all apps
-
-## Tech Stack
-
-### Shared Technologies
-- **Language:** TypeScript
-- **Package Manager:** Bun
-- **Build System:** Turborepo
-- **Testing:** Vitest
-- **Code Quality:** Biome + ESLint
-
-### API
-- **Framework:** Fastify with TypeBox
-- **Database:** PostgreSQL with Drizzle ORM
-- **Auth:** JWT tokens
-
-### Web
-- **Framework:** React Router v7
-- **UI:** React 19, Tailwind CSS v4, shadcn/ui
-- **Data:** openapi-react-query, TanStack React Query
-- **State:** Zustand
-
-### Docs
-- **Framework:** Docusaurus
-- **Content:** Markdown/MDX
+- [Getting Started](AGENTS.md) — Full development guide
+- [Architecture](docs/standards/architecture.md) — Design patterns and principles
+- [API Guide](apps/api/AGENTS.md) — Backend development
+- [Web Guide](apps/web/AGENTS.md) — Frontend development
 
 ## Contributing
 
-### Code Review Checklist
-
-- ✅ Follows layered architecture patterns
-- ✅ Includes comprehensive tests (unit + integration)
-- ✅ Passes all code quality checks (`bun run check`)
-- ✅ Updates documentation if needed
-- ✅ Follows spec-driven development workflow
-
-### Quality Gates
-
-All checks must pass before merging:
-
 ```bash
-bun run format     # Code formatting
-bun run lint       # Linting
-bun run types      # Type checking
-bun run test       # All tests passing
+bun run check   # Format, lint, type check
+bun run test    # Run all tests (requires Docker)
 ```
 
-## Project Structure
-
-```
-/
-├── AGENTS.md                    # Monorepo development guide
-├── README.md                    # This file
-├── docs/
-│   ├── product/                 # Product vision and roadmap
-│   └── standards/               # Shared architecture and coding standards
-├── apps/
-│   ├── api/                     # Ledger API (Fastify, Drizzle, PostgreSQL)
-│   ├── web/                     # Customer Portal (React Router, Tailwind)
-│   └── docs/                    # Documentation site (Docusaurus)
-└── packages/                    # Shared packages
-    ├── biome-config/            # Shared Biome configuration
-    ├── eslint-config/           # Shared ESLint configuration
-    └── typescript-config/       # Shared TypeScript configuration
-```
-
-## Support
-
-- **Product Questions:** See [docs/product/product.md](docs/product/product.md)
-- **Architecture Questions:** See [docs/standards/architecture.md](docs/standards/architecture.md)
-- **Coding Questions:** See [docs/standards/coding.md](docs/standards/coding.md)
-- **App-Specific Questions:** See `apps/*/AGENTS.md`
+See [AGENTS.md](AGENTS.md) for the full development workflow.
 
 ## License
 
-Private repository - All rights reserved.
+MIT License - see [LICENSE](LICENSE) for details.
