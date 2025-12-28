@@ -23,7 +23,6 @@ API runs at `http://localhost:3000` • Web dashboard at `http://localhost:5173`
 
 ## What's Inside
 
-<<<<<<< HEAD
 ### Running Applications
 
 ```bash
@@ -134,13 +133,12 @@ bun run docker:logs
 bun run ci
 # Equivalent to: docker:up + build + lint + types + test
 ```
-=======
+
 | App | Description | Stack |
 |-----|-------------|-------|
 | `apps/api` | Ledger API | Fastify, Drizzle, PostgreSQL |
 | `apps/web` | Dashboard | React Router v7, Tailwind |
 | `apps/docs` | Documentation | Docusaurus |
->>>>>>> main
 
 ## Documentation
 
