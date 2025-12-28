@@ -1,3 +1,4 @@
+import { retry } from "radash";
 import { ConflictError, NotFoundError } from "@/errors";
 import {
 	type LedgerID,
@@ -64,7 +65,31 @@ class LedgerTransactionService {
 		});
 
 		// Repository validates accounts exist and belong to ledger
-		const result = await this.ledgerTransactionRepo.createTransaction(transactionEntity);
+		// Retry on 409 conflicts (optimistic locking) with exponential backoff + jitter
+		const result = await retry(
+			{
+				times: 5,
+				delay: 50,
+				backoff: attempt => {
+					// Exponential backoff with full jitter, capped at 1s to prevent long waits
+					const base = Math.min(1000, 50 * 2 ** attempt);
+					return Math.floor(Math.random() * base);
+				},
+			},
+			async exit => {
+				try {
+					return await this.ledgerTransactionRepo.createTransaction(transactionEntity);
+				} catch (error) {
+					// Only retry on ConflictError with retryable flag
+					if (error instanceof ConflictError && error.retryable) {
+						throw error; // Let retry handle it
+					}
+					// For non-retryable errors, exit immediately
+					exit(error);
+					throw error; // TypeScript requires this
+				}
+			}
+		);
 
 		return result;
 	}
