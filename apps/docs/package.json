@@ -18,7 +18,8 @@
     "clsx": "^2",
     "prism-react-renderer": "^2",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "redocusaurus": "^2.5.0"
   },
   "devDependencies": {
     "@exchequerio/biome-config": "workspace:*",

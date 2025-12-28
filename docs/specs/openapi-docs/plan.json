@@ -1,0 +1,540 @@
+{
+  "feature": "openapi-docs",
+  "architecture_type": "Build-time Plugin Integration",
+  "note": "This feature uses configuration-based implementation, not Entity→Repository→Service→Router pattern. It integrates Docusaurus plugins to auto-generate static API documentation from OpenAPI specifications.",
+  "phases": {
+    "dependency_installation": {
+      "name": "Dependency Installation",
+      "description": "Install required npm packages for OpenAPI documentation and configure package scripts",
+      "dependencies": [],
+      "order": 1,
+      "tasks": ["install_plugin_packages", "add_package_scripts"],
+      "estimated_time": "15 minutes",
+      "validation": "Packages installed in node_modules and scripts callable"
+    },
+    "configuration": {
+      "name": "Configuration",
+      "description": "Configure Docusaurus for OpenAPI documentation integration including plugin, theme, navbar, and sidebar",
+      "dependencies": ["dependency_installation"],
+      "order": 2,
+      "tasks": ["configure_docusaurus_plugin", "configure_theme", "configure_navbar", "configure_sidebar"],
+      "estimated_time": "30 minutes",
+      "validation": "Configuration files compile without TypeScript errors"
+    },
+    "integration": {
+      "name": "Integration Setup",
+      "description": "Set up integration with API server, configure build process, and update version control exclusions",
+      "dependencies": ["configuration"],
+      "order": 3,
+      "tasks": ["update_gitignore", "verify_api_spec_accessible"],
+      "estimated_time": "15 minutes",
+      "validation": "API spec accessible and gitignore prevents generated file commits"
+    },
+    "documentation_generation": {
+      "name": "Documentation Generation",
+      "description": "Generate API documentation MDX files from OpenAPI spec and verify output structure",
+      "dependencies": ["integration"],
+      "order": 4,
+      "tasks": ["generate_api_docs", "verify_generated_files"],
+      "estimated_time": "15 minutes",
+      "validation": "MDX files generated in docs/api/ with correct structure"
+    },
+    "validation": {
+      "name": "Validation and Testing",
+      "description": "Build documentation site, verify navigation, and validate API documentation rendering",
+      "dependencies": ["documentation_generation"],
+      "order": 5,
+      "tasks": ["build_docs_site", "verify_navigation", "verify_api_docs_render"],
+      "estimated_time": "30 minutes",
+      "validation": "Documentation builds successfully and API docs accessible with all features working"
+    }
+  },
+  "tasks": {
+    "install_plugin_packages": {
+      "phase": "dependency_installation",
+      "order": 1,
+      "type": "configuration",
+      "description": "Install docusaurus-plugin-openapi-docs and docusaurus-theme-openapi-docs packages",
+      "rationale": "Required packages for OpenAPI documentation generation and rendering. Plugin v4.x is compatible with Docusaurus 3.x.",
+      "implementation_steps": [
+        "Navigate to apps/docs/ directory",
+        "Add 'docusaurus-plugin-openapi-docs': '^4.0.0' to dependencies in package.json",
+        "Add 'docusaurus-theme-openapi-docs': '^4.0.0' to dependencies in package.json",
+        "Run 'bun install' to install packages",
+        "Verify packages installed: ls node_modules/docusaurus-plugin-openapi-docs",
+        "Verify theme installed: ls node_modules/docusaurus-theme-openapi-docs"
+      ],
+      "files_modified": ["apps/docs/package.json"],
+      "files_created": [],
+      "verification": {
+        "command": "ls node_modules/docusaurus-plugin-openapi-docs && ls node_modules/docusaurus-theme-openapi-docs",
+        "expected_output": "Both directories exist with plugin files",
+        "failure_action": "Run 'bun install' again, check package.json syntax"
+      },
+      "rollback": "Remove dependencies from package.json and run 'bun install'",
+      "estimated_time": "10 minutes"
+    },
+    "add_package_scripts": {
+      "phase": "dependency_installation",
+      "order": 2,
+      "type": "configuration",
+      "description": "Add convenience scripts for generating and cleaning API docs",
+      "rationale": "Provides easy commands for developers to regenerate documentation when API spec changes",
+      "implementation_steps": [
+        "Open apps/docs/package.json",
+        "Add 'gen-api-docs': 'docusaurus gen-api-docs' to scripts section",
+        "Add 'clean-api-docs': 'docusaurus clean-api-docs' to scripts section",
+        "Save file",
+        "Test script availability: bun run gen-api-docs --help"
+      ],
+      "files_modified": ["apps/docs/package.json"],
+      "files_created": [],
+      "verification": {
+        "command": "bun run gen-api-docs --help",
+        "expected_output": "Command help text displayed",
+        "failure_action": "Check script syntax in package.json"
+      },
+      "rollback": "Remove scripts from package.json",
+      "estimated_time": "5 minutes"
+    },
+    "configure_docusaurus_plugin": {
+      "phase": "configuration",
+      "order": 1,
+      "type": "configuration",
+      "description": "Configure docusaurus-plugin-openapi-docs in docusaurus.config.ts",
+      "rationale": "Sets up spec source URL, output directory, and sidebar generation options for automatic API documentation generation",
+      "implementation_steps": [
+        "Open apps/docs/docusaurus.config.ts",
+        "Add import at top: import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs';",
+        "Add/create plugins array in config object if it doesn't exist",
+        "Add plugin configuration to plugins array:",
+        "  ['docusaurus-plugin-openapi-docs', {",
+        "    id: 'ledger-api',",
+        "    docsPluginId: 'default',",
+        "    config: {",
+        "      ledgerApi: {",
+        "        specPath: 'http://localhost:3000/docs/json',",
+        "        outputDir: 'docs/api',",
+        "        sidebarOptions: {",
+        "          groupPathsBy: 'tag',",
+        "          categoryLinkSource: 'tag'",
+        "        }",
+        "      }",
+        "    }",
+        "  }]",
+        "Save file",
+        "Verify TypeScript compilation: bun run build --dry-run (or check for TS errors)"
+      ],
+      "files_modified": ["apps/docs/docusaurus.config.ts"],
+      "files_created": [],
+      "configuration_details": {
+        "id": "ledger-api - Unique identifier for this plugin instance",
+        "docsPluginId": "default - ID of docs plugin to integrate with",
+        "specPath": "http://localhost:3000/docs/json - URL to fetch OpenAPI spec",
+        "outputDir": "docs/api - Directory where MDX files will be generated",
+        "groupPathsBy": "tag - Organize endpoints by OpenAPI tag field",
+        "categoryLinkSource": "tag - Use tag as category link"
+      },
+      "verification": {
+        "command": "TypeScript compilation check",
+        "expected_output": "No TypeScript errors in docusaurus.config.ts",
+        "failure_action": "Check syntax, ensure plugin package is installed, verify import statement"
+      },
+      "rollback": "Remove plugin configuration from plugins array",
+      "estimated_time": "15 minutes"
+    },
+    "configure_theme": {
+      "phase": "configuration",
+      "order": 2,
+      "type": "configuration",
+      "description": "Add docusaurus-theme-openapi-docs to themes array",
+      "rationale": "Enables React components and styling for rendering API documentation pages with interactive features",
+      "implementation_steps": [
+        "Open apps/docs/docusaurus.config.ts",
+        "Add/create themes array in config object if it doesn't exist",
+        "Add 'docusaurus-theme-openapi-docs' to themes array",
+        "Save file",
+        "Verify config compiles without errors"
+      ],
+      "files_modified": ["apps/docs/docusaurus.config.ts"],
+      "files_created": [],
+      "verification": {
+        "command": "TypeScript compilation check",
+        "expected_output": "Build recognizes theme without errors",
+        "failure_action": "Verify theme package installed, check array syntax"
+      },
+      "rollback": "Remove theme from themes array",
+      "estimated_time": "5 minutes"
+    },
+    "configure_navbar": {
+      "phase": "configuration",
+      "order": 3,
+      "type": "configuration",
+      "description": "Add API Reference navigation item to navbar",
+      "rationale": "Provides user-facing navigation to access API documentation section from main navigation bar",
+      "implementation_steps": [
+        "Open apps/docs/docusaurus.config.ts",
+        "Navigate to themeConfig.navbar.items array",
+        "Add new item object after existing items (before GitHub link):",
+        "  {",
+        "    type: 'docSidebar',",
+        "    sidebarId: 'apiSidebar',",
+        "    position: 'left',",
+        "    label: 'API Reference'",
+        "  }",
+        "Save file",
+        "Verify navbar appears correctly in dev mode"
+      ],
+      "files_modified": ["apps/docs/docusaurus.config.ts"],
+      "files_created": [],
+      "verification": {
+        "command": "Start dev server and check navbar",
+        "expected_output": "Navbar shows 'API Reference' link positioned to the left",
+        "failure_action": "Check sidebarId matches sidebar definition, verify object syntax"
+      },
+      "rollback": "Remove navbar item from items array",
+      "estimated_time": "5 minutes"
+    },
+    "configure_sidebar": {
+      "phase": "configuration",
+      "order": 4,
+      "type": "configuration",
+      "description": "Define apiSidebar in sidebars.ts for API documentation",
+      "rationale": "Creates dedicated sidebar structure for API docs that auto-generates from plugin output, keeping API docs separate from tutorial docs",
+      "implementation_steps": [
+        "Open apps/docs/sidebars.ts",
+        "Add apiSidebar to the sidebars configuration object:",
+        "  apiSidebar: [",
+        "    {",
+        "      type: 'autogenerated',",
+        "      dirName: 'api'",
+        "    }",
+        "  ]",
+        "Ensure it's added to the existing SidebarsConfig object alongside tutorialSidebar",
+        "Save file",
+        "Verify TypeScript compilation succeeds"
+      ],
+      "files_modified": ["apps/docs/sidebars.ts"],
+      "files_created": [],
+      "verification": {
+        "command": "TypeScript compilation check",
+        "expected_output": "No compilation errors, sidebar structure valid",
+        "failure_action": "Check syntax, ensure type matches SidebarsConfig"
+      },
+      "rollback": "Remove apiSidebar from sidebars object",
+      "estimated_time": "5 minutes"
+    },
+    "update_gitignore": {
+      "phase": "integration",
+      "order": 1,
+      "type": "configuration",
+      "description": "Add generated API docs directory to .gitignore",
+      "rationale": "Prevents generated MDX files from being committed, avoiding merge conflicts and repository bloat. Generated files should be regenerated from source of truth.",
+      "implementation_steps": [
+        "Open .gitignore file in repository root",
+        "Add comment: # Generated API documentation",
+        "Add line: apps/docs/docs/api/",
+        "Save file",
+        "Verify git status doesn't show api/ directory after generation"
+      ],
+      "files_modified": [".gitignore"],
+      "files_created": [],
+      "verification": {
+        "command": "After generating docs, run 'git status' and ensure docs/api/ not listed",
+        "expected_output": "git status should not show apps/docs/docs/api/ files",
+        "failure_action": "Check gitignore syntax, verify path is correct"
+      },
+      "rollback": "Remove line from .gitignore",
+      "estimated_time": "5 minutes"
+    },
+    "verify_api_spec_accessible": {
+      "phase": "integration",
+      "order": 2,
+      "type": "verification",
+      "description": "Verify API server exposes OpenAPI spec at expected endpoint",
+      "rationale": "Ensures the API spec source is available before attempting to generate documentation. Validates spec format is OpenAPI 3.0.0+.",
+      "implementation_steps": [
+        "Start API server: cd apps/api && bun run dev (in separate terminal)",
+        "Wait for server to start (check logs for 'Server listening')",
+        "Test spec endpoint: curl http://localhost:3000/docs/json",
+        "Verify response is valid JSON",
+        "Check OpenAPI version: curl http://localhost:3000/docs/json | jq '.openapi'",
+        "Expected version: '3.0.0' or higher",
+        "Verify spec has required fields: info, paths, components"
+      ],
+      "files_modified": [],
+      "files_created": [],
+      "verification": {
+        "command": "curl http://localhost:3000/docs/json | jq '.openapi'",
+        "expected_output": "'3.0.0' or higher version string",
+        "failure_action": "Ensure API server is running, check @fastify/swagger is configured, verify endpoint path"
+      },
+      "rollback": "Stop API server",
+      "estimated_time": "10 minutes",
+      "dependencies_required": ["API server must be running on localhost:3000", "OpenAPI spec must be exposed at /docs/json", "@fastify/swagger configured in API"]
+    },
+    "generate_api_docs": {
+      "phase": "documentation_generation",
+      "order": 1,
+      "type": "generation",
+      "description": "Generate API documentation MDX files from OpenAPI spec",
+      "rationale": "Fetches OpenAPI spec and generates static MDX documentation files that Docusaurus can build into the final documentation site",
+      "implementation_steps": [
+        "Ensure API server is running (from previous task)",
+        "Navigate to apps/docs/ directory",
+        "Run generation command: bun run gen-api-docs all",
+        "Wait for generation to complete",
+        "Verify success message in output",
+        "Check that docs/api/ directory was created",
+        "Verify MDX files were generated"
+      ],
+      "files_modified": [],
+      "files_generated": [
+        "apps/docs/docs/api/**/*.mdx - MDX files for each API endpoint",
+        "apps/docs/docs/api/sidebar.js - Auto-generated sidebar structure",
+        "apps/docs/docs/api/ledger-api.info.mdx - API overview page"
+      ],
+      "verification": {
+        "command": "ls -la apps/docs/docs/api/",
+        "expected_output": "Directory contains .mdx files and sidebar.js",
+        "failure_action": "Check API server is running, verify spec is accessible, review plugin configuration"
+      },
+      "rollback": "Run 'bun run clean-api-docs' to remove generated files",
+      "estimated_time": "10 minutes",
+      "dependencies_required": ["API server running", "Plugin and theme configured", "Spec accessible at http://localhost:3000/docs/json"]
+    },
+    "verify_generated_files": {
+      "phase": "documentation_generation",
+      "order": 2,
+      "type": "verification",
+      "description": "Verify generated documentation files are valid and complete",
+      "rationale": "Validates that generation process created expected output structure and files contain valid content",
+      "implementation_steps": [
+        "Check that apps/docs/docs/api/ directory exists",
+        "Verify sidebar.js file exists",
+        "List all generated .mdx files",
+        "Open a sample .mdx file and verify it contains:",
+        "  - Valid MDX frontmatter",
+        "  - API endpoint information",
+        "  - Request/response schema details",
+        "Check that files are organized by OpenAPI tags (subdirectories)",
+        "Verify ledger-api.info.mdx exists (API overview)"
+      ],
+      "files_modified": [],
+      "files_created": [],
+      "verification": {
+        "command": "cat apps/docs/docs/api/sidebar.js && head apps/docs/docs/api/**/*.mdx",
+        "expected_output": "Valid sidebar structure and MDX content with API documentation",
+        "failure_action": "Re-run generation, check OpenAPI spec has proper tags and operations"
+      },
+      "rollback": "N/A - read-only verification",
+      "estimated_time": "5 minutes"
+    },
+    "build_docs_site": {
+      "phase": "validation",
+      "order": 1,
+      "type": "build",
+      "description": "Build documentation site including API docs",
+      "rationale": "Validates that generated API documentation integrates correctly with Docusaurus build process and produces valid static output",
+      "implementation_steps": [
+        "Navigate to apps/docs/ directory",
+        "Run build command: bun run build",
+        "Monitor build output for errors",
+        "Verify build completes successfully",
+        "Check that build/ directory was created",
+        "Verify build/ contains static site files",
+        "Check that API documentation is included in build output"
+      ],
+      "files_modified": [],
+      "files_generated": ["apps/docs/build/ - Complete static site including API documentation"],
+      "verification": {
+        "command": "bun run build && ls apps/docs/build/",
+        "expected_output": "Build succeeds without errors, outputs to apps/docs/build/",
+        "failure_action": "Review build errors, check MDX syntax, verify configuration files"
+      },
+      "rollback": "Delete build/ directory",
+      "estimated_time": "15 minutes",
+      "dependencies_required": ["Generated MDX files in docs/api/", "All configuration completed", "No TypeScript or build errors"]
+    },
+    "verify_navigation": {
+      "phase": "validation",
+      "order": 2,
+      "type": "manual_verification",
+      "description": "Verify API Reference navigation works correctly",
+      "rationale": "Manual verification that navbar integration works and users can navigate to API documentation",
+      "implementation_steps": [
+        "Navigate to apps/docs/ directory",
+        "Run serve command: bun run serve",
+        "Open browser to http://localhost:3000",
+        "Verify 'API Reference' link appears in navbar",
+        "Click 'API Reference' link",
+        "Verify navigation to API documentation section",
+        "Verify API documentation sidebar appears",
+        "Check sidebar shows categories from OpenAPI tags",
+        "Test clicking between different API sections"
+      ],
+      "files_modified": [],
+      "files_created": [],
+      "verification": {
+        "command": "Manual verification - navigate through documentation site",
+        "expected_output": "API Reference link in navbar navigates to API docs with proper sidebar",
+        "failure_action": "Check navbar configuration, verify sidebarId matches, review sidebar definition"
+      },
+      "rollback": "N/A - read-only verification",
+      "estimated_time": "10 minutes",
+      "manual_steps": [
+        "Verify navbar shows 'API Reference' item",
+        "Click navbar item and verify route changes to /docs/api/",
+        "Verify sidebar switches to apiSidebar",
+        "Verify sidebar shows categories and endpoints",
+        "Test navigation between endpoints"
+      ]
+    },
+    "verify_api_docs_render": {
+      "phase": "validation",
+      "order": 3,
+      "type": "manual_verification",
+      "description": "Verify API documentation pages render correctly with all features",
+      "rationale": "Final validation that API documentation displays correctly with interactive components and proper styling",
+      "implementation_steps": [
+        "With docs site running (from previous task)",
+        "Navigate to API documentation section",
+        "Click on several different API endpoint pages",
+        "For each endpoint page, verify:",
+        "  - Endpoint path and HTTP method displayed",
+        "  - Request parameters shown with types",
+        "  - Request body schema rendered (if applicable)",
+        "  - Response status codes listed",
+        "  - Response schema rendered with expandable objects",
+        "  - Code examples shown with syntax highlighting",
+        "  - Visual styling matches rest of docs site",
+        "Test interactive features (if available):",
+        "  - Try expanding/collapsing schema objects",
+        "  - Try-it-out functionality (if CORS configured)"
+      ],
+      "files_modified": [],
+      "files_created": [],
+      "verification": {
+        "command": "Manual verification - review API documentation pages",
+        "expected_output": "API docs display correctly with all features (schemas, examples, interactive components)",
+        "failure_action": "Check OpenAPI spec has proper schemas and examples, verify theme is configured"
+      },
+      "rollback": "N/A - read-only verification",
+      "estimated_time": "10 minutes",
+      "manual_steps": [
+        "Navigate to multiple API endpoint pages",
+        "Verify request/response schemas render",
+        "Verify examples display with syntax highlighting",
+        "Verify authentication requirements shown (if any)",
+        "Verify visual consistency with site theme",
+        "Test interactive features if available"
+      ]
+    }
+  },
+  "implementation_order": [
+    "install_plugin_packages",
+    "add_package_scripts",
+    "configure_docusaurus_plugin",
+    "configure_theme",
+    "configure_navbar",
+    "configure_sidebar",
+    "update_gitignore",
+    "verify_api_spec_accessible",
+    "generate_api_docs",
+    "verify_generated_files",
+    "build_docs_site",
+    "verify_navigation",
+    "verify_api_docs_render"
+  ],
+  "total_estimated_time": "1 hour 45 minutes",
+  "success_criteria": [
+    "All plugin packages installed successfully",
+    "Configuration files compile without TypeScript errors",
+    "API spec accessible at http://localhost:3000/docs/json",
+    "MDX files generated in apps/docs/docs/api/",
+    "Documentation site builds successfully",
+    "API Reference navigation item appears in navbar",
+    "API documentation accessible at /docs/api/",
+    "All API endpoints documented with schemas and examples",
+    "Visual styling consistent with existing documentation",
+    "Generated files excluded from version control"
+  ],
+  "rollback_strategy": {
+    "level_1_package_rollback": "Remove dependencies from package.json, run bun install",
+    "level_2_config_rollback": "Remove plugin, theme, navbar, and sidebar configurations",
+    "level_3_generated_files_rollback": "Run 'bun run clean-api-docs' to remove generated documentation",
+    "level_4_full_rollback": "Revert all file changes using git"
+  },
+  "ci_cd_considerations": {
+    "recommendation": "Use static spec export for CI/CD (Option B from design)",
+    "reason": "Faster, more reliable, no need to run API server in CI",
+    "future_task": "Create spec export script in @apps/api for CI/CD environments",
+    "current_scope": "Local development workflow with running API server"
+  },
+  "dependencies_external": [
+    {
+      "name": "@apps/api",
+      "requirement": "Must be running on localhost:3000 during docs generation",
+      "endpoint": "GET http://localhost:3000/docs/json",
+      "format": "OpenAPI 3.0.0+ JSON"
+    },
+    {
+      "name": "@fastify/swagger",
+      "requirement": "Must be configured to expose OpenAPI 3.0.0 spec",
+      "verification": "curl http://localhost:3000/docs/json | jq '.openapi' returns '3.0.0'"
+    },
+    {
+      "name": "Docusaurus 3.x",
+      "requirement": "Version ^3.0.0 already installed",
+      "verification": "Check @docusaurus/core version in package.json"
+    }
+  ],
+  "testing_strategy": {
+    "automated_validation": [
+      "Package installation verification",
+      "TypeScript compilation checks",
+      "Build success validation",
+      "File existence checks"
+    ],
+    "manual_validation": [
+      "Navigation testing",
+      "API documentation page rendering",
+      "Interactive feature testing",
+      "Visual consistency review"
+    ],
+    "acceptance_testing": [
+      "Auto-generated docs visible in docs site",
+      "Docs fetch latest spec from API server",
+      "Integration with Docusaurus sidebar and theme",
+      "Documentation updates on rebuild"
+    ]
+  },
+  "potential_issues": {
+    "api_server_not_running": {
+      "symptom": "gen-api-docs fails to fetch spec",
+      "solution": "Start API server with 'cd apps/api && bun run dev'",
+      "verification": "curl http://localhost:3000/docs/json"
+    },
+    "spec_version_incompatible": {
+      "symptom": "Plugin fails to parse spec",
+      "solution": "Verify OpenAPI version is 3.0.0+, update @fastify/swagger config if needed",
+      "verification": "curl http://localhost:3000/docs/json | jq '.openapi'"
+    },
+    "generated_files_committed": {
+      "symptom": "docs/api/ files appear in git status",
+      "solution": "Verify .gitignore includes apps/docs/docs/api/",
+      "prevention": "Add to .gitignore before generation"
+    },
+    "build_errors": {
+      "symptom": "Docusaurus build fails",
+      "solution": "Check generated MDX syntax, verify plugin configuration, review build logs",
+      "common_causes": "Invalid MDX, missing configuration, incompatible plugin version"
+    }
+  },
+  "documentation_updates_needed": [
+    "Add API documentation workflow to README.md",
+    "Document gen-api-docs command usage",
+    "Explain not to manually edit files in docs/api/",
+    "Document CI/CD considerations for spec fetching"
+  ]
+}

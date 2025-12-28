@@ -1,5 +1,6 @@
 import type { Config } from "@docusaurus/types";
 import type * as Preset from "@docusaurus/preset-classic";
+import type * as Redocusaurus from "redocusaurus";
 
 const config: Config = {
   title: "Exchequer",
@@ -28,6 +29,21 @@ const config: Config = {
         },
       } satisfies Preset.Options,
     ],
+    [
+      "redocusaurus",
+      {
+        specs: [
+          {
+            id: "ledger-api",
+            spec: "static/openapi.json",
+            route: "/api/",
+          },
+        ],
+        theme: {
+          primaryColor: "#1890ff",
+        },
+      } satisfies Redocusaurus.PresetEntry,
+    ],
   ],
   themeConfig: {
     navbar: {
@@ -38,6 +54,11 @@ const config: Config = {
           sidebarId: "tutorialSidebar",
           position: "left",
           label: "Docs",
+        },
+        {
+          to: "/api/",
+          position: "left",
+          label: "API Reference",
         },
         {
           href: "https://github.com/exchequerio/monorepo",

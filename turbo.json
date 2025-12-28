@@ -5,6 +5,14 @@
 			"dependsOn": ["^build"],
 			"outputs": ["dist/**", "build/**", ".react-router/**", ".docusaurus/**"]
 		},
+		"@exchequerio/api#export-openapi": {
+			"cache": false,
+			"outputs": ["../docs/static/openapi.json"]
+		},
+		"@exchequerio/docs#build": {
+			"dependsOn": ["@exchequerio/api#export-openapi"],
+			"outputs": ["build/**", ".docusaurus/**"]
+		},
 		"dev": {
 			"cache": false,
 			"persistent": true

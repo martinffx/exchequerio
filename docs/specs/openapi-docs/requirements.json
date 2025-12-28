@@ -1,0 +1,31 @@
+{
+  "raw_user_story": "As developer I want to see the openapi spec in the docs website so that I can easily see the docs",
+  "raw_criteria": [
+    "openapi is loaded directly from @apps/api/",
+    "https://github.com/PaloAltoNetworks/docusaurus-openapi-docs"
+  ],
+  "raw_rules": [
+    "OpenAPI spec file must be sourced from @apps/api/ endpoint",
+    "Documentation must auto-generate from spec (no manual sync required)",
+    "OpenAPI docs must integrate with existing Docusaurus navigation/theme",
+    "Generated docs should update when spec changes (during build)",
+    "Must support standard OpenAPI 3.1.x specification format"
+  ],
+  "raw_scope": {
+    "included": [
+      "Install and configure docusaurus-openapi-docs plugin",
+      "Fetch OpenAPI spec from @apps/api/ endpoint",
+      "Auto-generate API reference documentation pages",
+      "Integrate generated docs into Docusaurus sidebar navigation",
+      "Apply existing Docusaurus theme to API docs",
+      "Build-time spec fetching and documentation generation"
+    ],
+    "excluded": [
+      "Multiple API versions/environments (can add later)",
+      "Custom OpenAPI spec editor or validator UI",
+      "Live API testing with real authentication tokens",
+      "Manual API documentation (everything auto-generated)",
+      "Versioned API documentation history"
+    ]
+  }
+}

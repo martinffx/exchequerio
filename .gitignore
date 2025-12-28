@@ -151,3 +151,6 @@ apps/*/build/
 apps/*/dist/
 apps/*/.react-router/
 apps/*/.docusaurus/
+
+# Generated files
+apps/docs/static/openapi.json

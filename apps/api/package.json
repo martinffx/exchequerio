@@ -7,6 +7,7 @@
 		"dev": "dotenvx run -- bun --watch ./src/index.ts",
 		"build": "bun build ./src/index.ts --outdir ./dist --target bun",
 		"start": "dotenvx run -- bun ./src/index.ts",
+		"export-openapi": "dotenvx run -f .env.test -- bun run ./scripts/export-openapi.ts",
 		"test": "NODE_ENV=test dotenvx run -f .env.test -- vitest run",
 		"test:watch": "NODE_ENV=test dotenvx run -f .env.test -- vitest",
 		"test:ci": "NODE_ENV=test dotenvx run -f .env.test -- vitest run --coverage",
