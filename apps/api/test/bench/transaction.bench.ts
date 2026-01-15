@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { FastifyInstance } from "fastify";
 import { Pool } from "pg";
+import { retry } from "radash";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TypeID } from "typeid-js";
 import { signJWT } from "@/auth";
@@ -194,78 +195,81 @@ async function setupFixtures(
 }
 
 async function cleanupFixtures(
-	db: DrizzleDB,
+	orgRepo: OrganizationRepo,
+	ledgerRepo: LedgerRepo,
+	accountRepo: LedgerAccountRepo,
+	transactionRepo: LedgerTransactionRepo,
 	orgId: OrgID
 ): Promise<void> {
-	// Delete in dependency order using raw SQL for reliability
-	// Order: settlement entries -> settlements -> transaction entries -> transactions -> accounts -> ledgers -> organization
+	// Retry cleanup to handle transient failures from straggler connections
+	await retry(
+		{
+			times: 3,
+			delay: 1000,
+			backoff: attempt => {
+				// Exponential backoff: 1s, 2s, 4s
+				return 1000 * 2 ** attempt;
+			},
+		},
+		async (exit) => {
+			try {
+				// Delete in dependency order within a single transaction
+				// This ensures atomicity even if there are straggler connections from the server
+				const orgIdStr = orgId.toString();
 
-	const orgIdStr = orgId.toString();
+				// Access db from repo (internal detail for cleanup)
+				const db = (orgRepo as any).db as DrizzleDB;
 
-	// 1. Delete all settlement entries for this org's settlements
-	await db.execute(sql`
-		DELETE FROM ledger_account_settlement_entries
-		WHERE settlement_id IN (
-			SELECT id FROM ledger_account_settlements
-			WHERE organization_id = ${orgIdStr}
-		)
-	`);
+				await db.transaction(async (tx) => {
+					// 1. Delete all settlements and settlement entries
+					await tx.execute(sql`
+						DELETE FROM ledger_account_settlement_entries
+						WHERE settlement_id IN (
+							SELECT id FROM ledger_account_settlements
+							WHERE organization_id = ${orgIdStr}
+						)
+					`);
 
-	// 2. Delete all settlements
-	await db.execute(sql`
-		DELETE FROM ledger_account_settlements
-		WHERE organization_id = ${orgIdStr}
-	`);
+					await tx.execute(sql`
+						DELETE FROM ledger_account_settlements
+						WHERE organization_id = ${orgIdStr}
+					`);
 
-	// 3. Delete all transaction entries (FIRST PASS - using entry's own organization_id)
-	const deleteEntriesResult1 = await db.execute(sql`
-		DELETE FROM ledger_transaction_entries
-		WHERE organization_id = ${orgIdStr}
-	`);
-	console.log(`[Pass 1] Deleted ${deleteEntriesResult1.rowCount ?? 0} transaction entries`);
+					// 2. Delete all transaction entries and transactions
+					await tx.execute(sql`
+						DELETE FROM ledger_transaction_entries
+						WHERE organization_id = ${orgIdStr}
+					`);
 
-	// 4. Delete all transactions (FIRST PASS)
-	const deleteTxResult1 = await db.execute(sql`
-		DELETE FROM ledger_transactions
-		WHERE organization_id = ${orgIdStr}
-	`);
-	console.log(`[Pass 1] Deleted ${deleteTxResult1.rowCount ?? 0} transactions`);
+					await tx.execute(sql`
+						DELETE FROM ledger_transactions
+						WHERE organization_id = ${orgIdStr}
+					`);
 
-	// 5. Delete transaction entries again (SECOND PASS - catch stragglers)
-	const deleteEntriesResult2 = await db.execute(sql`
-		DELETE FROM ledger_transaction_entries
-		WHERE organization_id = ${orgIdStr}
-	`);
-	if ((deleteEntriesResult2.rowCount ?? 0) > 0) {
-		console.log(`[Pass 2] Deleted ${deleteEntriesResult2.rowCount ?? 0} remaining transaction entries`);
-	}
+					// 3. Delete all accounts
+					await tx.execute(sql`
+						DELETE FROM ledger_accounts
+						WHERE organization_id = ${orgIdStr}
+					`);
 
-	// 6. Delete transactions again (SECOND PASS - catch stragglers)
-	const deleteTxResult2 = await db.execute(sql`
-		DELETE FROM ledger_transactions
-		WHERE organization_id = ${orgIdStr}
-	`);
-	if ((deleteTxResult2.rowCount ?? 0) > 0) {
-		console.log(`[Pass 2] Deleted ${deleteTxResult2.rowCount ?? 0} remaining transactions`);
-	}
+					// 4. Delete all ledgers
+					await tx.execute(sql`
+						DELETE FROM ledgers
+						WHERE organization_id = ${orgIdStr}
+					`);
 
-	// 7. Delete all accounts
-	await db.execute(sql`
-		DELETE FROM ledger_accounts
-		WHERE organization_id = ${orgIdStr}
-	`);
-
-	// 8. Delete all ledgers
-	await db.execute(sql`
-		DELETE FROM ledgers
-		WHERE organization_id = ${orgIdStr}
-	`);
-
-	// 9. Delete the organization
-	await db.execute(sql`
-		DELETE FROM organizations_table
-		WHERE id = ${orgIdStr}
-	`);
+					// 5. Delete the organization
+					await tx.execute(sql`
+						DELETE FROM organizations_table
+						WHERE id = ${orgIdStr}
+					`);
+				});
+			} catch (error) {
+				console.error("Cleanup attempt failed:", error);
+				throw error; // Let retry handle it
+			}
+		}
+	);
 }
 
 function createTransactionPayload(accountPair: { debitId: string; creditId: string }) {
@@ -317,7 +321,7 @@ async function runBenchmark(
 	let requestIndex = 0;
 
 	const result = await autocannon({
-		url: `http://localhost:3000/api/ledgers/${ledgerId}/transactions`,
+		url: `http://localhost:3333/api/ledgers/${ledgerId}/transactions`,
 		connections: 100,
 		duration: 30,
 		method: "POST",
@@ -440,30 +444,30 @@ describe("Transaction Creation Benchmarks", () => {
 		// Start server
 		console.log("Starting server...");
 		server = await buildServer();
-		await server.listen({ port: 3000, host: "0.0.0.0" });
-		console.log("Server started on http://localhost:3000\n");
+		await server.listen({ port: 3333, host: "0.0.0.0" });
+		console.log("Server started on http://localhost:3333\n");
 	});
 
 	afterAll(async () => {
-		// Print summary of all results
+  	// Close server first - this will trigger onClose hooks and clean up its connection pool
+  	if (server) {
+  		console.log("\nClosing server...");
+  		await server.close();
+  		console.log("Server closed");
+  	}
+
+  	// Cleanup all fixtures using our test repos
+  	console.log("Cleaning up all fixtures...");
+  	await cleanupFixtures(orgRepo, ledgerRepo, accountRepo, transactionRepo, sharedOrgId);
+  	console.log("Cleanup complete\n");
+
+    // Close our test pool
+    await pool.end();
+
+    // Print summary of all results
 		if (results.length > 0) {
 			printResults(results);
 		}
-  	// Close server first to stop accepting new requests
-  	if (server) {
-  		await server.close();
-  	}
-
-  	// Wait for in-flight database transactions to complete
-  	console.log("\nWaiting for in-flight transactions to complete...");
-  	await new Promise(resolve => setTimeout(resolve, 1000));
-
-  	// Cleanup all fixtures
-  	console.log("Cleaning up all fixtures...");
-  	await cleanupFixtures(db, sharedOrgId);
-  	console.log("Cleanup complete\n");
-
-		await pool.end();
 	});
 
 	it("should benchmark high contention (2 accounts)", async () => {
