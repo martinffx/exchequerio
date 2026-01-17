@@ -78,6 +78,18 @@ class LedgerTransactionEntity {
 			throw new Error("Transaction must have at least 2 entries");
 		}
 
+		// Check for duplicate accounts - each account can only have one entry per transaction
+		const accountIds = new Set<string>();
+		for (const entry of entries) {
+			const accountId = entry.accountId.toString();
+			if (accountIds.has(accountId)) {
+				throw new Error(
+					`Duplicate account in transaction: ${accountId}. Each account can only have one entry per transaction.`
+				);
+			}
+			accountIds.add(accountId);
+		}
+
 		let totalDebits = 0;
 		let totalCredits = 0;
 
