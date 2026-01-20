@@ -51,7 +51,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 			preHandler: server.hasPermissions(["ledger:account:read"]),
 		},
 		async (rq: ListLedgerAccountsRequest): Promise<LedgerAccountResponse[]> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString<"org">(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 
 			// Fetch ledger to get currency info
@@ -91,7 +91,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 			preHandler: server.hasPermissions(["ledger:account:read"]),
 		},
 		async (rq: GetLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString<"org">(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
 
@@ -128,7 +128,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 			preHandler: server.hasPermissions(["ledger:account:write"]),
 		},
 		async (rq: CreateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString<"org">(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 
 			// Get ledger for currency info
@@ -173,7 +173,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 			preHandler: server.hasPermissions(["ledger:account:write"]),
 		},
 		async (rq: UpdateLedgerAccountRequest): Promise<LedgerAccountResponse> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString<"org">(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
 
@@ -219,7 +219,7 @@ const LedgerAccountRoutes: FastifyPluginAsync = async (server): Promise<void> =>
 			preHandler: server.hasPermissions(["ledger:account:delete"]),
 		},
 		async (rq: DeleteLedgerAccountRequest): Promise<void> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString<"org">(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
 

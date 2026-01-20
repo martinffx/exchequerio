@@ -1,5 +1,45 @@
 # TypeScript Coding Standards
 
+## Commands Reference
+
+### Development Workflow
+- `bun run dev` - Start development server (auto-starts database)
+- `bun run test` - Run all tests with Vitest (auto-starts database)
+
+**Important:** Always use `bun run test` (NOT `bun test`). We use **Vitest** for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, etc.). The `bun test` command uses Bun's built-in test runner which lacks these features.
+
+**Testing Prerequisites:**
+- PostgreSQL database must be running (auto-started by `bun run test`)
+- Integration tests use real database with test schema
+
+### Testing Commands
+- `bun run test` - Run all tests (Vitest)
+- `bun run test:watch` - Run tests in watch mode (Vitest)
+- `bun run test:ci` - Run tests with coverage (Vitest)
+
+### Code Quality Commands
+- `bun run format` - Format code with Biome
+- `bun run lint` - Type-aware linting with Biome + ESLint
+- `bun run types` - Type check without emitting
+- `bun run check` - **Run all code quality checks** (format + lint + types)
+
+### Database Operations
+- `bun run docker:up` - Start PostgreSQL database
+- `bun run docker:down` - Stop PostgreSQL database
+- `bun run docker:logs` - View database logs
+
+### CI/CD Pipeline
+- `bun run ci` - **Complete CI pipeline** (docker:up + build + lint + types + test)
+
+### Database Migrations
+- `bun run db:gen` - Generate migrations from schema (drizzle-kit generate)
+- `bun run db:migrate` - Apply migrations to database (with environment config)
+
+### Database Schema
+- **ERD Reference**: See `docs/product/erd.md` for complete Entity Relationship Diagram
+- **Schema Source**: `src/repo/schema.ts` for Drizzle ORM definitions
+- **Architecture**: Follow Router → Service → Repository → Entity → Database pattern
+
 ## Code Style & Formatting
 
 ### ESLint + Biome Configuration
@@ -9,24 +49,51 @@
 - **Semicolons:** Always required (enforced by Biome)
 - **Line endings:** LF (Unix-style)
 
-### Commands
-- \`mise run lint\` - Run Biome + ESLint (hybrid linting approach)
-- \`mise run lint_fast\` - Run Biome only (fast formatting + syntax checks)
-- \`mise run lint_slow\` - Run ESLint only (type-aware + boundaries + unicorn)
-- \`mise run format\` - Format code with Biome
-- \`mise run check\` - Run all code quality checks (format + lint + types)
-- Run \`mise run format && mise run lint\` before committing
+### Recommended Workflow
+```bash
+mise run fix          # Format + auto-fix all issues (recommended)
+mise run lint         # Check for remaining issues
+mise run types        # Type check
+mise run test         # Run tests
+```
+
+### Linting Details
+- **Formatting**: Prettier with oxc plugin (fast parsing) - tab indentation, double quotes, no semicolons
+- **Linting**: Hybrid approach - oxlint (fast) + ESLint (type-aware + boundaries)
+- **Architecture**: Enforced with jsboundaries plugin
+  - `routes` → `services` (API calls to business logic)
+  - `services` → `repo` + `entities` (business logic to data)
+  - `entities` → `entities` only (pure data models)
+  - `repo` → `repo` only (data access layer)
+- **Type-Aware**: TypeScript-eslint with full type information
+- **Imports**: Use `@/*` path aliases for src/ directory
+- **Types**: Infer types from Drizzle schema, use `type` for type aliases
+- **Naming**: PascalCase for classes/types, camelCase for variables/functions
+- **Testing**: Vitest, test files follow `*.test.ts` pattern in src/
+- **Database**: Schema-first with Drizzle ORM, PostgreSQL required for ACID compliance
+  - **Schema Visualization**: Reference `docs/product/erd.md` for complete ERD
+  - **Schema Definitions**: Use `src/repo/schema.ts` for table structures
+  - **Relationship Patterns**: Follow double-entry accounting principles
 
 ## TypeScript Conventions
 
 ### Type Definitions
 ```typescript
-// Use explicit types for public APIs
-export interface CreateLedgerRequest {
+// Use type for pure data structures (DTOs, request/response, entities)
+export type CreateLedgerRequest = {
   name: string
   description?: string
   currency: string
   currencyExponent: number
+}
+
+export type LedgerResponse = {
+  id: string
+  name: string
+  description?: string
+  currency: string
+  currencyExponent: number
+  createdAt: Date
 }
 
 // Use type inference for internal variables
@@ -35,12 +102,25 @@ const ledger = await ledgerRepo.create(request) // Type inferred
 // Use const assertions for literal types
 const TRANSACTION_STATUSES = ["pending", "posted", "archived"] as const
 type TransactionStatus = typeof TRANSACTION_STATUSES[number]
+
+// Use interface for contracts that include behavior (repository/service methods)
+interface LedgerRepository {
+  create(data: CreateLedgerRequest): Promise<LedgerResponse>
+  findById(id: string): Promise<LedgerResponse | null>
+  update(id: string, data: Partial<CreateLedgerRequest>): Promise<LedgerResponse>
+}
+
+interface LedgerService {
+  createLedger(request: CreateLedgerRequest): Promise<LedgerResponse>
+  getLedger(id: string): Promise<LedgerResponse>
+}
 ```
 
 ### Naming Conventions
 ```typescript
 // PascalCase for types, interfaces, classes
-interface LedgerAccount { }
+type LedgerAccount = { id: string; name: string }
+interface LedgerAccountRepository { }  // Interface for behavior
 class LedgerService { }
 type TransactionStatus = string
 

@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
+import { createLocalJWKSet } from "jose";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/errors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import { buildServer } from "@/server";
 import type { LedgerAccountService, LedgerService } from "@/services";
+import { getTestJWKS, signTestJWT } from "@/test-utils/jwt";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -49,14 +49,13 @@ describe("LedgerAccountRoutes", () => {
 		updated: fixedDate,
 	});
 
-	const token = signJWT({ sub: orgId.toString(), scope: ["org_admin"] });
-	const tokenReadOnly = signJWT({
-		sub: orgId.toString(),
-		scope: ["org_readonly"],
-	});
+	let token: string;
+	let tokenReadOnly: string;
 
 	beforeAll(async () => {
+		const testJWKS = await getTestJWKS();
 		server = await buildServer({
+			authOpts: { jwks: createLocalJWKSet(testJWKS) },
 			servicePluginOpts: {
 				services: {
 					ledgerService: mockLedgerService,
@@ -64,6 +63,8 @@ describe("LedgerAccountRoutes", () => {
 				},
 			},
 		});
+		token = await signTestJWT({ org_id: orgId.toString(), role: "admin" });
+		tokenReadOnly = await signTestJWT({ org_id: orgId.toString(), role: "viewer" });
 	});
 
 	afterAll(async () => {
@@ -124,7 +125,7 @@ describe("LedgerAccountRoutes", () => {
 			expect(rs.statusCode).toBe(401);
 			const response: UnauthorizedErrorResponse = rs.json();
 			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
+			expect(response.detail).toEqual("Invalid token signature");
 		});
 
 		it("should allow org_readonly to list ledger accounts", async () => {

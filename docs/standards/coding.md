@@ -7,11 +7,19 @@ All applications in this monorepo use TypeScript with strict type checking enabl
 ### Type Definitions
 
 ```typescript
-// Use explicit types for public APIs and interfaces
-export interface CreateUserRequest {
+// Use type for pure data structures (DTOs, request/response, configs, entities)
+export type CreateUserRequest = {
   name: string
   email: string
   role?: UserRole
+}
+
+export type User = {
+  id: string
+  name: string
+  email: string
+  createdAt: Date
+  updatedAt: Date
 }
 
 // Use type inference for internal variables
@@ -21,20 +29,22 @@ const user = await userRepo.create(request) // Type inferred from repository
 const USER_ROLES = ["admin", "user", "guest"] as const
 type UserRole = typeof USER_ROLES[number]
 
-// Prefer type over interface for unions and intersections
+// Use type for unions and intersections
 type ID = string | number
 type UserWithMetadata = User & { metadata: Record<string, unknown> }
 
-// Use interface for object shapes that may be extended
-interface Entity {
-  id: string
-  createdAt: Date
-  updatedAt: Date
+// Use interface for contracts that include behavior (methods/functions)
+interface UserRepository {
+  create(data: CreateUserRequest): Promise<User>
+  findById(id: string): Promise<User | null>
+  update(id: string, data: Partial<User>): Promise<User>
+  delete(id: string): Promise<void>
 }
 
-interface User extends Entity {
-  name: string
-  email: string
+interface Logger {
+  info(message: string, context?: Record<string, unknown>): void
+  error(message: string, error?: Error): void
+  warn(message: string, context?: Record<string, unknown>): void
 }
 ```
 
@@ -480,6 +490,6 @@ users.forEach(user => {
 
 Each application may extend these principles with technology-specific conventions:
 
-- **API App**: See `apps/api/docs/standards/coding.md` for Fastify, Drizzle, PostgreSQL conventions
-- **Web App**: See `apps/web/docs/standards/coding.md` for React, Tailwind, Vitest conventions
+- **API App**: See `docs/standards/api/coding.md` for Fastify, Drizzle, PostgreSQL conventions
+- **Web App**: See `docs/standards/web/coding.md` for React, Tailwind, Vitest conventions
 - **Docs App**: See `apps/docs/docs/standards/coding.md` for Docusaurus content conventions

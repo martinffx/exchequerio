@@ -1,10 +1,11 @@
 import type { FastifyInstance } from "fastify";
+import { createLocalJWKSet } from "jose";
+import { TypeID } from "typeid-js";
 import { vi } from "vitest";
-import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/errors";
-
 import { buildServer } from "@/server";
 import type { OrganizationService } from "@/services/OrganizationService";
+import { getTestJWKS, signTestJWT } from "@/test-utils/jwt";
 import { createOrganizationFixture } from "./ledgers/fixtures";
 import type {
 	BadRequestErrorResponse,
@@ -25,14 +26,21 @@ const mockOrganizationService = vi.mocked<OrganizationService>({
 
 describe("OrganizationRoutes", () => {
 	let server: FastifyInstance;
+	let token: string;
+	let tokenReadOnly: string;
+	const orgId = new TypeID("org");
 	const mockOrg = createOrganizationFixture();
 
 	beforeAll(async () => {
+		const testJWKS = await getTestJWKS();
 		server = await buildServer({
+			authOpts: { jwks: createLocalJWKSet(testJWKS) },
 			servicePluginOpts: {
 				services: { organizationService: mockOrganizationService },
 			},
 		});
+		token = await signTestJWT({ org_id: orgId.toString(), role: "super_admin" });
+		tokenReadOnly = await signTestJWT({ org_id: orgId.toString(), role: "viewer" });
 	});
 
 	afterAll(async () => {
@@ -44,12 +52,11 @@ describe("OrganizationRoutes", () => {
 	});
 
 	describe("List Organizations", () => {
-		const token = signJWT({
-			sub: mockOrg.id.toString(),
-			scope: ["super_admin"],
-		});
-
 		it("should return a list of organizations", async () => {
+			const token = await signTestJWT({
+				org_id: mockOrg.id.toString(),
+				role: "super_admin",
+			});
 			mockOrganizationService.listOrganizations.mockResolvedValue([mockOrg]);
 
 			const rs = await server.inject({
@@ -124,13 +131,13 @@ describe("OrganizationRoutes", () => {
 			expect(rs.statusCode).toBe(401);
 			const response: UnauthorizedErrorResponse = rs.json();
 			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
+			expect(response.detail).toEqual("Invalid token signature");
 		});
 
 		it("should handle forbidden request error", async () => {
-			const orgAdmin = signJWT({
-				sub: mockOrg.id.toString(),
-				scope: ["org_admin"],
+			const orgAdmin = await signTestJWT({
+				org_id: mockOrg.id.toString(),
+				role: "admin",
 			});
 			mockOrganizationService.listOrganizations.mockResolvedValue([mockOrg]);
 			const rs = await server.inject({
@@ -143,19 +150,16 @@ describe("OrganizationRoutes", () => {
 			expect(rs.statusCode).toBe(403);
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
-			expect(response.detail).toEqual(
-				"One of: my:organization:read, organization:read; permissions is required"
-			);
+			expect(response.detail).toContain("Missing required permission");
 		});
 	});
 
 	describe("Get Organization", () => {
-		const token = signJWT({
-			sub: mockOrg.id.toString(),
-			scope: ["super_admin"],
-		});
-
 		it("should return a organization", async () => {
+			const token = await signTestJWT({
+				org_id: mockOrg.id.toString(),
+				role: "super_admin",
+			});
 			mockOrganizationService.getOrganization.mockImplementation(async () => mockOrg);
 			const rs = await server.inject({
 				method: "GET",
@@ -218,12 +222,11 @@ describe("OrganizationRoutes", () => {
 	});
 
 	describe("Create Organization", () => {
-		const token = signJWT({
-			sub: mockOrg.id.toString(),
-			scope: ["super_admin"],
-		});
-
 		it("should create a organization", async () => {
+			const token = await signTestJWT({
+				org_id: mockOrg.id.toString(),
+				role: "super_admin",
+			});
 			mockOrganizationService.createOrganization.mockImplementation(async () => mockOrg);
 			const rs = await server.inject({
 				method: "POST",
@@ -270,13 +273,13 @@ describe("OrganizationRoutes", () => {
 			expect(rs.statusCode).toBe(401);
 			const response: UnauthorizedErrorResponse = rs.json();
 			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
+			expect(response.detail).toEqual("Invalid token signature");
 		});
 
 		it("should handle forbidden request error", async () => {
-			const orgReadonly = signJWT({
-				sub: mockOrg.id.toString(),
-				scope: ["org_readonly"],
+			const orgReadonly = await signTestJWT({
+				org_id: mockOrg.id.toString(),
+				role: "viewer",
 			});
 			const rs = await server.inject({
 				method: "POST",
@@ -291,9 +294,7 @@ describe("OrganizationRoutes", () => {
 			expect(rs.statusCode).toBe(403);
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
-			expect(response.detail).toEqual(
-				"One of: my:organization:write, organization:write; permissions is required"
-			);
+			expect(response.detail).toContain("Missing required permission");
 		});
 
 		it("should handle a conflict error", async () => {
@@ -338,12 +339,11 @@ describe("OrganizationRoutes", () => {
 	});
 
 	describe("Update Organization", () => {
-		const token = signJWT({
-			sub: mockOrg.id.toString(),
-			scope: ["super_admin"],
-		});
-
 		it("should update a organization", async () => {
+			const token = await signTestJWT({
+				org_id: mockOrg.id.toString(),
+				role: "super_admin",
+			});
 			mockOrganizationService.updateOrganization.mockImplementation(async () => mockOrg);
 			const rs = await server.inject({
 				method: "PUT",
@@ -390,13 +390,13 @@ describe("OrganizationRoutes", () => {
 			expect(rs.statusCode).toBe(401);
 			const response: UnauthorizedErrorResponse = rs.json();
 			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
+			expect(response.detail).toEqual("Invalid token signature");
 		});
 
 		it("should handle forbidden request error", async () => {
-			const orgAdmin = signJWT({
-				sub: mockOrg.id.toString(),
-				scope: ["org_admin"],
+			const orgAdmin = await signTestJWT({
+				org_id: mockOrg.id.toString(),
+				role: "admin",
 			});
 			const rs = await server.inject({
 				method: "PUT",
@@ -411,9 +411,7 @@ describe("OrganizationRoutes", () => {
 			expect(rs.statusCode).toBe(403);
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
-			expect(response.detail).toEqual(
-				"One of: my:organization:write, organization:write; permissions is required"
-			);
+			expect(response.detail).toContain("Missing required permission");
 		});
 
 		it("should handle not found error", async () => {
@@ -478,12 +476,11 @@ describe("OrganizationRoutes", () => {
 	});
 
 	describe("Delete Organization", () => {
-		const token = signJWT({
-			sub: mockOrg.id.toString(),
-			scope: ["super_admin"],
-		});
-
 		it("should delete a organization", async () => {
+			const token = await signTestJWT({
+				org_id: mockOrg.id.toString(),
+				role: "super_admin",
+			});
 			mockOrganizationService.deleteOrganization.mockImplementation(async () => Promise.resolve());
 			const rs = await server.inject({
 				method: "DELETE",
@@ -520,13 +517,13 @@ describe("OrganizationRoutes", () => {
 			expect(rs.statusCode).toBe(401);
 			const response: UnauthorizedErrorResponse = rs.json();
 			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
+			expect(response.detail).toEqual("Invalid token signature");
 		});
 
 		it("should handle forbidden request error", async () => {
-			const orgAdmin = signJWT({
-				sub: mockOrg.id.toString(),
-				scope: ["org_user"],
+			const orgAdmin = await signTestJWT({
+				org_id: mockOrg.id.toString(),
+				role: "member",
 			});
 			const rs = await server.inject({
 				method: "DELETE",
@@ -538,9 +535,7 @@ describe("OrganizationRoutes", () => {
 			expect(rs.statusCode).toBe(403);
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
-			expect(response.detail).toEqual(
-				"One of: my:organization:delete, organization:delete; permissions is required"
-			);
+			expect(response.detail).toContain("Missing required permission");
 		});
 
 		it("should handle not found error", async () => {

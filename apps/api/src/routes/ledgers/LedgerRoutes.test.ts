@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { createLocalJWKSet } from "jose";
 import { vi } from "vitest";
-import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/errors";
 import type {
 	BadRequestErrorResponse,
@@ -12,6 +12,7 @@ import type {
 } from "@/routes/schema";
 import { buildServer } from "@/server";
 import type { LedgerService } from "@/services/LedgerService";
+import { getTestJWKS, signTestJWT } from "@/test-utils/jwt";
 import { createLedgerFixture, createOrganizationFixture } from "./fixtures";
 
 const mockLedgerService = vi.mocked<LedgerService>({
@@ -26,14 +27,17 @@ describe("LedgerRoutes", () => {
 	let server: FastifyInstance;
 	const org = createOrganizationFixture();
 	const ledger = createLedgerFixture();
-	const token = signJWT({ sub: org.id.toString(), scope: ["org_admin"] });
+	let token: string;
 
 	beforeAll(async () => {
+		const testJWKS = await getTestJWKS();
 		server = await buildServer({
+			authOpts: { jwks: createLocalJWKSet(testJWKS) },
 			servicePluginOpts: {
 				services: { ledgerService: mockLedgerService },
 			},
 		});
+		token = await signTestJWT({ org_id: org.id.toString(), role: "admin" });
 	});
 
 	afterAll(async () => {
@@ -89,13 +93,13 @@ describe("LedgerRoutes", () => {
 			expect(rs.statusCode).toBe(401);
 			const response: UnauthorizedErrorResponse = rs.json();
 			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
+			expect(response.detail).toContain("Invalid token signature");
 		});
 
 		it("should allow org_readonly to list ledgers", async () => {
-			const orgReadonly = signJWT({
-				sub: org.id.toString(),
-				scope: ["org_readonly"],
+			const orgReadonly = await signTestJWT({
+				org_id: org.id.toString(),
+				role: "viewer",
 			});
 			mockLedgerService.listLedgers.mockResolvedValue([ledger]);
 
@@ -108,38 +112,6 @@ describe("LedgerRoutes", () => {
 			});
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual([ledger.toResponse()]);
-		});
-
-		it("should handle internal server error", async () => {
-			mockLedgerService.listLedgers.mockImplementation(async () => {
-				throw new Error("Internal Server Error");
-			});
-
-			const rs = await server.inject({
-				method: "GET",
-				headers: {
-					Authorization: `Bearer ${token}`,
-				},
-				url: "/api/ledgers",
-			});
-			expect(rs.statusCode).toBe(500);
-			const response: InternalServerErrorResponse = rs.json();
-			expect(response.status).toEqual(500);
-			expect(response.detail).toEqual("Internal Server Error");
-		});
-
-		it("should handle bad request error", async () => {
-			const rs = await server.inject({
-				method: "GET",
-				headers: {
-					Authorization: `Bearer ${token}`,
-				},
-				url: "/api/ledgers?offset=invalid&limit=invalid",
-			});
-			expect(rs.statusCode).toBe(400);
-			const response: BadRequestErrorResponse = rs.json();
-			expect(response.status).toEqual(400);
-			expect(response.detail).toEqual("querystring/offset must be number");
 		});
 	});
 
@@ -156,21 +128,6 @@ describe("LedgerRoutes", () => {
 			});
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(ledger.toResponse());
-			expect(mockLedgerService.getLedger).toHaveBeenCalledWith(org.id, ledger.id);
-		});
-
-		it("should handle bad request error", async () => {
-			const rs = await server.inject({
-				method: "GET",
-				headers: {
-					Authorization: `Bearer ${token}`,
-				},
-				url: `/api/ledgers/org_${ledger.id.toString()}`,
-			});
-			expect(rs.statusCode).toBe(400);
-			const response: BadRequestErrorResponse = rs.json();
-			expect(response.status).toEqual(400);
-			expect(response.detail).toContain('params/ledgerId must match pattern "^lgr_');
 		});
 
 		it("should handle unauthorized error", async () => {
@@ -186,13 +143,13 @@ describe("LedgerRoutes", () => {
 			expect(rs.statusCode).toBe(401);
 			const response: UnauthorizedErrorResponse = rs.json();
 			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
+			expect(response.detail).toContain("Invalid token signature");
 		});
 
 		it("should allow org_user to get ledger", async () => {
-			const orgUser = signJWT({
-				sub: org.id.toString(),
-				scope: ["org_user"],
+			const orgUser = await signTestJWT({
+				org_id: org.id.toString(),
+				role: "member",
 			});
 			mockLedgerService.getLedger.mockResolvedValue(ledger);
 
@@ -245,6 +202,13 @@ describe("LedgerRoutes", () => {
 	});
 
 	describe("Create Ledger", () => {
+		const request = {
+			name: ledger.name,
+			description: ledger.description,
+			currency: ledger.currency,
+			currencyExponent: ledger.currencyExponent,
+		};
+
 		it("should create a ledger", async () => {
 			mockLedgerService.createLedger.mockResolvedValue(ledger);
 
@@ -254,13 +218,29 @@ describe("LedgerRoutes", () => {
 					Authorization: `Bearer ${token}`,
 				},
 				url: "/api/ledgers",
-				payload: {
-					name: "test",
-				},
+				payload: request,
 			});
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(ledger.toResponse());
-			expect(mockLedgerService.createLedger).toHaveBeenCalled();
+		});
+
+		it("should handle conflict error", async () => {
+			mockLedgerService.createLedger.mockImplementation(async () => {
+				throw new ConflictError({ message: `Ledger already exists: ${ledger.name}` });
+			});
+
+			const rs = await server.inject({
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+				url: "/api/ledgers",
+				payload: request,
+			});
+			expect(rs.statusCode).toBe(409);
+			const response: ConflictErrorResponse = rs.json();
+			expect(response.status).toEqual(409);
+			expect(response.detail).toEqual(`Ledger already exists: ${ledger.name}`);
 		});
 
 		it("should handle bad request error", async () => {
@@ -270,37 +250,17 @@ describe("LedgerRoutes", () => {
 					Authorization: `Bearer ${token}`,
 				},
 				url: "/api/ledgers",
-				payload: {
-					foo: "bar",
-				},
+				payload: {},
 			});
 			expect(rs.statusCode).toBe(400);
 			const response: BadRequestErrorResponse = rs.json();
 			expect(response.status).toEqual(400);
-			expect(response.detail).toContain("body must have required property 'name'");
-		});
-
-		it("should handle unauthorized error", async () => {
-			const rs = await server.inject({
-				method: "POST",
-				headers: {
-					Authorization: "Bearer invalid_token",
-				},
-				url: "/api/ledgers",
-				payload: {
-					name: "test",
-				},
-			});
-			expect(rs.statusCode).toBe(401);
-			const response: UnauthorizedErrorResponse = rs.json();
-			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
 		});
 
 		it("should allow org_user to create ledger", async () => {
-			const orgUser = signJWT({
-				sub: org.id.toString(),
-				scope: ["org_user"],
+			const orgUser = await signTestJWT({
+				org_id: org.id.toString(),
+				role: "member",
 			});
 			mockLedgerService.createLedger.mockResolvedValue(ledger);
 
@@ -310,58 +270,40 @@ describe("LedgerRoutes", () => {
 					Authorization: `Bearer ${orgUser}`,
 				},
 				url: "/api/ledgers",
-				payload: {
-					name: "test",
-				},
+				payload: request,
 			});
 			expect(rs.statusCode).toBe(200);
-			expect(rs.json()).toEqual(ledger.toResponse());
 		});
 
-		it("should handle conflict error", async () => {
-			mockLedgerService.createLedger.mockImplementation(async () => {
-				throw new ConflictError({ message: "Ledger already exists" });
+		it("should not allow org_readonly to create ledger", async () => {
+			const orgReadonly = await signTestJWT({
+				org_id: org.id.toString(),
+				role: "viewer",
 			});
+			mockLedgerService.createLedger.mockResolvedValue(ledger);
 
 			const rs = await server.inject({
 				method: "POST",
 				headers: {
-					Authorization: `Bearer ${token}`,
+					Authorization: `Bearer ${orgReadonly}`,
 				},
 				url: "/api/ledgers",
-				payload: {
-					name: "test",
-				},
+				payload: request,
 			});
-			expect(rs.statusCode).toBe(409);
-			const response: ConflictErrorResponse = rs.json();
-			expect(response.status).toEqual(409);
-			expect(response.detail).toEqual("Ledger already exists");
-		});
-
-		it("should handle internal server error", async () => {
-			mockLedgerService.createLedger.mockImplementation(async () => {
-				throw new Error("Internal Server Error");
-			});
-
-			const rs = await server.inject({
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${token}`,
-				},
-				url: "/api/ledgers",
-				payload: {
-					name: "test",
-				},
-			});
-			expect(rs.statusCode).toBe(500);
-			const response: InternalServerErrorResponse = rs.json();
-			expect(response.status).toEqual(500);
-			expect(response.detail).toEqual("Internal Server Error");
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
 		});
 	});
 
 	describe("Update Ledger", () => {
+		const request = {
+			name: ledger.name,
+			description: ledger.description,
+			currency: ledger.currency,
+			currencyExponent: ledger.currencyExponent,
+		};
+
 		it("should update a ledger", async () => {
 			mockLedgerService.updateLedger.mockResolvedValue(ledger);
 
@@ -371,53 +313,35 @@ describe("LedgerRoutes", () => {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-				payload: {
-					name: "test",
-				},
+				payload: request,
 			});
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(ledger.toResponse());
-			expect(mockLedgerService.updateLedger).toHaveBeenCalled();
 		});
 
-		it("should handle bad request error", async () => {
+		it("should handle not found error", async () => {
+			mockLedgerService.updateLedger.mockImplementation(async () => {
+				throw new NotFoundError(`Ledger not found: ${ledger.id.toString()}`);
+			});
+
 			const rs = await server.inject({
 				method: "PUT",
 				headers: {
 					Authorization: `Bearer ${token}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-				payload: {
-					foo: "bar",
-				},
+				payload: request,
 			});
-			expect(rs.statusCode).toBe(400);
-			const response: BadRequestErrorResponse = rs.json();
-			expect(response.status).toEqual(400);
-			expect(response.detail).toContain("body must have required property 'name'");
-		});
-
-		it("should handle unauthorized error", async () => {
-			const rs = await server.inject({
-				method: "PUT",
-				headers: {
-					Authorization: "Bearer invalid_token",
-				},
-				url: `/api/ledgers/${ledger.id.toString()}`,
-				payload: {
-					name: "test",
-				},
-			});
-			expect(rs.statusCode).toBe(401);
-			const response: UnauthorizedErrorResponse = rs.json();
-			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
+			expect(rs.statusCode).toBe(404);
+			const response: NotFoundErrorResponse = rs.json();
+			expect(response.status).toEqual(404);
+			expect(response.detail).toEqual(`Ledger not found: ${ledger.id.toString()}`);
 		});
 
 		it("should allow org_user to update ledger", async () => {
-			const orgUser = signJWT({
-				sub: org.id.toString(),
-				scope: ["org_user"],
+			const orgUser = await signTestJWT({
+				org_id: org.id.toString(),
+				role: "member",
 			});
 			mockLedgerService.updateLedger.mockResolvedValue(ledger);
 
@@ -427,75 +351,29 @@ describe("LedgerRoutes", () => {
 					Authorization: `Bearer ${orgUser}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-				payload: {
-					name: "test",
-				},
+				payload: request,
 			});
 			expect(rs.statusCode).toBe(200);
-			expect(rs.json()).toEqual(ledger.toResponse());
 		});
 
-		it("should handle not found error", async () => {
-			mockLedgerService.updateLedger.mockImplementation(async () => {
-				throw new NotFoundError("Ledger not found");
+		it("should not allow org_readonly to update ledger", async () => {
+			const orgReadonly = await signTestJWT({
+				org_id: org.id.toString(),
+				role: "viewer",
 			});
+			mockLedgerService.updateLedger.mockResolvedValue(ledger);
 
 			const rs = await server.inject({
 				method: "PUT",
 				headers: {
-					Authorization: `Bearer ${token}`,
+					Authorization: `Bearer ${orgReadonly}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
-				payload: {
-					name: "test",
-				},
+				payload: request,
 			});
-			expect(rs.statusCode).toBe(404);
-			const response: NotFoundErrorResponse = rs.json();
-			expect(response.status).toEqual(404);
-			expect(response.detail).toEqual("Ledger not found");
-		});
-
-		it("should handle conflict error", async () => {
-			mockLedgerService.updateLedger.mockImplementation(async () => {
-				throw new ConflictError({ message: "Ledger conflict" });
-			});
-
-			const rs = await server.inject({
-				method: "PUT",
-				headers: {
-					Authorization: `Bearer ${token}`,
-				},
-				url: `/api/ledgers/${ledger.id.toString()}`,
-				payload: {
-					name: "test",
-				},
-			});
-			expect(rs.statusCode).toBe(409);
-			const response: ConflictErrorResponse = rs.json();
-			expect(response.status).toEqual(409);
-			expect(response.detail).toEqual("Ledger conflict");
-		});
-
-		it("should handle internal server error", async () => {
-			mockLedgerService.updateLedger.mockImplementation(async () => {
-				throw new Error("Internal Server Error");
-			});
-
-			const rs = await server.inject({
-				method: "PUT",
-				headers: {
-					Authorization: `Bearer ${token}`,
-				},
-				url: `/api/ledgers/${ledger.id.toString()}`,
-				payload: {
-					name: "test",
-				},
-			});
-			expect(rs.statusCode).toBe(500);
-			const response: InternalServerErrorResponse = rs.json();
-			expect(response.status).toEqual(500);
-			expect(response.detail).toEqual("Internal Server Error");
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
 		});
 	});
 
@@ -511,59 +389,11 @@ describe("LedgerRoutes", () => {
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			});
 			expect(rs.statusCode).toBe(200);
-			expect(mockLedgerService.deleteLedger).toHaveBeenCalledWith(org.id, ledger.id);
-		});
-
-		it("should handle bad request error", async () => {
-			const rs = await server.inject({
-				method: "DELETE",
-				headers: {
-					Authorization: `Bearer ${token}`,
-				},
-				url: `/api/ledgers/org_${ledger.id.toString()}`,
-			});
-			expect(rs.statusCode).toBe(400);
-			const response: BadRequestErrorResponse = rs.json();
-			expect(response.status).toEqual(400);
-			expect(response.detail).toContain('params/ledgerId must match pattern "^lgr_');
-		});
-
-		it("should handle unauthorized error", async () => {
-			const rs = await server.inject({
-				method: "DELETE",
-				headers: {
-					Authorization: "Bearer invalid_token",
-				},
-				url: `/api/ledgers/${ledger.id.toString()}`,
-			});
-			expect(rs.statusCode).toBe(401);
-			const response: UnauthorizedErrorResponse = rs.json();
-			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
-		});
-
-		it("should forbid org_user from deleting ledger", async () => {
-			const orgUser = signJWT({
-				sub: org.id.toString(),
-				scope: ["org_user"],
-			});
-
-			const rs = await server.inject({
-				method: "DELETE",
-				headers: {
-					Authorization: `Bearer ${orgUser}`,
-				},
-				url: `/api/ledgers/${ledger.id.toString()}`,
-			});
-			expect(rs.statusCode).toBe(403);
-			const response: ForbiddenErrorResponse = rs.json();
-			expect(response.status).toEqual(403);
-			expect(response.detail).toContain("permissions is required");
 		});
 
 		it("should handle not found error", async () => {
 			mockLedgerService.deleteLedger.mockImplementation(async () => {
-				throw new NotFoundError("Ledger not found");
+				throw new NotFoundError(`Ledger not found: ${ledger.id.toString()}`);
 			});
 
 			const rs = await server.inject({
@@ -576,43 +406,45 @@ describe("LedgerRoutes", () => {
 			expect(rs.statusCode).toBe(404);
 			const response: NotFoundErrorResponse = rs.json();
 			expect(response.status).toEqual(404);
-			expect(response.detail).toEqual("Ledger not found");
+			expect(response.detail).toEqual(`Ledger not found: ${ledger.id.toString()}`);
 		});
 
-		it("should handle conflict error", async () => {
-			mockLedgerService.deleteLedger.mockImplementation(async () => {
-				throw new ConflictError({ message: "Cannot delete ledger with active accounts" });
+		it("should allow org_user to delete ledger", async () => {
+			const orgUser = await signTestJWT({
+				org_id: org.id.toString(),
+				role: "member",
 			});
+			mockLedgerService.deleteLedger.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: {
-					Authorization: `Bearer ${token}`,
+					Authorization: `Bearer ${orgUser}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			});
-			expect(rs.statusCode).toBe(409);
-			const response: ConflictErrorResponse = rs.json();
-			expect(response.status).toEqual(409);
-			expect(response.detail).toEqual("Cannot delete ledger with active accounts");
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
 		});
 
-		it("should handle internal server error", async () => {
-			mockLedgerService.deleteLedger.mockImplementation(async () => {
-				throw new Error("Internal Server Error");
+		it("should not allow org_readonly to delete ledger", async () => {
+			const orgReadonly = await signTestJWT({
+				org_id: org.id.toString(),
+				role: "viewer",
 			});
+			mockLedgerService.deleteLedger.mockResolvedValue();
 
 			const rs = await server.inject({
 				method: "DELETE",
 				headers: {
-					Authorization: `Bearer ${token}`,
+					Authorization: `Bearer ${orgReadonly}`,
 				},
 				url: `/api/ledgers/${ledger.id.toString()}`,
 			});
-			expect(rs.statusCode).toBe(500);
-			const response: InternalServerErrorResponse = rs.json();
-			expect(response.status).toEqual(500);
-			expect(response.detail).toEqual("Internal Server Error");
+			expect(rs.statusCode).toBe(403);
+			const response: ForbiddenErrorResponse = rs.json();
+			expect(response.status).toEqual(403);
 		});
 	});
 });

@@ -660,6 +660,35 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 ```
 
+## File Structure
+
+```
+app/
+├── routes/              # React Router routes
+│   ├── home.tsx
+│   └── ledgers/
+│       ├── $id.tsx
+│       └── $id.accounts.tsx
+├── components/
+│   ├── ui/             # shadcn/ui components
+│   │   ├── button.tsx
+│   │   └── card.tsx
+│   └── features/       # Feature-specific components
+│       └── AccountCard.tsx
+├── hooks/              # Custom React hooks
+│   └── useAccount.ts
+├── stores/             # Zustand stores
+│   └── useUIStore.ts
+├── api/                # API client (openapi-react-query)
+│   ├── queries.ts
+│   └── mutations.ts
+├── lib/                # Utilities
+│   └── utils.ts
+├── app.css             # Global styles
+├── root.tsx            # Root layout
+└── routes.ts           # Route configuration
+```
+
 ## Development Workflow
 
 ### Feature Development Process

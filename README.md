@@ -13,21 +13,21 @@ Real-time double-entry ledger API with PostgreSQL persistence.
 
 **Tech Stack:** Fastify, Drizzle ORM, PostgreSQL, Vitest
 
-[View API Documentation →](apps/api/AGENTS.md)
+[View API Documentation →](docs/standards/api/)
 
 #### `apps/web/` - Customer Portal
 Customer-facing dashboard for ledger data visualization and management.
 
 **Tech Stack:** React Router v7, React 19, Tailwind CSS v4, shadcn/ui, TanStack React Query, Zustand
 
-[View Web Documentation →](apps/web/AGENTS.md)
+[View Web Documentation →](docs/standards/web/)
 
 #### `apps/docs/` - Documentation Site
 Public documentation site built with Docusaurus.
 
 **Tech Stack:** Docusaurus, Markdown/MDX
 
-[View Docs Documentation →](apps/docs/AGENTS.md)
+[View Docs Documentation →](apps/docs/docs/standards/)
 
 ## Quick Start
 
@@ -159,15 +159,15 @@ Shared architecture and coding standards:
 
 Each app has its own detailed documentation:
 
-- [API Development Guide](apps/api/AGENTS.md) - Fastify, Drizzle, PostgreSQL patterns
-- [Web Development Guide](apps/web/AGENTS.md) - React Router, Tailwind, React Query patterns
-- [Docs Guide](apps/docs/AGENTS.md) - Docusaurus content and structure
+- [API Development Guide](docs/standards/api/) - Fastify, Drizzle, PostgreSQL patterns
+- [Web Development Guide](docs/standards/web/) - React Router, Tailwind, React Query patterns
+- [Docs Guide](apps/docs/docs/standards/) - Docusaurus content and structure
 
 ### Getting Started
 
 New to the project? Start here:
 
-1. Read [AGENTS.md](AGENTS.md) for a complete overview
+1. Read [CLAUDE.md](CLAUDE.md) for a complete overview
 2. Review [Architecture Standards](docs/standards/architecture.md)
 3. Check [Coding Standards](docs/standards/coding.md)
 4. Explore app-specific guides for your area of focus
@@ -182,7 +182,7 @@ This project uses **spec-driven development**. To build a new feature:
 4. `/spec-implement [feature-name]` - Implement with stub-driven TDD
 5. `/spec-progress [feature-name]` - Track feature progress
 
-See [AGENTS.md](AGENTS.md) for complete workflow details.
+See [CLAUDE.md](CLAUDE.md) for complete workflow details.
 
 ## Architecture
 
@@ -253,11 +253,14 @@ bun run test       # All tests passing
 
 ```
 /
-├── AGENTS.md                    # Monorepo development guide
+├── CLAUDE.md                    # Development guide (single entry point)
 ├── README.md                    # This file
 ├── docs/
 │   ├── product/                 # Product vision and roadmap
-│   └── standards/               # Shared architecture and coding standards
+│   ├── spec/                    # Feature specifications
+│   └── standards/               # Architecture and coding standards
+│       ├── api/                 # API-specific standards
+│       └── web/                 # Web-specific standards
 ├── apps/
 │   ├── api/                     # Ledger API (Fastify, Drizzle, PostgreSQL)
 │   ├── web/                     # Customer Portal (React Router, Tailwind)
@@ -273,7 +276,8 @@ bun run test       # All tests passing
 - **Product Questions:** See [docs/product/product.md](docs/product/product.md)
 - **Architecture Questions:** See [docs/standards/architecture.md](docs/standards/architecture.md)
 - **Coding Questions:** See [docs/standards/coding.md](docs/standards/coding.md)
-- **App-Specific Questions:** See `apps/*/AGENTS.md`
+- **API Questions:** See [docs/standards/api/](docs/standards/api/)
+- **Web Questions:** See [docs/standards/web/](docs/standards/web/)
 
 ## License
 

@@ -215,6 +215,6 @@ When refactoring existing code to follow these patterns:
 
 Each application may extend these principles with technology-specific implementations:
 
-- **API App**: See `apps/api/docs/standards/architecture.md` for Fastify, Drizzle, PostgreSQL patterns
-- **Web App**: See `apps/web/docs/standards/architecture.md` for React Router, React Query, Zustand patterns
-- **Docs App**: See `apps/docs/AGENTS.md` for Docusaurus-specific patterns
+- **API App**: See `docs/standards/api/architecture.md` for Fastify, Drizzle, PostgreSQL patterns
+- **Web App**: See `docs/standards/web/architecture.md` for React Router, React Query, Zustand patterns
+- **Docs App**: See `apps/docs/docs/standards/` for Docusaurus-specific patterns

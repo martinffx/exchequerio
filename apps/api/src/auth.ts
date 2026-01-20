@@ -1,11 +1,31 @@
 import fastifyAuth from "@fastify/auth";
-import fastifyJwt from "@fastify/jwt";
-import { createSigner, type SignerSync } from "fast-jwt";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { createRemoteJWKSet, errors, type JWTVerifyGetKey, jwtVerify } from "jose";
+
+const { JOSEError, JWTClaimValidationFailed, JWTExpired } = errors;
+
 import { TypeID } from "typeid-js";
-import { Config } from "./config";
 import { ForbiddenError, UnauthorizedError } from "./errors";
-import type { OrgID } from "./services";
+
+// WorkOS JWT payload structure (from WorkOS)
+type WorkOSAccessToken = {
+	sub: string; // User ID (e.g., "user_01HXYZ...")
+	sid: string; // Session ID (e.g., "session_01HXYZ...")
+	org_id: string; // Organization ID (required)
+	role?: string; // Role in organization (e.g., "admin", "member")
+	permissions?: string[]; // Array of permission strings
+	iat: number; // Issued at (Unix timestamp)
+	exp: number; // Expiration (Unix timestamp)
+};
+
+// Authenticated user context (attached to request)
+type AuthenticatedUser = {
+	userId: string; // from JWT.sub
+	sessionId: string; // from JWT.sid
+	organizationId: string; // from JWT.org_id (required)
+	role?: string; // from JWT.role
+	permissions: string[]; // from JWT.permissions or mapped from role
+};
 
 const Permissions = [
 	"ledger:read",
@@ -83,31 +103,29 @@ const SuperAdminPermissions = new Set<Permissions>([
 	"organization:write",
 	"organization:delete",
 ]);
-const RolePermissions = {
-	super_admin: SuperAdminPermissions,
-	org_admin: OrgAdminPermissions,
-	org_user: OrgUserPermissions,
-	org_readonly: OrgReadonlyPermissions,
-} as const;
-const Scope = {
-	SuperAdmin: "super_admin",
-	OrgAdmin: "org_admin",
-	OrgUser: "org_user",
-	OrgReadonly: "org_readonly",
-} as const;
-type Scope = (typeof Scope)[keyof typeof Scope];
-interface Token {
-	sub: string;
-	scope: Scope[];
-}
 
-class OrgToken {
-	public readonly orgId: OrgID;
-	public readonly scope: Scope[];
-	constructor({ sub, scope }: Token) {
-		this.orgId = TypeID.fromString(sub);
-		this.scope = scope;
+// WorkOS role to permission mapping
+const WorkOSRolePermissions: Record<string, Set<Permissions>> = {
+	admin: OrgAdminPermissions,
+	member: OrgUserPermissions,
+	viewer: OrgReadonlyPermissions,
+	super_admin: SuperAdminPermissions,
+};
+
+// Helper function to resolve permissions from WorkOS JWT
+function resolvePermissions(token: WorkOSAccessToken): string[] {
+	// If JWT has explicit permissions, use them
+	if (token.permissions && token.permissions.length > 0) {
+		return token.permissions;
 	}
+
+	// Otherwise, map role to permissions
+	if (token.role && WorkOSRolePermissions[token.role]) {
+		return [...WorkOSRolePermissions[token.role]];
+	}
+
+	// No permissions available
+	return [];
 }
 
 declare module "fastify" {
@@ -119,49 +137,109 @@ declare module "fastify" {
 	}
 
 	interface FastifyRequest {
-		token: OrgToken;
+		user: AuthenticatedUser;
 	}
 }
 
-let jwtSigner: typeof SignerSync;
-const signJWT = (token: Token): string => {
-	if (jwtSigner === undefined) {
-		const config = new Config();
-		jwtSigner = createSigner({ key: config.jwtSecret });
-	}
+// Auth options for JWKS injection
+export interface AuthOptions {
+	jwks?: JWTVerifyGetKey; // If not provided, uses WorkOS remote JWKS
+}
 
-	return jwtSigner(token);
-};
+const registerAuth = async (server: FastifyInstance, options: AuthOptions = {}): Promise<void> => {
+	// Use injected JWKS or default to WorkOS remote
+	const JWKS =
+		options.jwks ??
+		createRemoteJWKSet(new URL(`https://api.workos.com/sso/jwks/${server.config.workosClientId}`));
 
-const registerAuth = async (server: FastifyInstance): Promise<void> => {
-	await server.register(fastifyJwt, { secret: server.config.jwtSecret });
+	// WorkOS JWT verification
 	server.decorate("verifyJWT", async (request: FastifyRequest) => {
 		try {
-			const token = await request.jwtVerify<Token>();
-			request.token = new OrgToken(token);
-		} catch (error: unknown) {
-			request.log.error(error);
-			throw new UnauthorizedError("Invalid token");
-		}
-	});
-	server.decorate("hasPermissions", (requiredPermissions: Permissions[]) => {
-		return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-			const role = request.token.scope[0];
-			const permissions = RolePermissions[role];
-			if (!permissions) {
-				throw new ForbiddenError(
-					`One of: ${Object.keys(RolePermissions).join(", ")}; permissions is required`
-				);
+			// Extract Bearer token from Authorization header
+			const authHeader = request.headers.authorization;
+			if (!authHeader || !authHeader.startsWith("Bearer ")) {
+				throw new UnauthorizedError("Missing Authorization header");
 			}
 
+			const token = authHeader.substring(7); // Remove "Bearer " prefix
+
+			// Verify JWT signature using JWKS
+			const { payload } = await jwtVerify(token, JWKS, {
+				issuer: "https://api.workos.com",
+				audience: server.config.workosClientId,
+			});
+
+			// Extract and validate required claims
+			const workosToken = payload as unknown as WorkOSAccessToken;
+			if (!workosToken.sub || !workosToken.sid) {
+				throw new UnauthorizedError("Invalid token claims");
+			}
+
+			// Validate org_id is present and valid TypeID
+			if (!workosToken.org_id) {
+				throw new UnauthorizedError("Missing organization ID in token");
+			}
+
+			let orgId: TypeID;
+			try {
+				orgId = TypeID.fromString(workosToken.org_id);
+			} catch {
+				throw new UnauthorizedError("Invalid organization ID format in token");
+			}
+
+			// Resolve permissions from role or explicit permissions
+			const permissions = resolvePermissions(workosToken);
+
+			// Attach authenticated user to request
+			request.user = {
+				userId: workosToken.sub,
+				sessionId: workosToken.sid,
+				organizationId: orgId.toString(),
+				role: workosToken.role,
+				permissions,
+			};
+		} catch (error: unknown) {
+			request.log.error({ error }, "WorkOS JWT verification failed");
+
+			// Handle specific error types
+			if (error instanceof JWTExpired) {
+				throw new UnauthorizedError("Token expired");
+			}
+			if (error instanceof JWTClaimValidationFailed) {
+				throw new UnauthorizedError("Invalid token claims");
+			}
+			if (error instanceof JOSEError) {
+				throw new UnauthorizedError("Invalid token signature");
+			}
+
+			// Re-throw domain errors
+			if (error instanceof UnauthorizedError) {
+				throw error;
+			}
+
+			// JWKS fetch failure or other system errors
+			throw new Error("Authentication service unavailable");
+		}
+	});
+
+	server.decorate("hasPermissions", (requiredPermissions: Permissions[]) => {
+		return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
+			if (!request.user) {
+				throw new UnauthorizedError("Authentication required");
+			}
+
+			const userPermissions = new Set(request.user.permissions as Permissions[]);
+
+			// Check required permissions
 			for (const permission of requiredPermissions) {
-				if (!permissions.has(permission)) {
-					throw new ForbiddenError(`One of: ${requiredPermissions.join(", ")}; permissions is required`);
+				if (!userPermissions.has(permission)) {
+					throw new ForbiddenError(`Missing required permission: ${permission}`);
 				}
 			}
 		};
 	});
+
 	await server.register(fastifyAuth);
 };
 
-export { registerAuth, signJWT };
+export { registerAuth };

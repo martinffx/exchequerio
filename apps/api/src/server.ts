@@ -3,7 +3,7 @@ import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUI from "@fastify/swagger-ui";
 import fastifyUnderPressure from "@fastify/under-pressure";
 import fastify, { type FastifyInstance } from "fastify";
-import { registerAuth } from "@/auth";
+import { type AuthOptions, registerAuth } from "@/auth";
 import { Config } from "@/config";
 import { globalErrorHandler } from "@/errors";
 import { RepoPlugin, type RepoPluginOptions } from "@/repo";
@@ -13,6 +13,7 @@ import { ServicePlugin, type ServicePluginOpts } from "@/services";
 type ServerOpts = {
 	repoPluginOpts?: RepoPluginOptions;
 	servicePluginOpts?: ServicePluginOpts;
+	authOpts?: AuthOptions;
 };
 
 declare module "fastify" {
@@ -24,6 +25,7 @@ declare module "fastify" {
 const buildServer = async ({
 	repoPluginOpts,
 	servicePluginOpts,
+	authOpts,
 }: ServerOpts = {}): Promise<FastifyInstance> => {
 	const config = new Config();
 	const server = fastify<Server, IncomingMessage, ServerResponse>({
@@ -103,7 +105,7 @@ const buildServer = async ({
 		},
 	});
 
-	await registerAuth(server);
+	await registerAuth(server, authOpts ?? {});
 	await server.register(RepoPlugin, repoPluginOpts ?? {});
 	await server.register(ServicePlugin, servicePluginOpts ?? {});
 	await server.register(RouterPlugin, { prefix: "/api" });

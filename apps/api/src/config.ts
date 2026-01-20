@@ -1,16 +1,16 @@
 interface ConfigOptions {
 	databaseUrl?: string;
-	jwtSecret?: string;
+	workosClientId?: string;
 	environment?: string;
 }
 class Config {
 	public readonly databaseUrl: string;
-	public readonly jwtSecret: string;
+	public readonly workosClientId: string;
 	public readonly environment: string;
 
-	constructor({ databaseUrl, jwtSecret, environment }: ConfigOptions = {}) {
+	constructor({ databaseUrl, workosClientId, environment }: ConfigOptions = {}) {
 		this.databaseUrl = databaseUrl ?? process.env.DATABASE_URL ?? "";
-		this.jwtSecret = jwtSecret ?? process.env.JWT_SECRET ?? "";
+		this.workosClientId = workosClientId ?? process.env.WORKOS_CLIENT_ID ?? "";
 		this.environment = environment ?? process.env.NODE_ENV ?? "development";
 	}
 }

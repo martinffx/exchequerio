@@ -53,7 +53,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		},
 		async (rq: ListLedgerTransactionsRequest): Promise<LedgerTransactionResponse[]> => {
 			const transactions = await rq.server.services.ledgerTransactionService.listTransactions(
-				rq.token.orgId,
+				TypeID.fromString(rq.user.organizationId),
 				TypeID.fromString<"lgr">(rq.params.ledgerId),
 				rq.query.offset,
 				rq.query.limit
@@ -87,7 +87,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		},
 		async (rq: GetLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
 			const transaction = await rq.server.services.ledgerTransactionService.getLedgerTransaction(
-				rq.token.orgId,
+				TypeID.fromString(rq.user.organizationId),
 				TypeID.fromString<"lgr">(rq.params.ledgerId),
 				TypeID.fromString<"ltr">(rq.params.transactionId)
 			);
@@ -122,7 +122,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		async (rq: CreateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const ledgerTransaction = await rq.server.services.ledgerTransactionService.createTransaction(
-				rq.token.orgId,
+				TypeID.fromString(rq.user.organizationId),
 				ledgerId,
 				rq.body
 			);
@@ -156,7 +156,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		},
 		async (rq: PostLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
 			const transaction = await rq.server.services.ledgerTransactionService.postTransaction(
-				rq.token.orgId,
+				TypeID.fromString(rq.user.organizationId),
 				TypeID.fromString<"lgr">(rq.params.ledgerId),
 				TypeID.fromString<"ltr">(rq.params.transactionId)
 			);
@@ -192,7 +192,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		},
 		async (rq: UpdateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
 			const transaction = await rq.server.services.ledgerTransactionService.updateTransaction(
-				rq.token.orgId,
+				TypeID.fromString(rq.user.organizationId),
 				TypeID.fromString<"lgr">(rq.params.ledgerId),
 				TypeID.fromString<"ltr">(rq.params.transactionId),
 				rq.body
@@ -227,7 +227,7 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 		},
 		async (rq: DeleteLedgerTransactionRequest): Promise<void> => {
 			await rq.server.services.ledgerTransactionService.deleteTransaction(
-				rq.token.orgId,
+				TypeID.fromString(rq.user.organizationId),
 				TypeID.fromString<"lgr">(rq.params.ledgerId),
 				TypeID.fromString<"ltr">(rq.params.transactionId)
 			);

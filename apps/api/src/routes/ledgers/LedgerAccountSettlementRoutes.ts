@@ -55,7 +55,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:settlement:read"]),
 		},
 		async (rq: ListLedgerAccountSettlementsRequest): Promise<LedgerAccountSettlementResponse[]> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const settlements =
 				await rq.server.services.ledgerAccountSettlementService.listLedgerAccountSettlements(
@@ -94,7 +94,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:settlement:read"]),
 		},
 		async (rq: GetLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			const settlement =
 				await rq.server.services.ledgerAccountSettlementService.getLedgerAccountSettlement(
@@ -133,7 +133,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: CreateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 
 			// Get the ledger to retrieve currency information
@@ -193,7 +193,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: UpdateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 
 			// Get the ledger to retrieve currency information
@@ -252,7 +252,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:settlement:delete"]),
 		},
 		async (rq: DeleteLedgerAccountSettlementRequest): Promise<void> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			await rq.server.services.ledgerAccountSettlementService.deleteLedgerAccountSettlement(
 				orgId,
@@ -291,7 +291,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: AddLedgerAccountSettlementEntryRequest): Promise<void> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			await rq.server.services.ledgerAccountSettlementService.addLedgerAccountSettlementEntries(
 				orgId,
@@ -330,7 +330,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: RemoveLedgerAccountSettlementEntryRequest): Promise<void> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			await rq.server.services.ledgerAccountSettlementService.removeLedgerAccountSettlementEntries(
 				orgId,
@@ -373,7 +373,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		async (
 			rq: TransitionLedgerAccountSettlementStatusRequest
 		): Promise<LedgerAccountSettlementResponse> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			const targetStatus = rq.params.status;

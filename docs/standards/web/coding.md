@@ -1,5 +1,51 @@
 # Web Coding Standards
 
+## Commands Reference
+
+### Development Commands
+```bash
+# From monorepo root
+bun run dev:web          # Start web app only
+bun run dev              # Start all apps (including API)
+
+# From apps/web directory
+bun run dev              # Start development server
+```
+
+### Testing Commands
+
+**Important:** Always use `bun run test` (NOT `bun test`). We use **Vitest** for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, etc.). The `bun test` command uses Bun's built-in test runner which lacks these features.
+
+```bash
+# From monorepo root
+bun --filter=@exchequerio/web test
+
+# From apps/web directory
+bun run test             # Run all tests (Vitest)
+bun run test:watch       # Run tests in watch mode (Vitest)
+```
+
+### Code Quality Commands
+```bash
+# From monorepo root
+bun run check            # Run all quality checks across apps
+
+# From apps/web directory
+bun run format           # Format code with Biome
+bun run lint             # Lint with Biome + ESLint
+bun run types            # Type check with TypeScript
+```
+
+### Build Commands
+```bash
+# From monorepo root
+bun --filter=@exchequerio/web build
+
+# From apps/web directory
+bun run build            # Build for production
+bun run start            # Start production server
+```
+
 ## Code Style & Formatting
 
 ### Tooling
@@ -60,7 +106,8 @@ export function Counter() {
 
 ```typescript
 // Functional components with TypeScript
-interface UserCardProps {
+// Use type for component props (pure data, even with callbacks)
+type UserCardProps = {
   user: User
   onSelect?: (user: User) => void
 }
@@ -356,11 +403,41 @@ app/
 
 ## TypeScript Patterns
 
+### Type vs Interface
+
+```typescript
+// Use type for pure data structures (DTOs, props, state, configs)
+type User = {
+  id: string
+  name: string
+  email: string
+}
+
+type AccountCardProps = {
+  account: Account
+  variant?: "default" | "compact"
+  onSelect?: (account: Account) => void
+  className?: string
+}
+
+// Use interface for contracts that include behavior (methods)
+interface UserService {
+  getUser(id: string): Promise<User>
+  updateUser(id: string, data: Partial<User>): Promise<User>
+}
+
+interface DataProvider {
+  fetch(): Promise<Data>
+  invalidate(): void
+  subscribe(callback: () => void): () => void
+}
+```
+
 ### Component Props
 
 ```typescript
-// Define props interfaces
-interface AccountCardProps {
+// Use type for component props (pure data structures)
+type AccountCardProps = {
   account: Account
   variant?: "default" | "compact"
   onSelect?: (account: Account) => void
@@ -412,8 +489,8 @@ function Form() {
 ### Generics
 
 ```typescript
-// Generic components
-interface ListProps<T> {
+// Generic components - use type for props
+type ListProps<T> = {
   items: T[]
   renderItem: (item: T) => React.ReactNode
   keyExtractor: (item: T) => string
@@ -720,6 +797,78 @@ export function useLedgerAccounts(ledgerId: string) {
   // Implementation
 }
 ```
+
+## Common Development Tasks
+
+### Adding a New Page
+
+```bash
+# Create route file
+touch app/routes/my-page.tsx
+
+# Add route definition
+export default function MyPage() {
+  return <div>My Page</div>
+}
+```
+
+### Adding a shadcn/ui Component
+
+```bash
+# Use shadcn CLI
+bunx shadcn@latest add button
+
+# Component added to app/components/ui/button.tsx
+```
+
+### Creating a Zustand Store
+
+```bash
+# Create store file
+touch app/stores/useMyStore.ts
+
+# Define store with TypeScript
+import { create } from "zustand"
+
+interface MyStore {
+  count: number
+  increment: () => void
+}
+
+export const useMyStore = create<MyStore>((set) => ({
+  count: 0,
+  increment: () => set((state) => ({ count: state.count + 1 }))
+}))
+```
+
+### Environment Setup
+
+**Prerequisites:**
+- Node.js 18+ (via mise)
+- Bun 1.2+
+- API running on `http://localhost:3000` (for development)
+
+**Configuration:**
+```bash
+# .env (if needed)
+VITE_API_URL=http://localhost:3000
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue:** "Module not found" errors
+- **Solution:** Check import paths use `@/` alias or relative paths correctly
+
+**Issue:** API calls failing in development
+- **Solution:** Ensure API server is running on `http://localhost:3000`
+
+**Issue:** Tailwind styles not applying
+- **Solution:** Check `tailwind.config.ts` includes correct content paths
+
+**Issue:** Type errors from openapi-react-query
+- **Solution:** Regenerate client with latest API schema
 
 ## Code Quality
 

@@ -49,7 +49,8 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 			preHandler: server.hasPermissions(["ledger:read"]),
 		},
 		async (rq: ListLedgersRequest): Promise<LedgerResponse[]> => {
-			const ledgers = await ledgerService.listLedgers(rq.token.orgId, rq.query.offset, rq.query.limit);
+			const orgId = TypeID.fromString(rq.user.organizationId);
+			const ledgers = await ledgerService.listLedgers(orgId, rq.query.offset, rq.query.limit);
 			return ledgers.map(ledger => ledger.toResponse());
 		}
 	);
@@ -78,7 +79,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 			preHandler: server.hasPermissions(["ledger:read"]),
 		},
 		async (rq: GetLedgerRequest): Promise<LedgerResponse> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const ledger = await ledgerService.getLedger(orgId, ledgerId);
 			return ledger.toResponse();
@@ -109,7 +110,8 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 			preHandler: server.hasPermissions(["ledger:write"]),
 		},
 		async (rq: CreateLedgerRequest): Promise<LedgerResponse> => {
-			const ledger = await ledgerService.createLedger(rq.token.orgId, rq.body);
+			const orgId = TypeID.fromString(rq.user.organizationId);
+			const ledger = await ledgerService.createLedger(orgId, rq.body);
 			return ledger.toResponse();
 		}
 	);
@@ -140,7 +142,8 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 			preHandler: server.hasPermissions(["ledger:write"]),
 		},
 		async (rq: UpdateLedgerRequest): Promise<LedgerResponse> => {
-			const org = await ledgerService.updateLedger(rq.token.orgId, rq.body, rq.params.ledgerId);
+			const orgId = TypeID.fromString(rq.user.organizationId);
+			const org = await ledgerService.updateLedger(orgId, rq.body, rq.params.ledgerId);
 			return org.toResponse();
 		}
 	);
@@ -170,7 +173,7 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 			preHandler: server.hasPermissions(["ledger:delete"]),
 		},
 		async (rq: DeleteLedgerRequest): Promise<void> => {
-			const orgId = rq.token.orgId;
+			const orgId = TypeID.fromString(rq.user.organizationId);
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			await ledgerService.deleteLedger(orgId, ledgerId);
 		}

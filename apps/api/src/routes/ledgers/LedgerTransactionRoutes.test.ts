@@ -1,8 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import { createLocalJWKSet } from "jose";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/errors";
 import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
 import type {
@@ -15,6 +14,7 @@ import type {
 } from "@/routes/schema";
 import { buildServer } from "@/server";
 import type { LedgerTransactionService } from "@/services";
+import { getTestJWKS, signTestJWT } from "@/test-utils/jwt";
 import { createLedgerTransactionFixture } from "./fixtures";
 
 const mockLedgerTransactionService = vi.mocked<LedgerTransactionService>({
@@ -43,17 +43,21 @@ describe("LedgerTransactionRoutes", () => {
 		updated: fixedDate,
 		effectiveAt: fixedDate,
 	});
-	const token = signJWT({ sub: orgId.toString(), scope: ["org_admin"] });
-	const tokenReadOnly = signJWT({ sub: orgId.toString(), scope: ["org_readonly"] });
+	let token: string;
+	let tokenReadOnly: string;
 
 	beforeAll(async () => {
+		const testJWKS = await getTestJWKS();
 		server = await buildServer({
+			authOpts: { jwks: createLocalJWKSet(testJWKS) },
 			servicePluginOpts: {
 				services: {
 					ledgerTransactionService: mockLedgerTransactionService,
 				},
 			},
 		});
+		token = await signTestJWT({ org_id: orgId.toString(), role: "admin" });
+		tokenReadOnly = await signTestJWT({ org_id: orgId.toString(), role: "viewer" });
 	});
 
 	afterAll(async () => {
@@ -112,7 +116,7 @@ describe("LedgerTransactionRoutes", () => {
 			expect(rs.statusCode).toBe(401);
 			const response: UnauthorizedErrorResponse = rs.json();
 			expect(response.status).toEqual(401);
-			expect(response.detail).toEqual("Invalid token");
+			expect(response.detail).toEqual("Invalid token signature");
 		});
 
 		it("should handle bad request error", async () => {
@@ -371,7 +375,7 @@ describe("LedgerTransactionRoutes", () => {
 			expect(rs.statusCode).toBe(403);
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
-			expect(response.detail).toEqual("One of: ledger:transaction:write; permissions is required");
+			expect(response.detail).toEqual("Missing required permission: ledger:transaction:write");
 		});
 
 		it("should handle internal server error", async () => {
@@ -500,7 +504,7 @@ describe("LedgerTransactionRoutes", () => {
 			expect(rs.statusCode).toBe(403);
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
-			expect(response.detail).toEqual("One of: ledger:transaction:write; permissions is required");
+			expect(response.detail).toEqual("Missing required permission: ledger:transaction:write");
 		});
 
 		it("should handle internal server error", async () => {
@@ -594,7 +598,7 @@ describe("LedgerTransactionRoutes", () => {
 			expect(rs.statusCode).toBe(403);
 			const response: ForbiddenErrorResponse = rs.json();
 			expect(response.status).toEqual(403);
-			expect(response.detail).toEqual("One of: ledger:transaction:delete; permissions is required");
+			expect(response.detail).toEqual("Missing required permission: ledger:transaction:delete");
 		});
 
 		it("should handle internal server error", async () => {
