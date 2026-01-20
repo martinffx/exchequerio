@@ -1,66 +1,27 @@
 # Exchequer Platform
 
-Real-time double-entry ledger platform for Payment Service Providers (PSPs) and Marketplaces, enabling Financial Operations teams to track money flow, calculate balances, and automate settlement processes.
+Real-time double-entry ledger systems for PSPs, Marketplaces, and anyone who needs to move and manage money at scale.
 
-## Monorepo Structure
+## Why Exchequer?
 
-This is a Turborepo monorepo containing three applications:
-
-### 📦 Applications
-
-#### `apps/api/` - Ledger API
-Real-time double-entry ledger API with PostgreSQL persistence.
-
-**Tech Stack:** Fastify, Drizzle ORM, PostgreSQL, Vitest
-
-[View API Documentation →](docs/standards/api/)
-
-#### `apps/web/` - Customer Portal
-Customer-facing dashboard for ledger data visualization and management.
-
-**Tech Stack:** React Router v7, React 19, Tailwind CSS v4, shadcn/ui, TanStack React Query, Zustand
-
-[View Web Documentation →](docs/standards/web/)
-
-#### `apps/docs/` - Documentation Site
-Public documentation site built with Docusaurus.
-
-**Tech Stack:** Docusaurus, Markdown/MDX
-
-[View Docs Documentation →](apps/docs/docs/standards/)
+- **Kick-start your ledger** — Get a production-ready ledger system running in minutes, not months
+- **Simple by design** — Clean APIs, predictable patterns, no magic
+- **Real-time balances** — Know exactly where your money is, right now
+- **By devs, for devs** — Built with the developer experience you wish every financial tool had
 
 ## Quick Start
 
-### Prerequisites
-
-- **Node.js** 18+ (managed via mise: `mise install`)
-- **Bun** 1.2+ (package manager)
-- **Docker** (for PostgreSQL database)
-
-### Initial Setup
-
 ```bash
-# Install dependencies
+# Prerequisites: Node.js 18+, Bun 1.2+, Docker
+
 bun install
-
-# Start PostgreSQL database
 bun run docker:up
-
-# Run database migrations (API)
-cd apps/api
-bun run db:migrate
-cd ../..
-
-# Start all applications
 bun run dev
 ```
 
-The applications will be available at:
-- **API**: `http://localhost:3000`
-- **Web**: `http://localhost:5173`
-- **Docs**: `http://localhost:3000` (if running)
+API runs at `http://localhost:3000` • Web dashboard at `http://localhost:5173`
 
-## Development Commands
+## What's Inside
 
 ### Running Applications
 
@@ -94,6 +55,40 @@ bun run docker:up
 # Watch mode (from specific app directory)
 cd apps/api && bun run test:watch
 ```
+
+### Performance Benchmarks
+
+The API includes comprehensive benchmarks for transaction creation under various contention scenarios. Run benchmarks with:
+
+```bash
+cd apps/api
+bun run bench
+```
+
+#### Benchmark Results (M1 Max, 32GB RAM)
+
+Transaction creation throughput and latency across different contention levels:
+
+| Scenario | Accounts | Req/sec | p50 | p97.5 | p99 | Errors |
+|----------|----------|---------|-----|-------|-----|--------|
+| **High Contention** | 2 | 183.50 | 456ms | 1453ms | 1537ms | 0 |
+| **Medium Contention** | 20 | 383.84 | 106ms | 1303ms | 1442ms | 0 |
+| **Low Contention** | 200 | 538.64 | 79ms | 1191ms | 1475ms | 0 |
+| **Hot Account (2/2002)** | 2,002 | 249.54 | 162ms | 1392ms | 1486ms | 0 |
+| **Hot Account (20/2020)** | 2,020 | 384.27 | 106ms | 1310ms | 1448ms | 0 |
+
+**Key Insights:**
+- **Throughput degradation** (high vs low contention): 52.25%
+- **P97.5 latency increase** (high vs low contention): 10.92%
+- Optimistic locking with exponential backoff retry (5 attempts, 50ms-1s jitter)
+- Zero errors across all contention scenarios
+- Hot account patterns demonstrate realistic production workloads
+
+**Test Configuration:**
+- Duration: 10 seconds per scenario
+- Connections: 10 concurrent
+- Pipelining: 1 request per connection
+- Database: PostgreSQL 17 (local Docker)
 
 ### Code Quality
 
@@ -138,6 +133,12 @@ bun run docker:logs
 bun run ci
 # Equivalent to: docker:up + build + lint + types + test
 ```
+
+| App | Description | Stack |
+|-----|-------------|-------|
+| `apps/api` | Ledger API | Fastify, Drizzle, PostgreSQL |
+| `apps/web` | Dashboard | React Router v7, Tailwind |
+| `apps/docs` | Documentation | Docusaurus |
 
 ## Documentation
 
@@ -230,23 +231,9 @@ Key principles:
 
 ## Contributing
 
-### Code Review Checklist
-
-- ✅ Follows layered architecture patterns
-- ✅ Includes comprehensive tests (unit + integration)
-- ✅ Passes all code quality checks (`bun run check`)
-- ✅ Updates documentation if needed
-- ✅ Follows spec-driven development workflow
-
-### Quality Gates
-
-All checks must pass before merging:
-
 ```bash
-bun run format     # Code formatting
-bun run lint       # Linting
-bun run types      # Type checking
-bun run test       # All tests passing
+bun run check   # Format, lint, type check
+bun run test    # Run all tests (requires Docker)
 ```
 
 ## Project Structure
@@ -281,4 +268,4 @@ bun run test       # All tests passing
 
 ## License
 
-Private repository - All rights reserved.
+MIT License - see [LICENSE](LICENSE) for details.

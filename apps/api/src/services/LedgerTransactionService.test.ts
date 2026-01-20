@@ -295,6 +295,43 @@ describe("LedgerTransactionService", () => {
 			// LedgerTransactionEntity.fromRequest will throw validation error
 			await expect(service.createTransaction(orgId, ledgerId, unbalancedRequest)).rejects.toThrow();
 		});
+
+		it("should reject duplicate accounts in transaction", async () => {
+			const duplicateAccountRequest: LedgerTransactionRequest = {
+				description: "Duplicate account transaction",
+				effectiveAt: "2025-01-01T00:00:00Z",
+				status: "pending",
+				ledgerEntries: [
+					{
+						id: entryId1.toString(),
+						accountId: accountId1.toString(), // Same account
+						currency: "USD",
+						currencyExponent: 2,
+						amount: 10000,
+						direction: "debit",
+						status: "pending",
+					},
+					{
+						id: entryId2.toString(),
+						accountId: accountId1.toString(), // Duplicate account
+						currency: "USD",
+						currencyExponent: 2,
+						amount: 10000,
+						direction: "credit",
+						status: "pending",
+					},
+				],
+				created: new Date().toISOString(),
+				updated: new Date().toISOString(),
+			};
+
+			mockLedgerRepo.getLedger.mockResolvedValue(mockLedger);
+
+			// LedgerTransactionEntity.fromRequest will throw validation error
+			await expect(
+				service.createTransaction(orgId, ledgerId, duplicateAccountRequest)
+			).rejects.toThrow("Duplicate account in transaction");
+		});
 	});
 
 	describe("postTransaction", () => {
