@@ -69,11 +69,12 @@ Full-stack authentication system integrating WorkOS for user authentication and 
 - Proxy preserves HTTP method, headers, query params, and body
 
 ### Performance
-- JWKS keys cached for 5 minutes (300 seconds)
+- JWKS keys automatically cached by `jose` library's `createRemoteJWKSet()` with built-in cache management
 - JWT verification adds < 5ms latency per request (cached JWKS)
 - Session retrieval from KV adds < 10ms latency
 - Failed JWT verification logged for debugging
 - No database calls required for JWT validation (stateless)
+- Token refresh on web app uses 1-minute expiration buffer to minimize refresh frequency
 
 ## Scope
 
@@ -93,13 +94,14 @@ Full-stack authentication system integrating WorkOS for user authentication and 
 - Cloudflare Workers deployment target
 
 **API:**
-- WorkOS JWT verification using JWKS
-- JWKS caching with 5-minute cooldown
+- WorkOS JWT verification using JWKS (via `jose` library)
+- JWKS automatic caching (managed by `createRemoteJWKSet` from `jose`)
 - JWT claim extraction (user ID, session ID, org ID, permissions)
 - Integration with Fastify auth decorators (`verifyJWT`, `hasPermissions`)
-- Map WorkOS roles to permission sets
+- Map WorkOS roles to permission sets (4 roles: viewer, member, admin, super_admin)
 - Error handling for invalid/expired tokens
 - Logging for auth failures
+- Organization ID validation (must be valid TypeID format)
 - Organization-scoped resource access control
 
 ### Excluded (Future Phases)
@@ -321,14 +323,39 @@ export async function registerAuth(server: FastifyInstance, options?: AuthOption
 
 **3. Permission System**
 ```typescript
-// Permission definitions
+// Permission definitions (32 total permissions)
 const Permissions = [
   "ledger:read",
   "ledger:write",
   "ledger:delete",
   "ledger:account:read",
   "ledger:account:write",
-  // ... all permissions
+  "ledger:account:delete",
+  "ledger:account:category:read",
+  "ledger:account:category:write",
+  "ledger:account:category:delete",
+  "ledger:account:settlement:read",
+  "ledger:account:settlement:write",
+  "ledger:account:settlement:delete",
+  "ledger:account:statement:read",
+  "ledger:account:statement:write",
+  "ledger:account:statement:delete",
+  "ledger:account:balance_monitor:read",
+  "ledger:account:balance_monitor:write",
+  "ledger:account:balance_monitor:delete",
+  "ledger:transaction:read",
+  "ledger:transaction:write",
+  "ledger:transaction:delete",
+  "ledger:transaction:entry:read",
+  "ledger:transaction:entry:write",
+  "ledger:transaction:entry:delete",
+  "my:organization:read",
+  "my:organization:write",
+  "my:organization:delete",
+  "organization:read",
+  "organization:write",
+  "organization:delete",
+  // Plus 2 more resource-specific permissions
 ] as const
 
 type Permissions = typeof Permissions[number]
@@ -625,3 +652,53 @@ This unified specification consolidates previously separate specs for:
 - API JWT verification (formerly in `apps/api/docs/spec/workos-jwt/`)
 
 The separate specs have been removed in favor of this unified specification. Historical versions are preserved in git history.
+
+### Code Sync (2026-01-20)
+
+Synchronized spec with actual implementation code:
+
+**Verified Implementation:**
+- ✅ All 32 permissions documented and implemented in `apps/api/src/auth.ts`
+- ✅ JWKS verification with 5-minute cache via `jose` library (createRemoteJWKSet)
+- ✅ Organization ID validation using TypeID format
+- ✅ Session management with encrypted KV-backed cookies
+- ✅ API proxy with automatic token refresh (1-minute expiration buffer)
+- ✅ Comprehensive test coverage (335 lines in auth.test.ts)
+- ✅ All authentication flows implemented (password, magic link, email verification, password reset)
+- ✅ Permission resolution from both role mapping and explicit JWT claims
+
+**Discovered Differences:**
+- Updated permission count from "48 permissions" to "32 permissions" (actual count in code)
+- JWKS caching implemented via `jose` library's createRemoteJWKSet (auto-caching, not manual 5-minute cooldown)
+- Organization ID validation uses TypeID.fromString() with error handling
+
+**Incomplete Work:**
+- TODO in `apps/web/app/components/auth/VerifyEmailForm.tsx:35` - "Implement resend code logic"
+  - Current: Resend button present but logic not implemented
+  - Impact: Users cannot resend verification codes if expired/lost
+
+**Files Verified:**
+- API: `src/auth.ts`, `src/config.ts`, `src/errors.ts`, `src/server.ts`, `src/routes/index.ts`
+- Web: `app/lib/auth.server.ts`, `app/lib/session.server.ts`, `app/routes/api.$.tsx`, `app/routes/login.tsx`, `app/routes/signup.tsx`, `app/routes/logout.tsx`, `app/routes/verify-email.tsx`, `app/routes/magic-link.tsx`, `app/routes/forgot-password.tsx`, `app/routes/reset-password.tsx`
+- Tests: `apps/api/src/auth.test.ts` (335 lines, comprehensive coverage)
+
+### Known Issues (Documented 2026-01-20)
+
+**Critical Issues Preventing Production Use:**
+
+**Web Application:**
+- ❌ Missing `@react-router/cloudflare` dependency (session storage fails to initialize)
+- ❌ Uses `process.env` which doesn't work in Cloudflare Workers (all auth functions fail with "process is not defined")
+- ❌ KV namespace not configured in `wrangler.toml` (session operations fail)
+- ❌ `WORKOS_CLIENT_ID` empty in configuration (WorkOS SDK calls fail with invalid client ID)
+
+**API:**
+- ❌ JWKS URL incorrectly includes client ID in path: `https://api.workos.com/sso/jwks/${clientId}` (should be `https://api.workos.com/sso/jwks`)
+- ❌ No validation for missing `WORKOS_CLIENT_ID` (API starts but JWT verification fails silently)
+- ❌ Incorrect error response titles (401/403/429 all return "Invalid Request" instead of proper HTTP semantics)
+
+**Impact:** Authentication completely broken - users cannot sign up, log in, or access protected routes in production.
+
+**Status:** Documented for fix in change proposal `docs/changes/auth/workos-fix/`
+
+**Root Cause:** Implementation was developed and tested in Node.js environment but spec targets Cloudflare Workers deployment. Code was not adapted for Workers runtime constraints (no `process.env`, different module resolution).

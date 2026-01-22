@@ -1,0 +1,13 @@
+{
+  "epic": "exchequerio-51b",
+  "note": "Using existing epic created 2026-01-20 with 7 consolidated tasks",
+  "tasks": {
+    "infrastructure": "exchequerio-51b.1",
+    "env-refactor": "exchequerio-51b.2",
+    "kv-config": "exchequerio-51b.3",
+    "jwks-fix": "exchequerio-51b.4",
+    "config-validation": "exchequerio-51b.5",
+    "error-titles": "exchequerio-51b.6",
+    "e2e-verification": "exchequerio-51b.7"
+  }
+}

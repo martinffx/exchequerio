@@ -1,0 +1,247 @@
+{
+  "feature": "auth",
+  "change": "workos-fix",
+  "motivation": "The WorkOS authentication implementation has critical bugs preventing it from working in production. Despite being marked as 'fully implemented and tested,' the code contains multiple blocking issues: (1) Missing @react-router/cloudflare dependency causing web app crashes, (2) Cloudflare Workers incompatibility using process.env instead of context.cloudflare.env causing 'process is not defined' errors, (3) Incorrect JWKS URL causing JWT verification failures, (4) Missing KV namespace configuration causing session storage failures, (5) Empty WorkOS Client ID causing SDK call failures. Secondary issues include missing config validation, incorrect error response titles, and auth functions not accepting Cloudflare context.",
+  "tasks": [
+    {
+      "id": "task-1",
+      "name": "Add @react-router/cloudflare dependency",
+      "layer": "infrastructure",
+      "dependencies": [],
+      "description": "Install missing @react-router/cloudflare package required for createWorkersKVSessionStorage() function used in session.server.ts",
+      "files": ["apps/web/package.json"]
+    },
+    {
+      "id": "task-2",
+      "name": "Create Env type definition",
+      "layer": "types",
+      "dependencies": [],
+      "description": "Define Cloudflare Workers environment type with SESSION_KV, WORKOS_API_KEY, WORKOS_CLIENT_ID, WORKOS_COOKIE_PASSWORD, and API_URL properties",
+      "files": ["apps/web/app/lib/types.ts"]
+    },
+    {
+      "id": "task-3",
+      "name": "Update createSessionStorage function signature",
+      "layer": "session",
+      "dependencies": ["task-2"],
+      "description": "Add env parameter to createSessionStorage(kv, env) and replace process.env.WORKOS_COOKIE_PASSWORD with env.WORKOS_COOKIE_PASSWORD",
+      "files": ["apps/web/app/lib/session.server.ts"]
+    },
+    {
+      "id": "task-4",
+      "name": "Update getUserSession function signature",
+      "layer": "session",
+      "dependencies": ["task-3"],
+      "description": "Add env parameter to getUserSession(request, kv, env) and pass env to createSessionStorage(kv, env) call",
+      "files": ["apps/web/app/lib/session.server.ts"]
+    },
+    {
+      "id": "task-5",
+      "name": "Refactor getWorkOSClient to accept env",
+      "layer": "auth",
+      "dependencies": ["task-2"],
+      "description": "Remove module-level workos and clientId state. Change getWorkOSClient() to accept env parameter and return new WorkOS(env.WORKOS_API_KEY) and env.WORKOS_CLIENT_ID",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-6",
+      "name": "Update authenticateWithPassword signature",
+      "layer": "auth",
+      "dependencies": ["task-5"],
+      "description": "Add env parameter to authenticateWithPassword(email, password, env) and pass env to getWorkOSClient(env)",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-7",
+      "name": "Update createUser signature",
+      "layer": "auth",
+      "dependencies": ["task-5"],
+      "description": "Add env parameter to createUser(email, password, env) and pass env to getWorkOSClient(env)",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-8",
+      "name": "Update verifyEmailCode signature",
+      "layer": "auth",
+      "dependencies": ["task-5"],
+      "description": "Add env parameter to verifyEmailCode(email, code, env) and pass env to getWorkOSClient(env)",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-9",
+      "name": "Update createPasswordReset signature",
+      "layer": "auth",
+      "dependencies": ["task-5"],
+      "description": "Add env parameter to createPasswordReset(email, env) and pass env to getWorkOSClient(env)",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-10",
+      "name": "Update resetPassword signature",
+      "layer": "auth",
+      "dependencies": ["task-5"],
+      "description": "Add env parameter to resetPassword(token, newPassword, env) and pass env to getWorkOSClient(env)",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-11",
+      "name": "Update sendMagicAuthCode signature",
+      "layer": "auth",
+      "dependencies": ["task-5"],
+      "description": "Add env parameter to sendMagicAuthCode(email, env) and pass env to getWorkOSClient(env)",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-12",
+      "name": "Update authenticateWithMagicAuth signature",
+      "layer": "auth",
+      "dependencies": ["task-5"],
+      "description": "Add env parameter to authenticateWithMagicAuth(code, email, env) and pass env to getWorkOSClient(env)",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-13",
+      "name": "Update refreshAccessToken signature",
+      "layer": "auth",
+      "dependencies": ["task-5"],
+      "description": "Add env parameter to refreshAccessToken(refreshToken, env) and pass env to getWorkOSClient(env)",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-14",
+      "name": "Update logoutUser signature",
+      "layer": "auth",
+      "dependencies": ["task-5"],
+      "description": "Add env parameter to logoutUser(userId, env) and pass env to getWorkOSClient(env)",
+      "files": ["apps/web/app/lib/auth.server.ts"]
+    },
+    {
+      "id": "task-15",
+      "name": "Update login route handler",
+      "layer": "routes",
+      "dependencies": ["task-4", "task-6"],
+      "description": "Extract env from context.cloudflare.env and pass to getUserSession(request, env.SESSION_KV, env) and authenticateWithPassword(email, password, env)",
+      "files": ["apps/web/app/routes/login.tsx"]
+    },
+    {
+      "id": "task-16",
+      "name": "Update signup route handler",
+      "layer": "routes",
+      "dependencies": ["task-4", "task-7"],
+      "description": "Extract env from context.cloudflare.env and pass to getUserSession(request, env.SESSION_KV, env) and createUser(email, password, env)",
+      "files": ["apps/web/app/routes/signup.tsx"]
+    },
+    {
+      "id": "task-17",
+      "name": "Update logout route handler",
+      "layer": "routes",
+      "dependencies": ["task-4", "task-14"],
+      "description": "Extract env from context.cloudflare.env and pass to getUserSession(request, env.SESSION_KV, env) and logoutUser(userId, env)",
+      "files": ["apps/web/app/routes/logout.tsx"]
+    },
+    {
+      "id": "task-18",
+      "name": "Update verify-email route handler",
+      "layer": "routes",
+      "dependencies": ["task-4", "task-8"],
+      "description": "Extract env from context.cloudflare.env and pass to getUserSession(request, env.SESSION_KV, env) and verifyEmailCode(email, code, env)",
+      "files": ["apps/web/app/routes/verify-email.tsx"]
+    },
+    {
+      "id": "task-19",
+      "name": "Update forgot-password route handler",
+      "layer": "routes",
+      "dependencies": ["task-4", "task-9"],
+      "description": "Extract env from context.cloudflare.env and pass to getUserSession(request, env.SESSION_KV, env) and createPasswordReset(email, env)",
+      "files": ["apps/web/app/routes/forgot-password.tsx"]
+    },
+    {
+      "id": "task-20",
+      "name": "Update reset-password route handler",
+      "layer": "routes",
+      "dependencies": ["task-4", "task-10"],
+      "description": "Extract env from context.cloudflare.env and pass to getUserSession(request, env.SESSION_KV, env) and resetPassword(token, newPassword, env)",
+      "files": ["apps/web/app/routes/reset-password.tsx"]
+    },
+    {
+      "id": "task-21",
+      "name": "Update magic-link route handler",
+      "layer": "routes",
+      "dependencies": ["task-4", "task-11", "task-12"],
+      "description": "Extract env from context.cloudflare.env and pass to getUserSession(request, env.SESSION_KV, env), sendMagicAuthCode(email, env), and authenticateWithMagicAuth(code, email, env)",
+      "files": ["apps/web/app/routes/magic-link.tsx"]
+    },
+    {
+      "id": "task-22",
+      "name": "Update API proxy route handler",
+      "layer": "routes",
+      "dependencies": ["task-4", "task-13"],
+      "description": "Extract env from context.cloudflare.env and pass to getUserSession(request, env.SESSION_KV, env) and refreshAccessToken(session.refreshToken, env)",
+      "files": ["apps/web/app/routes/api.$.tsx"]
+    },
+    {
+      "id": "task-23",
+      "name": "Configure KV namespace bindings in wrangler.toml",
+      "layer": "config",
+      "dependencies": [],
+      "description": "Add [[kv_namespaces]] binding with SESSION_KV, set production id and preview_id (requires manual KV namespace creation via wrangler commands)",
+      "files": ["apps/web/wrangler.toml"]
+    },
+    {
+      "id": "task-24",
+      "name": "Set WORKOS_CLIENT_ID in wrangler.toml",
+      "layer": "config",
+      "dependencies": [],
+      "description": "Replace empty string WORKOS_CLIENT_ID with actual client ID value from WorkOS dashboard",
+      "files": ["apps/web/wrangler.toml"]
+    },
+    {
+      "id": "task-25",
+      "name": "Fix JWKS URL in API auth module",
+      "layer": "api-auth",
+      "dependencies": [],
+      "description": "Remove ${server.config.workosClientId} from JWKS URL path. Change from 'https://api.workos.com/sso/jwks/${server.config.workosClientId}' to 'https://api.workos.com/sso/jwks'",
+      "files": ["apps/api/src/auth.ts"]
+    },
+    {
+      "id": "task-26",
+      "name": "Add validateRequired method to Config class",
+      "layer": "api-config",
+      "dependencies": [],
+      "description": "Add private validateRequired(name: string, value: string | undefined): string method that throws Error if value is missing or empty",
+      "files": ["apps/api/src/config.ts"]
+    },
+    {
+      "id": "task-27",
+      "name": "Apply validation to workosClientId in Config",
+      "layer": "api-config",
+      "dependencies": ["task-26"],
+      "description": "Replace workosClientId assignment with this.validateRequired('WORKOS_CLIENT_ID', workosClientId ?? process.env.WORKOS_CLIENT_ID) to enforce required environment variable",
+      "files": ["apps/api/src/config.ts"]
+    },
+    {
+      "id": "task-28",
+      "name": "Fix UnauthorizedError response title",
+      "layer": "api-errors",
+      "dependencies": [],
+      "description": "Change UnauthorizedError.toResponse() title from 'Bad Request' to 'Unauthorized' for correct HTTP semantics",
+      "files": ["apps/api/src/errors.ts"]
+    },
+    {
+      "id": "task-29",
+      "name": "Fix ForbiddenError response title",
+      "layer": "api-errors",
+      "dependencies": [],
+      "description": "Change ForbiddenError.toResponse() title from 'Bad Request' to 'Forbidden' for correct HTTP semantics",
+      "files": ["apps/api/src/errors.ts"]
+    },
+    {
+      "id": "task-30",
+      "name": "Verify TooManyRequestsError response title",
+      "layer": "api-errors",
+      "dependencies": [],
+      "description": "Ensure TooManyRequestsError.toResponse() title is 'Too Many Requests' (not 'Bad Request')",
+      "files": ["apps/api/src/errors.ts"]
+    }
+  ]
+}
