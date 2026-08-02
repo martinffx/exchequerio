@@ -43,7 +43,6 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:balance_monitor:read"]),
 		},
 		async (
@@ -78,7 +77,6 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:balance_monitor:read"]),
 		},
 		async (
@@ -112,7 +110,6 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:balance_monitor:write"]),
 		},
 		async (
@@ -151,7 +148,6 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:balance_monitor:write"]),
 		},
 		async (
@@ -187,7 +183,6 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:balance_monitor:delete"]),
 		},
 		async (rq: DeleteLedgerAccountBalanceMonitorRequest): Promise<void> => {

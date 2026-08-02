@@ -1,7 +1,0 @@
-{
-  "$schema": "https://biomejs.dev/schemas/2.3.7/schema.json",
-  "extends": ["@exchequerio/biome-config/biome.json"],
-  "files": {
-    "includes": ["src/**/*", "docs/**/*"]
-  }
-}

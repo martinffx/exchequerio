@@ -12,11 +12,11 @@ Real-time double-entry ledger systems for PSPs, Marketplaces, and anyone who nee
 ## Quick Start
 
 ```bash
-# Prerequisites: Node.js 18+, Bun 1.2+, Docker
+# Prerequisites: Node.js 24, pnpm 11.18+, Docker
 
-bun install
-bun run docker:up
-bun run dev
+pnpm install
+pnpm run docker:up
+pnpm run dev
 ```
 
 API runs at `http://localhost:3000` • Web dashboard at `http://localhost:5173`
@@ -27,33 +27,33 @@ API runs at `http://localhost:3000` • Web dashboard at `http://localhost:5173`
 
 ```bash
 # Start all apps
-bun run dev
+pnpm run dev
 
 # Start specific app
-bun run dev:api      # API only
-bun run dev:web      # Web only
-bun run dev:docs     # Docs only
+pnpm run dev:api      # API only
+pnpm run dev:web      # Web only
+pnpm run dev:docs     # Docs only
 ```
 
 ### Testing
 
-**Important:** Always use `bun run test` (NOT `bun test`). We use **Vitest** as our test runner for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, etc.). The `bun test` command uses Bun's built-in test runner which lacks these features.
+Tests run through the repository's Vitest scripts.
 
 **Prerequisites:** Database must be running for API tests (integration tests use real PostgreSQL).
 
 ```bash
 # Run all tests across all apps (auto-starts database, uses Vitest)
-bun run test
+pnpm run test
 
 # Test specific app (uses Vitest)
-bun --filter=@exchequerio/api test    # Requires database
-bun --filter=@exchequerio/web test
+pnpm --filter=@exchequerio/api test    # Requires database
+pnpm --filter=@exchequerio/web test
 
 # Start database manually first (optional)
-bun run docker:up
+pnpm run docker:up
 
 # Watch mode (from specific app directory)
-cd apps/api && bun run test:watch
+pnpm --filter=@exchequerio/api test:watch
 ```
 
 ### Performance Benchmarks
@@ -62,7 +62,7 @@ The API includes comprehensive benchmarks for transaction creation under various
 
 ```bash
 cd apps/api
-bun run bench
+pnpm run bench
 ```
 
 #### Benchmark Results (M1 Max, 32GB RAM)
@@ -94,43 +94,44 @@ Transaction creation throughput and latency across different contention levels:
 
 ```bash
 # Run all quality checks (format + lint + types)
-bun run check
+pnpm run check
 
 # Individual checks
-bun run format       # Format all apps
-bun run lint         # Lint all apps
-bun run types        # Type check all apps
+pnpm run format         # Format all apps with Oxfmt
+pnpm run format:check   # Check formatting without writing
+pnpm run lint           # Lint all apps with Oxlint
+pnpm run types          # Type check all apps with TypeScript 7
 ```
 
 ### Build
 
 ```bash
 # Build all apps for production
-bun run build
+pnpm run build
 
 # Build specific app
-bun --filter=@exchequerio/api build
-bun --filter=@exchequerio/web build
+pnpm --filter=@exchequerio/web build
+pnpm --filter=@exchequerio/docs build
 ```
 
 ### Database
 
 ```bash
 # Start PostgreSQL database
-bun run docker:up
+pnpm run docker:up
 
 # Stop database
-bun run docker:down
+pnpm run docker:down
 
 # View database logs
-bun run docker:logs
+pnpm run docker:logs
 ```
 
 ### CI/CD
 
 ```bash
 # Run complete CI pipeline
-bun run ci
+pnpm run ci
 # Equivalent to: docker:up + build + lint + types + test
 ```
 
@@ -150,8 +151,8 @@ bun run ci
 ## Contributing
 
 ```bash
-bun run check   # Format, lint, type check
-bun run test    # Run all tests (requires Docker)
+pnpm run check   # Check formatting, lint, and types
+pnpm run test    # Run all tests (requires Docker)
 ```
 
 See [AGENTS.md](AGENTS.md) for the full development workflow.

@@ -2,20 +2,22 @@
 
 ## Code Style & Formatting
 
-### ESLint + Biome Configuration
-- **Primary tools:** Biome for fast formatting and linting, ESLint for type-aware linting
+### Oxc Configuration
+
+- **Primary tools:** Oxfmt for formatting and Oxlint for linting
+- **Type-aware linting:** Oxlint uses TypeScript 7 diagnostics and the boundaries plugin
 - **Indentation:** Tab characters (not spaces)
 - **Quotes:** Double quotes for strings
-- **Semicolons:** Always required (enforced by Biome)
+- **Semicolons:** Always required (enforced by Oxfmt)
 - **Line endings:** LF (Unix-style)
 
 ### Commands
-- \`mise run lint\` - Run Biome + ESLint (hybrid linting approach)
-- \`mise run lint_fast\` - Run Biome only (fast formatting + syntax checks)
-- \`mise run lint_slow\` - Run ESLint only (type-aware + boundaries + unicorn)
-- \`mise run format\` - Format code with Biome
-- \`mise run check\` - Run all code quality checks (format + lint + types)
-- Run \`mise run format && mise run lint\` before committing
+
+- `pnpm run lint` - Run Oxlint with type-aware and architectural boundary checks
+- `pnpm run format` - Format code with Oxfmt
+- `pnpm run format:check` - Check formatting without writing files
+- `pnpm run types` - Type-check with TypeScript 7 without emitting files
+- `pnpm run check` - Check formatting, lint, and types
 
 ## TypeScript Conventions
 
@@ -233,9 +235,7 @@ export async function registerLedgerRoutes(server: FastifyInstance) {
 
 ## Testing Standards
 
-**Test Framework:** We use **Vitest** (NOT Bun's built-in test runner) for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, `vi.spyOn()`, etc.).
-
-**Important:** Always run `bun run test` (NOT `bun test`). The `bun test` command uses Bun's built-in test runner which lacks Vitest features.
+**Test Framework:** We use **Vitest** for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, `vi.spyOn()`, etc.). Run it through `pnpm run test` or the owning package's test script.
 
 ### Test-Driven Development (TDD)
 
@@ -343,8 +343,8 @@ describe("Concurrent Balance Updates", () => {
 ### Command Sequence
 ```bash
 # 1. Start development environment
-pnpm docker              # Start PostgreSQL and Redis containers
-pnpm dev                # Start development server with hot reload
+pnpm run docker:up       # Start PostgreSQL
+pnpm run dev:api         # Start the API with hot reload
 
 # 2. Make changes following TDD
 # - Write failing test
@@ -352,10 +352,10 @@ pnpm dev                # Start development server with hot reload
 # - Refactor code
 
 # 3. Validate changes
-pnpm test               # Run all tests
-pnpm typecheck          # Type check without emitting files
-mise run lint          # Type-aware linting with ESLint + architectural boundaries
-mise run format         # Format code with Prettier + oxc plugin
+pnpm run test            # Run all tests
+pnpm run types           # Type check without emitting files
+pnpm run lint            # Type-aware linting and architectural boundaries
+pnpm run format:check    # Check Oxfmt formatting
 
 # 4. Database changes (if needed)
 drizzle-kit generate   # Generate migration from schema changes
@@ -516,10 +516,9 @@ migrations/
 ### Code Quality Gates
 ```bash
 # All checks must pass before committing
-pnpm typecheck  # No TypeScript errors
-pnpm lint       # No linting errors  
-pnpm test       # All tests passing
-pnpm test:ci    # Coverage thresholds met
+pnpm run types  # No TypeScript errors
+pnpm run lint   # No linting errors
+pnpm run test   # All tests passing
 ```
 
 ### Performance Standards

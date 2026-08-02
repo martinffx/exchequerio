@@ -319,7 +319,7 @@ src/services/__tests__/UserService.test.ts
 
 ### Linting and Formatting
 
-- Use consistent formatting tools across all apps (Biome, Prettier, ESLint)
+- Use Oxfmt and Oxlint consistently across all apps
 - Configure pre-commit hooks to enforce formatting
 - Enable auto-fix on save in your editor
 - Run linting before commits and in CI/CD

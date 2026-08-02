@@ -13,7 +13,7 @@
 
 ### Supporting Technologies
 - **Type Safety:** TypeScript with strict mode
-- **Code Quality:** Biome + ESLint
+- **Code Quality:** Oxlint + Oxfmt
 - **Form Handling:** React Router forms + actions
 - **Icons:** lucide-react
 - **Utilities:** clsx, tailwind-merge

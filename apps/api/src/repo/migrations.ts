@@ -6,7 +6,7 @@ const runMigrations = async (database: DrizzleDB) => {
 	try {
 		// Path to your migrations folder
 		await migrate(database, {
-			migrationsFolder: join(__dirname, "../../", "migrations"),
+			migrationsFolder: join(import.meta.dirname, "../../", "migrations"),
 		});
 
 		console.log("Migrations completed");

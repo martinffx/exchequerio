@@ -40,7 +40,6 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]),
 		},
 		async (rq: ListOrganizationsRequest): Promise<OrganizationResponse[]> => {
@@ -72,7 +71,6 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["my:organization:read", "organization:read"]),
 		},
 		async (rq: GetOrganizationRequest): Promise<OrganizationResponse> => {
@@ -101,7 +99,6 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]),
 		},
 		async (rq: CreateOrganizationRequest): Promise<OrganizationResponse> => {
@@ -132,7 +129,6 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["my:organization:write", "organization:write"]),
 		},
 		async (rq: UpdateOrganizationRequest): Promise<OrganizationResponse> => {
@@ -165,7 +161,6 @@ const OrganizationRoutes: FastifyPluginCallback = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["my:organization:delete", "organization:delete"]),
 		},
 		async (rq: DeleteOrganizationRequest): Promise<void> => {

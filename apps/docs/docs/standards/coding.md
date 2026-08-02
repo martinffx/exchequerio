@@ -3,12 +3,14 @@
 ## Writing Style
 
 ### Voice & Tone
+
 - **Active voice**: "Create a ledger" not "A ledger is created"
 - **Direct address**: Use "you" to speak directly to readers
 - **Conversational but professional**: Friendly without being casual
 - **Concise**: Short sentences and paragraphs (2-3 sentences max)
 
 ### Language Guidelines
+
 - **Use simple language**: Avoid jargon unless necessary
 - **Define technical terms**: Explain concepts when first introduced
 - **Be specific**: "Click the Save button" not "Click the button"
@@ -88,50 +90,54 @@ Content...
 ```typescript
 // Always include syntax highlighting
 interface User {
-  id: string
-  name: string
+	id: string;
+	name: string;
 }
 ```
 
 ```typescript title="user.ts"
 // Include filename for context
 export function getUser(id: string): User {
-  // Implementation
+	// Implementation
 }
 ```
 
 ```typescript {2-4}
 // Highlight important lines
 function example() {
-  const important = "highlighted"
-  const critical = "also highlighted"
-  const context = "regular"
+	const important = "highlighted";
+	const critical = "also highlighted";
+	const context = "regular";
 }
 ```
 ````
 
 ### Example Quality
 
-```markdown
+````markdown
 ✅ Good: Complete, runnable examples
+
 ```typescript
 // Create a ledger account
 const account = await fetch("/api/ledgers/123/accounts", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    name: "User Wallet",
-    type: "debit"
-  })
-})
+	method: "POST",
+	headers: { "Content-Type": "application/json" },
+	body: JSON.stringify({
+		name: "User Wallet",
+		type: "debit",
+	}),
+});
 ```
+````
 
 ❌ Avoid: Incomplete snippets
+
 ```typescript
 // Missing context
-fetch(url, options)
+fetch(url, options);
 ```
-```
+
+````
 
 ### Code Comments
 
@@ -147,7 +153,7 @@ const result = await retryRequest(request, { maxAttempts: 3 })
 // ❌ Avoid: States the obvious
 // Call the retryRequest function
 const result = await retryRequest(request, { maxAttempts: 3 })
-```
+````
 
 ## Markdown Conventions
 
@@ -155,6 +161,7 @@ const result = await retryRequest(request, { maxAttempts: 3 })
 
 ```markdown
 <!-- Unordered lists: Use hyphens -->
+
 - First item
 - Second item
   - Nested item (2 spaces indent)
@@ -162,11 +169,13 @@ const result = await retryRequest(request, { maxAttempts: 3 })
 - Third item
 
 <!-- Ordered lists: Use numbers -->
+
 1. First step
 2. Second step
 3. Third step
 
 <!-- Task lists -->
+
 - [x] Completed task
 - [ ] Pending task
 ```
@@ -175,12 +184,15 @@ const result = await retryRequest(request, { maxAttempts: 3 })
 
 ```markdown
 <!-- Internal links: Relative paths -->
+
 See the [Getting Started](./getting-started.md) guide.
 
 <!-- External links: Full URLs -->
+
 Learn more about [REST APIs](https://restfulapi.net/).
 
 <!-- Reference-style links for repeated URLs -->
+
 Check out the [API docs][api] and [SDK docs][sdk].
 
 [api]: https://api.exchequer.io
@@ -191,31 +203,36 @@ Check out the [API docs][api] and [SDK docs][sdk].
 
 ```markdown
 <!-- Always include alt text -->
+
 ![Architecture diagram showing the layered approach](./architecture.png)
 
 <!-- Not just -->
+
 ![](./architecture.png)
 
 <!-- Images from static directory -->
+
 ![Exchequer logo](/img/logo.png)
 
 <!-- With caption using emphasis -->
+
 ![Database schema](./schema.png)
-*Figure 1: Entity relationship diagram*
+_Figure 1: Entity relationship diagram_
 ```
 
 ### Tables
 
 ```markdown
 | Column 1 | Column 2 | Column 3 |
-|----------|----------|----------|
+| -------- | -------- | -------- |
 | Value 1  | Value 2  | Value 3  |
 | Value 4  | Value 5  | Value 6  |
 
 <!-- Align columns -->
+
 | Left | Center | Right |
-|:-----|:------:|------:|
-| Text | Text   | Text  |
+| :--- | :----: | ----: |
+| Text |  Text  |  Text |
 ```
 
 ## Admonitions
@@ -256,7 +273,7 @@ General information or FYI content.
 
 ### Endpoint Documentation
 
-```markdown
+````markdown
 ## Create Ledger
 
 Creates a new ledger for tracking financial transactions.
@@ -267,49 +284,51 @@ Creates a new ledger for tracking financial transactions.
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | Ledger name |
-| `currency` | string | Yes | ISO 4217 currency code |
-| `description` | string | No | Optional description |
+| Field         | Type   | Required | Description            |
+| ------------- | ------ | -------- | ---------------------- |
+| `name`        | string | Yes      | Ledger name            |
+| `currency`    | string | Yes      | ISO 4217 currency code |
+| `description` | string | No       | Optional description   |
 
 **Example Request:**
 
 ```typescript
 const response = await fetch("/api/ledgers", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_TOKEN",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    name: "Main Ledger",
-    currency: "USD",
-    description: "Primary accounting ledger"
-  })
-})
+	method: "POST",
+	headers: {
+		Authorization: "Bearer YOUR_TOKEN",
+		"Content-Type": "application/json",
+	},
+	body: JSON.stringify({
+		name: "Main Ledger",
+		currency: "USD",
+		description: "Primary accounting ledger",
+	}),
+});
 ```
+````
 
 **Example Response:**
 
 ```json
 {
-  "id": "led_123",
-  "name": "Main Ledger",
-  "currency": "USD",
-  "description": "Primary accounting ledger",
-  "created_at": "2024-01-15T10:30:00Z"
+	"id": "led_123",
+	"name": "Main Ledger",
+	"currency": "USD",
+	"description": "Primary accounting ledger",
+	"created_at": "2024-01-15T10:30:00Z"
 }
 ```
 
 **Error Responses:**
 
-| Status | Code | Description |
-|--------|------|-------------|
-| 400 | `VALIDATION_ERROR` | Invalid request data |
-| 401 | `UNAUTHORIZED` | Missing or invalid token |
-| 409 | `DUPLICATE_NAME` | Ledger name already exists |
-```
+| Status | Code               | Description                |
+| ------ | ------------------ | -------------------------- |
+| 400    | `VALIDATION_ERROR` | Invalid request data       |
+| 401    | `UNAUTHORIZED`     | Missing or invalid token   |
+| 409    | `DUPLICATE_NAME`   | Ledger name already exists |
+
+````
 
 ## Frontmatter
 
@@ -322,7 +341,7 @@ title: Page Title
 description: Brief description for SEO and preview
 keywords: [keyword1, keyword2, keyword3]
 ---
-```
+````
 
 ### Frontmatter Fields
 
@@ -339,9 +358,11 @@ keywords: [keyword1, keyword2, keyword3]
 
 ```markdown
 <!-- ✅ Good: Descriptive alt text -->
+
 ![Bar chart showing revenue growth from 2020 to 2024](./revenue-chart.png)
 
 <!-- ❌ Avoid: Generic alt text -->
+
 ![chart](./revenue-chart.png)
 ![image](./revenue-chart.png)
 ```
@@ -350,9 +371,11 @@ keywords: [keyword1, keyword2, keyword3]
 
 ```markdown
 <!-- ✅ Good: Descriptive link text -->
+
 Learn more about [authentication and authorization](./auth.md).
 
 <!-- ❌ Avoid: Generic link text -->
+
 Click [here](./auth.md) to learn more.
 ```
 
@@ -454,7 +477,7 @@ Before publishing documentation:
 - **File names**: `code formatting`
 - **UI elements**: **Bold** ("Click the **Save** button")
 - **Keyboard keys**: `Ctrl+C`, `Enter`
-- **Variables**: `variable_name` or *emphasis*
+- **Variables**: `variable_name` or _emphasis_
 - **Important terms**: **bold** on first use
 
 ### Numbers

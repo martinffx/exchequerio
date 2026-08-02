@@ -11,7 +11,7 @@
 
 ### Supporting Technologies
 - **Testing:** Jest with ts-jest transform
-- **Linting/Formatting:** Biome (not Prettier/ESLint)
+- **Linting/Formatting:** Oxlint and Oxfmt
 - **Environment:** @dotenvx/dotenvx for configuration
 - **Containerization:** Docker with docker-compose for development
 
