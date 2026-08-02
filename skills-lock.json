@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "skills": {
+    "typescript-api-design": {
+      "source": "martinffx/typescript-skills",
+      "sourceType": "github",
+      "skillPath": "skills/typescript-api-design/SKILL.md",
+      "computedHash": "dc85fb6d7fcab6ba92761fe0092bfa2e78dd0b87b8407c3f6556a1e92f085e30"
+    },
+    "typescript-build-tools": {
+      "source": "martinffx/typescript-skills",
+      "sourceType": "github",
+      "skillPath": "skills/typescript-build-tools/SKILL.md",
+      "computedHash": "7fafd20ee25350c85452cc84f80942d16fe90918741af9dc5e8e12bed7f5eade"
+    },
+    "typescript-drizzle-orm": {
+      "source": "martinffx/typescript-skills",
+      "sourceType": "github",
+      "skillPath": "skills/typescript-drizzle-orm/SKILL.md",
+      "computedHash": "838b43755257e38fc8cb9437b392804ea97a45bdb15df8d51f86fff44cc45f4a"
+    },
+    "typescript-effect-ts": {
+      "source": "martinffx/typescript-skills",
+      "sourceType": "github",
+      "skillPath": "skills/typescript-effect-ts/SKILL.md",
+      "computedHash": "7660e68f0cb80428943febb41931f4b576cd518a31f367084c25558fa1d57c3d"
+    },
+    "typescript-fastify": {
+      "source": "martinffx/typescript-skills",
+      "sourceType": "github",
+      "skillPath": "skills/typescript-fastify/SKILL.md",
+      "computedHash": "1838604df0e22c574551815bc50f9fdbe27fe87dcc5266d9c531033a9edf9c1b"
+    },
+    "typescript-functional-patterns": {
+      "source": "martinffx/typescript-skills",
+      "sourceType": "github",
+      "skillPath": "skills/typescript-functional-patterns/SKILL.md",
+      "computedHash": "5fc49c1f663318d8585a6ffcc111c94703b9a0cba593340f3f285036b8460bc3"
+    },
+    "typescript-testing": {
+      "source": "martinffx/typescript-skills",
+      "sourceType": "github",
+      "skillPath": "skills/typescript-testing/SKILL.md",
+      "computedHash": "a3e2b4be45afc09af685f070abddef96dba51af9d17f32fdbf76f6cc6c23a121"
+    }
+  }
+}
