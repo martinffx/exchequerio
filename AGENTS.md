@@ -38,7 +38,7 @@ Use these project-owned skills when their descriptions match the task:
 - [typescript-functional-patterns](./.agents/skills/typescript-functional-patterns/SKILL.md) — state machines, discriminated unions, branded types, and typed domain models.
 - [typescript-effect-ts](./.agents/skills/typescript-effect-ts/SKILL.md) — Effect programs, typed errors, Layers, and resource management when Effect is actually in scope.
 - [typescript-testing](./.agents/skills/typescript-testing/SKILL.md) — Vitest, MSW, typed mocks, and snapshots when that tooling is installed in the owning package.
-- [typescript-build-tools](./.agents/skills/typescript-build-tools/SKILL.md) — Bun, tsgo, Vitest, Biome, and Turborepo configuration or commands.
+- [typescript-build-tools](./.agents/skills/typescript-build-tools/SKILL.md) — TypeScript package, build, type-check, test, lint, format, and Turborepo guidance.
 
 Skills provide task guidance; they do not prove that a dependency is installed. The owning package manifest and source are authoritative.
 
@@ -54,22 +54,22 @@ Skills provide task guidance; they do not prove that a dependency is installed. 
 Run commands from the repository root unless noted otherwise.
 
 ```bash
-bun install
+pnpm install
 
-bun run dev              # Database plus all apps
-bun run dev:api          # Database plus API
-bun run dev:web          # Web only
-bun run dev:docs         # Documentation site only
+pnpm run dev              # Database plus all apps
+pnpm run dev:api          # Database plus API
+pnpm run dev:web          # Web only
+pnpm run dev:docs         # Documentation site only
 
-bun run build            # Build all apps
-bun run check            # Format, lint, and type-check all apps
-bun run test             # Start PostgreSQL and run Vitest suites
-bun run ci               # Full local CI pipeline
+pnpm run build            # Build all buildable apps
+pnpm run check            # Check formatting, lint, and types
+pnpm run test             # Start PostgreSQL and run Vitest suites
+pnpm run ci               # Full local CI pipeline
 
-bun --filter=@exchequerio/api test
-bun --filter=@exchequerio/api test:watch
-bun --filter=@exchequerio/api db:gen
-bun --filter=@exchequerio/api db:migrate
+pnpm --filter=@exchequerio/api test
+pnpm --filter=@exchequerio/api test:watch
+pnpm --filter=@exchequerio/api db:gen
+pnpm --filter=@exchequerio/api db:migrate
 ```
 
-Always use `bun run test`, never `bun test`: the latter invokes Bun's test runner instead of the repository's Vitest scripts. Start PostgreSQL with `bun run docker:up` before targeted API tests when it is not already running.
+Tests use Vitest through the package scripts. Start PostgreSQL with `pnpm run docker:up` before targeted API tests when it is not already running.

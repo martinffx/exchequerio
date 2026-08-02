@@ -1,31 +1,36 @@
 {
 	"name": "exchequerio",
 	"private": true,
-	"workspaces": [
-		"apps/*",
-		"packages/*"
-	],
-	"packageManager": "bun@1.2.15",
+	"packageManager": "pnpm@11.18.0",
+	"engines": {
+		"node": ">=24 <25",
+		"pnpm": ">=11.18.0 <12"
+	},
 	"scripts": {
 		"docker:up": "docker-compose up -d",
 		"docker:down": "docker-compose down",
 		"docker:logs": "docker-compose logs -f db",
-		"dev": "bun run docker:up && turbo dev",
-		"dev:api": "bun run docker:up && turbo dev --filter=@exchequerio/api",
+		"dev": "pnpm run docker:up && turbo dev",
+		"dev:api": "pnpm run docker:up && turbo dev --filter=@exchequerio/api",
 		"dev:web": "turbo dev --filter=@exchequerio/web",
 		"dev:docs": "turbo dev --filter=@exchequerio/docs",
 		"build": "turbo build",
-		"test": "bun run docker:up && turbo test",
+		"test": "pnpm run docker:up && turbo test",
 		"test:ci": "turbo test:ci",
 		"lint": "turbo lint",
 		"format": "turbo format",
+		"format:check": "turbo format:check",
 		"types": "turbo types",
-		"check": "turbo run format lint types",
-		"ci": "bun run docker:up && turbo build lint types test:ci",
-		"ci:gh": "turbo build lint types test:ci"
+		"check": "turbo run format:check lint types",
+		"ci": "pnpm run docker:up && turbo build format:check lint types test:ci",
+		"ci:gh": "turbo build format:check lint types test:ci"
 	},
 	"devDependencies": {
-		"@typescript/native-preview": "^7.0.0-dev.20251213.1",
+		"@typescript/native": "npm:typescript@7.0.2",
+		"eslint-plugin-boundaries": "^4.2.0",
+		"oxfmt": "0.61.0",
+		"oxlint": "1.76.0",
+		"oxlint-tsgolint": "7.0.2001",
 		"turbo": "^2"
 	}
 }

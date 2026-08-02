@@ -51,7 +51,6 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:settlement:read"]),
 		},
 		async (rq: ListLedgerAccountSettlementsRequest): Promise<LedgerAccountSettlementResponse[]> => {
@@ -90,7 +89,6 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:settlement:read"]),
 		},
 		async (rq: GetLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
@@ -129,7 +127,6 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: CreateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
@@ -189,7 +186,6 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: UpdateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
@@ -248,7 +244,6 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:settlement:delete"]),
 		},
 		async (rq: DeleteLedgerAccountSettlementRequest): Promise<void> => {
@@ -287,7 +282,6 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: AddLedgerAccountSettlementEntryRequest): Promise<void> => {
@@ -326,7 +320,6 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (rq: RemoveLedgerAccountSettlementEntryRequest): Promise<void> => {
@@ -367,7 +360,6 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
 		async (

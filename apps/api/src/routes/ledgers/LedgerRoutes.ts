@@ -45,7 +45,6 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:read"]),
 		},
 		async (rq: ListLedgersRequest): Promise<LedgerResponse[]> => {
@@ -74,7 +73,6 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:read"]),
 		},
 		async (rq: GetLedgerRequest): Promise<LedgerResponse> => {
@@ -105,7 +103,6 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:write"]),
 		},
 		async (rq: CreateLedgerRequest): Promise<LedgerResponse> => {
@@ -136,7 +133,6 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:write"]),
 		},
 		async (rq: UpdateLedgerRequest): Promise<LedgerResponse> => {
@@ -166,7 +162,6 @@ const LedgerRoutes: FastifyPluginAsync = async (server): Promise<void> => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:delete"]),
 		},
 		async (rq: DeleteLedgerRequest): Promise<void> => {

@@ -3,17 +3,19 @@
 ## Code Style & Formatting
 
 ### Tooling
-- **Primary:** Biome for fast formatting and linting
-- **Type-Aware:** ESLint for React-specific rules
-- **Indentation:** 2 spaces (React convention)
+
+- **Formatting:** Oxfmt
+- **Linting:** Oxlint with type-aware and React-specific rules
+- **Indentation:** Tabs
 - **Quotes:** Double quotes for JSX attributes, prefer double quotes for strings
-- **Semicolons:** Required (enforced by Biome)
+- **Semicolons:** Required (enforced by Oxfmt)
 
 ### Commands
 ```bash
-bun run format    # Format code with Biome
-bun run lint      # Lint with Biome + ESLint
-bun run types     # Type check with TypeScript
+pnpm run format         # Format code with Oxfmt
+pnpm run format:check   # Check formatting without writing
+pnpm run lint           # Lint with Oxlint
+pnpm run types          # Type check with TypeScript 7
 ```
 
 ## React 19 Conventions
@@ -198,9 +200,7 @@ export function IconButton({ icon: Icon, ...props }: IconButtonProps) {
 
 ## Testing Standards
 
-**Test Framework:** We use **Vitest** (NOT Bun's built-in test runner) for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, `vi.spyOn()`, etc.).
-
-**Important:** Always run `bun run test` (NOT `bun test`). The `bun test` command uses Bun's built-in test runner which lacks Vitest features.
+**Test Framework:** We use **Vitest** for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, `vi.spyOn()`, etc.). Run it through `pnpm run test` or the owning package's test script.
 
 ### Vitest + Testing Library
 
@@ -727,10 +727,10 @@ export function useLedgerAccounts(ledgerId: string) {
 
 ```bash
 # Before committing
-bun run format    # Format code
-bun run lint      # Check for errors
-bun run types     # Type check
-bun run test      # Run tests
+pnpm run format:check   # Check formatting
+pnpm run lint           # Check for lint errors
+pnpm run types          # Type check
+pnpm run test           # Run tests
 ```
 
 ### Code Review Guidelines

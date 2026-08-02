@@ -6,7 +6,6 @@
     "target": "ES2022",
     "jsx": "react-jsx",
     "moduleResolution": "Bundler",
-    "baseUrl": ".",
     "paths": {
       "@site/*": ["./*"]
     },

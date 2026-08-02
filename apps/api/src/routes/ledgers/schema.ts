@@ -959,7 +959,7 @@ export {
 	PostedBalance,
 	AvailableBalance,
 	SettlementStatus,
-	// Export unused types to silence Biome warnings
+	// Export unused types to make the schema's public surface explicit
 	type Metadata,
 	type NormalBalance,
 	type Balance,

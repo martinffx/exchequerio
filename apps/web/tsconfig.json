@@ -7,8 +7,10 @@
 		".react-router/types/**/*"
 	],
 	"compilerOptions": {
+		"rootDirs": [".", "./.react-router/types"],
 		"paths": {
 			"~/*": ["./app/*"]
-		}
+		},
+		"types": ["vite/client"]
 	}
 }

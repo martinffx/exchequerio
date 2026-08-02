@@ -1,0 +1,129 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"plugins": ["typescript", "unicorn"],
+	"jsPlugins": ["eslint-plugin-boundaries"],
+	"categories": {
+		"correctness": "off"
+	},
+	"options": {
+		"typeAware": true,
+		"maxWarnings": 0
+	},
+	"env": {
+		"builtin": true
+	},
+	"ignorePatterns": [
+		"node_modules/",
+		"dist/",
+		"build/",
+		"coverage/",
+		".react-router/",
+		".docusaurus/"
+	],
+	"settings": {
+		"boundaries/elements": [
+			{ "type": "routes", "pattern": "src/routes/**/*", "mode": "full" },
+			{ "type": "services", "pattern": "src/services/**/*", "mode": "full" },
+			{ "type": "entities", "pattern": "src/repo/entities/**/*", "mode": "full" },
+			{ "type": "repo", "pattern": "src/repo/**/*", "mode": "full" },
+			{ "type": "config", "pattern": "src/config.ts", "mode": "full" },
+			{ "type": "server", "pattern": "src/server.ts", "mode": "full" }
+		]
+	},
+	"rules": {
+		"eqeqeq": "error",
+		"no-unused-vars": [
+			"error",
+			{
+				"argsIgnorePattern": "^_",
+				"varsIgnorePattern": "^_",
+				"caughtErrorsIgnorePattern": "^_",
+				"destructuredArrayIgnorePattern": "^_"
+			}
+		],
+		"no-useless-switch-case": "error",
+		"unicorn/catch-error-name": "error",
+		"unicorn/consistent-function-scoping": "error",
+		"unicorn/no-array-callback-reference": "error",
+		"unicorn/no-array-for-each": "error",
+		"unicorn/no-array-reduce": "error",
+		"unicorn/no-instanceof-array": "error",
+		"unicorn/no-null": "error",
+		"unicorn/no-thenable": "error",
+		"unicorn/no-useless-spread": "error",
+		"unicorn/prefer-array-find": "error",
+		"unicorn/prefer-export-from": "error",
+		"unicorn/prefer-array-flat-map": "error",
+		"unicorn/prefer-includes": "error",
+		"unicorn/prefer-module": "error",
+		"unicorn/prefer-node-protocol": "error",
+		"unicorn/prefer-number-properties": "error",
+		"unicorn/prefer-object-from-entries": "error",
+		"unicorn/prefer-set-has": "error",
+		"unicorn/prefer-spread": "error",
+		"unicorn/prefer-top-level-await": "error",
+		"typescript/await-thenable": "error",
+		"typescript/ban-ts-comment": "error",
+		"typescript/no-array-delete": "error",
+		"typescript/no-base-to-string": "error",
+		"typescript/no-duplicate-enum-values": "error",
+		"typescript/no-duplicate-type-constituents": "error",
+		"typescript/no-dynamic-delete": "error",
+		"typescript/no-empty-object-type": "error",
+		"typescript/no-explicit-any": "error",
+		"typescript/no-extra-non-null-assertion": "error",
+		"typescript/no-extraneous-class": "error",
+		"typescript/no-floating-promises": "error",
+		"typescript/no-for-in-array": "error",
+		"typescript/no-implied-eval": "error",
+		"typescript/no-misused-new": "error",
+		"typescript/no-misused-promises": "error",
+		"typescript/no-namespace": "error",
+		"typescript/no-non-null-asserted-optional-chain": "error",
+		"typescript/no-redundant-type-constituents": "error",
+		"typescript/no-require-imports": "error",
+		"typescript/no-this-alias": "error",
+		"typescript/no-unnecessary-type-assertion": "off",
+		"typescript/no-unnecessary-type-constraint": "error",
+		"typescript/no-unsafe-argument": "error",
+		"typescript/no-unsafe-assignment": "error",
+		"typescript/no-unsafe-call": "error",
+		"typescript/no-unsafe-declaration-merging": "error",
+		"typescript/no-unsafe-enum-comparison": "error",
+		"typescript/no-unsafe-function-type": "error",
+		"typescript/no-unsafe-member-access": "error",
+		"typescript/no-unsafe-return": "error",
+		"typescript/no-unsafe-unary-minus": "error",
+		"typescript/no-wrapper-object-types": "error",
+		"typescript/only-throw-error": "error",
+		"typescript/prefer-as-const": "error",
+		"typescript/prefer-for-of": "error",
+		"typescript/prefer-namespace-keyword": "error",
+		"typescript/prefer-promise-reject-errors": "error",
+		"typescript/require-await": "off",
+		"typescript/restrict-plus-operands": "error",
+		"typescript/restrict-template-expressions": "error",
+		"typescript/triple-slash-reference": "error",
+		"typescript/unbound-method": "off",
+		"boundaries/element-types": [
+			"error",
+			{
+				"default": "disallow",
+				"rules": [
+					{ "from": ["routes"], "allow": ["services"] },
+					{ "from": ["services"], "allow": ["services", "repo", "entities"] },
+					{ "from": ["entities"], "allow": ["entities"] },
+					{ "from": ["repo"], "allow": ["repo", "entities"] },
+					{ "from": ["config"], "disallow": ["*"] },
+					{ "from": ["server"], "allow": ["routes", "services", "config"] }
+				]
+			}
+		]
+	},
+	"overrides": [
+		{
+			"files": ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
+			"env": { "browser": true }
+		}
+	]
+}

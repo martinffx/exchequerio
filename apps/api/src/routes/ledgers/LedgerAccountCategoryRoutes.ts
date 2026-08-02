@@ -54,7 +54,6 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:category:read"]),
 		},
 		async (rq: ListLedgerAccountCategoriesRequest): Promise<LedgerAccountCategoryResponse[]> => {
@@ -90,7 +89,6 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:category:read"]),
 		},
 		async (rq: GetLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
@@ -125,7 +123,6 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: CreateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
@@ -162,7 +159,6 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UpdateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
@@ -198,7 +194,6 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:category:delete"]),
 		},
 		async (rq: DeleteLedgerAccountCategoryRequest): Promise<void> => {
@@ -231,7 +226,6 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: LinkLedgerAccountToCategoryRequest): Promise<void> => {
@@ -265,7 +259,6 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UnlinkLedgerAccountToCategoryRequest): Promise<void> => {
@@ -303,7 +296,6 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: LinkLedgerAccountCategoryToCategoryRequest): Promise<void> => {
@@ -341,7 +333,6 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UnlinkLedgerAccountCategoryToCategoryRequest): Promise<void> => {

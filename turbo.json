@@ -25,6 +25,10 @@
 			"outputs": [],
 			"cache": false
 		},
+		"format:check": {
+			"outputs": [],
+			"cache": true
+		},
 		"types": {
 			"dependsOn": ["^build"],
 			"outputs": [],

@@ -48,7 +48,6 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:transaction:read"]),
 		},
 		async (rq: ListLedgerTransactionsRequest): Promise<LedgerTransactionResponse[]> => {
@@ -82,7 +81,6 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:transaction:read"]),
 		},
 		async (rq: GetLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
@@ -116,7 +114,6 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:transaction:write"]),
 		},
 		async (rq: CreateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
@@ -151,7 +148,6 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:transaction:write"]),
 		},
 		async (rq: PostLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
@@ -187,7 +183,6 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:transaction:write"]),
 		},
 		async (rq: UpdateLedgerTransactionRequest): Promise<LedgerTransactionResponse> => {
@@ -222,7 +217,6 @@ const LedgerTransactionRoutes: FastifyPluginAsync = server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:transaction:delete"]),
 		},
 		async (rq: DeleteLedgerTransactionRequest): Promise<void> => {

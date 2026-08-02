@@ -39,7 +39,6 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:statement:read"]),
 		},
 		async (rq: GetLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
@@ -71,7 +70,6 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			preHandler: server.hasPermissions(["ledger:account:statement:write"]),
 		},
 		async (rq: CreateLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
