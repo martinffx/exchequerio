@@ -1,310 +1,75 @@
-# Exchequer Platform - Agent Development Guide
+# Exchequer Agent Guide
 
-## Product Overview
+Exchequer is an operational double-entry subledger for organizations with treasury operations. Use [CONTEXT.md](./CONTEXT.md) as the canonical source for domain language and business invariants.
 
-**Exchequer** is a real-time double-entry ledger platform for Payment Service Providers (PSPs) and Marketplaces, enabling Financial Operations teams to track money flow, calculate balances, and automate settlement processes.
+## Before making changes
 
-## Monorepo Structure
+Read only the documents relevant to the work:
 
-This monorepo contains three applications:
+1. Read [CONTEXT.md](./CONTEXT.md) before changing domain behavior, names, API resources, schemas, or public documentation.
+2. Read the applicable product and engineering documents from the map below.
+3. Use a repository skill from [`.agents/skills`](./.agents/skills/) when its subject matches the task.
+4. Inspect the owning `package.json` and existing source before relying on a documented technology or command.
 
-### 📦 Apps
+## Repository map
 
-#### `apps/api/` - Ledger API
-Real-time double-entry ledger API with PostgreSQL persistence.
+| Scope | Source | Required references |
+| --- | --- | --- |
+| Ledger API | `apps/api/` | [Architecture](./apps/api/docs/standards/architecture.md), [coding standards](./apps/api/docs/standards/coding.md), [ERD](./apps/api/docs/product/erd.md), and the relevant document under [`apps/api/docs/spec`](./apps/api/docs/spec/) |
+| Customer portal | `apps/web/` | [Architecture](./apps/web/docs/standards/architecture.md) and [coding standards](./apps/web/docs/standards/coding.md) |
+| Documentation site | `apps/docs/` | [Content standards](./apps/docs/docs/standards/coding.md) and [CONTEXT.md](./CONTEXT.md) for all Ledger terminology |
+| Shared product | `docs/product/` | [Product definition](./docs/product/product.md) and [roadmap](./docs/product/roadmap.md) |
+| Shared engineering | `docs/standards/` | [Architecture](./docs/standards/architecture.md) and [coding standards](./docs/standards/coding.md) |
 
-**Tech Stack:**
-- **Runtime:** Node.js with TypeScript
-- **Framework:** Fastify with TypeBox validation
-- **Database:** PostgreSQL with Drizzle ORM
-- **Testing:** Vitest
-- **Code Quality:** Biome + ESLint
+## Agent workflow
 
-**Documentation:**
-- `apps/api/AGENTS.md` - API development guide
-- `apps/api/docs/product/erd.md` - Database schema and ERD
-- `apps/api/docs/spec/` - Feature specifications
-- `apps/api/docs/standards/` - API-specific standards
+- Use `atelier-orchestrator` at the start of development work. It selects an Inline Plan for bounded changes or a Spec-backed Plan when durable design and coordination artifacts are warranted.
+- Read [domain documentation guidance](./docs/agents/domain.md) before domain-modelling work. Maintain `CONTEXT.md` as a glossary, not an implementation specification.
+- Read [issue-tracker guidance](./docs/agents/issue-tracker.md) when issue tracking is relevant. `plan.json` remains authoritative for Spec-backed task details and dependencies.
+- Preserve unrelated work in a dirty worktree. Do not commit, push, or open a pull request unless explicitly requested.
 
-#### `apps/web/` - Customer Portal
-Customer-facing dashboard for ledger data visualization and management.
+## Repository skills
 
-**Tech Stack:**
-- **Framework:** React Router v7
-- **UI:** React 19, Tailwind CSS v4, shadcn/ui
-- **Data Fetching:** openapi-react-query, TanStack React Query
-- **State Management:** Zustand
-- **Testing:** Vitest, Testing Library, MSW
-- **Build:** Vite
+Use these project-owned skills when their descriptions match the task:
 
-**Documentation:**
-- `apps/web/AGENTS.md` - Web development guide
-- `apps/web/docs/standards/` - React/Tailwind standards
+- [typescript-api-design](./.agents/skills/typescript-api-design/SKILL.md) — REST resources, endpoints, errors, pagination, and versioning.
+- [typescript-fastify](./.agents/skills/typescript-fastify/SKILL.md) — Fastify routes, plugins, TypeBox validation, and OpenAPI wiring.
+- [typescript-drizzle-orm](./.agents/skills/typescript-drizzle-orm/SKILL.md) — database schemas, queries, relations, and migrations.
+- [typescript-functional-patterns](./.agents/skills/typescript-functional-patterns/SKILL.md) — state machines, discriminated unions, branded types, and typed domain models.
+- [typescript-effect-ts](./.agents/skills/typescript-effect-ts/SKILL.md) — Effect programs, typed errors, Layers, and resource management when Effect is actually in scope.
+- [typescript-testing](./.agents/skills/typescript-testing/SKILL.md) — Vitest, MSW, typed mocks, and snapshots when that tooling is installed in the owning package.
+- [typescript-build-tools](./.agents/skills/typescript-build-tools/SKILL.md) — Bun, tsgo, Vitest, Biome, and Turborepo configuration or commands.
 
-#### `apps/docs/` - Documentation Site
-Public documentation site built with Docusaurus.
+Skills provide task guidance; they do not prove that a dependency is installed. The owning package manifest and source are authoritative.
 
-**Tech Stack:**
-- **Framework:** Docusaurus
-- **Content:** Markdown
+## Architecture boundaries
 
-**Documentation:**
-- `apps/docs/AGENTS.md` - Docusaurus guide
+- API dependencies flow from Routes to Services to Repositories and Entities to PostgreSQL. Keep transport validation in Routes, business orchestration in Services, persistence in Repositories, and transformations or invariants in Entities.
+- Web work follows React Router framework conventions. Keep route composition in `apps/web/app/routes`, reusable UI in `apps/web/app/components`, and shared helpers in `apps/web/app/lib`.
+- Public documentation uses Docusaurus under `apps/docs`; follow its content standard rather than duplicating writing conventions here.
+- Use stub-driven TDD for behavior changes and keep tests at the narrowest useful layer. API integration tests use PostgreSQL.
 
-## Monorepo Commands
+## Commands
 
-### Development
+Run commands from the repository root unless noted otherwise.
 
 ```bash
-# Start all apps
-bun run dev
-
-# Start specific app
-bun run dev:api      # API only
-bun run dev:web      # Web only
-bun run dev:docs     # Docs only
-```
-
-### Testing
-
-**Important:** Always use `bun run test` (NOT `bun test`). We use **Vitest** as our test runner for its full mocking capabilities (`vi.mocked<T>()`, `vi.fn()`, etc.). The `bun test` command uses Bun's built-in test runner which lacks these features.
-
-**Prerequisites:** Database must be running for API tests (integration tests use real PostgreSQL).
-
-```bash
-# Run all tests across all apps (auto-starts database, uses Vitest)
-bun run test
-
-# Test specific app (uses Vitest)
-bun --filter=@exchequerio/api test    # Requires database
-bun --filter=@exchequerio/web test
-
-# Start database manually first (optional)
-bun run docker:up
-
-# Watch mode (from specific app directory)
-cd apps/api && bun run test:watch
-```
-
-### Code Quality
-
-```bash
-# Run all quality checks (format + lint + types)
-bun run check
-
-# Individual checks
-bun run format       # Format all apps
-bun run lint         # Lint all apps
-bun run types        # Type check all apps
-```
-
-### Build
-
-```bash
-# Build all apps for production
-bun run build
-
-# Build specific app
-bun --filter=@exchequerio/api build
-bun --filter=@exchequerio/web build
-```
-
-### Database
-
-```bash
-# Start PostgreSQL database
-bun run docker:up
-
-# Stop database
-bun run docker:down
-
-# View database logs
-bun run docker:logs
-```
-
-### CI/CD
-
-```bash
-# Run complete CI pipeline
-bun run ci
-# Equivalent to: docker:up + build + lint + types + test
-```
-
-## Documentation Structure
-
-### Product Documentation (`/docs/product/`)
-
-High-level product vision, roadmap, and business context shared across all apps.
-
-- **product.md** - Product definition, target users, core features
-- **roadmap.md** - Feature roadmap and implementation priorities
-
-### Shared Standards (`/docs/standards/`)
-
-Architecture and coding standards applicable to all applications.
-
-- **architecture.md** - Layered architecture, separation of concerns, design patterns
-- **coding.md** - TypeScript conventions, testing standards, error handling
-
-### App-Specific Documentation (`apps/*/docs/`)
-
-Each app has its own documentation for:
-- **standards/** - Technology-specific coding and architecture standards
-- **spec/** - Feature specifications (can also be at root level for cross-app features)
-- **product/** - App-specific product documentation (e.g., API ERD)
-
-## Spec-Driven Development Workflow
-
-This project uses spec-driven development for feature creation:
-
-### Available Commands
-
-1. **`/product-init`** - Initialize project documentation (already done)
-2. **`/product-roadmap`** - Update product roadmap with priorities
-3. **`/spec-create [feature-name]`** - Create new feature specification
-4. **`/spec-design [feature-name]`** - Design technical architecture
-5. **`/spec-plan [feature-name]`** - Plan implementation tasks
-6. **`/spec-implement [feature-name]`** - Implement with stub-driven TDD
-7. **`/spec-progress [feature-name]`** - Track feature progress
-8. **`/product-progress`** - Track overall product progress
-
-### Workflow Example
-
-```bash
-# Create feature spec
-/spec-create user-authentication
-
-# Design architecture
-/spec-design user-authentication
-
-# Plan implementation tasks
-/spec-plan user-authentication
-
-# Implement feature with TDD
-/spec-implement user-authentication
-
-# Track progress
-/spec-progress user-authentication
-```
-
-## Architecture Principles
-
-All apps follow consistent architectural patterns:
-
-### Layered Architecture
-- **Backend (API):** Routes → Services → Repositories → Entities → Database
-- **Frontend (Web):** Pages → Components → Hooks/State → API Client → Services
-
-### Key Principles
-- **Separation of Concerns:** Each layer has a single responsibility
-- **Dependency Direction:** Dependencies flow inward toward domain
-- **Domain-Driven Design:** Entities manage data transformations
-- **Test-Driven Development:** Stub-driven TDD for all features
-
-See `/docs/standards/architecture.md` for detailed architecture guidelines.
-
-## Coding Standards
-
-### TypeScript Conventions
-- Strict type checking enabled
-- Explicit types for public APIs
-- Type inference for internal variables
-- Named exports over default exports
-
-### Testing Strategy
-- **TDD Workflow:** Red → Green → Refactor
-- **Unit Tests:** Isolated with mocked dependencies
-- **Integration Tests:** Real dependencies, test databases
-- **E2E Tests:** Critical user flows
-
-### Code Quality
-- Use Biome/Prettier for consistent formatting
-- ESLint for type-aware linting
-- Pre-commit hooks enforce standards
-- 100% test coverage for critical business logic
-
-See `/docs/standards/coding.md` for detailed coding guidelines.
-
-## Getting Started
-
-### Prerequisites
-
-- **Node.js** 18+ (via mise: `mise install`)
-- **Bun** 1.2+ (package manager)
-- **Docker** (for PostgreSQL database)
-
-### Initial Setup
-
-```bash
-# Install dependencies
 bun install
 
-# Start database
-bun run docker:up
+bun run dev              # Database plus all apps
+bun run dev:api          # Database plus API
+bun run dev:web          # Web only
+bun run dev:docs         # Documentation site only
 
-# Run migrations (API)
-cd apps/api
-bun run db:migrate
+bun run build            # Build all apps
+bun run check            # Format, lint, and type-check all apps
+bun run test             # Start PostgreSQL and run Vitest suites
+bun run ci               # Full local CI pipeline
 
-# Start development
-bun run dev
+bun --filter=@exchequerio/api test
+bun --filter=@exchequerio/api test:watch
+bun --filter=@exchequerio/api db:gen
+bun --filter=@exchequerio/api db:migrate
 ```
 
-### Development Workflow
-
-1. **Pick a feature** from `/docs/product/roadmap.md`
-2. **Create spec** using `/spec-create [feature-name]`
-3. **Design architecture** using `/spec-design [feature-name]`
-4. **Plan tasks** using `/spec-plan [feature-name]`
-5. **Implement with TDD** using `/spec-implement [feature-name]`
-6. **Track progress** using `/spec-progress [feature-name]`
-
-## App-Specific Guides
-
-For detailed development instructions specific to each app:
-
-- **API Development:** See `apps/api/AGENTS.md`
-  - Fastify routes and plugins
-  - Drizzle ORM and migrations
-  - Repository and service patterns
-  - Database schema (ERD)
-
-- **Web Development:** See `apps/web/AGENTS.md`
-  - React Router v7 patterns
-  - React Query and Zustand
-  - Tailwind and shadcn/ui
-  - Testing with Vitest and MSW
-
-- **Docs Development:** See `apps/docs/AGENTS.md`
-  - Docusaurus configuration
-  - Content structure
-  - Markdown conventions
-
-## Contributing
-
-### Code Review Checklist
-
-- ✅ Follows layered architecture patterns
-- ✅ Includes comprehensive tests (unit + integration)
-- ✅ Passes all code quality checks (`bun run check`)
-- ✅ Updates documentation if needed
-- ✅ Follows spec-driven development workflow
-
-### Quality Gates
-
-All checks must pass before merging:
-
-```bash
-bun run format     # Code formatting
-bun run lint       # Linting
-bun run types      # Type checking
-bun run test       # All tests passing
-```
-
-## Support
-
-- **Product Questions:** See `/docs/product/product.md`
-- **Architecture Questions:** See `/docs/standards/architecture.md`
-- **Coding Questions:** See `/docs/standards/coding.md`
-- **App-Specific Questions:** See `apps/*/AGENTS.md`
-- **Feature Specs:** See `/docs/spec/` or `apps/*/docs/spec/`
+Always use `bun run test`, never `bun test`: the latter invokes Bun's test runner instead of the repository's Vitest scripts. Start PostgreSQL with `bun run docker:up` before targeted API tests when it is not already running.
