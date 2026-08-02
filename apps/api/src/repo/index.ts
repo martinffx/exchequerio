@@ -27,9 +27,9 @@ const RepoPlugin: FastifyPluginAsync<RepoPluginOptions> = fp(
 
 		// Register onClose hook to clean up database pool when server shuts down
 		server.addHook("onClose", async () => {
-		server.log.info("Closing database connection pool...");
-      await new Promise(resolve => setTimeout(resolve, 5000))
-      await pool.end();
+			server.log.info("Closing database connection pool...");
+			await new Promise(resolve => setTimeout(resolve, 5000));
+			await pool.end();
 			server.log.info("Database connection pool closed");
 		});
 

@@ -27,7 +27,7 @@ const buildServer = async ({
 }: ServerOpts = {}): Promise<FastifyInstance> => {
 	const config = new Config();
 	const server = fastify<Server, IncomingMessage, ServerResponse>({
-	  forceCloseConnections: true,
+		forceCloseConnections: true,
 		logger: {
 			transport: {
 				targets: [
