@@ -5,10 +5,10 @@ interface OrganizationIdGeneratorShape {
 	readonly generate: Effect.Effect<OrganizationId>;
 }
 
-class OrganizationIdGenerator extends Context.Tag("OrganizationIdGenerator")<
+class OrganizationIdGenerator extends Context.Service<
 	OrganizationIdGenerator,
 	OrganizationIdGeneratorShape
->() {}
+>()("OrganizationIdGenerator") {}
 
 export type { OrganizationIdGeneratorShape };
 export { OrganizationIdGenerator };

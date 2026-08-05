@@ -15,7 +15,7 @@
             "Dependency and configuration requirements from design.md",
             "Current API package scripts and Node 24/pnpm 11 toolchain"
           ],
-          "description": "Add Effect 3, the Fastify 5-compatible rate-limit plugin, and ioredis. Extend Config with required REDIS_URL and positive-integer Organization rate-limit settings defaulting to 1000 requests and 60000 milliseconds. Add the test Redis URL without changing production secret handling.",
+          "description": "Add Effect 4 beta using the beta distribution tag, the Fastify 5-compatible rate-limit plugin, and ioredis. Extend Config with required REDIS_URL and positive-integer Organization rate-limit settings defaulting to 1000 requests and 60000 milliseconds. Add the test Redis URL without changing production secret handling.",
           "files": {
             "create": [
               "apps/api/src/config.test.ts"
@@ -35,7 +35,7 @@
               "accepts explicit valid overrides"
             ],
             "acceptance": [
-              "effect@^3.22.1, @fastify/rate-limit@^11.2.0, and ioredis@^6.0.0 resolve under Node 24",
+              "effect@beta, @fastify/rate-limit@^11.2.0, and ioredis@^6.0.0 resolve under Node 24, with the lockfile pinning the selected Effect beta",
               "Config exposes validated Redis and Organization rate-limit settings",
               "Existing package scripts remain authoritative"
             ]
@@ -91,7 +91,7 @@
             "Organization domain types from T2",
             "Repository operations, access matrix, and error model from design.md"
           ],
-          "description": "Add Context-tagged OrganizationRepository, OrganizationIdGenerator, and OrganizationService capabilities. Represent repository absence with Effect Option rather than null or transport errors. Implement list, get, create, update, and delete Effects with explicit actor ID and access mode, target checks before repository calls, SQL list-scope intent, deterministic ID injection, and operation-specific application and infrastructure failure unions. OrganizationHasDependents applies only to delete; OrganizationNotFound applies only to get, update, and delete. Supply Layer-based test implementations.",
+          "description": "Add Effect 4 Context.Service capabilities for OrganizationRepository, OrganizationIdGenerator, and OrganizationService. Represent repository absence with Effect Option rather than null or transport errors. Implement list, get, create, update, and delete Effects with explicit actor ID and access mode, target checks before repository calls, SQL list-scope intent, deterministic ID injection, and operation-specific application and infrastructure failure unions. OrganizationHasDependents applies only to delete; OrganizationNotFound applies only to get, update, and delete. Supply Layer-based test implementations.",
           "files": {
             "create": [
               "apps/api/src/organizations/application/organization-repository.ts",
@@ -151,7 +151,7 @@
               "test Layer finalization does not close an injected database or pool"
             ],
             "acceptance": [
-              "Database access is available through a Context tag",
+              "Database access is available through an Effect 4 Context.Service",
               "Production and test ownership are explicit",
               "No schema or migration files change"
             ]

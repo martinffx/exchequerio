@@ -9,7 +9,7 @@ type PoolFactory = (connectionString: string) => Pool;
 const defaultPoolFactory: PoolFactory = connectionString => new Pool({ connectionString });
 
 const makeDatabaseLive = (connectionString: string, createPool: PoolFactory = defaultPoolFactory) =>
-	Layer.scoped(
+	Layer.effect(
 		Database,
 		Effect.acquireRelease(
 			Effect.sync(() => {
