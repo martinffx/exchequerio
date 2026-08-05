@@ -1,0 +1,538 @@
+{
+  "feature": "organizations-effect",
+  "spec": "docs/specs/2026-08-04-organizations-effect/design.md",
+  "goal": "Migrate all five Organization endpoints to a pure functional domain and Effect application layer with managed PostgreSQL and Redis resources, tenant-aware authorization, typed failures, and reusable full-stack tests.",
+  "phases": [
+    {
+      "id": "P1",
+      "name": "Domain and Application",
+      "tasks": [
+        {
+          "id": "T1",
+          "name": "Add dependencies and validated runtime configuration",
+          "depends_on": [],
+          "inputs": [
+            "Dependency and configuration requirements from design.md",
+            "Current API package scripts and Node 24/pnpm 11 toolchain"
+          ],
+          "description": "Add Effect 3, the Fastify 5-compatible rate-limit plugin, and ioredis. Extend Config with required REDIS_URL and positive-integer Organization rate-limit settings defaulting to 1000 requests and 60000 milliseconds. Add the test Redis URL without changing production secret handling.",
+          "files": {
+            "create": [
+              "apps/api/src/config.test.ts"
+            ],
+            "modify": [
+              "apps/api/package.json",
+              "apps/api/src/config.ts",
+              "apps/api/.env.test",
+              "pnpm-lock.yaml"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "rejects a missing Redis URL",
+              "rejects non-positive and non-integer rate-limit values",
+              "uses the documented quota and window defaults",
+              "accepts explicit valid overrides"
+            ],
+            "acceptance": [
+              "effect@^3.22.1, @fastify/rate-limit@^11.2.0, and ioredis@^6.0.0 resolve under Node 24",
+              "Config exposes validated Redis and Organization rate-limit settings",
+              "Existing package scripts remain authoritative"
+            ]
+          }
+        },
+        {
+          "id": "T2",
+          "name": "Implement the pure Organization domain",
+          "depends_on": [],
+          "inputs": [
+            "Organization vocabulary and invariants from CONTEXT.md",
+            "Functional-core and access requirements from design.md"
+          ],
+          "description": "Define a branded canonical Organization ID with non-throwing parsing, an immutable Organization entity using native dates, create and update inputs that preserve omitted descriptions, and exhaustive platform/current access decisions. Keep all domain modules free of Effect, Fastify, TypeBox, Drizzle, PostgreSQL, configuration, and environment imports.",
+          "files": {
+            "create": [
+              "apps/api/src/organizations/domain/organization-id.ts",
+              "apps/api/src/organizations/domain/organization-id.test.ts",
+              "apps/api/src/organizations/domain/organization.ts",
+              "apps/api/src/organizations/domain/organization.test.ts",
+              "apps/api/src/organizations/domain/organization-access.ts",
+              "apps/api/src/organizations/domain/organization-access.test.ts",
+              "apps/api/src/organizations/domain/organization-errors.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "accepts canonical org TypeIDs",
+              "rejects malformed and wrong-prefix IDs without throwing",
+              "permits platform access to any target",
+              "permits current access only to the actor Organization",
+              "preserves an omitted description and replaces a supplied description"
+            ],
+            "acceptance": [
+              "Organization IDs are branded and can only be constructed through validated constructors or the injected generator",
+              "The Organization value is immutable",
+              "Absent descriptions are represented as undefined",
+              "Domain dependency boundaries are pure"
+            ]
+          }
+        },
+        {
+          "id": "T3",
+          "name": "Define Effect capabilities and Organization use cases",
+          "depends_on": [
+            "T1",
+            "T2"
+          ],
+          "inputs": [
+            "Organization domain types from T2",
+            "Repository operations, access matrix, and error model from design.md"
+          ],
+          "description": "Add Context-tagged OrganizationRepository, OrganizationIdGenerator, and OrganizationService capabilities. Represent repository absence with Effect Option rather than null or transport errors. Implement list, get, create, update, and delete Effects with explicit actor ID and access mode, target checks before repository calls, SQL list-scope intent, deterministic ID injection, and discriminated application and infrastructure failures. Supply Layer-based test implementations.",
+          "files": {
+            "create": [
+              "apps/api/src/organizations/application/organization-repository.ts",
+              "apps/api/src/organizations/application/organization-id-generator.ts",
+              "apps/api/src/organizations/application/organization-service.ts",
+              "apps/api/src/organizations/application/organization-service.test.ts",
+              "apps/api/src/organizations/application/organization-test-layers.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "covers all five use cases through test Layers",
+              "passes all-scope or actor-scope intent to list",
+              "gives platform access precedence when both modes are present",
+              "denies current-target mismatches before repository invocation",
+              "maps permitted absence to OrganizationNotFound",
+              "allows create only for platform access and uses the injected ID generator"
+            ],
+            "acceptance": [
+              "Every use case accepts the actor Organization ID explicitly",
+              "Service and repository capability methods return typed Effects",
+              "Application modules do not run Effects or import HTTP and SQL adapters",
+              "No automatic generated-ID retry is introduced"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Persistence and Runtime",
+      "tasks": [
+        {
+          "id": "T4",
+          "name": "Introduce PostgreSQL capability and ownership Layers",
+          "depends_on": [
+            "T1"
+          ],
+          "inputs": [
+            "Current Drizzle schema and DrizzleDB type",
+            "Resource ownership rules from design.md"
+          ],
+          "description": "Define the Drizzle database capability. Provide a scoped production Layer that owns one PostgreSQL pool and a test Layer that wraps an externally supplied database without owning it. Keep the existing schema authoritative and add no migration.",
+          "files": {
+            "create": [
+              "apps/api/src/database/database.ts",
+              "apps/api/src/database/database-live.ts",
+              "apps/api/src/database/database-live.test.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "production Layer finalization closes its pool exactly once",
+              "test Layer finalization does not close an injected database or pool"
+            ],
+            "acceptance": [
+              "Database access is available through a Context tag",
+              "Production and test ownership are explicit",
+              "No schema or migration files change"
+            ]
+          }
+        },
+        {
+          "id": "T5",
+          "name": "Implement the live Organization PostgreSQL adapter",
+          "depends_on": [
+            "T2",
+            "T3",
+            "T4"
+          ],
+          "inputs": [
+            "OrganizationsTable and Drizzle database capability",
+            "OrganizationRepository contract and typed error vocabulary"
+          ],
+          "description": "Implement the repository Layer with Organization-ID ordering, optional actor filtering, limit and offset, INSERT/UPDATE/DELETE RETURNING, database-owned timestamps, conditional description assignment, and safe row decoding. Translate connectivity failures to retryable repository unavailability, invalid rows to persistence decoding failures, unexpected SQL failures to sanitized persistence errors, and delete error 23503 to OrganizationHasDependents. Do not synthesize name conflicts.",
+          "files": {
+            "create": [
+              "apps/api/src/organizations/adapters/postgres/organization-row.ts",
+              "apps/api/src/organizations/adapters/postgres/organization-row.test.ts",
+              "apps/api/src/organizations/adapters/postgres/organization-repository-live.ts",
+              "apps/api/src/organizations/adapters/postgres/organization-repository-live.test.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "orders lists by Organization ID and applies limit and offset",
+              "filters current-Organization lists in PostgreSQL",
+              "creates rows with database timestamps and decodes RETURNING values",
+              "preserves or replaces descriptions according to update input",
+              "returns explicit absence for missing get, update, and delete",
+              "maps a real dependent Ledger delete to OrganizationHasDependents",
+              "allows duplicate Organization names",
+              "maps invalid persisted rows and rejected database operations into typed failures"
+            ],
+            "acceptance": [
+              "Drizzle and SQL values do not escape the adapter",
+              "All rejected promises are captured in the Effect error channel",
+              "Delete uses the database foreign-key constraint as the source of truth"
+            ]
+          }
+        },
+        {
+          "id": "T6",
+          "name": "Add Redis and ID-generator live Layers",
+          "depends_on": [
+            "T1",
+            "T2",
+            "T3"
+          ],
+          "inputs": [
+            "Redis failure policy from design.md",
+            "OrganizationIdGenerator capability from T3"
+          ],
+          "description": "Add the canonical TypeID generator Layer and a scoped ioredis capability configured from REDIS_URL with bounded connection and command retries and no indefinitely queued requests. Make the Redis finalizer attempt graceful shutdown and always disconnect without hanging. Provide non-owning test Layers for injected clients.",
+          "files": {
+            "create": [
+              "apps/api/src/organizations/adapters/id/organization-id-generator-live.ts",
+              "apps/api/src/runtime/redis-client.ts",
+              "apps/api/src/runtime/redis-client.test.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "generated IDs satisfy the domain smart constructor",
+              "Redis acquisition does not require Redis readiness for unrelated routes",
+              "owned Redis finalization is bounded and runs once",
+              "injected test clients are not closed by non-owning Layers"
+            ],
+            "acceptance": [
+              "The runtime can expose one Redis client per server",
+              "Redis command failures are observable by the HTTP rate limiter",
+              "No unbounded shutdown or request retry behavior remains"
+            ]
+          }
+        },
+        {
+          "id": "T7",
+          "name": "Compose one managed runtime and bridge legacy repositories",
+          "depends_on": [
+            "T3",
+            "T4",
+            "T5",
+            "T6"
+          ],
+          "inputs": [
+            "Live and test Layers from T3 through T6",
+            "Existing Fastify plugin registration and shutdown behavior"
+          ],
+          "description": "Compose configuration, PostgreSQL, Redis, Organization repository, ID generator, and Organization service Layers into one ManagedRuntime per buildServer call. Permit buildServer to accept a complete runtime Layer for tests while always creating and disposing the runtime itself. Retrieve the runtime-owned Drizzle database for legacy repositories, make RepoPlugin a purely injected-database bridge, and remove its pool creation, five-second delay, and close hook.",
+          "files": {
+            "create": [
+              "apps/api/src/runtime/server-runtime.ts",
+              "apps/api/src/runtime/server-runtime.test.ts"
+            ],
+            "modify": [
+              "apps/api/src/server.ts",
+              "apps/api/src/repo/index.ts",
+              "apps/api/src/repo/types.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "repeated requests use the same runtime and resource instances",
+              "server shutdown disposes the runtime exactly once",
+              "legacy repositories receive the runtime-owned Drizzle database",
+              "external test resources remain open after runtime disposal"
+            ],
+            "acceptance": [
+              "Exactly one ManagedRuntime is created per Fastify server",
+              "No runtime is constructed per request",
+              "The artificial repository shutdown delay and duplicate pool ownership are removed"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "HTTP Adapter",
+      "tasks": [
+        {
+          "id": "T8",
+          "name": "Add Organization schemas, authorization, and Effect error handling",
+          "depends_on": [
+            "T2",
+            "T3",
+            "T7"
+          ],
+          "inputs": [
+            "Current JWT role and permission model",
+            "Organization API and error contracts from design.md"
+          ],
+          "description": "Add Organization-specific TypeBox schemas so stricter pagination does not alter Ledger routes. Expose each verified token's permission set while preserving the existing all-permissions behavior of hasPermissions. Derive platform/current access with platform precedence. Add an edge-only Effect runner and exhaustive tagged-error mapper using the request URL and request ID; log and sanitize decoding failures, persistence failures, and defects.",
+          "files": {
+            "create": [
+              "apps/api/src/http/problem-details.ts",
+              "apps/api/src/http/run-effect.ts",
+              "apps/api/src/http/run-effect.test.ts",
+              "apps/api/src/organizations/adapters/http/organization-schema.ts",
+              "apps/api/src/organizations/adapters/http/organization-authorization.ts",
+              "apps/api/src/organizations/adapters/http/organization-authorization.test.ts",
+              "apps/api/src/organizations/adapters/http/organization-http-errors.ts"
+            ],
+            "modify": [
+              "apps/api/src/auth.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "maps every expected tagged error to its designed status and RFC 7807 schema",
+              "returns 403 for current-target mismatch and 404 for permitted absence",
+              "uses request.url and request.id for instance and traceId",
+              "logs unexpected causes and returns a sanitized 500",
+              "derives platform access before current access when both permissions exist",
+              "preserves existing non-Organization permission semantics"
+            ],
+            "acceptance": [
+              "Organization pagination accepts only offset integers >= 0 and limit integers from 1 through 100",
+              "HTTP validation and authentication remain adapter concerns",
+              "Expected failures are handled exhaustively before the runtime edge"
+            ]
+          }
+        },
+        {
+          "id": "T9",
+          "name": "Add the shared Redis-backed Organization limiter",
+          "depends_on": [
+            "T6",
+            "T7",
+            "T8"
+          ],
+          "inputs": [
+            "Runtime-owned Redis client",
+            "Manual limiter API and rate-limit configuration from design.md"
+          ],
+          "description": "Register @fastify/rate-limit with global false, skipOnError false, the runtime client, the configured quota and window, the stable environment namespace, and actor-ID key generation. Create one manual limiter shared by all Organization routes. Convert allowed results to limit, remaining, and reset headers; exceeded results to a tagged 429 with Retry-After; and store failures to a tagged 503.",
+          "files": {
+            "create": [
+              "apps/api/src/organizations/adapters/http/organization-rate-limit.ts",
+              "apps/api/src/organizations/adapters/http/organization-rate-limit.test.ts"
+            ],
+            "modify": [
+              "apps/api/src/server.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "all authenticated Organization operations use the same actor bucket",
+              "invalid authentication never invokes the limiter",
+              "allowed responses include limit, remaining, and reset headers",
+              "exceeded responses include Retry-After and tagged 429 details",
+              "store failures become sanitized tagged 503 failures"
+            ],
+            "acceptance": [
+              "The Redis key is exchequer:<environment>:organizations:<actor-organization-id>",
+              "Health, documentation, Ledger, and other routes do not receive a rate-limit hook",
+              "Redis failures fail Organization routes closed"
+            ]
+          }
+        },
+        {
+          "id": "T10",
+          "name": "Replace the Organization routes",
+          "depends_on": [
+            "T8",
+            "T9"
+          ],
+          "inputs": [
+            "Organization service capability",
+            "Organization schemas, authorization resolver, limiter, and Effect runner"
+          ],
+          "description": "Register the resource-first Organization HTTP adapter at the existing prefix. Apply JWT authentication, rate limiting, access-mode derivation, one application use case, and response serialization in that order. Implement 201 with Location, 204 with no body, absent-description omission, and exact OpenAPI error sets. Remove Organization from the legacy service container and remove the old mocked route and service implementation.",
+          "files": {
+            "create": [
+              "apps/api/src/organizations/adapters/http/organization-routes.ts",
+              "apps/api/src/organizations/adapters/http/organization-routes.test.ts"
+            ],
+            "modify": [
+              "apps/api/src/routes/index.ts",
+              "apps/api/src/services/index.ts",
+              "apps/api/src/routes/schema.ts",
+              "apps/api/src/routes/OrganizationRoutes.ts",
+              "apps/api/src/routes/OrganizationRoutes.test.ts",
+              "apps/api/src/services/OrganizationService.ts",
+              "apps/api/src/services/OrganisationService.test.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "all five routes invoke the managed runtime instead of server.services",
+              "create returns 201, the created representation, and a canonical Location header",
+              "delete returns 204 with an empty body",
+              "description is omitted when absent",
+              "schemas advertise only applicable statuses and reserve 409 for delete",
+              "OpenAPI response schemas match runtime response shapes"
+            ],
+            "acceptance": [
+              "All existing Organization paths and JSON field names remain stable",
+              "Create requires organization:write",
+              "List and get use organization:read or my:organization:read",
+              "Update and delete use organization:write or my:organization:write"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "name": "Full-Stack Verification and Cleanup",
+      "tasks": [
+        {
+          "id": "T11",
+          "name": "Establish the reusable HTTP-to-PostgreSQL harness",
+          "depends_on": [
+            "T5",
+            "T7",
+            "T10"
+          ],
+          "inputs": [
+            "buildServer and live Organization Layers",
+            "JWT signer, test PostgreSQL database, and Compose-managed Valkey"
+          ],
+          "description": "Build a reusable harness that composes real PostgreSQL and Redis adapters, starts buildServer, signs actor JWTs, injects HTTP requests, creates unique fixtures, and cleans them in reverse dependency order without truncation. Add full-stack Organization coverage with no mocked service or repository.",
+          "files": {
+            "create": [
+              "apps/api/src/testing/api-test-harness.ts",
+              "apps/api/src/organizations/organizations.integration.test.ts"
+            ],
+            "modify": [
+              "apps/api/test.setup.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "covers all five success paths, response bodies, headers, and post-delete absence",
+              "covers platform and current access plus platform precedence",
+              "verifies tenant-filtered lists and cross-tenant 403 before existence lookup",
+              "covers malformed IDs, invalid pagination and bodies, authentication, and missing rows",
+              "verifies duplicate names remain valid",
+              "verifies a real dependent Ledger delete returns 409",
+              "checks generated OpenAPI against the contracts exercised at runtime"
+            ],
+            "acceptance": [
+              "The harness exercises the real Fastify-to-PostgreSQL lifecycle",
+              "Services and repositories are not mocked",
+              "Fixture cleanup is isolated and never truncates shared tables",
+              "The harness is reusable by later Effect resource migrations"
+            ]
+          }
+        },
+        {
+          "id": "T12",
+          "name": "Verify distributed limiting and resource lifecycle",
+          "depends_on": [
+            "T9",
+            "T10",
+            "T11"
+          ],
+          "inputs": [
+            "Compose-managed Valkey",
+            "Injectable runtime Layers and the full-stack test harness"
+          ],
+          "description": "Add integration tests using unique environment namespaces. Start two independent Fastify servers against the same Redis service, exhaust one actor's shared bucket across both, verify actor isolation, and exercise fail-closed behavior. Add lifecycle regressions for runtime-owned and externally injected resources.",
+          "files": {
+            "create": [
+              "apps/api/src/organizations/organization-rate-limit.integration.test.ts",
+              "apps/api/src/runtime/server-runtime.integration.test.ts"
+            ],
+            "modify": [
+              "apps/api/src/testing/api-test-harness.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "shares quota consumption across two server instances",
+              "isolates buckets for different actors",
+              "verifies allowed and exceeded headers plus Retry-After",
+              "verifies invalid JWTs do not consume a valid actor bucket",
+              "maps an injected failing store to sanitized 503",
+              "keeps health and Ledger routes available while Redis is unavailable",
+              "finalizes PostgreSQL and Redis once without the old delay",
+              "does not close injected external resources"
+            ],
+            "acceptance": [
+              "Distributed rate limiting behaves consistently across API instances",
+              "Organization routes fail closed when Redis fails",
+              "Server shutdown remains bounded and resource-safe"
+            ]
+          }
+        },
+        {
+          "id": "T13",
+          "name": "Remove obsolete Organization production code and run quality gates",
+          "depends_on": [
+            "T10",
+            "T11",
+            "T12"
+          ],
+          "inputs": [
+            "Completed resource-first Organization slice",
+            "Existing unrelated repository tests and legacy OrgID consumers"
+          ],
+          "description": "Remove the transport-coupled Organization repository and entity from production wiring and delete their obsolete tests. Replace their use in unrelated repository test setup with a fixture-only PostgreSQL helper while preserving those tests' behavior and the legacy OrgID type used by unmigrated resources. Remove stale exports and Organization fixtures no longer used by routes, then execute the complete validation sequence.",
+          "files": {
+            "create": [],
+            "modify": [
+              "apps/api/src/repo/OrganizationRepo.ts",
+              "apps/api/src/repo/OrganizationRepo.test.ts",
+              "apps/api/src/repo/entities/OrganizationEntity.ts",
+              "apps/api/src/repo/entities/index.ts",
+              "apps/api/src/repo/fixtures.ts",
+              "apps/api/src/repo/LedgerRepo.test.ts",
+              "apps/api/src/repo/LedgerAccountRepo.test.ts",
+              "apps/api/src/repo/LedgerAccountBalanceMonitorRepo.test.ts",
+              "apps/api/src/repo/LedgerAccountCategoryRepo.test.ts",
+              "apps/api/src/repo/LedgerAccountSettlementRepo.test.ts",
+              "apps/api/src/repo/LedgerAccountStatementRepo.test.ts",
+              "apps/api/src/repo/index.ts",
+              "apps/api/src/repo/types.ts",
+              "apps/api/src/routes/ledgers/fixtures.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "runs focused Organization domain, service, adapter, HTTP, Redis, and lifecycle tests",
+              "runs the complete @exchequerio/api test suite",
+              "runs pnpm run check",
+              "runs pnpm run ci under Node 24"
+            ],
+            "acceptance": [
+              "No production Organization endpoint imports legacy route, service, repository, or entity modules",
+              "Unmigrated resources retain their current interfaces and behavior",
+              "No artificial Organization resource ownership or shutdown delay remains",
+              "No database migration, web, docs-site, shared-package, or CONTEXT.md change is introduced",
+              "The final diff contains only approved scope and preserves unrelated work"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
