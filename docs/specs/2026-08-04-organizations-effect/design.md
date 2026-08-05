@@ -174,12 +174,12 @@ Central route registration remains under the existing routes entry point. Files 
 The Organization domain contains:
 
 - A branded canonical Organization ID.
-- An immutable Organization entity with `id`, `name`, optional `description`, `created`, and `updated`.
-- Create and update inputs that preserve the distinction between an omitted description and a supplied description.
+- An immutable Organization entity with `id`, `name`, optional `description`, and immutable UTC Luxon `DateTime` values for `created` and `updated`.
+- Create and update inputs that preserve the distinction between an omitted description and a supplied description through explicit preserve/replace intent.
 - Pure access decisions for platform versus current-Organization capabilities.
 - Pure TypeID parsing and validation that returns a value or an explicit domain error rather than throwing.
 
-The domain represents an absent description as `undefined`. PostgreSQL `null` is normalized at the adapter boundary, and HTTP serialization omits an absent description.
+The domain represents an absent description as `undefined`. PostgreSQL `null` is normalized at the adapter boundary, and HTTP serialization omits an absent description. An update property explicitly present with the value `undefined` is invalid rather than an operation to clear the description; omission preserves the stored value and a supplied string replaces it.
 
 ### Application services
 
