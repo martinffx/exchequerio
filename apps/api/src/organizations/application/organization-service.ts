@@ -73,10 +73,9 @@ interface OrganizationServiceShape {
 	) => Effect.Effect<Organization, OrganizationDeleteError>;
 }
 
-class OrganizationService extends Context.Tag("OrganizationService")<
-	OrganizationService,
-	OrganizationServiceShape
->() {}
+class OrganizationService extends Context.Service<OrganizationService, OrganizationServiceShape>()(
+	"OrganizationService"
+) {}
 
 const requireAccess = (
 	access: OrganizationAccessDecision,

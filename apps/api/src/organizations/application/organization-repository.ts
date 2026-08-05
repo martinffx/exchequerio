@@ -51,10 +51,10 @@ interface OrganizationRepositoryShape {
 	) => Effect.Effect<Option.Option<Organization>, OrganizationDeleteRepositoryError>;
 }
 
-class OrganizationRepository extends Context.Tag("OrganizationRepository")<
+class OrganizationRepository extends Context.Service<
 	OrganizationRepository,
 	OrganizationRepositoryShape
->() {}
+>()("OrganizationRepository") {}
 
 export type {
 	OrganizationCreateRecord,

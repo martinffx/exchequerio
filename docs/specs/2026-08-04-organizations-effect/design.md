@@ -94,7 +94,7 @@ As an API maintainer, I want a complete, testable reference slice so that subseq
 
 - One runtime is created per Fastify server and disposed once during server shutdown.
 - Domain code is pure and has no Effect, Fastify, Drizzle, environment, or database imports.
-- Application and repository capabilities use Context tags and Layers.
+- Application and repository capabilities use Effect 4 `Context.Service` services and Layers.
 - Expected failures are typed and mapped exhaustively to RFC 7807 responses.
 - Full-stack tests execute the real HTTP lifecycle against PostgreSQL and Redis.
 
@@ -104,7 +104,7 @@ As an API maintainer, I want a complete, testable reference slice so that subseq
 - API dependencies flow from routes to application services to repositories and entities to PostgreSQL.
 - Fastify and TypeBox remain transport adapters; Drizzle remains the SQL adapter.
 - Authentication remains an HTTP concern. The verified JWT actor Organization ID is passed explicitly into every application use case.
-- Effect 3 is the effect system. The runtime is shared rather than constructed per request.
+- Effect 4 beta is the effect system. The API tracks the `beta` distribution tag, while the lockfile pins the resolved beta for reproducible installs. The runtime is shared rather than constructed per request.
 - PostgreSQL is required for API integration tests. Redis/Valkey is required for rate-limit integration tests.
 - Tests follow stub-driven TDD at the narrowest useful layer, with live infrastructure reserved for adapter and full-stack behavior.
 - Validation and CI run under the repository's supported Node 24 toolchain.
@@ -183,7 +183,7 @@ The domain represents an absent description as `undefined`. PostgreSQL `null` is
 
 ### Application services
 
-`OrganizationService`, `OrganizationRepository`, and `OrganizationIdGenerator` are Context-tagged capabilities.
+`OrganizationService`, `OrganizationRepository`, and `OrganizationIdGenerator` are Effect 4 `Context.Service` capabilities.
 
 The service exposes list, get, create, update, and delete use cases. Each use case receives the actor Organization ID even when a platform permission permits cross-tenant access. The HTTP adapter supplies an access mode derived from verified permissions; the service applies the corresponding pure access rule.
 

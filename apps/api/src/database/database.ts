@@ -8,7 +8,7 @@ interface DatabaseShape {
 	readonly db: DrizzleDatabase;
 }
 
-class Database extends Context.Tag("Database")<Database, DatabaseShape>() {}
+class Database extends Context.Service<Database, DatabaseShape>()("Database") {}
 
 export type { DatabaseShape, DrizzleDatabase };
 export { Database };

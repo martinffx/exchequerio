@@ -45,7 +45,7 @@ const organization = createOrganization({
 	updated: timestamp,
 });
 const organizationList = [organization];
-const someOrganization = Option.fromNullable(organization);
+const someOrganization = Option.fromNullishOr(organization);
 const infrastructureFailures = [
 	new OrganizationRepositoryUnavailable(new Error("unavailable")),
 	new OrganizationPersistenceDecodingFailure(new Error("invalid row")),
@@ -73,7 +73,7 @@ const repository = (
 
 const runService = <A, E>(
 	repositoryImplementation: OrganizationRepositoryShape,
-	use: (service: OrganizationService["Type"]) => Effect.Effect<A, E>
+	use: (service: OrganizationService["Service"]) => Effect.Effect<A, E>
 ) => {
 	const dependencies = Layer.merge(
 		makeOrganizationRepositoryTest(repositoryImplementation),
@@ -119,8 +119,8 @@ describe("OrganizationService", () => {
 		"denies a current-Organization %s mismatch before repository invocation",
 		async operation => {
 			const repo = repository();
-			const effect = await Effect.runPromise(
-				Effect.either(
+			const error = await Effect.runPromise(
+				Effect.flip(
 					Effect.gen(function* () {
 						const service = yield* OrganizationService;
 						if (operation === "get") {
@@ -150,10 +150,7 @@ describe("OrganizationService", () => {
 				)
 			);
 
-			expect(effect).toMatchObject({
-				_tag: "Left",
-				left: new OrganizationAccessDenied(targetId),
-			});
+			expect(error).toEqual(new OrganizationAccessDenied(targetId));
 			expect(repo[operation]).not.toHaveBeenCalled();
 		}
 	);
@@ -289,7 +286,7 @@ describe("OrganizationService", () => {
 
 	it("exposes operation-specific service error types", () => {
 		type EffectError<T> = T extends Effect.Effect<unknown, infer E, unknown> ? E : never;
-		type Service = OrganizationService["Type"];
+		type Service = OrganizationService["Service"];
 		type Repository = OrganizationRepositoryShape;
 
 		expectTypeOf<EffectError<ReturnType<Service["list"]>>>().toEqualTypeOf<OrganizationListError>();
