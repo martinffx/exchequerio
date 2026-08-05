@@ -49,7 +49,7 @@
             "Organization vocabulary and invariants from CONTEXT.md",
             "Functional-core and access requirements from design.md"
           ],
-          "description": "Define a branded canonical Organization ID with non-throwing parsing, an immutable Organization entity using native dates, create and update inputs that preserve omitted descriptions, and exhaustive platform/current access decisions. Keep all domain modules free of Effect, Fastify, TypeBox, Drizzle, PostgreSQL, configuration, and environment imports.",
+          "description": "Define a branded canonical Organization ID with non-throwing parsing, an immutable Organization entity using UTC Luxon DateTime values, create and update inputs with explicit preserve/replace description intent, and exhaustive platform/current access decisions. Reject an explicitly present undefined description through a non-throwing constructor. Keep all domain modules free of Effect, Fastify, TypeBox, Drizzle, PostgreSQL, configuration, and environment imports.",
           "files": {
             "create": [
               "apps/api/src/organizations/domain/organization-id.ts",
@@ -68,11 +68,13 @@
               "rejects malformed and wrong-prefix IDs without throwing",
               "permits platform access to any target",
               "permits current access only to the actor Organization",
-              "preserves an omitted description and replaces a supplied description"
+              "preserves an omitted description and replaces a supplied description",
+              "rejects an explicitly present undefined description without throwing",
+              "keeps Organization timestamps immutable under Luxon transformations"
             ],
             "acceptance": [
               "Organization IDs are branded and can only be constructed through validated constructors or the injected generator",
-              "The Organization value is immutable",
+              "The Organization value and its UTC Luxon timestamps are immutable",
               "Absent descriptions are represented as undefined",
               "Domain dependency boundaries are pure"
             ]
@@ -89,7 +91,7 @@
             "Organization domain types from T2",
             "Repository operations, access matrix, and error model from design.md"
           ],
-          "description": "Add Context-tagged OrganizationRepository, OrganizationIdGenerator, and OrganizationService capabilities. Represent repository absence with Effect Option rather than null or transport errors. Implement list, get, create, update, and delete Effects with explicit actor ID and access mode, target checks before repository calls, SQL list-scope intent, deterministic ID injection, and discriminated application and infrastructure failures. Supply Layer-based test implementations.",
+          "description": "Add Context-tagged OrganizationRepository, OrganizationIdGenerator, and OrganizationService capabilities. Represent repository absence with Effect Option rather than null or transport errors. Implement list, get, create, update, and delete Effects with explicit actor ID and access mode, target checks before repository calls, SQL list-scope intent, deterministic ID injection, and operation-specific application and infrastructure failure unions. OrganizationHasDependents applies only to delete; OrganizationNotFound applies only to get, update, and delete. Supply Layer-based test implementations.",
           "files": {
             "create": [
               "apps/api/src/organizations/application/organization-repository.ts",
@@ -106,12 +108,13 @@
               "passes all-scope or actor-scope intent to list",
               "gives platform access precedence when both modes are present",
               "denies current-target mismatches before repository invocation",
-              "maps permitted absence to OrganizationNotFound",
+              "maps permitted get, update, and delete absence to OrganizationNotFound",
+              "propagates applicable infrastructure failures and delete-dependent failures through precise Effect error channels",
               "allows create only for platform access and uses the injected ID generator"
             ],
             "acceptance": [
               "Every use case accepts the actor Organization ID explicitly",
-              "Service and repository capability methods return typed Effects",
+              "Service and repository capability methods return operation-specific typed Effects",
               "Application modules do not run Effects or import HTTP and SQL adapters",
               "No automatic generated-ID retry is introduced"
             ]
@@ -166,7 +169,7 @@
             "OrganizationsTable and Drizzle database capability",
             "OrganizationRepository contract and typed error vocabulary"
           ],
-          "description": "Implement the repository Layer with Organization-ID ordering, optional actor filtering, limit and offset, INSERT/UPDATE/DELETE RETURNING, database-owned timestamps, conditional description assignment, and safe row decoding. Translate connectivity failures to retryable repository unavailability, invalid rows to persistence decoding failures, unexpected SQL failures to sanitized persistence errors, and delete error 23503 to OrganizationHasDependents. Do not synthesize name conflicts.",
+          "description": "Implement the repository Layer with Organization-ID ordering, optional actor filtering, limit and offset, INSERT/UPDATE/DELETE RETURNING, database-owned timestamps decoded to immutable UTC Luxon DateTime values, conditional description assignment from explicit preserve/replace intent, and safe row decoding. Translate connectivity failures to retryable repository unavailability, invalid rows to persistence decoding failures, unexpected SQL failures to sanitized persistence errors, and delete error 23503 to OrganizationHasDependents. Do not synthesize name conflicts.",
           "files": {
             "create": [
               "apps/api/src/organizations/adapters/postgres/organization-row.ts",
@@ -286,7 +289,7 @@
             "Current JWT role and permission model",
             "Organization API and error contracts from design.md"
           ],
-          "description": "Add Organization-specific TypeBox schemas so stricter pagination does not alter Ledger routes. Expose each verified token's permission set while preserving the existing all-permissions behavior of hasPermissions. Derive platform/current access with platform precedence. Add an edge-only Effect runner and exhaustive tagged-error mapper using the request URL and request ID; log and sanitize decoding failures, persistence failures, and defects.",
+          "description": "Add Organization-specific TypeBox schemas so stricter pagination does not alter Ledger routes. Expose each verified token's permission set while preserving the existing all-permissions behavior of hasPermissions. Derive platform/current access with platform precedence. Translate omitted or supplied description fields into explicit domain update intent and map an explicitly present undefined description to 400. Add an edge-only Effect runner and exhaustive operation-specific tagged-error mapping using the request URL and request ID; log and sanitize decoding failures, persistence failures, and defects.",
           "files": {
             "create": [
               "apps/api/src/http/problem-details.ts",
