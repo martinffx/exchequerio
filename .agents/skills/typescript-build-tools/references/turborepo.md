@@ -173,7 +173,7 @@ my-monorepo/
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./dist --target bun",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run"
   }
@@ -188,7 +188,7 @@ my-monorepo/
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run"
   }

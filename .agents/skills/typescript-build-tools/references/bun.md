@@ -26,8 +26,8 @@ bun install --force
 # Add runtime dependency
 bun add fastify drizzle-orm @sinclair/typebox
 
-# Add dev dependency
-bun add -D vitest @biomejs/biome typescript
+# Add dev dependencies (including TypeScript 7 and Bun globals)
+bun add -D vitest @biomejs/biome typescript @types/bun
 
 # Add specific version
 bun add react@18.2.0
@@ -318,7 +318,7 @@ bun run --filter "**" test
 ```json
 {
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
@@ -326,6 +326,8 @@ bun run --filter "**" test
   }
 }
 ```
+
+TypeScript 7 no longer discovers global type packages automatically. Bun projects that use Bun globals should include `"types": ["bun"]` in `compilerOptions`.
 
 ### Monorepo Scripts
 

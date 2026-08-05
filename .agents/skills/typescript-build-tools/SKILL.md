@@ -1,40 +1,55 @@
 ---
 name: typescript-build-tools
-description: TypeScript project tooling with Bun, tsgo, Vitest, Biome, and Turborepo. Use when setting up package.json scripts, running builds, typechecking, configuring tests, linting, formatting, or orchestrating monorepo development.
+description: TypeScript project tooling with Bun or pnpm, TypeScript 7, Vitest, Biome or Oxc (Oxlint and Oxfmt), and Turborepo. Use when setting up package.json scripts, running builds, typechecking, configuring tests, linting, formatting, or orchestrating monorepo development.
 user-invocable: false
 ---
 
 # TypeScript Build Tools
 
-Modern TypeScript build tooling stack: Bun for package management and task running, tsgo for typechecking, Vitest for testing, Biome for linting/formatting, and Turborepo for monorepo orchestration.
+Modern TypeScript build tooling stack: Bun or pnpm for package management and task running, the native TypeScript 7 compiler for typechecking, Vitest for testing, Biome or Oxc for linting/formatting, and Turborepo for monorepo orchestration.
 
 ## Additional References
 
 - [references/bun.md](./references/bun.md) - Bun package manager and task runner
+- [references/pnpm.md](./references/pnpm.md) - pnpm package manager, workspaces, and CI
 - [references/vitest.md](./references/vitest.md) - Advanced Vitest configuration patterns
 - [references/biome.md](./references/biome.md) - Biome rules and customization
+- [references/oxc.md](./references/oxc.md) - Oxlint and Oxfmt configuration and migration
 - [references/turborepo.md](./references/turborepo.md) - Turborepo monorepo orchestration
+
+## Choose the Existing Toolchain
+
+Follow the repository's existing lockfile, `packageManager` field, scripts, and configuration:
+
+- Use Bun when the project has `bun.lock` or targets the Bun runtime.
+- Use pnpm when the project has `pnpm-lock.yaml`, `pnpm-workspace.yaml`, or a pnpm `packageManager` field.
+- Use Biome when the project has `biome.json`; use Oxlint/Oxfmt when it has `.oxlintrc.*`, `oxlint.config.*`, `.oxfmtrc.*`, or `oxfmt.config.*`.
+- Do not mix package managers, linters, or formatters unless the repository is already migrating between them.
+
+pnpm replaces Bun's package-management and task-running roles, not Bun's runtime or bundler.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-bun add -D vitest @vitest/coverage-v8 @biomejs/biome
+# Bun + Biome
+bun add -D typescript @types/bun vitest @vitest/coverage-v8 @biomejs/biome
+bun add -D turbo # For monorepos
 
-# For monorepos
-bun add -D turbo
+# pnpm + Oxc (Node runtime)
+pnpm add -D typescript @types/node vitest @vitest/coverage-v8 oxlint oxfmt
+pnpm add -D turbo # For monorepos
 ```
 
 ## Package.json Scripts
 
-### Single Package
+### Bun + Biome
 
 ```json
 {
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./dist --target bun",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -42,6 +57,26 @@ bun add -D turbo
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "check": "bun run typecheck && bun run lint && bun run test"
+  }
+}
+```
+
+### pnpm + Oxc
+
+pnpm does not supply a runtime or bundler, so keep `dev` and `build` scripts specific to the project.
+
+```json
+{
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test"
   }
 }
 ```
@@ -56,81 +91,66 @@ bun add -D turbo
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "lint": "turbo lint",
-    "check": "turbo typecheck lint test"
+    "format:check": "turbo format:check",
+    "check": "turbo typecheck lint format:check test"
   }
 }
 ```
 
 ## Bun
 
-### Package Manager
-
 ```bash
-# Install dependencies
 bun install
-
-# Add dependencies
 bun add fastify drizzle-orm
-bun add -D vitest @biomejs/biome
-
-# Remove dependency
-bun remove package-name
-
-# Update dependencies
-bun update
-```
-
-### Task Runner
-
-**Important:** Use `bun run test` (not `bun test`) on Node projects. `bun test` invokes Bun's native test runner, not your package.json test script.
-
-```bash
-# Run script from package.json
 bun run dev
 bun run test
-bun run build
-
-# Run TypeScript directly (no build step)
-bun run src/index.ts
-
-# Watch mode
 bun run --watch src/index.ts
-
-# With environment variables
-bun run --env-file .env src/index.ts
-```
-
-### Build Command
-
-```bash
-# Basic build for Bun runtime
 bun build ./src/index.ts --outdir ./dist --target bun
-
-# For Node.js runtime
-bun build ./src/index.ts --outdir ./dist --target node
-
-# With minification
-bun build ./src/index.ts --outdir ./dist --target bun --minify
-
-# Multiple entry points
-bun build ./src/index.ts ./src/worker.ts --outdir ./dist --target bun
 ```
 
-See [references/bun.md](./references/bun.md) for bunfig.toml configuration and advanced patterns.
+Use `bun run test`, not `bun test`, on Bun-managed Node projects because `bun test` invokes Bun's native test runner. See [references/bun.md](./references/bun.md) for dependency management, runtime execution, building, workspaces, configuration, and CI.
 
-## tsgo Typechecking
+## pnpm
 
-tsgo is a fast TypeScript typechecker. Use it instead of `tsc` for faster CI builds.
+Use `pn` as an optional shorthand in interactive shells:
 
 ```bash
+alias pn=pnpm
+```
+
+Keep documentation, `package.json` scripts, and CI commands on canonical `pnpm`; shell aliases are not available in every non-interactive environment.
+
+```bash
+pnpm install
+pnpm add fastify drizzle-orm
+pnpm add -D typescript vitest oxlint oxfmt
+pnpm run test
+pnpm exec tsc --noEmit
+pnpm -r run test
+pnpm --filter './packages/**' run build
+```
+
+Commit `pnpm-lock.yaml`, define workspaces in `pnpm-workspace.yaml`, and pin pnpm with the `packageManager` field. See [references/pnpm.md](./references/pnpm.md) for dependency management, workspace filtering, CI, and troubleshooting.
+
+## TypeScript 7 Native Compiler
+
+TypeScript 7 is the stable, native Go implementation of TypeScript. Install the standard `typescript` package and use its `tsc` executable; `@typescript/native-preview` and `tsgo` were preview names.
+
+```bash
+# Install TypeScript 7
+pnpm add -D typescript
+
 # Typecheck without emitting
-tsgo --noEmit
+pnpm exec tsc --noEmit
 
-# Typecheck specific files
-tsgo --noEmit src/**/*.ts
+# Use an explicit project
+pnpm exec tsc --noEmit -p tsconfig.json
 
-# With project reference
-tsgo --noEmit -p tsconfig.json
+# Build project references
+pnpm exec tsc --build
+
+# Bun equivalent
+bunx tsc --noEmit
 ```
 
 ### tsconfig.json
@@ -142,19 +162,17 @@ tsgo --noEmit -p tsconfig.json
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
-    "skipLibCheck": true,
     "noEmit": true,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "lib": ["ESNext"],
-    "types": ["bun-types"]
+    "types": ["node"]
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts"]
 }
 ```
+
+Install `@types/node` for Node projects. For Bun runtime projects, install `@types/bun` and use `"types": ["bun"]` instead.
+
+TypeScript 7.0 does not expose the legacy programmatic compiler API. Frameworks and tools that embed that API may still require TypeScript 6 until they add TypeScript 7 support; follow their compatibility guidance instead of forcing an upgrade.
 
 ## Vitest
 
@@ -288,6 +306,21 @@ See [references/vitest.md](./references/vitest.md) for workspace configs, benchm
 
 See [references/biome.md](./references/biome.md) for rule explanations, shareable configs, and CLI commands.
 
+## Oxc (Oxlint + Oxfmt)
+
+Use Oxlint for linting and Oxfmt for formatting when the repository has adopted the Oxc toolchain.
+
+```bash
+oxlint --init
+oxlint
+oxlint --fix
+oxfmt --init
+oxfmt
+oxfmt --check
+```
+
+Keep `tsc --noEmit` as the default typecheck step. Type-aware Oxlint rules require `oxlint-tsgolint`; do not adopt the experimental `--type-check` mode implicitly. See [references/oxc.md](./references/oxc.md) for configuration, type-aware rules, migration, editors, and CI.
+
 ## Turborepo (Monorepo)
 
 ### turbo.json
@@ -304,6 +337,7 @@ See [references/biome.md](./references/biome.md) for rule explanations, shareabl
       "dependsOn": ["^typecheck"]
     },
     "lint": {},
+    "format:check": {},
     "test": {
       "dependsOn": ["^build"],
       "env": ["DATABASE_URL"]
@@ -322,14 +356,15 @@ See [references/biome.md](./references/biome.md) for rule explanations, shareabl
 my-monorepo/
 ├── package.json          # Root with turbo scripts
 ├── turbo.json            # Turbo configuration
-├── biome.json            # Shared Biome config
+├── pnpm-workspace.yaml   # pnpm workspaces; omit for Bun-only repos
+├── biome.json            # Biome projects; use Oxc config files instead for Oxc
 ├── packages/
 │   ├── config-biome/     # Shareable Biome package
 │   └── shared/           # Shared utilities
 ├── apps/
 │   ├── api/              # Fastify API
 │   └── web/              # React app
-└── bun.lock
+└── pnpm-lock.yaml        # Or bun.lock for Bun projects
 ```
 
 See [references/turborepo.md](./references/turborepo.md) for caching strategies, filtering, and CI setup.
@@ -424,24 +459,26 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - run: bun run check  # turbo typecheck lint test
+      - run: bun run check  # turbo typecheck lint format:check test
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ vars.TURBO_TEAM }}
 ```
 
+For pnpm setup, dependency caching, and an Oxc check job, use the CI pattern in [references/pnpm.md](./references/pnpm.md) together with the scripts in [references/oxc.md](./references/oxc.md).
+
 ## Guidelines
 
-1. **Use Bun** as package manager (`bun install`) and task runner (`bun run`)
-2. **Use `bun run test`** (not `bun test`) - `bun test` runs Bun's native test runner
-3. **Use tsgo** for typechecking - faster than `tsc` for CI
-4. **Use Vitest** for testing - fast, ESM-native, great DX
-5. **Use Biome** for linting and formatting - single tool, fast
-6. **Use Turborepo** for monorepos - caching, parallel execution
-7. **Enable V8 coverage** in Vitest for accurate coverage reports
-8. **Configure global setup** for database migrations in tests
-9. **Use workspace configs** in Vitest for different test pools
-10. **Share Biome config** via workspace package in monorepos
-11. **Run checks in order**: typecheck, lint, test (fail fast)
-12. **Use `--frozen-lockfile`** in CI for reproducible builds
-13. **Configure Turbo caching** for faster CI with remote cache
+1. **Preserve the existing toolchain** indicated by lockfiles, configs, and `packageManager`
+2. **Use Bun or pnpm consistently**; do not create competing lockfiles
+3. **Use `bun run test`** (not `bun test`) on Bun-managed Node projects
+4. **Use `pn` only as an interactive alias**; use canonical `pnpm` in shared automation
+5. **Use TypeScript 7's `tsc`** for native typechecking and builds
+6. **Use Vitest** for fast, ESM-native testing
+7. **Choose one lint/format stack**: Biome or Oxlint plus Oxfmt
+8. **Use safe lint fixes by default**: `biome check --write` or `oxlint --fix`
+9. **Check formatting in CI** when using Oxfmt: `oxfmt --check`
+10. **Use Turborepo** for monorepo caching and task orchestration
+11. **Run checks in order**: typecheck, lint, format check, test (fail fast)
+12. **Use `--frozen-lockfile`** in CI for reproducible installs
+13. **Enable V8 coverage** and configure Vitest workspace/global setup as needed
