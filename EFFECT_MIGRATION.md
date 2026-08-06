@@ -163,20 +163,15 @@ apps/api/src/
 - Application services, repository capabilities, live implementations, HTTP adapters, row
   decoders, and test Layers live at the owning slice root. Do not create `application/` or
   `adapters/` directories.
-- Each migrated slice has a lowercase `index.ts` that exports its public contract and composed
-  Layer. Concrete Live classes, persistence rows, and internal wiring remain private.
-- Cross-slice imports use the target slice's `index.ts`. A child slice may import an explicitly
+- Each migrated slice exposes a public contract and composed Layer from one entrypoint. Concrete
+  Live classes, persistence rows, and internal wiring remain private.
+- Cross-slice imports use the target slice's public entrypoint. A child slice may import an explicitly
   allowed parent; a parent must not import its child. Sibling dependencies require an explicit
   boundary edge, while runtime or route composition coordinates otherwise independent slices.
 - Ledger Account Settlements, Statements, and Balance Monitors live under `ledgers/accounts/`.
   Transactions and Categories are direct Ledger children. Transaction Entries remain part of the
   Transaction domain and do not receive an independent resource slice.
 - Assets remain top-level because an Organization owns reusable Asset definitions across Ledgers.
-- Directories use kebab-case. Every TypeScript module uses a PascalCase basename except the
-  conventional slice entrypoint `index.ts`; tests retain suffixes such as
-  `OrganizationService.test.ts` and `OrganizationRoutes.integration.test.ts`.
-- `Live` and `Test` suffixes are reserved for Effect Layer implementations. Files are named by
-  responsibility and do not use an `.effect.ts` suffix.
 
 ### Functional core
 

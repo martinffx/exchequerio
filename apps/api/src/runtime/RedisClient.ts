@@ -11,6 +11,12 @@ type RedisFactory = (url: string, options: RedisOptions) => Redis;
 
 const defaultRedisFactory: RedisFactory = (url, options) => new Redis(url, options);
 
+const redisReconnectDelay = (attempts: number, random: () => number = Math.random): number => {
+	const exponent = Math.min(Math.max(0, attempts - 1), 6);
+	const cap = Math.min(2_000, 50 * 2 ** exponent);
+	return Math.max(1, Math.floor(cap / 2 + random() * (cap / 2)));
+};
+
 class RedisClientLive extends RedisClient {
 	constructor(
 		readonly client: Redis,
@@ -65,7 +71,7 @@ const makeRedisClientLive = (
 							connectTimeout: 2_000,
 							disconnectTimeout: 1_000,
 							maxRetriesPerRequest: 1,
-							retryStrategy: attempts => (attempts > 1 ? undefined : 50),
+							retryStrategy: redisReconnectDelay,
 						}),
 						shutdownTimeoutMs
 					)
@@ -77,4 +83,11 @@ const makeRedisClientLive = (
 const makeRedisClientTest = (client: Redis) => Layer.succeed(RedisClientTag, { client });
 
 export type { RedisFactory };
-export { RedisClient, RedisClientLive, RedisClientTag, makeRedisClientLive, makeRedisClientTest };
+export {
+	RedisClient,
+	RedisClientLive,
+	RedisClientTag,
+	makeRedisClientLive,
+	makeRedisClientTest,
+	redisReconnectDelay,
+};

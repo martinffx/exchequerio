@@ -107,7 +107,6 @@ As an API maintainer, I want a complete, testable reference slice so that subseq
 - Effect 4 beta is the effect system. The API tracks the `beta` distribution tag, while the lockfile pins the resolved beta for reproducible installs. The runtime is shared rather than constructed per request.
 - PostgreSQL is required for API integration tests. Redis/Valkey is required for rate-limit integration tests.
 - Tests follow stub-driven TDD at the narrowest useful layer, with live infrastructure reserved for adapter and full-stack behavior.
-- Directories use kebab-case and every TypeScript module uses a PascalCase basename. Tests retain conventional suffixes after a PascalCase basename.
 - Validation and CI run under the repository's supported Node 24 toolchain.
 - Unrelated work in the branch or worktree must be preserved.
 
@@ -178,7 +177,7 @@ apps/api/src/runtime/
 apps/api/src/http/
 ```
 
-`domain/` remains separate because it is a meaningful purity boundary. All other application, HTTP, PostgreSQL, row-decoding, and ID-generation modules live at the slice root; the slice does not create `application/` or `adapters/` directories. Each responsibility-named capability module co-locates its contract, Effect tag, concrete implementation, and production or test Layers. The lowercase `index.ts` exports the public Organization contract and composed Layer while concrete Live classes and row codecs remain private. Cross-slice imports use this entrypoint. Every other TypeScript module uses a PascalCase basename and files are named by responsibility rather than using an `.effect.ts` or `Live` suffix.
+`domain/` remains separate because it is a meaningful purity boundary. All other application, HTTP, PostgreSQL, row-decoding, and ID-generation modules live at the slice root; the slice does not create `application/` or `adapters/` directories. Each responsibility-named capability module co-locates its contract, Effect tag, concrete implementation, and production or test Layers. The slice entrypoint exports the public Organization contract and composed Layer while concrete Live classes and row codecs remain private. Cross-slice imports use this entrypoint.
 
 ### Functional core
 

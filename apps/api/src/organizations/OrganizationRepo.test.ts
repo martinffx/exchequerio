@@ -60,6 +60,18 @@ describe("decodeOrganizationRow", () => {
 			expect(result.error).toBeInstanceOf(OrganizationPersistenceDecodingFailure);
 		}
 	});
+
+	it("reports only the row ID and invalid fields when decoding fails", () => {
+		const result = decodeOrganizationRow({
+			...row,
+			name: JSON.parse("null") as unknown,
+			description: "secret persisted description",
+		});
+
+		if (result._tag === "Success") expect.fail("expected a decoding failure");
+		expect(result.error.cause).toEqual({ rowId: row.id, invalidFields: ["name"] });
+		expect(JSON.stringify(result.error.cause)).not.toContain("secret persisted description");
+	});
 });
 
 describe("OrganizationRepoLive", () => {

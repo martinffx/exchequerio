@@ -144,7 +144,7 @@ pnpm run ci
 ## Documentation
 
 - [Getting Started](AGENTS.md) — Full development guide
-- [Architecture](docs/standards/architecture.md) — Design patterns and principles
+- [API Architecture](apps/api/docs/standards/architecture.md) — Backend design patterns and principles
 - [API Guide](apps/api/AGENTS.md) — Backend development
 - [Web Guide](apps/web/AGENTS.md) — Frontend development
 

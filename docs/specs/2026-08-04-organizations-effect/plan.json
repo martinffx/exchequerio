@@ -15,7 +15,7 @@
 						"Dependency and configuration requirements from design.md",
 						"Current API package scripts and Node 24/pnpm 11 toolchain"
 					],
-					"description": "Add Effect 4 beta using the beta distribution tag, the Fastify 5-compatible rate-limit plugin, and ioredis. Rename the existing configuration modules to the required PascalCase basenames, extend Config with required REDIS_URL and positive-integer Organization rate-limit settings defaulting to 1000 requests and 60000 milliseconds, and update imports. Add the test Redis URL without changing production secret handling.",
+					"description": "Add Effect 4 beta using the beta distribution tag, the Fastify 5-compatible rate-limit plugin, and ioredis. Consolidate the existing configuration modules, extend Config with required REDIS_URL and positive-integer Organization rate-limit settings defaulting to 1000 requests and 60000 milliseconds, and update imports. Add the test Redis URL without changing production secret handling.",
 					"files": {
 						"create": ["apps/api/src/Config.test.ts"],
 						"modify": [
@@ -216,7 +216,7 @@
 						"Live and test Layers from T3 through T6",
 						"Existing Fastify plugin registration and shutdown behavior"
 					],
-					"description": "Expose the Organization public contract and composed Layer through organizations/index.ts, then compose configuration, PostgreSQL, Redis, and that Layer into one ManagedRuntime per buildServer call. Rename the shared server and application entry-point modules to PascalCase, update imports and package entry commands, and permit buildServer to accept a complete runtime Layer for tests while always creating and disposing the runtime itself through one shared disposal promise. Retrieve the runtime-owned Drizzle database for legacy repositories, make RepoPlugin a purely injected-database bridge, and remove its pool creation, five-second delay, and close hook. Configure migrated-slice imports to use index.ts and explicit dependency edges.",
+					"description": "Expose the Organization public contract and composed Layer through the slice entrypoint, then compose configuration, PostgreSQL, Redis, and that Layer into one ManagedRuntime per buildServer call. Update imports and package entry commands, and permit buildServer to accept a complete runtime Layer for tests while always creating and disposing the runtime itself through one shared disposal promise. Retrieve the runtime-owned Drizzle database for legacy repositories, make RepoPlugin a purely injected-database bridge, and remove its pool creation, five-second delay, and close hook. Configure migrated-slice imports to use the entrypoint and explicit dependency edges.",
 					"files": {
 						"create": [
 							"apps/api/src/organizations/index.ts",
@@ -263,7 +263,7 @@
 						"Current JWT role and permission model",
 						"Organization API and error contracts from design.md"
 					],
-					"description": "Add Organization-specific TypeBox schemas so stricter pagination does not alter Ledger routes. Rename the shared authentication and error modules to PascalCase and update their imports. Expose each verified token's permission set while preserving the existing all-permissions behavior of hasPermissions. Derive platform/current access with platform precedence. Translate omitted or supplied description fields into explicit domain update intent and map an explicitly present undefined description to 400. Add an edge-only Effect runner and exhaustive operation-specific tagged-error mapping using the request URL and request ID; log and sanitize decoding failures, persistence failures, and defects.",
+					"description": "Add Organization-specific TypeBox schemas so stricter pagination does not alter Ledger routes. Update the shared authentication and error modules and their imports. Expose each verified token's permission set while preserving the existing all-permissions behavior of hasPermissions. Derive platform/current access with platform precedence. Translate omitted or supplied description fields into explicit domain update intent and map an explicitly present undefined description to 400. Add an edge-only Effect runner and exhaustive operation-specific tagged-error mapping using the request URL and request ID; log and sanitize decoding failures, persistence failures, and defects.",
 					"files": {
 						"create": [
 							"apps/api/src/http/ProblemDetails.ts",
@@ -378,7 +378,7 @@
 						"buildServer and live Organization Layers",
 						"JWT signer, test PostgreSQL database, and Compose-managed Valkey"
 					],
-					"description": "Build a reusable harness that composes real PostgreSQL with an externally owned Redis test Layer, starts buildServer, signs actor JWTs, injects HTTP requests, creates isolated unique fixtures, and cleans them in reverse dependency order without truncation. Rename the test setup and Vitest configuration modules to PascalCase, update every configuration reference and package command, and add full-stack Organization coverage with no mocked service or repository. Use one assembled CRUD journey plus targeted public-contract cases instead of replaying the complete repository matrix.",
+					"description": "Build a reusable harness that composes real PostgreSQL with an externally owned Redis test Layer, starts buildServer, signs actor JWTs, injects HTTP requests, creates isolated unique fixtures, and cleans them in reverse dependency order without truncation. Update test setup and Vitest configuration references and package commands, and add full-stack Organization coverage with no mocked service or repository. Use one assembled CRUD journey plus targeted public-contract cases instead of replaying the complete repository matrix.",
 					"files": {
 						"create": [
 							"apps/api/src/testing/ApiTestHarness.ts",

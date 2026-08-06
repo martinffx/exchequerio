@@ -42,35 +42,46 @@ type OrganizationRowDecodeResult =
 	| { readonly _tag: "Success"; readonly value: Organization }
 	| { readonly _tag: "Failure"; readonly error: OrganizationPersistenceDecodingFailure };
 
-const decodingFailure = (cause: unknown): OrganizationRowDecodeResult => ({
+interface OrganizationRowDecodeDiagnostic {
+	readonly rowId?: string;
+	readonly invalidFields: readonly string[];
+}
+
+const decodingFailure = (cause: OrganizationRowDecodeDiagnostic): OrganizationRowDecodeResult => ({
 	_tag: "Failure",
 	error: new OrganizationPersistenceDecodingFailure(cause),
 });
 
 const decodeOrganizationRow = (row: unknown): OrganizationRowDecodeResult => {
-	if (typeof row !== "object" || row === null) return decodingFailure(row);
+	if (typeof row !== "object" || row === null) return decodingFailure({ invalidFields: ["row"] });
 	const value = row as Record<string, unknown>;
-	if (
-		typeof value.id !== "string" ||
-		typeof value.name !== "string" ||
-		(value.description !== null && typeof value.description !== "string") ||
-		!(value.created instanceof Date) ||
-		!(value.updated instanceof Date)
-	) {
-		return decodingFailure(row);
-	}
+	const rowId = typeof value.id === "string" ? value.id : undefined;
+	const invalidFields: string[] = [];
+	if (typeof value.id !== "string") invalidFields.push("id");
+	if (typeof value.name !== "string") invalidFields.push("name");
+	if (value.description !== null && typeof value.description !== "string")
+		invalidFields.push("description");
+	if (!(value.created instanceof Date)) invalidFields.push("created");
+	if (!(value.updated instanceof Date)) invalidFields.push("updated");
+	if (invalidFields.length > 0)
+		return decodingFailure({ ...(rowId === undefined ? {} : { rowId }), invalidFields });
 
-	const id = parseOrganizationId(value.id);
-	const created = DateTime.fromJSDate(value.created, { zone: "utc" });
-	const updated = DateTime.fromJSDate(value.updated, { zone: "utc" });
-	if (id._tag === "Failure" || !created.isValid || !updated.isValid) return decodingFailure(row);
+	const id = parseOrganizationId(value.id as string);
+	if (id._tag === "Failure")
+		return decodingFailure({ rowId: value.id as string, invalidFields: ["id"] });
+	const created = DateTime.fromJSDate(value.created as Date, { zone: "utc" });
+	if (!created.isValid)
+		return decodingFailure({ rowId: value.id as string, invalidFields: ["created"] });
+	const updated = DateTime.fromJSDate(value.updated as Date, { zone: "utc" });
+	if (!updated.isValid)
+		return decodingFailure({ rowId: value.id as string, invalidFields: ["updated"] });
 
 	return {
 		_tag: "Success",
 		value: createOrganization({
 			id: id.value,
-			name: value.name,
-			...(value.description === null ? {} : { description: value.description }),
+			name: value.name as string,
+			...(value.description === null ? {} : { description: value.description as string }),
 			created,
 			updated,
 		}),

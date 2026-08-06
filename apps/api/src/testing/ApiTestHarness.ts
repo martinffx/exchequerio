@@ -35,6 +35,28 @@ interface ApiTestHarness {
 	readonly close: () => Promise<void>;
 }
 
+type CleanupStep = () => unknown;
+
+const runCleanupSteps = async (steps: readonly CleanupStep[]): Promise<void> => {
+	const errors: unknown[] = [];
+	for (const step of steps) {
+		try {
+			await step();
+		} catch (error) {
+			errors.push(error);
+		}
+	}
+	if (errors.length > 0) throw new AggregateError(errors, "API test harness cleanup failed");
+};
+
+const makeIdempotentCleanup = (steps: readonly CleanupStep[]): (() => Promise<void>) => {
+	let cleanup: Promise<void> | undefined;
+	return () => (cleanup ??= runCleanupSteps(steps));
+};
+
+const errorsFrom = (error: unknown): readonly unknown[] =>
+	error instanceof AggregateError ? (error.errors as unknown[]) : [error];
+
 const createApiTestHarness = async (
 	options: ApiTestHarnessOptions = {}
 ): Promise<ApiTestHarness> => {
@@ -46,14 +68,42 @@ const createApiTestHarness = async (
 	});
 	const pool = new Pool({ connectionString: config.databaseUrl });
 	const db = drizzle(pool, { schema });
-	const redis = new Redis(config.redisUrl);
+	let redis: Redis;
+	try {
+		redis = new Redis(config.redisUrl);
+	} catch (setupError) {
+		try {
+			await runCleanupSteps([() => pool.end()]);
+		} catch (cleanupError) {
+			const cleanupErrors = errorsFrom(cleanupError);
+			throw new AggregateError(
+				[setupError, ...cleanupErrors],
+				"API test harness setup and cleanup failed"
+			);
+		}
+		throw setupError;
+	}
 	const organizationIds = new Set<string>();
 	const ledgerIds = new Set<string>();
 	const runtimeLayer = makeServerRuntimeLayer(config, {
 		database: makeDatabaseTest(db),
 		redis: makeRedisClientTest(redis),
 	});
-	const server = await buildServer({ runtimeLayer });
+	let server: FastifyInstance;
+	try {
+		server = await buildServer({ runtimeLayer });
+	} catch (setupError) {
+		try {
+			await runCleanupSteps([() => redis.disconnect(), () => pool.end()]);
+		} catch (cleanupError) {
+			const cleanupErrors = errorsFrom(cleanupError);
+			throw new AggregateError(
+				[setupError, ...cleanupErrors],
+				"API test harness setup and cleanup failed"
+			);
+		}
+		throw setupError;
+	}
 
 	const createOrganization = async (name: string, description?: string) => {
 		const id = new TypeID("org").toString();
@@ -81,16 +131,22 @@ const createApiTestHarness = async (
 			if (keys.length > 0) await redis.del(...keys);
 		} while (cursor !== "0");
 	};
-	const close = async () => {
-		for (const id of ledgerIds) await db.delete(LedgersTable).where(eq(LedgersTable.id, id));
-		for (const id of organizationIds) {
-			await db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id));
-		}
-		await clearRateLimits();
-		await server.close();
-		redis.disconnect();
-		await pool.end();
-	};
+	const close = makeIdempotentCleanup([
+		() =>
+			runCleanupSteps(
+				[...ledgerIds].map(id => () => db.delete(LedgersTable).where(eq(LedgersTable.id, id)))
+			),
+		() =>
+			runCleanupSteps(
+				[...organizationIds].map(
+					id => () => db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id))
+				)
+			),
+		clearRateLimits,
+		() => server.close(),
+		() => redis.disconnect(),
+		() => pool.end(),
+	]);
 
 	return {
 		server,
@@ -109,4 +165,4 @@ const createApiTestHarness = async (
 };
 
 export type { ApiTestHarness, ApiTestHarnessOptions, TestScope };
-export { createApiTestHarness };
+export { createApiTestHarness, makeIdempotentCleanup, runCleanupSteps };

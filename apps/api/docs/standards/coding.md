@@ -56,10 +56,6 @@ function calculateBalance() {}
 const DEFAULT_CURRENCY_EXPONENT = 2;
 const MAX_RETRY_ATTEMPTS = 3;
 
-// PascalCase for every TypeScript module filename
-LedgerService.ts;
-TransactionRepo.ts;
-ProblemDetails.ts;
 ```
 
 ### Import/Export Patterns
@@ -90,7 +86,7 @@ export type { CreateLedgerRequest };
   slices may depend on an allowed parent; parents do not depend on children, and sibling edges are
   opt-in.
 
-## File Structure & Naming
+## File Structure
 
 ### Directory Organization
 
@@ -118,13 +114,6 @@ src/
     │   └── Fixtures.ts  # Test data
     └── Schema.ts        # Global API schemas
 ```
-
-### File Naming Rules
-
-- **PascalCase** for TypeScript module filenames: `LedgerService.ts`, `Config.ts`, `Schema.ts`
-- Lowercase `index.ts` is the sole module-name exception and is reserved for slice entrypoints
-- Test and benchmark suffixes follow a PascalCase basename: `LedgerService.test.ts`, `LedgerTransaction.bench.ts`
-- **kebab-case** for feature directories: `ledger-accounts/`, `transaction-entries/`
 
 ### Test File Conventions
 
