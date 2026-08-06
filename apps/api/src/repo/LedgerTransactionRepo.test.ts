@@ -4,8 +4,8 @@ import { Pool } from "pg";
 import { retry } from "radash";
 import { TypeID } from "typeid-js";
 import { vi } from "vitest";
-import { Config } from "@/config";
-import { NotFoundError } from "@/errors";
+import { Config } from "@/Config";
+import { NotFoundError } from "@/Errors";
 import { LedgerTransactionEntity } from "@/repo/entities";
 import {
 	createLedgerEntity,

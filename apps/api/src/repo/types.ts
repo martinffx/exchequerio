@@ -6,11 +6,9 @@ import type { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo"
 import type { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import type { LedgerRepo } from "./LedgerRepo";
 import type { LedgerTransactionRepo } from "./LedgerTransactionRepo";
-import type { OrganizationRepo } from "./OrganizationRepo";
 import type * as schema from "./schema";
 
 type Repos = {
-	organizationRepo: OrganizationRepo;
 	ledgerRepo: LedgerRepo;
 	ledgerAccountRepo: LedgerAccountRepo;
 	ledgerAccountCategoryRepo: LedgerAccountCategoryRepo;
@@ -21,7 +19,7 @@ type Repos = {
 };
 
 type RepoPluginOptions = {
-	db?: DrizzleDB;
+	db: DrizzleDB;
 	repos?: Partial<Repos>;
 };
 

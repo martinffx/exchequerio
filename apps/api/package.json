@@ -4,8 +4,8 @@
 	"version": "0.0.0",
 	"type": "module",
 	"scripts": {
-		"dev": "dotenvx run -- tsx watch ./src/index.ts",
-		"start": "dotenvx run -- tsx ./src/index.ts",
+		"dev": "dotenvx run -- tsx watch ./src/Index.ts",
+		"start": "dotenvx run -- tsx ./src/Index.ts",
 		"test": "NODE_ENV=test dotenvx run -f .env.test -- vitest run",
 		"test:watch": "NODE_ENV=test dotenvx run -f .env.test -- vitest",
 		"test:ci": "NODE_ENV=test dotenvx run -f .env.test -- vitest run --coverage",

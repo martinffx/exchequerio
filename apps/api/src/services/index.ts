@@ -7,7 +7,6 @@ import { LedgerAccountSettlementService } from "./LedgerAccountSettlementService
 import { LedgerAccountStatementService } from "./LedgerAccountStatementService";
 import { LedgerService } from "./LedgerService";
 import { LedgerTransactionService } from "./LedgerTransactionService";
-import { OrganizationService } from "./OrganizationService";
 
 type Services = {
 	ledgerService: LedgerService;
@@ -17,7 +16,6 @@ type Services = {
 	ledgerAccountStatementService: LedgerAccountStatementService;
 	ledgerAccountBalanceMonitorService: LedgerAccountBalanceMonitorService;
 	ledgerTransactionService: LedgerTransactionService;
-	organizationService: OrganizationService;
 };
 
 type ServicePluginOpts = {
@@ -32,8 +30,6 @@ declare module "fastify" {
 
 const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 	async (server: FastifyInstance, opts: ServicePluginOpts) => {
-		const organizationService =
-			opts.services?.organizationService ?? new OrganizationService(server.repo.organizationRepo);
 		const ledgerService = opts.services?.ledgerService ?? new LedgerService(server.repo.ledgerRepo);
 		const ledgerAccountService =
 			opts.services?.ledgerAccountService ??
@@ -58,7 +54,6 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 			opts.services?.ledgerAccountBalanceMonitorService ??
 			new LedgerAccountBalanceMonitorService(server.repo.ledgerAccountBalanceMonitorRepo);
 		server.decorate("services", {
-			organizationService,
 			ledgerService,
 			ledgerAccountService,
 			ledgerAccountCategoryService,
@@ -78,5 +73,4 @@ export { LedgerAccountSettlementService } from "./LedgerAccountSettlementService
 export { LedgerAccountStatementService } from "./LedgerAccountStatementService";
 export { LedgerService } from "./LedgerService";
 export { LedgerTransactionService } from "./LedgerTransactionService";
-export { OrganizationService } from "./OrganizationService";
 export { ServicePlugin, type ServicePluginOpts };

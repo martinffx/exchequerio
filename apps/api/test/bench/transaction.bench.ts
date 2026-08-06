@@ -7,7 +7,7 @@ import { retry } from "radash";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TypeID } from "typeid-js";
 import { signJWT } from "@/auth";
-import { Config } from "@/config";
+import { Config } from "@/Config";
 import {
 	LedgerAccountEntity,
 	LedgerEntity,
@@ -29,7 +29,7 @@ import {
 	LedgerAccountSettlementsTable,
 	LedgerAccountSettlementEntriesTable,
 } from "@/repo/schema";
-import { buildServer } from "@/server";
+import { buildServer } from "@/Server";
 import type { DrizzleDB } from "@/repo/types";
 
 interface BenchmarkScenario {

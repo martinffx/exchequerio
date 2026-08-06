@@ -1,5 +1,5 @@
 import { retry } from "radash";
-import { ConflictError, NotFoundError } from "@/errors";
+import { ConflictError, NotFoundError } from "@/Errors";
 import {
 	type LedgerID,
 	LedgerTransactionEntity,
