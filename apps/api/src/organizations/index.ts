@@ -16,11 +16,7 @@ export type {
 	OrganizationUpdateRequest,
 	UpdateOrganizationInput,
 } from "./domain/Organization";
-export {
-	createOrganization,
-	parseOrganizationUpdateInput,
-	updateOrganization,
-} from "./domain/Organization";
+export { createOrganization, parseOrganizationUpdateInput } from "./domain/Organization";
 export type {
 	OrganizationAccessCapabilities,
 	OrganizationAccessDecision,

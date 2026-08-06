@@ -34,6 +34,10 @@ describe("ServerRuntime", () => {
 
 		const first = await runtime.runPromise(Probe);
 		const second = await runtime.runPromise(Probe);
+		const firstDisposal = runtime.dispose();
+		const secondDisposal = runtime.dispose();
+		expect(firstDisposal).toBe(secondDisposal);
+		await Promise.all([firstDisposal, secondDisposal]);
 		await runtime.dispose();
 
 		expect(first).toBe(second);

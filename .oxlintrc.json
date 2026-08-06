@@ -30,19 +30,34 @@
 		"boundaries/elements": [
 			{ "type": "tests", "pattern": "src/**/*.test.ts", "mode": "full" },
 			{ "type": "http", "pattern": "src/http/**/*", "mode": "full" },
+			{ "type": "organization-composition", "pattern": "src/organizations/index.ts", "mode": "full" },
+			{ "type": "organization-routes", "pattern": "src/organizations/OrganizationRoutes.ts", "mode": "full" },
+			{ "type": "organization-service", "pattern": "src/organizations/OrganizationService.ts", "mode": "full" },
+			{ "type": "organization-repo", "pattern": "src/organizations/OrganizationRepo.ts", "mode": "full" },
+			{ "type": "organization-domain", "pattern": "src/organizations/domain/**/*", "mode": "full" },
+			{ "type": "organization-capability", "pattern": "src/organizations/OrganizationIdGenerator.ts", "mode": "full" },
 			{
-				"type": "organizations",
-				"pattern": "organizations",
-				"basePattern": "src",
-				"mode": "folder"
+				"type": "organization-transport",
+				"pattern": [
+					"src/organizations/OrganizationAuthorization.ts",
+					"src/organizations/OrganizationHttpErrors.ts",
+					"src/organizations/OrganizationRateLimit.ts",
+					"src/organizations/OrganizationSchema.ts"
+				],
+				"mode": "full"
 			},
 			{ "type": "database", "pattern": "src/database/**/*", "mode": "full" },
 			{ "type": "runtime", "pattern": "src/runtime/**/*", "mode": "full" },
+			{ "type": "legacy-route-contracts", "pattern": "src/routes/schema.ts", "mode": "full" },
 			{
-				"type": "legacy",
-				"pattern": ["src/routes/**/*", "src/services/**/*", "src/repo/**/*"],
+				"type": "legacy-ledger-route-contracts",
+				"pattern": "src/routes/ledgers/schema.ts",
 				"mode": "full"
 			},
+			{ "type": "legacy-routes", "pattern": "src/routes/**/*", "mode": "full" },
+			{ "type": "legacy-services", "pattern": "src/services/**/*", "mode": "full" },
+			{ "type": "legacy-entities", "pattern": "src/repo/entities/**/*", "mode": "full" },
+			{ "type": "legacy-repo", "pattern": "src/repo/**/*", "mode": "full" },
 			{ "type": "config", "pattern": "src/Config.ts", "mode": "full" },
 			{ "type": "server", "pattern": "src/Server.ts", "mode": "full" }
 		]
@@ -128,29 +143,107 @@
 				"default": "disallow",
 				"rules": [
 					{ "from": ["tests"], "allow": ["*"] },
-					{ "from": ["legacy"], "allow": ["*"] },
-					{ "from": ["organizations"], "allow": ["organizations", "database", "http", "legacy"] },
-					{ "from": ["http"], "allow": ["http", "organizations"] },
-					{ "from": ["database"], "allow": ["database", "legacy"] },
-					{ "from": ["runtime"], "allow": ["config", "database", "organizations", "runtime"] },
+					{
+						"from": ["legacy-routes"],
+						"allow": [
+							"legacy-routes",
+							"legacy-route-contracts",
+							"legacy-ledger-route-contracts",
+							"legacy-services",
+							"legacy-entities",
+							"organization-composition"
+						]
+					},
+					{
+						"from": ["legacy-services"],
+						"allow": [
+							"legacy-services",
+							"legacy-repo",
+							"legacy-entities",
+							"legacy-route-contracts",
+							"legacy-ledger-route-contracts"
+						]
+					},
+					{
+						"from": ["legacy-entities"],
+						"allow": [
+							"legacy-entities",
+							"legacy-repo",
+							"legacy-route-contracts",
+							"legacy-ledger-route-contracts"
+						]
+					},
+					{
+						"from": ["legacy-repo"],
+						"allow": [
+							"legacy-repo",
+							"legacy-entities",
+							"legacy-route-contracts",
+							"legacy-ledger-route-contracts",
+							"config"
+						]
+					},
+					{ "from": ["legacy-route-contracts"], "disallow": ["*"] },
+					{
+						"from": ["legacy-ledger-route-contracts"],
+						"allow": ["legacy-route-contracts"]
+					},
+					{ "from": ["organization-domain"], "allow": ["organization-domain"] },
+					{ "from": ["organization-capability"], "allow": ["organization-domain"] },
+					{
+						"from": ["organization-repo"],
+						"allow": ["organization-domain", "database", "legacy-repo"]
+					},
+					{
+						"from": ["organization-service"],
+						"allow": ["organization-domain", "organization-capability", "organization-repo"]
+					},
+					{
+						"from": ["organization-transport"],
+						"allow": ["organization-domain", "http"]
+					},
+					{
+						"from": ["organization-routes"],
+						"allow": [
+							"organization-domain",
+							"organization-service",
+							"organization-transport",
+							"http"
+						]
+					},
+					{
+						"from": ["organization-composition"],
+						"allow": [
+							"organization-capability",
+							"organization-repo",
+							"organization-routes",
+							"organization-service",
+							"organization-transport"
+						]
+					},
+					{ "from": ["http"], "allow": ["http"] },
+					{ "from": ["database"], "allow": ["database", "legacy-repo"] },
+					{
+						"from": ["runtime"],
+						"allow": ["config", "database", "organization-composition", "runtime"]
+					},
 					{ "from": ["config"], "disallow": ["*"] },
 					{
 						"from": ["server"],
-						"allow": ["legacy", "config", "database", "organizations", "runtime"]
+						"allow": [
+							"legacy-routes",
+							"legacy-services",
+							"legacy-repo",
+							"config",
+							"database",
+							"organization-composition",
+							"runtime"
+						]
 					}
 				]
 			}
 		],
-		"boundaries/entry-point": [
-			"error",
-			{
-				"default": "allow",
-				"rules": [
-					{ "target": ["organizations"], "disallow": ["*"] },
-					{ "target": ["organizations"], "allow": ["index.ts", "OrganizationHttpErrors.ts"] }
-				]
-			}
-		]
+		"boundaries/entry-point": "error"
 	},
 	"overrides": [
 		{

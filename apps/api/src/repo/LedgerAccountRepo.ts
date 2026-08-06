@@ -2,7 +2,7 @@ import { and, desc, eq, getTableColumns, like } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "@/Errors";
 import type { LedgerAccountID, LedgerID } from "@/repo/entities/LedgerAccountEntity";
 import { LedgerAccountEntity } from "@/repo/entities/LedgerAccountEntity";
-import type { OrgID } from "@/services";
+import type { OrgID } from "@/repo/entities";
 import { getDBErrorCode, isDBError } from "./errors";
 import { LedgerAccountsTable, LedgersTable } from "./schema";
 import type { DrizzleDB } from "./types";

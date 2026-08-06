@@ -6,7 +6,7 @@ export default defineConfig({
 		globals: true,
 		environment: "node",
 		include: ["test/bench/**/*.bench.ts"],
-		globalSetup: "./test.setup.ts",
+		globalSetup: process.env.BENCH_CHECK === "true" ? undefined : "./test.setup.ts",
 		testTimeout: 120000, // 2 minutes per test (benchmarks take longer)
 		hookTimeout: 60000, // 1 minute for setup/teardown
 	},
