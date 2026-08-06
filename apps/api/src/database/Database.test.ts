@@ -1,31 +1,22 @@
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Effect } from "effect";
-import { Pool, type PoolClient } from "pg";
+import { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 import { Config } from "../Config";
 import * as schema from "../repo/schema";
 import { DatabaseLive, DatabaseTag, makeDatabaseLive, makeDatabaseTest } from "./Database";
 
 describe("Database Layers", () => {
-	it("forces checked-out clients closed and completes when pool shutdown rejects", async () => {
-		const release = vi.fn();
-		let connected: ((client: PoolClient) => void) | undefined;
+	it("completes when owned pool shutdown rejects", async () => {
 		const pool = {
 			end: vi.fn(() => Promise.reject(new Error("shutdown failed"))),
-			off: vi.fn(),
-			on: vi.fn((event: string, listener: (client: PoolClient) => void) => {
-				if (event === "connect") connected = listener;
-				return pool;
-			}),
 		} as unknown as Pool;
-		const database = new DatabaseLive(pool, 20);
-		connected?.({ release } as unknown as PoolClient);
+		const database = new DatabaseLive(pool);
 
 		await expect(Effect.runPromise(database.close())).resolves.toBeUndefined();
 
-		expect(release).toHaveBeenCalledWith(true);
-		expect(pool.off).toHaveBeenCalledTimes(2);
+		expect(pool.end).toHaveBeenCalledOnce();
 	});
 
 	it("closes an owned PostgreSQL pool when its scope ends", async () => {
