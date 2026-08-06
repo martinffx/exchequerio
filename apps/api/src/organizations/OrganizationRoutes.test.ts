@@ -37,6 +37,7 @@ const buildRouteServer = async (implementation: OrganizationService) => {
 	server.addHook("preHandler", async request => {
 		request.token = {
 			orgId: organizationId,
+			organizationId,
 			permissions: new Set(["organization:read", "organization:write"]),
 		} as never;
 	});
@@ -44,7 +45,7 @@ const buildRouteServer = async (implementation: OrganizationService) => {
 	await server.register(OrganizationRoutes, { prefix: "/api/organizations" });
 	await server.ready();
 	servers.push(server);
-	return server;
+	return { server, runtime };
 };
 
 afterEach(async () => {
@@ -54,7 +55,8 @@ afterEach(async () => {
 describe("OrganizationRoutes", () => {
 	it("creates through the Effect service with 201 and Location", async () => {
 		const implementation = service();
-		const server = await buildRouteServer(implementation);
+		const { server, runtime } = await buildRouteServer(implementation);
+		const runPromise = vi.spyOn(runtime, "runPromise");
 
 		const response = await server.inject({
 			method: "POST",
@@ -67,11 +69,12 @@ describe("OrganizationRoutes", () => {
 		expect(response.json()).toMatchObject({ id: organizationId, name: "Example" });
 		expect(response.json()).not.toHaveProperty("description");
 		expect(implementation.create).toHaveBeenCalledOnce();
+		expect(runPromise).toHaveBeenCalledOnce();
 	});
 
 	it("deletes through the Effect service with an empty 204 response", async () => {
 		const implementation = service();
-		const server = await buildRouteServer(implementation);
+		const { server } = await buildRouteServer(implementation);
 
 		const response = await server.inject({
 			method: "DELETE",
@@ -91,7 +94,7 @@ describe("OrganizationRoutes", () => {
 				organizationId,
 			} as never)
 		);
-		const server = await buildRouteServer(implementation);
+		const { server } = await buildRouteServer(implementation);
 
 		const response = await server.inject({
 			method: "GET",

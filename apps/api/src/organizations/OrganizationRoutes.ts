@@ -6,7 +6,7 @@ import type { InvalidOrganizationId } from "./domain/OrganizationErrors";
 import type { Organization } from "./domain/Organization";
 import { parseOrganizationUpdateInput } from "./domain/Organization";
 import { resolveOrganizationAccess, type OrganizationOperation } from "./OrganizationAuthorization";
-import type { OrganizationHttpError } from "./OrganizationHttpErrors";
+import { organizationHttpFailure, type OrganizationHttpError } from "./OrganizationHttpErrors";
 import {
 	BadRequestProblem,
 	ConflictProblem,
@@ -27,8 +27,6 @@ import type { OrganizationService } from "./OrganizationService";
 import { OrganizationServiceTag } from "./OrganizationService";
 import { runEffect } from "../http/RunEffect";
 
-const actorId = (request: FastifyRequest) => parseOrganizationId(request.token.orgId.toString());
-
 const targetId = (value: string): Effect.Effect<OrganizationId, InvalidOrganizationId> => {
 	const parsed = parseOrganizationId(value);
 	return parsed._tag === "Success" ? Effect.succeed(parsed.value) : Effect.fail(parsed.error);
@@ -44,17 +42,19 @@ const execute = async <A, E extends OrganizationHttpError>(
 		access: ReturnType<typeof resolveOrganizationAccess>
 	) => Effect.Effect<A, E>
 ): Promise<A | undefined> => {
-	const parsedActor = actorId(request);
-	const service = await request.server.runtime.runPromise(OrganizationServiceTag);
-	const effect: Effect.Effect<A, E | InvalidOrganizationId> =
-		parsedActor._tag === "Failure"
-			? Effect.fail(parsedActor.error)
-			: use(
-					service,
-					parsedActor.value,
-					resolveOrganizationAccess(request.token.permissions, operation)
-				);
-	const result = await runEffect(request, effect);
+	const effect = Effect.gen(function* () {
+		const service = yield* OrganizationServiceTag;
+		return yield* use(
+			service,
+			request.token.organizationId,
+			resolveOrganizationAccess(request.token.permissions, operation)
+		);
+	});
+	const result = await runEffect(request.server.runtime, request, effect, {
+		mapError: organizationHttpFailure,
+		operation: "Organization Effect",
+		defectDetail: "The Organization operation could not be completed",
+	});
 	if (result._tag === "Failure") {
 		await reply.status(result.status).send(result.problem);
 		return undefined;

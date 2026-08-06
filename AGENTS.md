@@ -18,8 +18,6 @@ Read only the documents relevant to the work:
 | Ledger API | `apps/api/` | [Architecture](./apps/api/docs/standards/architecture.md), [coding standards](./apps/api/docs/standards/coding.md), [ERD](./apps/api/docs/product/erd.md), and the relevant document under [`apps/api/docs/spec`](./apps/api/docs/spec/) |
 | Customer portal | `apps/web/` | [Architecture](./apps/web/docs/standards/architecture.md) and [coding standards](./apps/web/docs/standards/coding.md) |
 | Documentation site | `apps/docs/` | [Content standards](./apps/docs/docs/standards/coding.md) and [CONTEXT.md](./CONTEXT.md) for all Ledger terminology |
-| Shared product | `docs/product/` | [Product definition](./docs/product/product.md) and [roadmap](./docs/product/roadmap.md) |
-| Shared engineering | `docs/standards/` | [Architecture](./docs/standards/architecture.md) and [coding standards](./docs/standards/coding.md) |
 
 ## Agent workflow
 

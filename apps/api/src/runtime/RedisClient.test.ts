@@ -2,7 +2,22 @@ import { Effect } from "effect";
 import Redis from "ioredis";
 import { describe, expect, it } from "vitest";
 import { Config } from "../Config";
-import { RedisClientTag, makeRedisClientLive, makeRedisClientTest } from "./RedisClient";
+import {
+	RedisClientTag,
+	makeRedisClientLive,
+	makeRedisClientTest,
+	redisReconnectDelay,
+} from "./RedisClient";
+
+describe("redisReconnectDelay", () => {
+	it("keeps reconnecting with capped exponential equal jitter", () => {
+		expect([1, 2, 3, 4, 5, 6, 7].map(attempt => redisReconnectDelay(attempt, () => 0))).toEqual([
+			25, 50, 100, 200, 400, 800, 1000,
+		]);
+		expect(redisReconnectDelay(100, () => 0.999)).toBeLessThanOrEqual(2_000);
+		expect(redisReconnectDelay(100, () => 0.999)).toBeGreaterThan(0);
+	});
+});
 
 describe("RedisClient Layers", () => {
 	it("acquires lazily, reaches the real Redis service, and closes it", async () => {

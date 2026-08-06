@@ -5,6 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { TypeID } from "typeid-js";
 import { Config } from "./Config";
 import { ForbiddenError, UnauthorizedError } from "./Errors";
+import { parseOrganizationId, type OrganizationId } from "./organizations";
 import type { OrgID } from "./services";
 
 const Permissions = [
@@ -102,10 +103,15 @@ interface Token {
 
 class OrgToken {
 	public readonly orgId: OrgID;
+	public readonly organizationId: OrganizationId;
 	public readonly scope: Scope[];
 	public readonly permissions: ReadonlySet<Permission>;
 	constructor({ sub, scope }: Token) {
-		this.orgId = TypeID.fromString(sub);
+		const organizationId = parseOrganizationId(sub);
+		if (organizationId._tag === "Failure")
+			throw new Error("JWT subject is not a canonical Organization ID");
+		this.orgId = TypeID.fromString(sub) as OrgID;
+		this.organizationId = organizationId.value;
 		this.scope = scope;
 		this.permissions = RolePermissions[scope[0]] ?? new Set<Permission>();
 	}

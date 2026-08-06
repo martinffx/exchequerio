@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { ApiTestHarness } from "../testing/ApiTestHarness";
 import { createApiTestHarness } from "../testing/ApiTestHarness";
+import { TypeID } from "typeid-js";
 
 let harness: ApiTestHarness | undefined;
 
@@ -115,6 +116,53 @@ describe.sequential("Organizations HTTP to PostgreSQL", () => {
 		expect(ids).toContain(otherId);
 	});
 
+	it("enforces current-Organization mutation permissions on the assembled server", async () => {
+		const api = await useHarness();
+		const actorId = await api.createOrganization("Current mutation actor");
+		const otherId = await api.createOrganization("Other mutation target");
+		const authorization = `Bearer ${api.token(actorId, "org_admin")}`;
+
+		const create = await api.server.inject({
+			method: "POST",
+			url: "/api/organizations",
+			headers: { authorization },
+			payload: { name: "Denied create" },
+		});
+		expect(create.statusCode).toBe(403);
+
+		const updateOther = await api.server.inject({
+			method: "PUT",
+			url: `/api/organizations/${otherId}`,
+			headers: { authorization },
+			payload: { name: "Denied update" },
+		});
+		expect(updateOther.statusCode).toBe(403);
+
+		const deleteOther = await api.server.inject({
+			method: "DELETE",
+			url: `/api/organizations/${otherId}`,
+			headers: { authorization },
+		});
+		expect(deleteOther.statusCode).toBe(403);
+
+		const updateSelf = await api.server.inject({
+			method: "PUT",
+			url: `/api/organizations/${actorId}`,
+			headers: { authorization },
+			payload: { name: "Updated current actor" },
+		});
+		expect(updateSelf.statusCode).toBe(200);
+		expect(updateSelf.json()).toMatchObject({ id: actorId, name: "Updated current actor" });
+
+		const deleteSelf = await api.server.inject({
+			method: "DELETE",
+			url: `/api/organizations/${actorId}`,
+			headers: { authorization },
+		});
+		expect(deleteSelf.statusCode).toBe(204);
+		api.organizationIds.delete(actorId);
+	});
+
 	it("keeps duplicate names valid and rejects distinct transport errors", async () => {
 		const api = await useHarness();
 		const actorId = await api.createOrganization("Platform actor");
@@ -155,6 +203,16 @@ describe.sequential("Organizations HTTP to PostgreSQL", () => {
 					method: "GET",
 					url: "/api/organizations",
 					headers: { authorization: "Bearer invalid" },
+				})
+			).statusCode
+		).toBe(401);
+		const wrongSubjectAuthorization = `Bearer ${api.token(new TypeID("lgr").toString())}`;
+		expect(
+			(
+				await api.server.inject({
+					method: "GET",
+					url: "/api/organizations",
+					headers: { authorization: wrongSubjectAuthorization },
 				})
 			).statusCode
 		).toBe(401);

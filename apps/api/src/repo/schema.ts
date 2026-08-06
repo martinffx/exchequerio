@@ -39,19 +39,25 @@ const OrganizationsTable = pgTable("organizations_table", {
 });
 
 // Ledgers: Chart of accounts container
-const LedgersTable = pgTable("ledgers", {
-	id: text("id").primaryKey(),
-	organizationId: text("organization_id")
-		.notNull()
-		.references(() => OrganizationsTable.id),
-	name: text("name").notNull(),
-	description: text("description"),
-	currency: text("currency").notNull().default("USD"),
-	currencyExponent: integer("currency_exponent").notNull().default(2),
-	metadata: text("metadata"),
-	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
-	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-});
+const LedgersTable = pgTable(
+	"ledgers",
+	{
+		id: text("id").primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => OrganizationsTable.id),
+		name: text("name").notNull(),
+		description: text("description"),
+		currency: text("currency").notNull().default("USD"),
+		currencyExponent: integer("currency_exponent").notNull().default(2),
+		metadata: text("metadata"),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => ({
+		organizationIdx: index("idx_ledgers_organization").on(table.organizationId),
+	})
+);
 
 // Ledger Accounts: Individual accounts (merchant wallets, fee accounts, etc.)
 const LedgerAccountsTable = pgTable(
@@ -83,6 +89,7 @@ const LedgerAccountsTable = pgTable(
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
+		organizationIdx: index("idx_ledger_accounts_organization").on(table.organizationId),
 		uniqueNamePerLedger: uniqueIndex("unique_account_name_per_ledger").on(table.ledgerId, table.name),
 		postedBalanceIdx: index("idx_ledger_accounts_posted_balance").on(
 			table.ledgerId,
@@ -116,6 +123,7 @@ const LedgerTransactionsTable = pgTable(
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
+		organizationIdx: index("idx_ledger_transactions_organization").on(table.organizationId),
 		statusIdx: index("idx_ledger_transactions_status").on(table.status),
 		createdIdx: index("idx_ledger_transactions_created").on(table.created),
 		effectiveAtIdx: index("idx_ledger_transactions_effective_at").on(table.effectiveAt),
@@ -147,6 +155,7 @@ const LedgerTransactionEntriesTable = pgTable(
 	},
 	table => ({
 		// Indexes for performance
+		organizationIdx: index("idx_ledger_transaction_entries_organization").on(table.organizationId),
 		accountIdx: index("idx_ledger_transaction_entries_account").on(table.accountId),
 		transactionIdx: index("idx_ledger_transaction_entries_transaction").on(table.transactionId),
 		statusIdx: index("idx_ledger_transaction_entries_status").on(table.status),
