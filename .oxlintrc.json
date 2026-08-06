@@ -21,13 +21,30 @@
 		".docusaurus/"
 	],
 	"settings": {
+		"import/resolver": {
+			"typescript": { "alwaysTryTypes": true },
+			"eslint-import-resolver-node": {
+				"extensions": [".js", ".jsx", ".ts", ".tsx"]
+			}
+		},
 		"boundaries/elements": [
-			{ "type": "routes", "pattern": "src/routes/**/*", "mode": "full" },
-			{ "type": "services", "pattern": "src/services/**/*", "mode": "full" },
-			{ "type": "entities", "pattern": "src/repo/entities/**/*", "mode": "full" },
-			{ "type": "repo", "pattern": "src/repo/**/*", "mode": "full" },
-			{ "type": "config", "pattern": "src/config.ts", "mode": "full" },
-			{ "type": "server", "pattern": "src/server.ts", "mode": "full" }
+			{ "type": "tests", "pattern": "src/**/*.test.ts", "mode": "full" },
+			{ "type": "http", "pattern": "src/http/**/*", "mode": "full" },
+			{
+				"type": "organizations",
+				"pattern": "organizations",
+				"basePattern": "src",
+				"mode": "folder"
+			},
+			{ "type": "database", "pattern": "src/database/**/*", "mode": "full" },
+			{ "type": "runtime", "pattern": "src/runtime/**/*", "mode": "full" },
+			{
+				"type": "legacy",
+				"pattern": ["src/routes/**/*", "src/services/**/*", "src/repo/**/*"],
+				"mode": "full"
+			},
+			{ "type": "config", "pattern": "src/Config.ts", "mode": "full" },
+			{ "type": "server", "pattern": "src/Server.ts", "mode": "full" }
 		]
 	},
 	"rules": {
@@ -110,17 +127,36 @@
 			{
 				"default": "disallow",
 				"rules": [
-					{ "from": ["routes"], "allow": ["services"] },
-					{ "from": ["services"], "allow": ["services", "repo", "entities"] },
-					{ "from": ["entities"], "allow": ["entities"] },
-					{ "from": ["repo"], "allow": ["repo", "entities"] },
+					{ "from": ["tests"], "allow": ["*"] },
+					{ "from": ["legacy"], "allow": ["*"] },
+					{ "from": ["organizations"], "allow": ["organizations", "database", "http", "legacy"] },
+					{ "from": ["http"], "allow": ["http", "organizations"] },
+					{ "from": ["database"], "allow": ["database", "legacy"] },
+					{ "from": ["runtime"], "allow": ["config", "database", "organizations", "runtime"] },
 					{ "from": ["config"], "disallow": ["*"] },
-					{ "from": ["server"], "allow": ["routes", "services", "config"] }
+					{
+						"from": ["server"],
+						"allow": ["legacy", "config", "database", "organizations", "runtime"]
+					}
+				]
+			}
+		],
+		"boundaries/entry-point": [
+			"error",
+			{
+				"default": "allow",
+				"rules": [
+					{ "target": ["organizations"], "disallow": ["*"] },
+					{ "target": ["organizations"], "allow": ["index.ts", "OrganizationHttpErrors.ts"] }
 				]
 			}
 		]
 	},
 	"overrides": [
+		{
+			"files": ["apps/api/src/**/*.test.ts"],
+			"rules": { "boundaries/entry-point": "off" }
+		},
 		{
 			"files": ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
 			"env": { "browser": true }

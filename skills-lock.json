@@ -11,7 +11,7 @@
       "source": "martinffx/typescript-skills",
       "sourceType": "github",
       "skillPath": "skills/typescript-build-tools/SKILL.md",
-      "computedHash": "7fafd20ee25350c85452cc84f80942d16fe90918741af9dc5e8e12bed7f5eade"
+      "computedHash": "df0b207d0117b9208bd6b4a460799db6e904d6f561a4498a58761357c446b9c8"
     },
     "typescript-drizzle-orm": {
       "source": "martinffx/typescript-skills",
@@ -23,7 +23,7 @@
       "source": "martinffx/typescript-skills",
       "sourceType": "github",
       "skillPath": "skills/typescript-effect-ts/SKILL.md",
-      "computedHash": "7660e68f0cb80428943febb41931f4b576cd518a31f367084c25558fa1d57c3d"
+      "computedHash": "2af8d8c00e4e35543c2d114501edc3651c5c6dfb24881292431bdb32c6bb30fd"
     },
     "typescript-fastify": {
       "source": "martinffx/typescript-skills",

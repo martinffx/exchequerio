@@ -130,6 +130,54 @@ Steps 05 through 08 may be implemented concurrently only after step 04 is integr
 
 ## Shared architecture constraints
 
+### Module layout and naming
+
+The completed API uses domain-rooted vertical slices with only the directories that communicate a
+real ownership or purity boundary:
+
+```text
+apps/api/src/
+  organizations/
+    domain/
+    index.ts
+  assets/
+    domain/
+    index.ts
+  ledgers/
+    domain/
+    index.ts
+    accounts/
+      domain/
+      index.ts
+      settlements/
+      statements/
+      balance-monitors/
+    transactions/
+    categories/
+  database/
+  runtime/
+  http/
+```
+
+- `domain/` is the mandatory pure-domain boundary inside each resource family.
+- Application services, repository capabilities, live implementations, HTTP adapters, row
+  decoders, and test Layers live at the owning slice root. Do not create `application/` or
+  `adapters/` directories.
+- Each migrated slice has a lowercase `index.ts` that exports its public contract and composed
+  Layer. Concrete Live classes, persistence rows, and internal wiring remain private.
+- Cross-slice imports use the target slice's `index.ts`. A child slice may import an explicitly
+  allowed parent; a parent must not import its child. Sibling dependencies require an explicit
+  boundary edge, while runtime or route composition coordinates otherwise independent slices.
+- Ledger Account Settlements, Statements, and Balance Monitors live under `ledgers/accounts/`.
+  Transactions and Categories are direct Ledger children. Transaction Entries remain part of the
+  Transaction domain and do not receive an independent resource slice.
+- Assets remain top-level because an Organization owns reusable Asset definitions across Ledgers.
+- Directories use kebab-case. Every TypeScript module uses a PascalCase basename except the
+  conventional slice entrypoint `index.ts`; tests retain suffixes such as
+  `OrganizationService.test.ts` and `OrganizationRoutes.integration.test.ts`.
+- `Live` and `Test` suffixes are reserved for Effect Layer implementations. Files are named by
+  responsibility and do not use an `.effect.ts` suffix.
+
 ### Functional core
 
 - Domain invariants and state transitions are pure functions.
@@ -143,8 +191,9 @@ Steps 05 through 08 may be implemented concurrently only after step 04 is integr
 
 ### Effect application layer
 
-- Target stable Effect 3; the initial expected dependency is `effect@^3.22.1`.
-- Define repository capabilities and application services with `Context.Tag`.
+- Target Effect 4 beta. The API tracks the `beta` distribution tag, while the lockfile pins the
+  resolved beta version for reproducible installs.
+- Define repository capabilities and application services with Effect 4 `Context.Service`.
 - Compose live and test implementations with `Layer`.
 - Service functions return `Effect<Success, DomainError | InfrastructureError, Requirements>`.
 - Represent expected failures as tagged errors in the Effect error channel.
@@ -239,6 +288,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
+- Place the migrated slice under `apps/api/src/organizations/` using the shared flat slice layout.
 - Add Effect and establish the managed runtime, service Tags, Layers, and tagged error mapping.
 - Add `.worktrees/` to `.gitignore`.
 - Establish the standard directory and module boundaries followed by later steps.
@@ -265,6 +315,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
+- Place the migrated slice at `apps/api/src/ledgers/`.
 - Migrate all five Ledger endpoints using step 01 as the reference implementation.
 - Correct create versus update semantics; updating a missing Ledger must not create it.
 - Enforce Organization tenancy consistently without revealing cross-Organization existence.
@@ -293,6 +344,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
+- Place the migrated slice at `apps/api/src/ledgers/accounts/`.
 - Migrate all five Account endpoints to Effect.
 - Introduce the shared Currency, exponent, Minor Units, Normal Balance, and Account ID value types.
 - Add immutable `currencyCode` and `minorUnitExponent` fields to Ledger Accounts.
@@ -319,6 +371,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
+- Place the migrated slice at `apps/api/src/ledgers/transactions/`.
 - Migrate all six Transaction endpoints to Effect.
 - Model Pending, Posted, and Voided as an exhaustive functional state machine.
 - Permit several Entries for one Account.
@@ -350,6 +403,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
+- Place the migrated slice at `apps/api/src/ledgers/categories/`.
 - Migrate all nine Category endpoints to Effect.
 - Enforce Organization and Ledger scope for Category records, Account membership, and parent links.
 - Prevent self-links, two-node cycles, longer cycles, and concurrent cycle creation.
@@ -375,6 +429,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
+- Place the migrated slice at `apps/api/src/ledgers/accounts/settlements/`.
 - Migrate all eight Settlement endpoints to Effect.
 - Enforce Organization, Ledger, and nested Settlement path scope.
 - Require the settled and contra Accounts to use the same Currency and exponent.
@@ -403,6 +458,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
+- Place the migrated slice at `apps/api/src/ledgers/accounts/statements/`.
 - Migrate both Statement endpoints to Effect.
 - Enforce Organization, Ledger, Account, and nested path scope.
 - Validate non-empty periods with an inclusive lower bound and exclusive upper bound.
@@ -429,6 +485,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
+- Place the migrated slice at `apps/api/src/ledgers/accounts/balance-monitors/`.
 - Migrate all five Balance Monitor endpoints to Effect.
 - Enforce Organization, Ledger, Account, and nested path scope.
 - Persist the complete typed condition set in Account Minor Units.
@@ -457,6 +514,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
+- Place the migrated slice at `apps/api/src/assets/`.
 - Add Organization-owned Asset persistence and public Asset CRUD endpoints using the established
   Effect architecture.
 - Give every Asset an immutable Exchequer ID and immutable Minor Unit Exponent.

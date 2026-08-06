@@ -4,7 +4,7 @@ import {
 	InternalServerError,
 	NotFoundError,
 	ServiceUnavailableError,
-} from "@/errors";
+} from "@/Errors";
 import { type DBError, getDBErrorCode, handleDBError, isDBError } from "./errors";
 
 describe("isDBError", () => {

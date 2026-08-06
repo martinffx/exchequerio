@@ -107,6 +107,7 @@ As an API maintainer, I want a complete, testable reference slice so that subseq
 - Effect 4 beta is the effect system. The API tracks the `beta` distribution tag, while the lockfile pins the resolved beta for reproducible installs. The runtime is shared rather than constructed per request.
 - PostgreSQL is required for API integration tests. Redis/Valkey is required for rate-limit integration tests.
 - Tests follow stub-driven TDD at the narrowest useful layer, with live infrastructure reserved for adapter and full-stack behavior.
+- Directories use kebab-case and every TypeScript module uses a PascalCase basename. Tests retain conventional suffixes after a PascalCase basename.
 - Validation and CI run under the repository's supported Node 24 toolchain.
 - Unrelated work in the branch or worktree must be preserved.
 
@@ -153,21 +154,31 @@ Drizzle/PostgreSQL adapter
 
 "Effect" is not a separate business layer. The domain is the pure vocabulary and rules used by the application service. The service represents application use cases: it receives the authenticated actor, applies access policy, orchestrates ID generation and persistence, and returns an Effect describing its dependencies and typed failures.
 
-The physical layout is resource-first:
+The physical layout is a flat vertical slice with a dedicated pure-domain boundary:
 
 ```text
 apps/api/src/organizations/
   domain/
-  application/
-  adapters/http/
-  adapters/postgres/
+    Organization.ts
+    OrganizationId.ts
+    OrganizationAccess.ts
+    OrganizationErrors.ts
+  OrganizationService.ts
+  OrganizationRepo.ts
+  OrganizationIdGenerator.ts
+  OrganizationRoutes.ts
+  OrganizationSchema.ts
+  OrganizationAuthorization.ts
+  OrganizationHttpErrors.ts
+  OrganizationRateLimit.ts
+  index.ts
 
 apps/api/src/database/
 apps/api/src/runtime/
 apps/api/src/http/
 ```
 
-Central route registration remains under the existing routes entry point. Files are named by responsibility rather than using an `.effect.ts` suffix. `Live` and `Test` suffixes are reserved for Layer implementations.
+`domain/` remains separate because it is a meaningful purity boundary. All other application, HTTP, PostgreSQL, row-decoding, and ID-generation modules live at the slice root; the slice does not create `application/` or `adapters/` directories. Each responsibility-named capability module co-locates its contract, Effect tag, concrete implementation, and production or test Layers. The lowercase `index.ts` exports the public Organization contract and composed Layer while concrete Live classes and row codecs remain private. Cross-slice imports use this entrypoint. Every other TypeScript module uses a PascalCase basename and files are named by responsibility rather than using an `.effect.ts` or `Live` suffix.
 
 ### Functional core
 
@@ -183,7 +194,7 @@ The domain represents an absent description as `undefined`. PostgreSQL `null` is
 
 ### Application services
 
-`OrganizationService`, `OrganizationRepository`, and `OrganizationIdGenerator` are Effect 4 `Context.Service` capabilities.
+`OrganizationService`, `OrganizationRepo`, and `OrganizationIdGenerator` are constructor-injected classes whose methods return Effects. Separate Effect 4 `Context.Service` tags and small Layers wire their instances into the runtime.
 
 The service exposes list, get, create, update, and delete use cases. Each use case receives the actor Organization ID even when a platform permission permits cross-tenant access. The HTTP adapter supplies an access mode derived from verified permissions; the service applies the corresponding pure access rule.
 
@@ -210,9 +221,9 @@ All promises are captured with Effect constructors so rejected operations remain
 
 `buildServer` creates one `ManagedRuntime` containing the live configuration, PostgreSQL pool, Drizzle database, Redis client, Organization repository, ID generator, and Organization service Layers.
 
-The production PostgreSQL Layer owns its pool. A test Layer may wrap an externally supplied database without taking ownership. During the transition, the legacy repository plugin receives the runtime-owned Drizzle database and stops creating or closing another pool. This is an infrastructure bridge only; unrelated repositories and services retain their current interfaces and behavior.
+The production PostgreSQL Layer owns its pool. Its finalizer waits for graceful closure up to a bounded deadline, force-releases checked-out clients when needed, logs cleanup failures, and completes without failing shutdown. A test Layer may wrap an externally supplied database without taking ownership. During the transition, the legacy repository plugin receives the runtime-owned Drizzle database and stops creating or closing another pool. This is an infrastructure bridge only; unrelated repositories and services retain their current interfaces and behavior.
 
-The Redis Layer owns one `ioredis` client configured from `REDIS_URL` with bounded connection timeout and command retries. Its finalizer attempts graceful shutdown and disconnects without leaving Fastify shutdown hanging. Fastify's `onClose` hook disposes the managed runtime once, after request handling has stopped. The existing artificial repository shutdown delay is removed.
+The Redis Layer owns one `ioredis` client configured from `REDIS_URL` with bounded connection timeout and command retries. Its finalizer attempts graceful shutdown and disconnects without leaving Fastify shutdown hanging. Fastify's `onClose` hook shares one disposal promise so concurrent close paths dispose the managed runtime once, after request handling has stopped. The existing artificial repository shutdown delay is removed.
 
 ### HTTP adapter
 
@@ -229,13 +240,13 @@ Handlers do not call Drizzle or repositories directly. They translate transport 
 
 The access matrix is:
 
-| Operation | Platform permission | Current-Organization permission | Current-Organization constraint |
-| --- | --- | --- | --- |
-| List | `organization:read` | `my:organization:read` | SQL filter to actor ID |
-| Get | `organization:read` | `my:organization:read` | Target must equal actor ID |
-| Create | `organization:write` | None | Platform only |
-| Update | `organization:write` | `my:organization:write` | Target must equal actor ID |
-| Delete | `organization:write` | `my:organization:write` | Target must equal actor ID |
+| Operation | Platform permission  | Current-Organization permission | Current-Organization constraint |
+| --------- | -------------------- | ------------------------------- | ------------------------------- |
+| List      | `organization:read`  | `my:organization:read`          | SQL filter to actor ID          |
+| Get       | `organization:read`  | `my:organization:read`          | Target must equal actor ID      |
+| Create    | `organization:write` | None                            | Platform only                   |
+| Update    | `organization:write` | `my:organization:write`         | Target must equal actor ID      |
+| Delete    | `organization:write` | `my:organization:write`         | Target must equal actor ID      |
 
 Platform permission wins when both forms are present. Target mismatches are `403` regardless of whether the requested Organization exists, preventing existence disclosure.
 
@@ -243,18 +254,18 @@ Platform permission wins when both forms are present. Target mismatches are `403
 
 Expected failures are discriminated tagged errors:
 
-| Error | HTTP status | Notes |
-| --- | --- | --- |
-| Invalid Organization ID or request | `400` | Safe validation detail |
-| Authentication failure | `401` | Existing JWT transport behavior |
-| Access denied | `403` | No target-existence disclosure |
-| Organization not found | `404` | Allowed lookup or mutation found no row |
-| Organization has dependents | `409` | Only a real delete foreign-key violation |
-| Rate limit exceeded | `429` | Includes `Retry-After` |
-| Repository unavailable | `503` | Retryable PostgreSQL failure |
-| Rate-limit store unavailable | `503` | Redis failure; fail closed |
-| Persistence decoding failure | `500` | Sanitized, non-retryable response |
-| Unexpected persistence error or defect | `500` | Sanitized response and server-side logging |
+| Error                                  | HTTP status | Notes                                      |
+| -------------------------------------- | ----------- | ------------------------------------------ |
+| Invalid Organization ID or request     | `400`       | Safe validation detail                     |
+| Authentication failure                 | `401`       | Existing JWT transport behavior            |
+| Access denied                          | `403`       | No target-existence disclosure             |
+| Organization not found                 | `404`       | Allowed lookup or mutation found no row    |
+| Organization has dependents            | `409`       | Only a real delete foreign-key violation   |
+| Rate limit exceeded                    | `429`       | Includes `Retry-After`                     |
+| Repository unavailable                 | `503`       | Retryable PostgreSQL failure               |
+| Rate-limit store unavailable           | `503`       | Redis failure; fail closed                 |
+| Persistence decoding failure           | `500`       | Sanitized, non-retryable response          |
+| Unexpected persistence error or defect | `500`       | Sanitized response and server-side logging |
 
 Problem responses use the API's RFC 7807 representation and include the request URL as `instance` and Fastify request ID as `traceId`. Organization context may be included when it is safe. Error mapping is exhaustive for the migrated Effect error union. Unrecognized defects remain the responsibility of the global error boundary.
 
@@ -270,10 +281,10 @@ exchequer:<environment>:organizations:<actor-organization-id>
 
 Configuration is owned by the API:
 
-| Setting | Requirement | Default |
-| --- | --- | --- |
-| `REDIS_URL` | Required | None |
-| `ORGANIZATION_RATE_LIMIT_MAX` | Positive integer | `1000` |
+| Setting                             | Requirement      | Default |
+| ----------------------------------- | ---------------- | ------- |
+| `REDIS_URL`                         | Required         | None    |
+| `ORGANIZATION_RATE_LIMIT_MAX`       | Positive integer | `1000`  |
 | `ORGANIZATION_RATE_LIMIT_WINDOW_MS` | Positive integer | `60000` |
 
 Allowed responses include limit, remaining, and reset headers. Exceeded responses additionally include `Retry-After` and an RFC 7807 `429` body. Redis storage errors are not skipped: the pre-handler translates them to a tagged rate-limit-store-unavailable failure and returns a sanitized `503`. Other API routes remain available when Redis is unavailable.
@@ -286,11 +297,11 @@ The endpoint paths and JSON field names remain stable.
 
 ```json
 {
-  "id": "org_...",
-  "name": "Example Organization",
-  "description": "Optional description",
-  "created": "2026-08-04T10:00:00.000Z",
-  "updated": "2026-08-04T10:00:00.000Z"
+	"id": "org_...",
+	"name": "Example Organization",
+	"description": "Optional description",
+	"created": "2026-08-04T10:00:00.000Z",
+	"updated": "2026-08-04T10:00:00.000Z"
 }
 ```
 
@@ -318,8 +329,8 @@ The endpoint paths and JSON field names remain stable.
 
 ```json
 {
-  "name": "Example Organization",
-  "description": "Optional description"
+	"name": "Example Organization",
+	"description": "Optional description"
 }
 ```
 
@@ -333,8 +344,8 @@ The endpoint paths and JSON field names remain stable.
 
 ```json
 {
-  "name": "Updated Organization",
-  "description": "Optional replacement"
+	"name": "Updated Organization",
+	"description": "Optional replacement"
 }
 ```
 
@@ -367,34 +378,47 @@ No schema or migration is required. The existing Organization table remains auth
 
 ## Testing Strategy
 
+Each test owns one boundary contract. A scenario is repeated across layers only when the
+lower test proves adapter translation and the upper test proves externally observable
+composition. Full-stack HTTP tests own public CRUD behavior; lower layers do not replay the
+same CRUD matrix.
+
 ### Pure domain tests
 
-- Canonical and malformed Organization ID parsing.
-- Platform-versus-current access decisions.
-- Cross-tenant denial.
-- Update patch behavior for supplied and omitted descriptions.
-- Domain-to-DTO normalization where appropriate.
+- Table-driven canonical, malformed, wrong-prefix, and non-canonical Organization ID parsing.
+- The complete platform/current capability truth table, target access, and list-scope decisions.
+- Update behavior for supplied, omitted, and explicitly undefined descriptions.
+- Immutability and actual non-UTC-to-UTC normalization without retesting Luxon behavior.
 
 ### Application Layer tests
 
-- Provide test repository and ID-generator Layers rather than class mocks.
-- Verify each use case's orchestration, SQL scope intent, absence handling, and tagged failures.
-- Verify current-Organization target checks occur before repository lookup.
+- Provide typed `vi.mocked` repository and ID-generator implementations through `Layer.succeed` at the capability boundary.
+- Verify only application orchestration: repository arguments, SQL scope intent, absence
+  handling, generated IDs, and operation-specific error eligibility.
+- Verify denied and cross-Organization access occurs before repository or ID-generator calls.
+- Use one representative infrastructure failure per operation rather than a cross-product of
+  every repository failure and use case.
 
 ### PostgreSQL adapter tests
 
-- Run against PostgreSQL using unique TypeIDs.
-- Cover deterministic list ordering, tenant filtering, create returning, update omission behavior, missing rows, safe row decoding, and delete returning.
-- Create a real dependent Ledger row and verify PostgreSQL `23503` maps to Organization-has-dependents.
+- Run SQL-contract tests against PostgreSQL using isolated unique TypeIDs.
+- Cover deterministic ordering, tenant filtering and pagination, update omission behavior,
+  safe row decoding, and PostgreSQL error translation.
+- Create a real dependent Ledger row and verify PostgreSQL `23503` maps to
+  Organization-has-dependents; the HTTP suite separately verifies that error maps to `409`.
+- Do not terminate backends, deliberately abort transactions, or rely on global table offsets.
 - Clean up rows in reverse dependency order; do not truncate shared tables.
 
 ### Full-stack HTTP-to-PostgreSQL tests
 
 Create a reusable harness that starts a real Fastify server instance through `buildServer`, supplies the live managed runtime, signs JWTs, and uses Fastify `inject` to execute the complete HTTP lifecycle. Services and repositories are not mocked.
 
+The ordinary HTTP suite uses an externally owned Redis test Layer. Real Redis is reserved for
+the distributed rate-limit suite.
+
 Cover:
 
-- All five success paths and their response codes, bodies, and headers.
+- One assembled create/get/list/update/delete journey and the five public success contracts.
 - Platform and current-Organization permission paths.
 - Platform precedence when both permissions are present.
 - Tenant-filtered list results and cross-tenant `403` before existence lookup.
@@ -415,8 +439,10 @@ Cover:
 
 ### Lifecycle and regression tests
 
-- Verify one runtime per server and one-time disposal of PostgreSQL and Redis resources.
-- Verify injected test resources are not incorrectly closed by production ownership logic.
+- Verify one runtime per server, startup-failure cleanup, and one-time disposal using
+  deterministic probes without wall-clock assertions.
+- Verify injected test resources are not incorrectly closed by production ownership logic,
+  with at most one real-resource connectivity smoke test per infrastructure boundary.
 - Run focused Organization tests, the complete API suite, API format/lint/type checks, and full CI under Node 24.
 
 ## Trade-offs
@@ -429,9 +455,9 @@ The selected approach makes application services and repository capabilities nat
 
 Migrating every resource at once would remove the temporary dual architecture but greatly expand risk and violate the Organization scope. The shared runtime and database bridge deliberately support gradual resource-by-resource adoption.
 
-### Resource-first versus layer-first layout
+### Flat vertical slice versus layer directories
 
-Grouping domain, application, and adapters under `organizations/` keeps the complete slice discoverable and gives later resources a repeatable template. Global layer-first folders would scatter each resource across the codebase.
+Keeping the domain boundary and every other module at the `organizations/` root makes the complete slice discoverable and gives later resources a repeatable template. `application/` and `adapters/` directories would add navigation depth without adding an ownership boundary. Each future slice adds its own public `index.ts` and explicit dependency edges when migrated; child-to-parent dependencies may be allowed, while parent-to-child and sibling dependencies remain disallowed unless explicitly designed.
 
 ### Redis versus in-memory rate limiting
 

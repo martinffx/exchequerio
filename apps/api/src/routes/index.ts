@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
+import { OrganizationRoutes } from "@/organizations";
 import { LedgerRouterPlugin } from "./ledgers";
-import { OrganizationRoutes } from "./OrganizationRoutes";
 
 const RouterPlugin: FastifyPluginAsync = async server => {
 	server.addHook("preHandler", server.auth([server.verifyJWT]));

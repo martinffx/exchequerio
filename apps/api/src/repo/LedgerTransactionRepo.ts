@@ -4,7 +4,7 @@ import {
 	InternalServerError,
 	NotFoundError,
 	ServiceUnavailableError,
-} from "@/errors";
+} from "@/Errors";
 import {
 	LedgerAccountEntity,
 	type LedgerID,

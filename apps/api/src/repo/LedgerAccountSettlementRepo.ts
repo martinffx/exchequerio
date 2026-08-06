@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
-import { ConflictError, NotFoundError } from "@/errors";
+import { ConflictError, NotFoundError } from "@/Errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities/LedgerAccountSettlementEntity";
 import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { SettlementStatus } from "@/routes/ledgers/schema";

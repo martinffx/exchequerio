@@ -1,6 +1,6 @@
 import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
-import { ConflictError, NotFoundError } from "@/errors";
+import { ConflictError, NotFoundError } from "@/Errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities/LedgerAccountSettlementEntity";
 import { LedgerEntity } from "@/repo/entities/LedgerEntity";
 import type {

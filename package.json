@@ -27,6 +27,7 @@
 	},
 	"devDependencies": {
 		"@typescript/native": "npm:typescript@7.0.2",
+		"eslint-import-resolver-typescript": "^4.4.5",
 		"eslint-plugin-boundaries": "^4.2.0",
 		"oxfmt": "0.61.0",
 		"oxlint": "1.76.0",

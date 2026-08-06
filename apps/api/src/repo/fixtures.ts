@@ -1,8 +1,9 @@
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { DateTime } from "luxon";
 import { Pool } from "pg";
 import { TypeID } from "typeid-js";
-import { Config } from "@/config";
+import { Config } from "@/Config";
 import {
 	LedgerAccountEntity,
 	LedgerEntity,
@@ -27,12 +28,18 @@ import { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
 import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import { LedgerRepo } from "./LedgerRepo";
 import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
-import { OrganizationRepo } from "./OrganizationRepo";
 import * as schema from "./schema";
 import type { Repos } from "./types";
 
-let repos: Repos | undefined;
-function getRepos(): Repos {
+interface OrganizationFixtureRepo {
+	createOrganization(record: OrganizationEntity): Promise<OrganizationEntity>;
+	deleteOrganization(id: TypeID<"org">): Promise<void>;
+}
+
+type TestRepos = Repos & { organizationRepo: OrganizationFixtureRepo };
+
+let repos: TestRepos | undefined;
+function getRepos(): TestRepos {
 	if (repos !== undefined) {
 		return repos;
 	}
@@ -41,7 +48,23 @@ function getRepos(): Repos {
 	const pool = new Pool({ connectionString: config.databaseUrl, max: 1 });
 	const db = drizzle(pool, { schema });
 
-	const organizationRepo = new OrganizationRepo(db);
+	const organizationRepo: OrganizationFixtureRepo = {
+		createOrganization: async record => {
+			await db.insert(schema.OrganizationsTable).values({
+				id: record.id.toString(),
+				name: record.name,
+				description: record.description,
+				created: record.created?.toJSDate(),
+				updated: record.updated?.toJSDate(),
+			});
+			return record;
+		},
+		deleteOrganization: async id => {
+			await db
+				.delete(schema.OrganizationsTable)
+				.where(eq(schema.OrganizationsTable.id, id.toString()));
+		},
+	};
 	const ledgerRepo = new LedgerRepo(db);
 	const ledgerAccountRepo = new LedgerAccountRepo(db);
 	const ledgerAccountCategoryRepo = new LedgerAccountCategoryRepo(db);

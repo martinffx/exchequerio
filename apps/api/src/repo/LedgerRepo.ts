@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import { ConflictError, NotFoundError } from "@/errors";
+import { ConflictError, NotFoundError } from "@/Errors";
 import type { LedgerID, OrgID } from "@/services";
 import { LedgerEntity } from "@/services";
 import { getDBErrorCode, isDBError } from "./errors";

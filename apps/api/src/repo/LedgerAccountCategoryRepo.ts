@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
-import { ConflictError, NotFoundError } from "@/errors";
+import { ConflictError, NotFoundError } from "@/Errors";
 import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
 import { getDBErrorCode, isDBError } from "./errors";

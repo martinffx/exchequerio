@@ -2,10 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { signJWT } from "@/auth";
-import { ConflictError, NotFoundError } from "@/errors";
+import { signJWT } from "@/Auth";
+import { ConflictError, NotFoundError } from "@/Errors";
 import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/repo/entities/types";
-import { buildServer } from "@/server";
+import { buildServer } from "@/Server";
 import type { LedgerAccountBalanceMonitorService } from "@/services";
 import type {
 	BadRequestErrorResponse,
