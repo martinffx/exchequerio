@@ -4,6 +4,8 @@ packages:
 allowBuilds:
   core-js: false
   esbuild: true
+  msgpackr-extract: false
+  unrs-resolver: false
 
 overrides:
   tsx: "4.20.6"

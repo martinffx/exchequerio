@@ -1,6 +1,6 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
-import { ConflictError } from "@/errors";
+import { ConflictError } from "@/Errors";
 import type { LedgerTransactionsTable } from "@/repo/schema";
 import type {
 	BalanceStatus,

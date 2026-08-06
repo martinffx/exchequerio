@@ -21,12 +21,13 @@
 		"format": "turbo format",
 		"format:check": "turbo format:check",
 		"types": "turbo types",
-		"check": "turbo run format:check lint types",
-		"ci": "pnpm run docker:up && turbo build format:check lint types test:ci",
-		"ci:gh": "turbo build format:check lint types test:ci"
+		"check": "turbo run format:check lint types bench:check",
+		"ci": "pnpm run docker:up && turbo build format:check lint types bench:check test:ci",
+		"ci:gh": "turbo build format:check lint types bench:check test:ci"
 	},
 	"devDependencies": {
 		"@typescript/native": "npm:typescript@7.0.2",
+		"eslint-import-resolver-typescript": "^4.4.5",
 		"eslint-plugin-boundaries": "^4.2.0",
 		"oxfmt": "0.61.0",
 		"oxlint": "1.76.0",

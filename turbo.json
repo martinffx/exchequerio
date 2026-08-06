@@ -17,6 +17,10 @@
 			"outputs": ["coverage/**"],
 			"cache": true
 		},
+		"bench:check": {
+			"outputs": [],
+			"cache": true
+		},
 		"lint": {
 			"outputs": [],
 			"cache": true

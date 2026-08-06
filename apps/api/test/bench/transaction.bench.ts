@@ -1,35 +1,19 @@
 import autocannon from "autocannon";
-import { and, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { FastifyInstance } from "fastify";
 import { Pool } from "pg";
 import { retry } from "radash";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, it } from "vitest";
 import { TypeID } from "typeid-js";
-import { signJWT } from "@/auth";
-import { Config } from "@/config";
-import {
-	LedgerAccountEntity,
-	LedgerEntity,
-	OrganizationEntity,
-	type LedgerID,
-	type OrgID,
-} from "@/repo/entities";
+import { signJWT } from "@/Auth";
+import { Config } from "@/Config";
+import { LedgerAccountEntity, LedgerEntity, type LedgerID, type OrgID } from "@/repo/entities";
 import { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
 import { LedgerRepo } from "@/repo/LedgerRepo";
-import { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
-import { OrganizationRepo } from "@/repo/OrganizationRepo";
 import * as schema from "@/repo/schema";
-import {
-	LedgerAccountsTable,
-	LedgerTransactionEntriesTable,
-	LedgerTransactionsTable,
-	LedgersTable,
-	OrganizationsTable,
-	LedgerAccountSettlementsTable,
-	LedgerAccountSettlementEntriesTable,
-} from "@/repo/schema";
-import { buildServer } from "@/server";
+import { OrganizationsTable } from "@/repo/schema";
+import { buildServer } from "@/Server";
 import type { DrizzleDB } from "@/repo/types";
 
 interface BenchmarkScenario {
@@ -54,7 +38,6 @@ interface BenchmarkResult {
 }
 
 async function setupFixtures(
-	orgRepo: OrganizationRepo,
 	ledgerRepo: LedgerRepo,
 	accountRepo: LedgerAccountRepo,
 	orgId: OrgID,
@@ -194,13 +177,7 @@ async function setupFixtures(
 	};
 }
 
-async function cleanupFixtures(
-	orgRepo: OrganizationRepo,
-	ledgerRepo: LedgerRepo,
-	accountRepo: LedgerAccountRepo,
-	transactionRepo: LedgerTransactionRepo,
-	orgId: OrgID
-): Promise<void> {
+async function cleanupFixtures(db: DrizzleDB, orgId: OrgID): Promise<void> {
 	// Retry cleanup to handle transient failures from straggler connections
 	await retry(
 		{
@@ -211,16 +188,13 @@ async function cleanupFixtures(
 				return 1000 * 2 ** attempt;
 			},
 		},
-		async (exit) => {
+		async () => {
 			try {
 				// Delete in dependency order within a single transaction
 				// This ensures atomicity even if there are straggler connections from the server
 				const orgIdStr = orgId.toString();
 
-				// Access db from repo (internal detail for cleanup)
-				const db = (orgRepo as any).db as DrizzleDB;
-
-				await db.transaction(async (tx) => {
+				await db.transaction(async tx => {
 					// 1. Delete all settlements and settlement entries
 					await tx.execute(sql`
 						DELETE FROM ledger_account_settlement_entries
@@ -318,8 +292,6 @@ async function runBenchmark(
 		return JSON.stringify(createTransactionPayload(accountPair));
 	});
 
-	let requestIndex = 0;
-
 	const result = await autocannon({
 		url: `http://localhost:3333/api/ledgers/${ledgerId}/transactions`,
 		connections: 100,
@@ -329,13 +301,8 @@ async function runBenchmark(
 			Authorization: `Bearer ${token}`,
 			"Content-Type": "application/json",
 		},
-		setupClient: (client) => {
-			client.on("response", () => {
-				requestIndex++;
-			});
-		},
 		body: requestBodies[0], // Use first body as template
-		requests: requestBodies.map((body) => ({
+		requests: requestBodies.map(body => ({
 			method: "POST",
 			path: `/api/ledgers/${ledgerId}/transactions`,
 			headers: {
@@ -400,9 +367,12 @@ function printResults(results: BenchmarkResult[]): void {
 	const throughputDegradation =
 		((lowContention.throughput - highContention.throughput) / lowContention.throughput) * 100;
 	const latencyIncrease =
-		((highContention.latency.p97_5 - lowContention.latency.p97_5) / lowContention.latency.p97_5) * 100;
+		((highContention.latency.p97_5 - lowContention.latency.p97_5) / lowContention.latency.p97_5) *
+		100;
 
-	console.log(`Throughput degradation (high vs low contention): ${throughputDegradation.toFixed(2)}%`);
+	console.log(
+		`Throughput degradation (high vs low contention): ${throughputDegradation.toFixed(2)}%`
+	);
 	console.log(`P97.5 latency increase (high vs low contention): ${latencyIncrease.toFixed(2)}%`);
 	console.log(`\nHigh contention throughput: ${highContention.throughput.toFixed(2)} req/sec`);
 	console.log(`Low contention throughput: ${lowContention.throughput.toFixed(2)} req/sec`);
@@ -413,10 +383,8 @@ describe("Transaction Creation Benchmarks", () => {
 	let server: FastifyInstance;
 	let pool: Pool;
 	let db: DrizzleDB;
-	let orgRepo: OrganizationRepo;
 	let ledgerRepo: LedgerRepo;
 	let accountRepo: LedgerAccountRepo;
-	let transactionRepo: LedgerTransactionRepo;
 	let sharedOrgId: OrgID;
 	const results: BenchmarkResult[] = [];
 
@@ -425,20 +393,17 @@ describe("Transaction Creation Benchmarks", () => {
 		pool = new Pool({ connectionString: config.databaseUrl, max: 20 });
 		db = drizzle(pool, { schema });
 
-		orgRepo = new OrganizationRepo(db);
 		ledgerRepo = new LedgerRepo(db);
 		accountRepo = new LedgerAccountRepo(db);
-		transactionRepo = new LedgerTransactionRepo(db);
 
 		// Create shared organization for all tests
 		console.log("Creating shared organization...");
-		const org = await orgRepo.createOrganization(
-			OrganizationEntity.fromRequest({
-				name: "Benchmark Organization",
-				description: "Shared organization for all benchmark tests",
-			})
-		);
-		sharedOrgId = org.id;
+		sharedOrgId = new TypeID("org");
+		await db.insert(OrganizationsTable).values({
+			id: sharedOrgId.toString(),
+			name: "Benchmark Organization",
+			description: "Shared organization for all benchmark tests",
+		});
 		console.log(`Shared organization created: ${sharedOrgId.toString()}\n`);
 
 		// Start server
@@ -449,22 +414,22 @@ describe("Transaction Creation Benchmarks", () => {
 	});
 
 	afterAll(async () => {
-  	// Close server first - this will trigger onClose hooks and clean up its connection pool
-  	if (server) {
-  		console.log("\nClosing server...");
-  		await server.close();
-  		console.log("Server closed");
-  	}
+		// Close server first - this will trigger onClose hooks and clean up its connection pool
+		if (server) {
+			console.log("\nClosing server...");
+			await server.close();
+			console.log("Server closed");
+		}
 
-  	// Cleanup all fixtures using our test repos
-  	console.log("Cleaning up all fixtures...");
-  	await cleanupFixtures(orgRepo, ledgerRepo, accountRepo, transactionRepo, sharedOrgId);
-  	console.log("Cleanup complete\n");
+		// Cleanup all fixtures using our test repos
+		console.log("Cleaning up all fixtures...");
+		await cleanupFixtures(db, sharedOrgId);
+		console.log("Cleanup complete\n");
 
-    // Close our test pool
-    await pool.end();
+		// Close our test pool
+		await pool.end();
 
-    // Print summary of all results
+		// Print summary of all results
 		if (results.length > 0) {
 			printResults(results);
 		}
@@ -472,13 +437,7 @@ describe("Transaction Creation Benchmarks", () => {
 
 	it("should benchmark high contention (2 accounts)", async () => {
 		console.log("\nSetting up fixtures for High Contention...");
-		const { ledgerId, accountPairs } = await setupFixtures(
-			orgRepo,
-			ledgerRepo,
-			accountRepo,
-			sharedOrgId,
-			2
-		);
+		const { ledgerId, accountPairs } = await setupFixtures(ledgerRepo, accountRepo, sharedOrgId, 2);
 
 		const token = signJWT({ sub: sharedOrgId.toString(), scope: ["org_admin"] });
 		const scenario: BenchmarkScenario = {
@@ -497,13 +456,7 @@ describe("Transaction Creation Benchmarks", () => {
 
 	it("should benchmark medium contention (20 accounts)", async () => {
 		console.log("\nSetting up fixtures for Medium Contention...");
-		const { ledgerId, accountPairs } = await setupFixtures(
-			orgRepo,
-			ledgerRepo,
-			accountRepo,
-			sharedOrgId,
-			20
-		);
+		const { ledgerId, accountPairs } = await setupFixtures(ledgerRepo, accountRepo, sharedOrgId, 20);
 
 		const token = signJWT({ sub: sharedOrgId.toString(), scope: ["org_admin"] });
 		const scenario: BenchmarkScenario = {
@@ -522,13 +475,7 @@ describe("Transaction Creation Benchmarks", () => {
 
 	it("should benchmark low contention (200 accounts)", async () => {
 		console.log("\nSetting up fixtures for Low Contention...");
-		const { ledgerId, accountPairs } = await setupFixtures(
-			orgRepo,
-			ledgerRepo,
-			accountRepo,
-			sharedOrgId,
-			200
-		);
+		const { ledgerId, accountPairs } = await setupFixtures(ledgerRepo, accountRepo, sharedOrgId, 200);
 
 		const token = signJWT({ sub: sharedOrgId.toString(), scope: ["org_admin"] });
 		const scenario: BenchmarkScenario = {
@@ -548,7 +495,6 @@ describe("Transaction Creation Benchmarks", () => {
 	it("should benchmark hot accounts (2 hot + 2000 regular = 2002 accounts)", async () => {
 		console.log("\nSetting up fixtures for Hot Accounts (2 hot + 2000 regular)...");
 		const { ledgerId, accountPairs } = await setupFixtures(
-			orgRepo,
 			ledgerRepo,
 			accountRepo,
 			sharedOrgId,
@@ -574,7 +520,6 @@ describe("Transaction Creation Benchmarks", () => {
 	it("should benchmark hot accounts (20 hot + 2000 regular = 2020 accounts)", async () => {
 		console.log("\nSetting up fixtures for Hot Accounts (20 hot + 2000 regular)...");
 		const { ledgerId, accountPairs } = await setupFixtures(
-			orgRepo,
 			ledgerRepo,
 			accountRepo,
 			sharedOrgId,

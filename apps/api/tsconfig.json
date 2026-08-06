@@ -6,5 +6,5 @@
 		},
 		"types": ["vitest/globals"]
 	},
-	"include": ["src/**/*", "*.ts"]
+	"include": ["src/**/*", "test/bench/**/*", "*.ts"]
 }

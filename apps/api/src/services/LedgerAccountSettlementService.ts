@@ -1,5 +1,5 @@
 import { TypeID } from "typeid-js";
-import { ConflictError } from "@/errors";
+import { ConflictError } from "@/Errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities";
 import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlementRepo";

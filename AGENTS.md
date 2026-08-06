@@ -18,8 +18,6 @@ Read only the documents relevant to the work:
 | Ledger API | `apps/api/` | [Architecture](./apps/api/docs/standards/architecture.md), [coding standards](./apps/api/docs/standards/coding.md), [ERD](./apps/api/docs/product/erd.md), and the relevant document under [`apps/api/docs/spec`](./apps/api/docs/spec/) |
 | Customer portal | `apps/web/` | [Architecture](./apps/web/docs/standards/architecture.md) and [coding standards](./apps/web/docs/standards/coding.md) |
 | Documentation site | `apps/docs/` | [Content standards](./apps/docs/docs/standards/coding.md) and [CONTEXT.md](./CONTEXT.md) for all Ledger terminology |
-| Shared product | `docs/product/` | [Product definition](./docs/product/product.md) and [roadmap](./docs/product/roadmap.md) |
-| Shared engineering | `docs/standards/` | [Architecture](./docs/standards/architecture.md) and [coding standards](./docs/standards/coding.md) |
 
 ## Agent workflow
 
@@ -56,8 +54,8 @@ Run commands from the repository root unless noted otherwise.
 ```bash
 pnpm install
 
-pnpm run dev              # Database plus all apps
-pnpm run dev:api          # Database plus API
+pnpm run dev              # PostgreSQL, Valkey, and all apps
+pnpm run dev:api          # PostgreSQL, Valkey, and API
 pnpm run dev:web          # Web only
 pnpm run dev:docs         # Documentation site only
 
@@ -72,4 +70,8 @@ pnpm --filter=@exchequerio/api db:gen
 pnpm --filter=@exchequerio/api db:migrate
 ```
 
-Tests use Vitest through the package scripts. Start PostgreSQL with `pnpm run docker:up` before targeted API tests when it is not already running.
+Tests use Vitest through the package scripts. Start PostgreSQL and Valkey with
+`pnpm run docker:up` before targeted API tests when they are not already running. API startup
+requires `REDIS_URL`; copy `apps/api/.env.example` to `apps/api/.env` for the documented local
+defaults. `ORGANIZATION_RATE_LIMIT_MAX` and `ORGANIZATION_RATE_LIMIT_WINDOW_MS` are optional
+positive integers defaulting to `1000` and `60000`.
