@@ -68,7 +68,11 @@ describe("OrganizationRoutes", () => {
 		expect(response.headers.location).toBe(`/api/organizations/${organizationId}`);
 		expect(response.json()).toMatchObject({ id: organizationId, name: "Example" });
 		expect(response.json()).not.toHaveProperty("description");
-		expect(implementation.create).toHaveBeenCalledOnce();
+		expect(implementation.create).toHaveBeenCalledWith({
+			actorId: organizationId,
+			access: "platform",
+			input: { name: "Example" },
+		});
 		expect(runPromise).toHaveBeenCalledOnce();
 	});
 
@@ -83,7 +87,11 @@ describe("OrganizationRoutes", () => {
 
 		expect(response.statusCode).toBe(204);
 		expect(response.body).toBe("");
-		expect(implementation.delete).toHaveBeenCalledOnce();
+		expect(implementation.delete).toHaveBeenCalledWith({
+			actorId: organizationId,
+			access: "platform",
+			targetId: organizationId,
+		});
 	});
 
 	it("maps permitted absence through the Effect boundary", async () => {

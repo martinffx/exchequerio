@@ -229,12 +229,11 @@ The Redis Layer owns one `ioredis` client configured from `REDIS_URL` with bound
 
 The Fastify adapter owns JWT authentication, permission extraction, TypeBox schemas, HTTP status codes, headers, serialization, and invocation of the shared runtime. A reusable Effect HTTP runner:
 
-1. Obtains the Organization application service from the runtime.
-2. Runs the returned Effect with `ManagedRuntime.runPromise`.
-3. Exhaustively maps expected tagged failures to RFC 7807.
-4. Converts unexpected defects to a sanitized `500` without leaking persistence details.
+1. Runs the handler-built Effect with `ManagedRuntime.runPromise`.
+2. Exhaustively maps expected tagged failures to RFC 7807.
+3. Converts unexpected defects to a sanitized `500` without leaking persistence details.
 
-Handlers do not call Drizzle or repositories directly. They translate transport values into domain/application inputs, call one use case, and translate its success value into the existing response DTO.
+Handlers do not call Drizzle or repositories directly. They extract transport and authentication values, obtain the Organization application service through its Effect tag, build and run one use-case Effect, and explicitly translate the runner's success or failure into an HTTP response.
 
 ### Authorization
 
