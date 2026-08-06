@@ -27,7 +27,8 @@ Success means all five Organization endpoints run through a pure domain and Effe
 
 - Migrating Ledger or any other API resource to Effect.
 - Changing `apps/web`, `apps/docs`, or shared workspace packages.
-- Changing Organization database tables, adding migrations, or backfilling data.
+- Changing Organization database tables or backfilling data. Schema changes are limited to the
+  approved indexes on direct Organization foreign keys in existing Ledger tables.
 - Adding Organization-name uniqueness, optimistic concurrency, cursor pagination, events, or retry schedules.
 - Adding an explicit API operation to clear an Organization description.
 - Adding rate limiting to health, documentation, Ledger, or other API routes.
@@ -367,13 +368,20 @@ Organization operations document applicable `400`, `401`, `403`, `404`, `429`, `
 
 ## Data Model
 
-No schema or migration is required. The existing Organization table remains authoritative.
+The existing Organization table remains authoritative and unchanged. Review follow-up adds B-tree
+indexes on the direct `organization_id` foreign keys in Ledgers, Ledger Accounts, Ledger
+Transactions, and Ledger Transaction Entries so PostgreSQL dependency checks do not scan those
+tables during Organization deletion.
 
 - Names remain non-unique; no index or constraint is added.
 - Existing timestamp defaults remain in PostgreSQL.
 - Existing foreign keys enforce deletion safety.
 - Update concurrency remains last-write-wins.
 - The adapter validates every returned row before constructing a domain entity.
+
+Migration `0003_blue_kid_colt.sql` uses transactional `CREATE INDEX`, as required by the standard
+Drizzle PostgreSQL migrator. It must be timed against production-scale data and applied during a
+write maintenance window. The migration runbook records the preflight and verification steps.
 
 ## Testing Strategy
 

@@ -8,14 +8,17 @@ let harness: ApiTestHarness | undefined;
 const useHarness = async () => (harness ??= await createApiTestHarness());
 
 afterEach(async () => {
-	if (harness !== undefined) await harness.close();
+	const currentHarness = harness;
 	harness = undefined;
+	if (currentHarness !== undefined) await currentHarness.close();
 });
 
 describe.sequential("Organizations HTTP to PostgreSQL", () => {
 	it("publishes the Organization HTTP contract from the assembled server", async () => {
 		const api = await useHarness();
+		const pressureStatus = await api.server.inject({ method: "GET", url: "/status" });
 		const response = await api.server.inject({ method: "GET", url: "/docs/json" });
+		expect(pressureStatus.statusCode).toBe(404);
 		expect(response.statusCode).toBe(200);
 		const document = response.json<{
 			paths: Record<string, Record<string, { responses: Record<string, unknown> }>>;

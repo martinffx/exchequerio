@@ -1,7 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "@/Errors";
-import type { LedgerID, OrgID } from "@/services";
-import { LedgerEntity } from "@/services";
+import { LedgerEntity, type LedgerID, type OrgID } from "@/repo/entities";
 import { getDBErrorCode, isDBError } from "./errors";
 import { LedgersTable } from "./schema";
 import type { DrizzleDB } from "./types";

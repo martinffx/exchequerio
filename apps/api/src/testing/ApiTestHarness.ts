@@ -60,16 +60,17 @@ const errorsFrom = (error: unknown): readonly unknown[] =>
 const createApiTestHarness = async (
 	options: ApiTestHarnessOptions = {}
 ): Promise<ApiTestHarness> => {
-	const environment = options.environment ?? `test-${new TypeID("tst").toString()}`;
+	const environment = `test-${options.environment ?? new TypeID("tst").toString()}`;
 	const config = new Config({
 		environment,
 		organizationRateLimitMax: options.rateLimitMax ?? 1000,
 		organizationRateLimitWindowMs: options.rateLimitWindowMs ?? 60_000,
 	});
 	const pool = new Pool({ connectionString: config.databaseUrl });
-	const db = drizzle(pool, { schema });
+	let db: DrizzleDatabase;
 	let redis: Redis;
 	try {
+		db = drizzle(pool, { schema });
 		redis = new Redis(config.redisUrl);
 	} catch (setupError) {
 		try {

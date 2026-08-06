@@ -15,6 +15,7 @@ Real-time double-entry ledger systems for PSPs, Marketplaces, and anyone who nee
 # Prerequisites: Node.js 24, pnpm 11.18+, Docker
 
 pnpm install
+cp apps/api/.env.example apps/api/.env
 pnpm run docker:up
 pnpm run dev
 ```
@@ -39,17 +40,17 @@ pnpm run dev:docs     # Docs only
 
 Tests run through the repository's Vitest scripts.
 
-**Prerequisites:** Database must be running for API tests (integration tests use real PostgreSQL).
+**Prerequisites:** PostgreSQL and Valkey must be running for API tests.
 
 ```bash
-# Run all tests across all apps (auto-starts database, uses Vitest)
+# Run all tests across all apps (auto-starts PostgreSQL and Valkey, uses Vitest)
 pnpm run test
 
 # Test specific app (uses Vitest)
-pnpm --filter=@exchequerio/api test    # Requires database
+pnpm --filter=@exchequerio/api test    # Requires PostgreSQL and Valkey
 pnpm --filter=@exchequerio/web test
 
-# Start database manually first (optional)
+# Start PostgreSQL and Valkey manually first (optional)
 pnpm run docker:up
 
 # Watch mode (from specific app directory)
@@ -93,7 +94,7 @@ Transaction creation throughput and latency across different contention levels:
 ### Code Quality
 
 ```bash
-# Run all quality checks (format + lint + types)
+# Run all quality checks (format + lint + types + benchmark collection)
 pnpm run check
 
 # Individual checks
@@ -114,16 +115,16 @@ pnpm --filter=@exchequerio/web build
 pnpm --filter=@exchequerio/docs build
 ```
 
-### Database
+### Local Infrastructure
 
 ```bash
-# Start PostgreSQL database
+# Start PostgreSQL and Valkey
 pnpm run docker:up
 
-# Stop database
+# Stop PostgreSQL and Valkey
 pnpm run docker:down
 
-# View database logs
+# View PostgreSQL logs
 pnpm run docker:logs
 ```
 
@@ -132,7 +133,7 @@ pnpm run docker:logs
 ```bash
 # Run complete CI pipeline
 pnpm run ci
-# Equivalent to: docker:up + build + lint + types + test
+# Equivalent to: docker:up + build + format check + lint + types + benchmark collection + test
 ```
 
 | App | Description | Stack |

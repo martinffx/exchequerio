@@ -67,7 +67,7 @@ const buildServer = async ({
 		server.setErrorHandler(globalErrorHandler);
 
 		// Skip under-pressure in test environment to avoid interference with test execution
-		if (config.environment !== "test") {
+		if (config.environment !== "test" && !config.environment.startsWith("test-")) {
 			await server.register(fastifyUnderPressure, {
 				maxEventLoopDelay: 1000,
 				maxHeapUsedBytes: 500_000_000,

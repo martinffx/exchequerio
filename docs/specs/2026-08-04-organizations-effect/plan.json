@@ -483,8 +483,62 @@
 							"No production Organization endpoint imports legacy route, service, repository, or entity modules",
 							"Unmigrated resources retain their current interfaces and behavior",
 							"No artificial Organization resource ownership or shutdown delay remains",
-							"No database migration, web, docs-site, shared-package, or CONTEXT.md change is introduced",
+							"No unapproved database migration, web, docs-site, shared-package, or CONTEXT.md change is introduced",
 							"The final diff contains only approved scope and preserves unrelated work"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P5",
+			"name": "Final Review Follow-up",
+			"tasks": [
+				{
+					"id": "T14",
+					"name": "Resolve validated final-review findings",
+					"depends_on": ["T13"],
+					"inputs": ["Validated multi-agent review findings", "Approved review-response decisions"],
+					"description": "Make the shared Effect runner feature-neutral and execute complete Organization programs through the managed runtime. Validate JWT Organization subjects at authentication, keep Redis reconnecting with capped jitter, harden test-harness cleanup and runtime disposal, sanitize row-decoding diagnostics, and cover current-Organization mutations through the assembled server. Add approved direct Organization foreign-key indexes with bounded lock acquisition and an explicit maintenance-window runbook, remove duplicate documentation and manual filename rules, enforce directional boundaries within both the Organization slice and legacy layers, repair and statically validate the benchmark fixture boundary, keep production pressure monitoring out of assembled tests, document Redis startup configuration, and remove the unused domain update implementation and its non-production tests.",
+					"files": {
+						"create": [
+							"apps/api/.env.example",
+							"apps/api/migrations/0003_blue_kid_colt.sql",
+							"apps/api/migrations/README.md",
+							"apps/api/migrations/meta/0003_snapshot.json",
+							"apps/api/src/testing/ApiTestHarness.test.ts"
+						],
+						"modify": [
+							".oxlintrc.json",
+							"AGENTS.md",
+							"README.md",
+							"apps/api/src/Auth.ts",
+							"apps/api/src/http/RunEffect.ts",
+							"apps/api/src/organizations/OrganizationRepo.ts",
+							"apps/api/src/organizations/OrganizationRoutes.ts",
+							"apps/api/src/organizations/Organizations.integration.test.ts",
+							"apps/api/src/repo/schema.ts",
+							"apps/api/src/runtime/RedisClient.ts",
+							"apps/api/src/testing/ApiTestHarness.ts",
+							"apps/api/test/bench/transaction.bench.ts",
+							"apps/api/package.json",
+							"apps/api/vitest.bench.config.ts",
+							"docs/specs/2026-08-04-organizations-effect/design.md",
+							"package.json",
+							"turbo.json"
+						]
+					},
+					"validation": {
+						"tests": [
+							"formats, lints, type-checks, and collects the transaction benchmark",
+							"runs the complete @exchequerio/api test and coverage suites",
+							"runs pnpm run check and pnpm run build",
+							"reruns the comprehensive code-review gate"
+						],
+						"acceptance": [
+							"Every introduced Critical, High, and Medium review finding is resolved or explicitly rejected with evidence",
+							"Tests remain at the narrowest layer that owns the behavior",
+							"The benchmark, runtime configuration guide, schema snapshot, and migration runbook match the delivered implementation"
 						]
 					}
 				}

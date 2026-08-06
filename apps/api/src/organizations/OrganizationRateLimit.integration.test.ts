@@ -1,12 +1,17 @@
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ApiTestHarness } from "../testing/ApiTestHarness";
-import { createApiTestHarness } from "../testing/ApiTestHarness";
+import { createApiTestHarness, runCleanupSteps } from "../testing/ApiTestHarness";
 
 const harnesses: ApiTestHarness[] = [];
 
 afterEach(async () => {
-	for (const harness of harnesses.splice(0).reverse()) await harness.close();
+	await runCleanupSteps(
+		harnesses
+			.splice(0)
+			.reverse()
+			.map(harness => harness.close)
+	);
 });
 
 describe.sequential("Organization distributed rate limiting", () => {

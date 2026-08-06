@@ -64,18 +64,6 @@ const parseOrganizationUpdateInput = (
 	};
 };
 
-const updateOrganization = (
-	organization: Organization,
-	input: UpdateOrganizationInput,
-	updated: DateTime
-): Organization =>
-	createOrganization({
-		...organization,
-		name: input.name,
-		...(input.description._tag === "Replace" ? { description: input.description.value } : {}),
-		updated,
-	});
-
 export type {
 	CreateOrganizationInput,
 	Organization,
@@ -85,4 +73,4 @@ export type {
 	OrganizationUpdateRequest,
 	UpdateOrganizationInput,
 };
-export { createOrganization, parseOrganizationUpdateInput, updateOrganization };
+export { createOrganization, parseOrganizationUpdateInput };

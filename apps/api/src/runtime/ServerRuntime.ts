@@ -29,6 +29,7 @@ const makeServerRuntimeLayer = (
 
 class ServerRuntime<R, ER> {
 	private readonly runtime: ManagedRuntime.ManagedRuntime<R, ER>;
+	private disposal: Promise<void> | undefined;
 
 	constructor(layer: Layer.Layer<R, ER, never>) {
 		this.runtime = ManagedRuntime.make(layer);
@@ -39,7 +40,7 @@ class ServerRuntime<R, ER> {
 	}
 
 	dispose(): Promise<void> {
-		return this.runtime.dispose();
+		return (this.disposal ??= this.runtime.dispose());
 	}
 }
 
