@@ -3,7 +3,7 @@ import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/Auth";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
 import type {
 	BadRequestErrorResponse,
@@ -12,7 +12,7 @@ import type {
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema";
+} from "@/lib/errors";
 import { buildServer } from "@/Server";
 import type { LedgerTransactionService } from "@/services";
 import { createLedgerTransactionFixture } from "./fixtures";
@@ -295,7 +295,7 @@ describe("LedgerTransactionRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerTransactionService.createTransaction.mockRejectedValue(
-				new ConflictError({ message: "Transaction already exists" })
+				new ConflictError("Transaction already exists")
 			);
 
 			const rs = await server.inject({
@@ -476,7 +476,7 @@ describe("LedgerTransactionRoutes", () => {
 
 		it("should handle conflict error when transaction is archived", async () => {
 			mockLedgerTransactionService.postTransaction.mockRejectedValue(
-				new ConflictError({ message: "Cannot post an archived transaction" })
+				new ConflictError("Cannot post an archived transaction")
 			);
 
 			const rs = await server.inject({
@@ -568,9 +568,7 @@ describe("LedgerTransactionRoutes", () => {
 
 		it("should handle conflict error for posted transactions in production", async () => {
 			mockLedgerTransactionService.deleteTransaction.mockRejectedValue(
-				new ConflictError({
-					message: "Cannot delete a posted transaction outside of test environment",
-				})
+				new ConflictError("Cannot delete a posted transaction outside of test environment")
 			);
 
 			const rs = await server.inject({

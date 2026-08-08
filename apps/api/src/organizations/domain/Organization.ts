@@ -7,7 +7,7 @@ import {
 	type OrganizationInfrastructureError,
 	OrganizationPersistenceDecodingFailure,
 } from "./OrganizationErrors";
-import { parseId } from "./OrganizationId";
+import { parseId } from "@/lib/utils";
 
 type OrganizationOpts = {
 	id: OrgID;

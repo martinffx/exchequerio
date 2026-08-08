@@ -3,7 +3,7 @@ import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/Auth";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerAccountStatementID, OrgID } from "@/repo/entities/types";
 import { buildServer } from "@/Server";
 import type { LedgerAccountStatementService } from "@/services";
@@ -14,7 +14,7 @@ import type {
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
-} from "../schema";
+} from "@/lib/errors";
 import { createLedgerAccountStatementFixture } from "./fixtures";
 
 const mockLedgerAccountStatementService = vi.mocked<LedgerAccountStatementService>({
@@ -211,7 +211,7 @@ describe("LedgerAccountStatementRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerAccountStatementService.createLedgerAccountStatement.mockRejectedValue(
-				new ConflictError({ message: "Statement already exists" })
+				new ConflictError("Statement already exists")
 			);
 
 			const rs = await server.inject({

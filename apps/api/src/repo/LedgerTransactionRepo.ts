@@ -4,7 +4,7 @@ import {
 	InternalServerError,
 	NotFoundError,
 	ServiceUnavailableError,
-} from "@/Errors";
+} from "@/lib/errors";
 import {
 	LedgerAccountEntity,
 	type LedgerID,
@@ -250,17 +250,17 @@ class LedgerTransactionRepo {
 
 					// No rows updated = optimistic lock failure
 					if (result.length === 0) {
-						throw new ConflictError({
-							message: `Account ${account.id.toString()} was modified by another transaction`,
-							retryable: true,
-						});
+						throw new ConflictError(
+							`Account ${account.id.toString()} was modified by another transaction`,
+							{ retryable: true }
+						);
 					}
 
 					// More than one row updated = data integrity issue
 					if (result.length > 1) {
-						throw new ConflictError({
-							message: `Data integrity error: Updated ${result.length} rows for account ${account.id.toString()}, expected 1`,
-						});
+						throw new ConflictError(
+							`Data integrity error: Updated ${result.length} rows for account ${account.id.toString()}, expected 1`
+						);
 					}
 
 					return LedgerAccountEntity.fromRecord(result[0]);
@@ -293,7 +293,9 @@ class LedgerTransactionRepo {
 				});
 			}
 
-			throw new InternalServerError("Unexpected error during transaction creation", error);
+			throw new InternalServerError("Unexpected error during transaction creation", {
+				cause: error,
+			});
 		}
 	}
 
@@ -328,9 +330,9 @@ class LedgerTransactionRepo {
 
 		// Only allow updates to pending transactions
 		if (transaction.status !== "pending") {
-			throw new ConflictError({
-				message: `Cannot update transaction with status '${transaction.status}'. Only pending transactions can be updated.`,
-			});
+			throw new ConflictError(
+				`Cannot update transaction with status '${transaction.status}'. Only pending transactions can be updated.`
+			);
 		}
 
 		// Build the update object
@@ -509,27 +511,27 @@ class LedgerTransactionRepo {
 
 						// No rows updated = optimistic lock failure
 						if (result.length === 0) {
-							throw new ConflictError({
-								message: `Account ${account.id.toString()} was modified by another transaction`,
-								retryable: true,
-								context: {
+							throw new ConflictError(
+								`Account ${account.id.toString()} was modified by another transaction`,
+								{
+									retryable: true,
 									transactionId: transactionId.toString(),
 									ledgerId: ledgerId.toString(),
 									organizationId: organizationId.toString(),
-								},
-							});
+								}
+							);
 						}
 
 						// More than one row updated = data integrity issue
 						if (result.length > 1) {
-							throw new ConflictError({
-								message: `Data integrity error: Updated ${result.length} rows for account ${account.id.toString()}, expected 1`,
-								context: {
+							throw new ConflictError(
+								`Data integrity error: Updated ${result.length} rows for account ${account.id.toString()}, expected 1`,
+								{
 									transactionId: transactionId.toString(),
 									ledgerId: ledgerId.toString(),
 									organizationId: organizationId.toString(),
-								},
-							});
+								}
+							);
 						}
 
 						return LedgerAccountEntity.fromRecord(result[0]);
@@ -555,7 +557,9 @@ class LedgerTransactionRepo {
 				});
 			}
 
-			throw new InternalServerError("Unexpected error during transaction creation", error);
+			throw new InternalServerError("Unexpected error during transaction creation", {
+				cause: error,
+			});
 		}
 	}
 
@@ -694,27 +698,27 @@ class LedgerTransactionRepo {
 
 						// No rows updated = optimistic lock failure
 						if (result.length === 0) {
-							throw new ConflictError({
-								message: `Account ${account.id.toString()} was modified by another transaction`,
-								retryable: true,
-								context: {
+							throw new ConflictError(
+								`Account ${account.id.toString()} was modified by another transaction`,
+								{
+									retryable: true,
 									transactionId: transactionId.toString(),
 									ledgerId: ledgerId.toString(),
 									organizationId: organizationId.toString(),
-								},
-							});
+								}
+							);
 						}
 
 						// More than one row updated = data integrity issue
 						if (result.length > 1) {
-							throw new ConflictError({
-								message: `Data integrity error: Updated ${result.length} rows for account ${account.id.toString()}, expected 1`,
-								context: {
+							throw new ConflictError(
+								`Data integrity error: Updated ${result.length} rows for account ${account.id.toString()}, expected 1`,
+								{
 									transactionId: transactionId.toString(),
 									ledgerId: ledgerId.toString(),
 									organizationId: organizationId.toString(),
-								},
-							});
+								}
+							);
 						}
 
 						return LedgerAccountEntity.fromRecord(result[0]);
@@ -738,7 +742,9 @@ class LedgerTransactionRepo {
 				});
 			}
 
-			throw new InternalServerError("Unexpected error during transaction deletion", error);
+			throw new InternalServerError("Unexpected error during transaction deletion", {
+				cause: error,
+			});
 		}
 	}
 }

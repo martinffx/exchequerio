@@ -7,134 +7,6 @@ const PaginationQuery = Type.Object({
 });
 type PaginationQuery = Static<typeof PaginationQuery>;
 
-const ProblemDetailError = Type.Object({
-	message: Type.String(),
-	stackTrace: Type.Optional(Type.Array(Type.String())),
-});
-type ProblemDetailError = Static<typeof ProblemDetailError>;
-const ProblemDetail = Type.Object({
-	title: Type.String(),
-	detail: Type.String(),
-	instance: Type.String(),
-	traceId: Type.String(),
-	errors: Type.Optional(Type.Array(ProblemDetailError)),
-});
-type ProblemDetail = Static<typeof ProblemDetail>;
-
-const ErrorContext = Type.Object({
-	organizationId: Type.Optional(Type.String()),
-	ledgerId: Type.Optional(Type.String()),
-	accountId: Type.Optional(Type.String()),
-	transactionId: Type.Optional(Type.String()),
-	idempotencyKey: Type.Optional(Type.String()),
-});
-type ErrorContext = Static<typeof ErrorContext>;
-
-const BadRequestErrorResponse = Type.Composite(
-	[
-		ProblemDetail,
-		Type.Object({
-			type: Type.Literal("BAD_REQUEST"),
-			status: Type.Literal(400),
-		}),
-	],
-	{ $id: "BadRequestErrorResponse" }
-);
-type BadRequestErrorResponse = Static<typeof BadRequestErrorResponse>;
-const UnauthorizedErrorResponse = Type.Composite(
-	[
-		ProblemDetail,
-		Type.Object({
-			type: Type.Literal("UNAUTHORIZED"),
-			status: Type.Literal(401),
-		}),
-	],
-	{ $id: "UnauthorizedErrorResponse" }
-);
-type UnauthorizedErrorResponse = Static<typeof UnauthorizedErrorResponse>;
-const ForbiddenErrorResponse = Type.Composite(
-	[
-		ProblemDetail,
-		Type.Object({
-			type: Type.Literal("FORBIDDEN"),
-			status: Type.Literal(403),
-		}),
-	],
-	{ $id: "ForbiddenErrorResponse" }
-);
-type ForbiddenErrorResponse = Static<typeof ForbiddenErrorResponse>;
-const NotFoundErrorResponse = Type.Composite(
-	[
-		ProblemDetail,
-		ErrorContext,
-		Type.Object({
-			type: Type.Literal("NOT_FOUND"),
-			status: Type.Literal(404),
-		}),
-	],
-	{ $id: "NotFoundErrorResponse" }
-);
-type NotFoundErrorResponse = Static<typeof NotFoundErrorResponse>;
-const ConflictErrorResponse = Type.Composite(
-	[
-		ProblemDetail,
-		ErrorContext,
-		Type.Object({
-			type: Type.Literal("CONFLICT"),
-			status: Type.Literal(409),
-			retryable: Type.Optional(Type.Boolean()),
-		}),
-	],
-	{ $id: "ConflictErrorResponse" }
-);
-type ConflictErrorResponse = Static<typeof ConflictErrorResponse>;
-const TooManyRequestsErrorResponse = Type.Composite(
-	[
-		ProblemDetail,
-		Type.Object({
-			type: Type.Literal("TOO_MANY_REQUESTS"),
-			status: Type.Literal(429),
-		}),
-	],
-	{ $id: "TooManyRequestsErrorResponse" }
-);
-type TooManyRequestsErrorResponse = Static<typeof TooManyRequestsErrorResponse>;
-const InternalServerErrorResponse = Type.Composite(
-	[
-		ProblemDetail,
-		ErrorContext,
-		Type.Object({
-			type: Type.Literal("INTERNAL_SERVER_ERROR"),
-			status: Type.Literal(500),
-		}),
-	],
-	{ $id: "InternalServerErrorResponse" }
-);
-type InternalServerErrorResponse = Static<typeof InternalServerErrorResponse>;
-const ServiceUnavailableErrorResponse = Type.Composite(
-	[
-		ProblemDetail,
-		ErrorContext,
-		Type.Object({
-			type: Type.Literal("SERVICE_UNAVAILABLE"),
-			status: Type.Literal(503),
-			retryable: Type.Optional(Type.Boolean()),
-		}),
-	],
-	{ $id: "ServiceUnavailableErrorResponse" }
-);
-type ServiceUnavailableErrorResponse = Static<typeof ServiceUnavailableErrorResponse>;
-
-type ErrorResponse =
-	| BadRequestErrorResponse
-	| UnauthorizedErrorResponse
-	| ForbiddenErrorResponse
-	| NotFoundErrorResponse
-	| ConflictErrorResponse
-	| TooManyRequestsErrorResponse
-	| InternalServerErrorResponse
-	| ServiceUnavailableErrorResponse;
-
 const OrgId = Type.String({
 	description: "The organization's ID",
 	pattern: "^org_[0-9a-z]{26}$",
@@ -175,20 +47,8 @@ export {
 	PaginationQuery,
 	OrgId,
 	OrgIdParameters as OrgIdParams,
-	BadRequestErrorResponse,
-	UnauthorizedErrorResponse,
-	ForbiddenErrorResponse,
-	NotFoundErrorResponse,
-	ConflictErrorResponse,
-	TooManyRequestsErrorResponse,
-	InternalServerErrorResponse,
-	ServiceUnavailableErrorResponse,
 	OrganizationResponse,
 	OrganizationRequest,
-	ProblemDetail,
-	ProblemDetailError,
-	ErrorContext,
-	type ErrorResponse,
 	type ListOrganizationsRequest,
 	type GetOrganizationRequest,
 	type CreateOrganizationRequest,

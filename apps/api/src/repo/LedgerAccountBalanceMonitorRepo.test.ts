@@ -1,5 +1,5 @@
 import { TypeID } from "typeid-js";
-import { NotFoundError } from "@/Errors";
+import { NotFoundError } from "@/lib/errors";
 import type {
 	LedgerAccountBalanceMonitorID,
 	LedgerAccountID,

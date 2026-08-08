@@ -1,6 +1,6 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
-import { ConflictError } from "@/Errors";
+import { ConflictError } from "@/lib/errors";
 import type { LedgerTransactionsTable } from "@/repo/schema";
 import type {
 	BalanceStatus,
@@ -124,9 +124,7 @@ class LedgerTransactionEntity {
 		}
 
 		if (this.status === "archived") {
-			throw new ConflictError({
-				message: "Cannot post an archived transaction",
-			});
+			throw new ConflictError("Cannot post an archived transaction");
 		}
 
 		// Create new entity with posted status and updated entries

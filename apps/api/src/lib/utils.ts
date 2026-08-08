@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { TypeID } from "typeid-js";
-import { InvalidId } from "./OrganizationErrors";
+import { InvalidId } from "./errors";
 
 const parseId = <Prefix extends string, Return extends TypeID<Prefix>>(
 	prefix: Prefix,

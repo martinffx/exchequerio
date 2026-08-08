@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns, like } from "drizzle-orm";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID } from "@/repo/entities/LedgerAccountEntity";
 import { LedgerAccountEntity } from "@/repo/entities/LedgerAccountEntity";
 import type { OrgID } from "@/repo/entities";
@@ -185,10 +185,9 @@ class LedgerAccountRepo {
 				.returning();
 
 			if (result.length === 0) {
-				throw new ConflictError({
-					message:
-						"Account not found, was modified by another transaction, or immutable fields (organizationId/ledgerId) were changed",
-				});
+				throw new ConflictError(
+					"Account not found, was modified by another transaction, or immutable fields (organizationId/ledgerId) were changed"
+				);
 			}
 
 			return LedgerAccountEntity.fromRecord(result[0]);
@@ -256,7 +255,7 @@ class LedgerAccountRepo {
 		} catch (error) {
 			// PostgreSQL foreign key violation (account has dependent transaction entries)
 			if (isDBError(error) && getDBErrorCode(error) === "23503") {
-				throw new ConflictError({ message: "Cannot delete account with existing transaction entries" });
+				throw new ConflictError("Cannot delete account with existing transaction entries");
 			}
 			throw error;
 		}

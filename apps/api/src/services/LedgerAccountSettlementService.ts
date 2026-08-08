@@ -1,5 +1,5 @@
 import { TypeID } from "typeid-js";
-import { ConflictError } from "@/Errors";
+import { ConflictError } from "@/lib/errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities";
 import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlementRepo";
@@ -195,9 +195,7 @@ class LedgerAccountSettlementService {
 		};
 
 		if (!validTransitions[currentStatus].includes(newStatus)) {
-			throw new ConflictError({
-				message: `Invalid status transition from '${currentStatus}' to '${newStatus}'`,
-			});
+			throw new ConflictError(`Invalid status transition from '${currentStatus}' to '${newStatus}'`);
 		}
 	}
 }

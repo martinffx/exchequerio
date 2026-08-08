@@ -1,5 +1,5 @@
 import { TypeID } from "typeid-js";
-import { ConflictError } from "@/Errors";
+import { ConflictError } from "@/lib/errors";
 import { LedgerEntity } from "@/repo/entities/LedgerEntity";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
 import { createLedgerEntity, createOrganizationEntity, getRepos } from "./fixtures";

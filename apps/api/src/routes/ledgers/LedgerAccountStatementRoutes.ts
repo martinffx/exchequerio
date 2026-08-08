@@ -8,7 +8,7 @@ import {
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "../schema";
+} from "@/lib/errors";
 import {
 	type CreateLedgerAccountStatementRequest,
 	type GetLedgerAccountStatementRequest,

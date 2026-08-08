@@ -9,14 +9,13 @@ const organizationLayer = organizationServiceLayer.pipe(
 
 export { Organization } from "./domain/Organization";
 export {
-	InvalidId,
 	OrganizationHasDependents,
 	OrganizationNotFound,
 	OrganizationPersistenceDecodingFailure,
 	OrganizationPersistenceFailure,
 	OrganizationRepositoryUnavailable,
 } from "./domain/OrganizationErrors";
-export { parseId } from "./domain/OrganizationId";
+
 export type {
 	OrganizationCreateError,
 	OrganizationDeleteError,

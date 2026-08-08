@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { LedgerEntity, type LedgerID, type OrgID } from "@/repo/entities";
 import { getDBErrorCode, isDBError } from "./errors";
 import { LedgersTable } from "./schema";
@@ -120,10 +120,9 @@ class LedgerRepo {
 				.returning();
 
 			if (result.length === 0) {
-				throw new ConflictError({
-					message:
-						"Ledger not found or immutable fields (organizationId, currency, currencyExponent) were changed",
-				});
+				throw new ConflictError(
+					"Ledger not found or immutable fields (organizationId, currency, currencyExponent) were changed"
+				);
 			}
 
 			return LedgerEntity.fromRecord(result[0]);
@@ -180,7 +179,7 @@ class LedgerRepo {
 		} catch (error) {
 			// PostgreSQL foreign key violation (ledger has dependent accounts)
 			if (isDBError(error) && getDBErrorCode(error) === "23503") {
-				throw new ConflictError({ message: "Cannot delete ledger with existing accounts" });
+				throw new ConflictError("Cannot delete ledger with existing accounts");
 			}
 			throw error;
 		}

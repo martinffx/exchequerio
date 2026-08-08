@@ -2,7 +2,7 @@ import fastify, { type FastifyInstance } from "fastify";
 import { Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { globalErrorHandler } from "../http/HttpErrors";
+import { globalErrorHandler } from "@/lib/errors";
 import type { OrgID } from "../repo/entities/types";
 import { ServerRuntime } from "../runtime/ServerRuntime";
 import { Organization } from "./domain/Organization";

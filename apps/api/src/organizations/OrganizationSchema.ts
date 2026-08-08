@@ -1,6 +1,5 @@
 import { type Static, Type } from "@sinclair/typebox";
 import type { DateTime } from "luxon";
-import { problemDetailSchema } from "../http/ProblemDetails";
 import type { Organization } from "./domain/Organization";
 
 const OrganizationIdSchema = Type.String({ pattern: "^org_[0-9a-z]{26}$" });
@@ -31,14 +30,6 @@ const OrganizationResponse = Type.Object({
 	updated: Type.String({ format: "date-time" }),
 });
 
-const BadRequestProblem = problemDetailSchema("BAD_REQUEST", 400);
-const UnauthorizedProblem = problemDetailSchema("UNAUTHORIZED", 401);
-const ForbiddenProblem = problemDetailSchema("FORBIDDEN", 403);
-const NotFoundProblem = problemDetailSchema("NOT_FOUND", 404);
-const ConflictProblem = problemDetailSchema("CONFLICT", 409);
-const InternalServerProblem = problemDetailSchema("INTERNAL_SERVER_ERROR", 500);
-const ServiceUnavailableProblem = problemDetailSchema("SERVICE_UNAVAILABLE", 503);
-
 type OrganizationIdParameters = Static<typeof OrganizationIdParameters>;
 type OrganizationListQuery = Static<typeof OrganizationListQuery>;
 type OrganizationCreateRequest = Static<typeof OrganizationCreateRequest>;
@@ -54,24 +45,17 @@ const toIso = (value: DateTime): string => {
 const toOrganizationResponse = (organization: Organization): OrganizationResponse => ({
 	id: organization.id.toString(),
 	name: organization.name,
-	...(organization.description === undefined ? {} : { description: organization.description }),
+	description: organization.description ?? undefined,
 	created: toIso(organization.created),
 	updated: toIso(organization.updated),
 });
 
 export {
-	BadRequestProblem,
-	ConflictProblem,
-	ForbiddenProblem,
-	InternalServerProblem,
-	NotFoundProblem,
 	OrganizationCreateRequest,
 	OrganizationIdParameters,
 	OrganizationIdSchema,
 	OrganizationListQuery,
 	OrganizationResponse,
 	OrganizationUpdateRequest,
-	ServiceUnavailableProblem,
-	UnauthorizedProblem,
 	toOrganizationResponse,
 };

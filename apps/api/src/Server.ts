@@ -6,7 +6,7 @@ import fastify, { type FastifyInstance } from "fastify";
 import { registerAuth } from "@/Auth";
 import { Config } from "@/Config";
 import { DatabaseTag } from "@/db/Database";
-import { globalErrorHandler } from "@/http/HttpErrors";
+import { globalErrorHandler } from "@/lib/errors";
 import { RepoPlugin, type RepoPluginOptions } from "@/repo";
 import { RouterPlugin } from "@/routes";
 import { ServicePlugin, type ServicePluginOpts } from "@/services";

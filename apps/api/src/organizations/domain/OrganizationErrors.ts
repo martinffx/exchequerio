@@ -1,20 +1,9 @@
 import {
-	BadRequestError,
-	ConflictError,
-	InternalServerError,
 	NotFoundError,
+	ConflictError,
 	ServiceUnavailableError,
-} from "../../http/ProblemDetails";
-
-class InvalidId extends BadRequestError {
-	constructor(
-		public readonly prefix: string,
-		public readonly value: string,
-		options?: ErrorOptions
-	) {
-		super(`Invalid ${prefix} id: ${value}`, options);
-	}
-}
+	InternalServerError,
+} from "@/lib/errors";
 
 class OrganizationNotFound extends NotFoundError {
 	constructor(public readonly organizationId: string) {
@@ -54,7 +43,6 @@ type OrganizationInfrastructureError =
 export type { OrganizationInfrastructureError };
 
 export {
-	InvalidId,
 	OrganizationHasDependents,
 	OrganizationNotFound,
 	OrganizationPersistenceDecodingFailure,

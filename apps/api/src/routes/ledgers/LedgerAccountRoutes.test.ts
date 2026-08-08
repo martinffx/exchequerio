@@ -3,7 +3,7 @@ import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/Auth";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import { buildServer } from "@/Server";
 import type { LedgerAccountService, LedgerService } from "@/services";
@@ -14,7 +14,7 @@ import type {
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
-} from "../schema";
+} from "@/lib/errors";
 import { createLedgerAccountFixture, createLedgerFixture } from "./fixtures";
 
 const mockLedgerService = vi.mocked<LedgerService>({
@@ -330,7 +330,7 @@ describe("LedgerAccountRoutes", () => {
 		it("should handle conflict error", async () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.createLedgerAccount.mockRejectedValue(
-				new ConflictError({ message: "Account already exists" })
+				new ConflictError("Account already exists")
 			);
 
 			const rs = await server.inject({
@@ -455,7 +455,7 @@ describe("LedgerAccountRoutes", () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockAccount);
 			mockLedgerAccountService.updateLedgerAccount.mockRejectedValue(
-				new ConflictError({ message: "Account conflict" })
+				new ConflictError("Account conflict")
 			);
 
 			const rs = await server.inject({
@@ -550,9 +550,7 @@ describe("LedgerAccountRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerAccountService.deleteLedgerAccount.mockRejectedValue(
-				new ConflictError({
-					message: "Cannot delete account with transactions",
-				})
+				new ConflictError("Cannot delete account with transactions")
 			);
 
 			const rs = await server.inject({

@@ -1,23 +1,25 @@
 import { Effect, Result } from "effect";
 import type { FastifyPluginAsync } from "fastify";
 import type { OrgID } from "../repo/entities/types";
-import { parseId } from "./domain/OrganizationId";
+import {
+	OrganizationCreateRequest,
+	OrganizationIdParameters,
+	OrganizationListQuery,
+	OrganizationResponse,
+	OrganizationUpdateRequest,
+	toOrganizationResponse,
+} from "./OrganizationSchema";
+import { OrganizationServiceTag } from "./OrganizationService";
 import {
 	BadRequestProblem,
 	ConflictProblem,
 	ForbiddenProblem,
 	InternalServerProblem,
 	NotFoundProblem,
-	OrganizationCreateRequest,
-	OrganizationIdParameters,
-	OrganizationListQuery,
-	OrganizationResponse,
-	OrganizationUpdateRequest,
 	ServiceUnavailableProblem,
 	UnauthorizedProblem,
-	toOrganizationResponse,
-} from "./OrganizationSchema";
-import { OrganizationServiceTag } from "./OrganizationService";
+} from "@/lib/errors";
+import { parseId } from "@/lib/utils";
 
 const commonErrors = {
 	400: BadRequestProblem,

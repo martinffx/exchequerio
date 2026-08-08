@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
 import type { OrgID } from "../repo/entities/types";
-import { parseId } from "./domain/OrganizationId";
+import { parseId } from "@/lib/utils";
 
 interface OrganizationIdGenerator {
 	generate(): Effect.Effect<OrgID>;
