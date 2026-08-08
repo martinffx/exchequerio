@@ -5,9 +5,8 @@ import fastifyUnderPressure from "@fastify/under-pressure";
 import fastify, { type FastifyInstance } from "fastify";
 import { registerAuth } from "@/Auth";
 import { Config } from "@/Config";
-import { DatabaseTag } from "@/database/Database";
-import { globalErrorHandler } from "@/Errors";
-import { registerOrganizationRateLimit } from "@/organizations";
+import { DatabaseTag } from "@/db/Database";
+import { globalErrorHandler } from "@/http/HttpErrors";
 import { RepoPlugin, type RepoPluginOptions } from "@/repo";
 import { RouterPlugin } from "@/routes";
 import { ServicePlugin, type ServicePluginOpts } from "@/services";
@@ -18,7 +17,6 @@ import {
 	type ServerRuntimeLayer,
 	type ServerRuntimeServices,
 } from "@/runtime/ServerRuntime";
-import { RedisClientTag } from "@/runtime/RedisClient";
 
 type ServerOpts = {
 	repoPluginOpts?: Omit<RepoPluginOptions, "db">;
@@ -126,8 +124,6 @@ const buildServer = async ({
 		});
 
 		await registerAuth(server);
-		const { client } = await runtime.runPromise(RedisClientTag);
-		await registerOrganizationRateLimit(server, client);
 		const { db } = await runtime.runPromise(DatabaseTag);
 		await server.register(RepoPlugin, { ...repoPluginOpts, db });
 		await server.register(ServicePlugin, servicePluginOpts ?? {});

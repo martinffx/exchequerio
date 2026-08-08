@@ -1,11 +1,11 @@
 import fastifyAuth from "@fastify/auth";
 import fastifyJwt from "@fastify/jwt";
+import { Effect, Result } from "effect";
 import { createSigner, type SignerSync } from "fast-jwt";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { TypeID } from "typeid-js";
 import { Config } from "./Config";
 import { ForbiddenError, UnauthorizedError } from "./Errors";
-import { parseOrganizationId, type OrganizationId } from "./organizations";
+import { parseId } from "./organizations/domain/OrganizationId";
 import type { OrgID } from "./services";
 
 const Permissions = [
@@ -103,15 +103,15 @@ interface Token {
 
 class OrgToken {
 	public readonly orgId: OrgID;
-	public readonly organizationId: OrganizationId;
+	public readonly organizationId: OrgID;
 	public readonly scope: Scope[];
 	public readonly permissions: ReadonlySet<Permission>;
 	constructor({ sub, scope }: Token) {
-		const organizationId = parseOrganizationId(sub);
-		if (organizationId._tag === "Failure")
+		const organizationId = Effect.runSync(Effect.result(parseId<"org", OrgID>("org", sub)));
+		if (Result.isFailure(organizationId))
 			throw new Error("JWT subject is not a canonical Organization ID");
-		this.orgId = TypeID.fromString(sub) as OrgID;
-		this.organizationId = organizationId.value;
+		this.orgId = organizationId.success;
+		this.organizationId = organizationId.success;
 		this.scope = scope;
 		this.permissions = RolePermissions[scope[0]] ?? new Set<Permission>();
 	}

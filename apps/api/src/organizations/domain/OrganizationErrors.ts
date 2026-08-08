@@ -1,53 +1,60 @@
-class InvalidOrganizationId {
-	public readonly _tag = "InvalidOrganizationId";
+import {
+	BadRequestError,
+	ConflictError,
+	InternalServerError,
+	NotFoundError,
+	ServiceUnavailableError,
+} from "../../http/ProblemDetails";
 
-	constructor(public readonly value: string) {}
+class InvalidId extends BadRequestError {
+	constructor(
+		public readonly prefix: string,
+		public readonly value: string,
+		options?: ErrorOptions
+	) {
+		super(`Invalid ${prefix} id: ${value}`, options);
+	}
 }
 
-class InvalidOrganizationDescriptionUpdate {
-	public readonly _tag = "InvalidOrganizationDescriptionUpdate";
+class OrganizationNotFound extends NotFoundError {
+	constructor(public readonly organizationId: string) {
+		super(`Organization not found: ${organizationId}`);
+	}
 }
 
-class OrganizationAccessDenied {
-	public readonly _tag = "OrganizationAccessDenied";
-
-	constructor(public readonly organizationId?: string) {}
+class OrganizationHasDependents extends ConflictError {
+	constructor(public readonly organizationId: string) {
+		super(`Organization has dependents: ${organizationId}`);
+	}
 }
 
-class OrganizationNotFound {
-	public readonly _tag = "OrganizationNotFound";
-
-	constructor(public readonly organizationId: string) {}
+class OrganizationRepositoryUnavailable extends ServiceUnavailableError {
+	constructor(cause: unknown) {
+		super("Organization repository unavailable", { cause });
+	}
 }
 
-class OrganizationHasDependents {
-	public readonly _tag = "OrganizationHasDependents";
-
-	constructor(public readonly organizationId: string) {}
+class OrganizationPersistenceDecodingFailure extends InternalServerError {
+	constructor(cause: unknown) {
+		super("Persisted Organization could not be decoded", { cause });
+	}
 }
 
-class OrganizationRepositoryUnavailable {
-	public readonly _tag = "OrganizationRepositoryUnavailable";
-
-	constructor(public readonly cause: unknown) {}
+class OrganizationPersistenceFailure extends InternalServerError {
+	constructor(cause: unknown) {
+		super("Organization persistence operation failed", { cause });
+	}
 }
 
-class OrganizationPersistenceDecodingFailure {
-	public readonly _tag = "OrganizationPersistenceDecodingFailure";
+type OrganizationInfrastructureError =
+	| OrganizationPersistenceDecodingFailure
+	| OrganizationPersistenceFailure
+	| OrganizationRepositoryUnavailable;
 
-	constructor(public readonly cause: unknown) {}
-}
-
-class OrganizationPersistenceFailure {
-	public readonly _tag = "OrganizationPersistenceFailure";
-
-	constructor(public readonly cause: unknown) {}
-}
+export type { OrganizationInfrastructureError };
 
 export {
-	InvalidOrganizationId,
-	InvalidOrganizationDescriptionUpdate,
-	OrganizationAccessDenied,
+	InvalidId,
 	OrganizationHasDependents,
 	OrganizationNotFound,
 	OrganizationPersistenceDecodingFailure,

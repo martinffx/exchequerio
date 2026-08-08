@@ -1,18 +1,16 @@
 import { Context, type Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "../Config";
-import { type Database, makeDatabaseLive } from "../database/Database";
+import { type Database, makeDatabaseLive } from "../db/Database";
 import { organizationLayer, type OrganizationService } from "../organizations";
-import { makeRedisClientLive, type RedisClient } from "./RedisClient";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
 
-type ServerRuntimeServices = Config | Database | RedisClient | OrganizationService;
+type ServerRuntimeServices = Config | Database | OrganizationService;
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
 interface ServerRuntimeLayerOverrides {
 	readonly database?: Layer.Layer<Database, never, never>;
-	readonly redis?: Layer.Layer<RedisClient, never, never>;
 }
 
 const makeServerRuntimeLayer = (
@@ -21,8 +19,7 @@ const makeServerRuntimeLayer = (
 ): ServerRuntimeLayer => {
 	const infrastructure = Layer.mergeAll(
 		Layer.succeed(ServerConfigTag, config),
-		overrides.database ?? makeDatabaseLive(config.databaseUrl),
-		overrides.redis ?? makeRedisClientLive(config.redisUrl)
+		overrides.database ?? makeDatabaseLive(config.databaseUrl)
 	);
 	return organizationLayer.pipe(Layer.provideMerge(infrastructure));
 };

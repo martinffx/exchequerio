@@ -1,87 +1,42 @@
 import { Context, Effect, Layer, Option } from "effect";
+import type { OrgID } from "../repo/entities/types";
+import { Organization } from "./domain/Organization";
+import { OrganizationHasDependents, OrganizationNotFound } from "./domain/OrganizationErrors";
 import {
-	organizationListScope,
-	organizationTargetAllowed,
-	type OrganizationAccessDecision,
-} from "./domain/OrganizationAccess";
-import type { OrganizationId } from "./domain/OrganizationId";
-import type {
-	CreateOrganizationInput,
-	Organization,
-	UpdateOrganizationInput,
-} from "./domain/Organization";
-import { OrganizationAccessDenied, OrganizationNotFound } from "./domain/OrganizationErrors";
-import { OrganizationIdGenerator, OrganizationIdGeneratorTag } from "./OrganizationIdGenerator";
+	OrganizationIdGeneratorTag,
+	type OrganizationIdGenerator,
+} from "./OrganizationIdGenerator";
 import {
-	OrganizationRepo,
+	type OrganizationRepo,
 	OrganizationRepoTag,
-	type OrganizationDeleteRepositoryError,
 	type OrganizationInfrastructureError,
 } from "./OrganizationRepo";
+import type { OrganizationCreateRequest, OrganizationUpdateRequest } from "./OrganizationSchema";
 
-interface OrganizationOperationInput {
-	readonly actorId: OrganizationId;
-	readonly access: OrganizationAccessDecision;
-}
+type ListOrganizationsOptions = {
+	offset: number;
+	limit: number;
+};
 
-interface OrganizationListInput extends OrganizationOperationInput {
-	readonly offset: number;
-	readonly limit: number;
-}
-
-interface OrganizationTargetInput extends OrganizationOperationInput {
-	readonly targetId: OrganizationId;
-}
-
-interface OrganizationCreateInput extends OrganizationOperationInput {
-	readonly input: CreateOrganizationInput;
-}
-
-interface OrganizationUpdateInput extends OrganizationTargetInput {
-	readonly input: UpdateOrganizationInput;
-}
-
-type OrganizationListError = OrganizationAccessDenied | OrganizationInfrastructureError;
-type OrganizationGetError =
-	| OrganizationAccessDenied
-	| OrganizationNotFound
-	| OrganizationInfrastructureError;
-type OrganizationCreateError = OrganizationAccessDenied | OrganizationInfrastructureError;
-type OrganizationUpdateError =
-	| OrganizationAccessDenied
-	| OrganizationNotFound
-	| OrganizationInfrastructureError;
+type OrganizationServiceInfrastructureError = OrganizationInfrastructureError;
+type OrganizationListError = OrganizationServiceInfrastructureError;
+type OrganizationGetError = OrganizationNotFound | OrganizationServiceInfrastructureError;
+type OrganizationCreateError = OrganizationServiceInfrastructureError;
+type OrganizationUpdateError = OrganizationNotFound | OrganizationServiceInfrastructureError;
 type OrganizationDeleteError =
-	| OrganizationAccessDenied
+	| OrganizationHasDependents
 	| OrganizationNotFound
-	| OrganizationDeleteRepositoryError;
-
-const requireAccess = (
-	access: OrganizationAccessDecision,
-	organizationId?: OrganizationId
-): Effect.Effect<Exclude<OrganizationAccessDecision, "denied">, OrganizationAccessDenied> =>
-	access === "denied"
-		? Effect.fail(new OrganizationAccessDenied(organizationId))
-		: Effect.succeed(access);
-
-const requireTargetAccess = (
-	access: OrganizationAccessDecision,
-	actorId: OrganizationId,
-	targetId: OrganizationId
-): Effect.Effect<Exclude<OrganizationAccessDecision, "denied">, OrganizationAccessDenied> =>
-	Effect.flatMap(requireAccess(access, targetId), permittedAccess =>
-		organizationTargetAllowed(permittedAccess, actorId, targetId)
-			? Effect.succeed(permittedAccess)
-			: Effect.fail(new OrganizationAccessDenied(targetId))
-	);
+	| OrganizationServiceInfrastructureError;
 
 const requireFound = (
-	organization: Option.Option<Organization>,
-	targetId: OrganizationId
-): Effect.Effect<Organization, OrganizationNotFound> =>
-	Option.isSome(organization)
-		? Effect.succeed(organization.value)
-		: Effect.fail(new OrganizationNotFound(targetId));
+	organizationId: OrgID
+): ((
+	organization: Option.Option<Organization>
+) => Effect.Effect<Organization, OrganizationNotFound>) =>
+	Option.match({
+		onNone: () => Effect.fail(new OrganizationNotFound(organizationId.toString())),
+		onSome: Effect.succeed,
+	});
 
 class OrganizationService {
 	constructor(
@@ -89,47 +44,41 @@ class OrganizationService {
 		private readonly idGenerator: OrganizationIdGenerator
 	) {}
 
-	list(input: OrganizationListInput): Effect.Effect<readonly Organization[], OrganizationListError> {
-		return requireAccess(input.access).pipe(
-			Effect.flatMap(access =>
-				this.repository.list({
-					scope: organizationListScope(access, input.actorId),
-					offset: input.offset,
-					limit: input.limit,
-				})
-			)
+	listOrganizations({
+		offset,
+		limit,
+	}: ListOrganizationsOptions): Effect.Effect<Organization[], OrganizationListError> {
+		return this.repository.listOrganizations({
+			offset,
+			limit,
+		});
+	}
+
+	getOrganization(orgId: OrgID): Effect.Effect<Organization, OrganizationGetError> {
+		return this.repository.getOrganization(orgId).pipe(Effect.flatMap(requireFound(orgId)));
+	}
+
+	createOrganization(
+		rq: OrganizationCreateRequest
+	): Effect.Effect<Organization, OrganizationCreateError> {
+		return this.idGenerator.generate().pipe(
+			Effect.flatMap(id => {
+				const organization = Organization.fromRequest(id, rq);
+				return this.repository.createOrganization(organization);
+			})
 		);
 	}
 
-	get(input: OrganizationTargetInput): Effect.Effect<Organization, OrganizationGetError> {
-		return requireTargetAccess(input.access, input.actorId, input.targetId).pipe(
-			Effect.flatMap(() => this.repository.get(input.targetId)),
-			Effect.flatMap(organization => requireFound(organization, input.targetId))
-		);
+	updateOrganization(
+		orgId: OrgID,
+		rq: OrganizationUpdateRequest
+	): Effect.Effect<Organization, OrganizationUpdateError> {
+		const organization = Organization.fromRequest(orgId, rq);
+		return this.repository.updateOrganization(organization).pipe(Effect.flatMap(requireFound(orgId)));
 	}
 
-	create(input: OrganizationCreateInput): Effect.Effect<Organization, OrganizationCreateError> {
-		if (input.access !== "platform") {
-			return Effect.fail(new OrganizationAccessDenied());
-		}
-
-		return this.idGenerator
-			.generate()
-			.pipe(Effect.flatMap(id => this.repository.create({ id, ...input.input })));
-	}
-
-	update(input: OrganizationUpdateInput): Effect.Effect<Organization, OrganizationUpdateError> {
-		return requireTargetAccess(input.access, input.actorId, input.targetId).pipe(
-			Effect.flatMap(() => this.repository.update(input.targetId, input.input)),
-			Effect.flatMap(organization => requireFound(organization, input.targetId))
-		);
-	}
-
-	delete(input: OrganizationTargetInput): Effect.Effect<Organization, OrganizationDeleteError> {
-		return requireTargetAccess(input.access, input.actorId, input.targetId).pipe(
-			Effect.flatMap(() => this.repository.delete(input.targetId)),
-			Effect.flatMap(organization => requireFound(organization, input.targetId))
-		);
+	deleteOrganization(orgId: OrgID): Effect.Effect<Organization, OrganizationDeleteError> {
+		return this.repository.deleteOrganization(orgId).pipe(Effect.flatMap(requireFound(orgId)));
 	}
 }
 
@@ -143,14 +92,10 @@ const organizationServiceLayer = Layer.effect(
 );
 
 export type {
-	OrganizationCreateInput,
 	OrganizationCreateError,
 	OrganizationDeleteError,
 	OrganizationGetError,
-	OrganizationListInput,
 	OrganizationListError,
-	OrganizationTargetInput,
 	OrganizationUpdateError,
-	OrganizationUpdateInput,
 };
 export { OrganizationService, OrganizationServiceTag, organizationServiceLayer };

@@ -1,15 +1,13 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import Redis from "ioredis";
 import { Pool } from "pg";
 import { TypeID } from "typeid-js";
 import type { FastifyInstance } from "fastify";
 import { signJWT } from "../Auth";
 import { Config } from "../Config";
-import { makeDatabaseTest, type DrizzleDatabase } from "../database/Database";
+import { makeDatabaseTest, type DrizzleDatabase } from "../db/Database";
 import * as schema from "../repo/schema";
 import { LedgersTable, OrganizationsTable } from "../repo/schema";
-import { makeRedisClientTest } from "../runtime/RedisClient";
 import { makeServerRuntimeLayer } from "../runtime/ServerRuntime";
 import { buildServer } from "../Server";
 
@@ -17,14 +15,11 @@ type TestScope = "super_admin" | "org_admin" | "org_user" | "org_readonly";
 
 interface ApiTestHarnessOptions {
 	readonly environment?: string;
-	readonly rateLimitMax?: number;
-	readonly rateLimitWindowMs?: number;
 }
 
 interface ApiTestHarness {
 	readonly server: FastifyInstance;
 	readonly db: DrizzleDatabase;
-	readonly redis: Redis;
 	readonly environment: string;
 	readonly organizationIds: Set<string>;
 	readonly ledgerIds: Set<string>;
@@ -61,17 +56,11 @@ const createApiTestHarness = async (
 	options: ApiTestHarnessOptions = {}
 ): Promise<ApiTestHarness> => {
 	const environment = `test-${options.environment ?? new TypeID("tst").toString()}`;
-	const config = new Config({
-		environment,
-		organizationRateLimitMax: options.rateLimitMax ?? 1000,
-		organizationRateLimitWindowMs: options.rateLimitWindowMs ?? 60_000,
-	});
+	const config = new Config({ environment });
 	const pool = new Pool({ connectionString: config.databaseUrl });
 	let db: DrizzleDatabase;
-	let redis: Redis;
 	try {
 		db = drizzle(pool, { schema });
-		redis = new Redis(config.redisUrl);
 	} catch (setupError) {
 		try {
 			await runCleanupSteps([() => pool.end()]);
@@ -88,14 +77,13 @@ const createApiTestHarness = async (
 	const ledgerIds = new Set<string>();
 	const runtimeLayer = makeServerRuntimeLayer(config, {
 		database: makeDatabaseTest(db),
-		redis: makeRedisClientTest(redis),
 	});
 	let server: FastifyInstance;
 	try {
 		server = await buildServer({ runtimeLayer });
 	} catch (setupError) {
 		try {
-			await runCleanupSteps([() => redis.disconnect(), () => pool.end()]);
+			await runCleanupSteps([() => pool.end()]);
 		} catch (cleanupError) {
 			const cleanupErrors = errorsFrom(cleanupError);
 			throw new AggregateError(
@@ -118,20 +106,6 @@ const createApiTestHarness = async (
 		await db.insert(LedgersTable).values({ id, organizationId, name });
 		return id;
 	};
-	const clearRateLimits = async () => {
-		let cursor = "0";
-		do {
-			const [next, keys] = await redis.scan(
-				cursor,
-				"MATCH",
-				`exchequer:${environment}:organizations:*`,
-				"COUNT",
-				100
-			);
-			cursor = next;
-			if (keys.length > 0) await redis.del(...keys);
-		} while (cursor !== "0");
-	};
 	const close = makeIdempotentCleanup([
 		() =>
 			runCleanupSteps(
@@ -143,16 +117,13 @@ const createApiTestHarness = async (
 					id => () => db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id))
 				)
 			),
-		clearRateLimits,
 		() => server.close(),
-		() => redis.disconnect(),
 		() => pool.end(),
 	]);
 
 	return {
 		server,
 		db,
-		redis,
 		environment,
 		organizationIds,
 		ledgerIds,

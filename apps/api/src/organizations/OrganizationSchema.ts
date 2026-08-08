@@ -36,7 +36,6 @@ const UnauthorizedProblem = problemDetailSchema("UNAUTHORIZED", 401);
 const ForbiddenProblem = problemDetailSchema("FORBIDDEN", 403);
 const NotFoundProblem = problemDetailSchema("NOT_FOUND", 404);
 const ConflictProblem = problemDetailSchema("CONFLICT", 409);
-const TooManyRequestsProblem = problemDetailSchema("TOO_MANY_REQUESTS", 429);
 const InternalServerProblem = problemDetailSchema("INTERNAL_SERVER_ERROR", 500);
 const ServiceUnavailableProblem = problemDetailSchema("SERVICE_UNAVAILABLE", 503);
 
@@ -53,7 +52,7 @@ const toIso = (value: DateTime): string => {
 };
 
 const toOrganizationResponse = (organization: Organization): OrganizationResponse => ({
-	id: organization.id,
+	id: organization.id.toString(),
 	name: organization.name,
 	...(organization.description === undefined ? {} : { description: organization.description }),
 	created: toIso(organization.created),
@@ -73,7 +72,6 @@ export {
 	OrganizationResponse,
 	OrganizationUpdateRequest,
 	ServiceUnavailableProblem,
-	TooManyRequestsProblem,
 	UnauthorizedProblem,
 	toOrganizationResponse,
 };

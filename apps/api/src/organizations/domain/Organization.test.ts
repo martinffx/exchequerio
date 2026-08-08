@@ -1,46 +1,50 @@
+import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 import { describe, expect, it } from "vitest";
-import type { OrganizationId } from "./OrganizationId";
-import { createOrganization, parseOrganizationUpdateInput } from "./Organization";
-import { InvalidOrganizationDescriptionUpdate } from "./OrganizationErrors";
+import type { OrganizationRow } from "../../repo/schema";
+import { Organization } from "./Organization";
+import { OrganizationPersistenceDecodingFailure } from "./OrganizationErrors";
 
-const id = "org_01h2x3y4z5a6b7c8d9e0f1g2h3" as OrganizationId;
-const created = DateTime.fromISO("2026-08-04T12:00:00.000+02:00", { setZone: true });
+const row = {
+	id: "org_01h2x3y4z5a6b7c8d9e0f1g2h3",
+	name: "Example",
+	// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+	description: null,
+	created: new Date("2026-08-04T10:00:00.000Z"),
+	updated: new Date("2026-08-04T11:00:00.000Z"),
+} satisfies OrganizationRow;
 
 describe("Organization", () => {
-	it("creates an immutable Organization with an absent description", () => {
-		const organization = createOrganization({ id, name: "Example", created, updated: created });
+	it("decodes a Drizzle row into UTC domain values", () => {
+		const organization = Option.getOrThrow(Effect.runSync(Organization.fromRow(row)));
 
 		expect(organization.description).toBeUndefined();
-		expect(Object.isFrozen(organization)).toBe(true);
+		expect(organization.created).toBeInstanceOf(DateTime);
 		expect(organization.created.zoneName).toBe("UTC");
 		expect(organization.created.toISO()).toBe("2026-08-04T10:00:00.000Z");
 	});
 
-	it.each([
-		{
-			case: "omission to preserve intent",
-			request: { name: "After" },
-			description: { _tag: "Preserve" },
-		},
-		{
-			case: "a supplied value to replace intent",
-			request: { name: "After", description: "Replacement" },
-			description: { _tag: "Replace", value: "Replacement" },
-		},
-	])("translates $case", ({ request, description }) => {
-		expect(parseOrganizationUpdateInput(request)).toEqual({
-			_tag: "Success",
-			value: { name: "After", description },
-		});
+	it("encodes a complete Drizzle row and round-trips all domain fields", () => {
+		const organization = Option.getOrThrow(Effect.runSync(Organization.fromRow(row)));
+		const encoded = organization.toRow();
+		const decoded = Option.getOrThrow(Effect.runSync(Organization.fromRow(encoded)));
+
+		expect(encoded).toEqual(row);
+		expect(decoded.toRow()).toEqual(row);
 	});
 
-	it("rejects an explicitly present undefined description without throwing", () => {
-		const request = { name: "After", description: undefined };
+	it("returns None when no row exists", () => {
+		expect(Effect.runSync(Organization.fromRow(undefined))).toEqual(Option.none());
+	});
 
-		expect(parseOrganizationUpdateInput(request)).toEqual({
-			_tag: "Failure",
-			error: new InvalidOrganizationDescriptionUpdate(),
-		});
+	it.each([
+		{ ...row, id: "not-an-organization" },
+		{ ...row, id: "lgr_01h2x3y4z5a6b7c8d9e0f1g2h3" },
+		{ ...row, created: new Date("invalid") },
+		{ ...row, updated: new Date("invalid") },
+	])("fails with a typed error when persisted data cannot be decoded", invalidRow => {
+		const error = Effect.runSync(Organization.fromRow(invalidRow).pipe(Effect.flip));
+
+		expect(error).toBeInstanceOf(OrganizationPersistenceDecodingFailure);
 	});
 });
