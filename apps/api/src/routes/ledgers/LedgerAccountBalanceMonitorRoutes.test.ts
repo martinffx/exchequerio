@@ -3,7 +3,7 @@ import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/Auth";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/repo/entities/types";
 import { buildServer } from "@/Server";
 import type { LedgerAccountBalanceMonitorService } from "@/services";
@@ -14,7 +14,7 @@ import type {
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
-} from "../schema";
+} from "@/lib/errors";
 import { createLedgerAccountBalanceMonitorFixture } from "./fixtures";
 
 const mockLedgerAccountBalanceMonitorService = vi.mocked<LedgerAccountBalanceMonitorService>({
@@ -298,7 +298,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerAccountBalanceMonitorService.createLedgerAccountBalanceMonitor.mockRejectedValue(
-				new ConflictError({ message: "Monitor already exists" })
+				new ConflictError("Monitor already exists")
 			);
 
 			const rs = await server.inject({
@@ -434,7 +434,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor.mockRejectedValue(
-				new ConflictError({ message: "Cannot update active monitor" })
+				new ConflictError("Cannot update active monitor")
 			);
 
 			const rs = await server.inject({
@@ -533,7 +533,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerAccountBalanceMonitorService.deleteLedgerAccountBalanceMonitor.mockRejectedValue(
-				new ConflictError({ message: "Cannot delete active monitor" })
+				new ConflictError("Cannot delete active monitor")
 			);
 
 			const rs = await server.inject({

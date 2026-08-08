@@ -1,6 +1,6 @@
 import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
-import { NotFoundError } from "@/Errors";
+import { NotFoundError } from "@/lib/errors";
 import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
 import type { LedgerAccountCategoryRepo } from "@/repo/LedgerAccountCategoryRepo";

@@ -4,7 +4,7 @@ import {
 	InternalServerError,
 	NotFoundError,
 	ServiceUnavailableError,
-} from "@/Errors";
+} from "@/lib/errors";
 
 /**
  * Database error with code property (PostgreSQL/DSQL)
@@ -63,7 +63,7 @@ function getDBErrorCode(error: DBError): string {
  *
  * @param error - Database error with code
  * @param context - Optional context with resource IDs for debugging
- * @returns LedgerError based on error code
+ * @returns HttpError based on error code
  */
 function handleDBError(error: DBError, context: ErrorContext = {}): Error {
 	const code = getDBErrorCode(error);
@@ -71,7 +71,7 @@ function handleDBError(error: DBError, context: ErrorContext = {}): Error {
 	switch (code) {
 		// Unique constraint violation
 		case "23505":
-			return new ConflictError({ message: "Resource already exists", retryable: false, context });
+			return new ConflictError("Resource already exists", { ...context, retryable: false });
 
 		// Foreign key violation (PG only - DSQL doesn't support FKs)
 		case "23503":
@@ -80,18 +80,21 @@ function handleDBError(error: DBError, context: ErrorContext = {}): Error {
 		// Serialization failure (PG + DSQL)
 		case "40001":
 		case "OC000":
-			return new ServiceUnavailableError("Transaction conflict - please retry", true, context);
+			return new ServiceUnavailableError("Transaction conflict - please retry", context);
 
 		// Deadlock (PG only)
 		case "40P01":
-			return new ServiceUnavailableError("Transaction deadlock - please retry", true, context);
+			return new ServiceUnavailableError("Transaction deadlock - please retry", context);
 
 		// Catalog cache stale (DSQL)
 		case "OC001":
-			return new ServiceUnavailableError("Schema conflict - please retry", true, context);
+			return new ServiceUnavailableError("Schema conflict - please retry", context);
 
 		default:
-			return new InternalServerError(error.message || "Database error", error, context);
+			return new InternalServerError(error.message || "Database error", {
+				...context,
+				cause: error,
+			});
 	}
 }
 

@@ -7,11 +7,11 @@ import {
 	ForbiddenErrorResponse,
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
-	PaginationQuery,
 	ServiceUnavailableErrorResponse,
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema";
+} from "@/lib/errors";
+import { PaginationQuery } from "@/routes/schema";
 import {
 	type CreateLedgerRequest,
 	type DeleteLedgerRequest,

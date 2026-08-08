@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { vi } from "vitest";
 import { signJWT } from "@/Auth";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -9,7 +9,7 @@ import type {
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
-} from "@/routes/schema";
+} from "@/lib/errors";
 import { buildServer } from "@/Server";
 import type { LedgerService } from "@/services/LedgerService";
 import { createLedgerFixture, createOrganizationFixture } from "./fixtures";
@@ -320,7 +320,7 @@ describe("LedgerRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerService.createLedger.mockImplementation(async () => {
-				throw new ConflictError({ message: "Ledger already exists" });
+				throw new ConflictError("Ledger already exists");
 			});
 
 			const rs = await server.inject({
@@ -458,7 +458,7 @@ describe("LedgerRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerService.updateLedger.mockImplementation(async () => {
-				throw new ConflictError({ message: "Ledger conflict" });
+				throw new ConflictError("Ledger conflict");
 			});
 
 			const rs = await server.inject({
@@ -581,7 +581,7 @@ describe("LedgerRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerService.deleteLedger.mockImplementation(async () => {
-				throw new ConflictError({ message: "Cannot delete ledger with active accounts" });
+				throw new ConflictError("Cannot delete ledger with active accounts");
 			});
 
 			const rs = await server.inject({

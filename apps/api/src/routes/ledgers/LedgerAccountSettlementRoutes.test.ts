@@ -3,7 +3,7 @@ import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/Auth";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import type {
 	LedgerAccountID,
 	LedgerAccountSettlementID,
@@ -23,7 +23,7 @@ import type {
 	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
-} from "../schema";
+} from "@/lib/errors";
 import {
 	createLedgerAccountFixture,
 	createLedgerAccountSettlementFixture,
@@ -344,7 +344,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
 			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockRejectedValue(
-				new ConflictError({ message: "Settlement already exists" })
+				new ConflictError("Settlement already exists")
 			);
 
 			const rs = await server.inject({
@@ -492,7 +492,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
 			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
 			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
-				new ConflictError({ message: "Cannot update posted settlement" })
+				new ConflictError("Cannot update posted settlement")
 			);
 
 			const rs = await server.inject({
@@ -596,7 +596,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockRejectedValue(
-				new ConflictError({ message: "Cannot delete posted settlement" })
+				new ConflictError("Cannot delete posted settlement")
 			);
 
 			const rs = await server.inject({
@@ -714,7 +714,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockRejectedValue(
-				new ConflictError({ message: "Cannot add entries to posted settlement" })
+				new ConflictError("Cannot add entries to posted settlement")
 			);
 
 			const rs = await server.inject({
@@ -838,7 +838,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 		it("should handle conflict error", async () => {
 			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockRejectedValue(
-				new ConflictError({ message: "Cannot remove entries from posted settlement" })
+				new ConflictError("Cannot remove entries from posted settlement")
 			);
 
 			const rs = await server.inject({
@@ -961,7 +961,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 		it("should handle conflict error for invalid transition", async () => {
 			mockLedgerAccountSettlementService.transitionSettlementStatus.mockRejectedValue(
-				new ConflictError({ message: "Invalid transition from posted to drafting" })
+				new ConflictError("Invalid transition from posted to drafting")
 			);
 
 			const rs = await server.inject({

@@ -4,8 +4,8 @@ import { Effect, Result } from "effect";
 import { createSigner, type SignerSync } from "fast-jwt";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Config } from "./Config";
-import { ForbiddenError, UnauthorizedError } from "./Errors";
-import { parseId } from "./organizations/domain/OrganizationId";
+import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
+import { parseId } from "@/lib/utils";
 import type { OrgID } from "./services";
 
 const Permissions = [

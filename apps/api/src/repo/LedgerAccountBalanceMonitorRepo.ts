@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { NotFoundError } from "@/Errors";
+import { NotFoundError } from "@/lib/errors";
 import { LedgerAccountBalanceMonitorEntity } from "@/repo/entities/LedgerAccountBalanceMonitorEntity";
 import type { LedgerAccountBalanceMonitorID } from "@/repo/entities/types";
 import { LedgerAccountBalanceMonitorsTable } from "./schema";

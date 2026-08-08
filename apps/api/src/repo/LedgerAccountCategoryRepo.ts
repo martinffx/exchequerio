@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
 import { getDBErrorCode, isDBError } from "./errors";
@@ -102,7 +102,7 @@ class LedgerAccountCategoryRepo {
 				.returning();
 
 			if (result.length === 0) {
-				throw new ConflictError({ message: "Category not found or ledgerId mismatch" });
+				throw new ConflictError("Category not found or ledgerId mismatch");
 			}
 
 			return LedgerAccountCategoryEntity.fromRecord(result[0]);
@@ -240,7 +240,7 @@ class LedgerAccountCategoryRepo {
 
 		// Prevent self-reference
 		if (categoryId.toString() === parentCategoryId.toString()) {
-			throw new ConflictError({ message: "Category cannot be its own parent" });
+			throw new ConflictError("Category cannot be its own parent");
 		}
 
 		try {
@@ -254,7 +254,7 @@ class LedgerAccountCategoryRepo {
 		} catch (error) {
 			// PostgreSQL CHECK constraint violation (self-reference)
 			if (error instanceof Error && "code" in error && error.code === "23514") {
-				throw new ConflictError({ message: "Category cannot be its own parent" });
+				throw new ConflictError("Category cannot be its own parent");
 			}
 			throw error;
 		}

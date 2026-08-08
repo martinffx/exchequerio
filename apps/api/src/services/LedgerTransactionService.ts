@@ -1,5 +1,5 @@
 import { retry } from "radash";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import {
 	type LedgerID,
 	LedgerTransactionEntity,
@@ -137,9 +137,7 @@ class LedgerTransactionService {
 
 		// Cannot delete posted transactions in production
 		if (existing.status === "posted" && process.env.NODE_ENV !== "test") {
-			throw new ConflictError({
-				message: "Cannot delete a posted transaction outside of test environment",
-			});
+			throw new ConflictError("Cannot delete a posted transaction outside of test environment");
 		}
 
 		await this.ledgerTransactionRepo.deleteTransactionWithBalanceUpdate(

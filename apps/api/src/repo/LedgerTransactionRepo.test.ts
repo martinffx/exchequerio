@@ -5,7 +5,7 @@ import { retry } from "radash";
 import { TypeID } from "typeid-js";
 import { vi } from "vitest";
 import { Config } from "@/Config";
-import { NotFoundError } from "@/Errors";
+import { NotFoundError } from "@/lib/errors";
 import { LedgerTransactionEntity } from "@/repo/entities";
 import {
 	createLedgerEntity,

@@ -5,7 +5,7 @@ import {
 	OrganizationIdGeneratorTag,
 	organizationIdGeneratorLayer,
 } from "./OrganizationIdGenerator";
-import { parseId } from "./domain/OrganizationId";
+import { parseId } from "@/lib/utils";
 
 describe("OrganizationIdGeneratorLive", () => {
 	it("generates canonical Organization TypeIDs", async () => {

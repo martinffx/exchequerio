@@ -1,7 +1,7 @@
 import { Effect, Layer, Option } from "effect";
 import { TypeID } from "typeid-js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { HttpError, InternalServerError, ServiceUnavailableError } from "../http/ProblemDetails";
+import { HttpError, InternalServerError, ServiceUnavailableError } from "@/lib/errors";
 import type { OrgID } from "../repo/entities/types";
 import { Organization } from "./domain/Organization";
 import {

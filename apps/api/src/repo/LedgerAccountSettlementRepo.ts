@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
-import { ConflictError, NotFoundError } from "@/Errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities/LedgerAccountSettlementEntity";
 import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { SettlementStatus } from "@/routes/ledgers/schema";
@@ -93,9 +93,7 @@ class LedgerAccountSettlementRepo {
 			}
 			// PostgreSQL check constraint violation (self-settle)
 			if (isDBError(error) && getDBErrorCode(error) === "23514") {
-				throw new ConflictError({
-					message: "Cannot settle an account to itself",
-				});
+				throw new ConflictError("Cannot settle an account to itself");
 			}
 			throw error;
 		}
@@ -126,9 +124,7 @@ class LedgerAccountSettlementRepo {
 			.returning();
 
 		if (result.length === 0) {
-			throw new ConflictError({
-				message: "Settlement not found or not in drafting status",
-			});
+			throw new ConflictError("Settlement not found or not in drafting status");
 		}
 
 		return LedgerAccountSettlementEntity.fromRecord(result[0]);
@@ -154,9 +150,7 @@ class LedgerAccountSettlementRepo {
 			.returning({ id: LedgerAccountSettlementsTable.id });
 
 		if (result.length === 0) {
-			throw new ConflictError({
-				message: "Settlement not found or not in drafting status",
-			});
+			throw new ConflictError("Settlement not found or not in drafting status");
 		}
 	}
 
@@ -173,9 +167,7 @@ class LedgerAccountSettlementRepo {
 		const settlement = await this.getSettlement(orgId, settlementId);
 
 		if (settlement.status !== "drafting") {
-			throw new ConflictError({
-				message: "Can only add entries to settlements in drafting status",
-			});
+			throw new ConflictError("Can only add entries to settlements in drafting status");
 		}
 
 		// Validate all entries exist, belong to settled account, and are posted
@@ -201,16 +193,12 @@ class LedgerAccountSettlementRepo {
 
 			// Verify entry belongs to the settled account
 			if (entryCheck[0].accountId !== settlement.settledAccountId.toString()) {
-				throw new ConflictError({
-					message: `Entry ${entryId} does not belong to the settled account`,
-				});
+				throw new ConflictError(`Entry ${entryId} does not belong to the settled account`);
 			}
 
 			// Verify entry is posted
 			if (entryCheck[0].status !== "posted") {
-				throw new ConflictError({
-					message: `Entry ${entryId} is not posted (status: ${entryCheck[0].status})`,
-				});
+				throw new ConflictError(`Entry ${entryId} is not posted (status: ${entryCheck[0].status})`);
 			}
 
 			// Check if already attached to another settlement
@@ -221,9 +209,9 @@ class LedgerAccountSettlementRepo {
 				.limit(1);
 
 			if (existingAttachment.length > 0) {
-				throw new ConflictError({
-					message: `Entry ${entryId} is already attached to settlement ${existingAttachment[0].settlementId}`,
-				});
+				throw new ConflictError(
+					`Entry ${entryId} is already attached to settlement ${existingAttachment[0].settlementId}`
+				);
 			}
 		}
 
@@ -248,9 +236,7 @@ class LedgerAccountSettlementRepo {
 		const settlement = await this.getSettlement(orgId, settlementId);
 
 		if (settlement.status !== "drafting") {
-			throw new ConflictError({
-				message: "Can only remove entries from settlements in drafting status",
-			});
+			throw new ConflictError("Can only remove entries from settlements in drafting status");
 		}
 
 		// Remove all specified entries
