@@ -38,15 +38,10 @@
 			{ "type": "organization-capability", "pattern": "src/organizations/OrganizationIdGenerator.ts", "mode": "full" },
 			{
 				"type": "organization-transport",
-				"pattern": [
-					"src/organizations/OrganizationAuthorization.ts",
-					"src/organizations/OrganizationHttpErrors.ts",
-					"src/organizations/OrganizationRateLimit.ts",
-					"src/organizations/OrganizationSchema.ts"
-				],
+				"pattern": "src/organizations/OrganizationSchema.ts",
 				"mode": "full"
 			},
-			{ "type": "database", "pattern": "src/database/**/*", "mode": "full" },
+			{ "type": "database", "pattern": "src/db/**/*", "mode": "full" },
 			{ "type": "runtime", "pattern": "src/runtime/**/*", "mode": "full" },
 			{ "type": "legacy-route-contracts", "pattern": "src/routes/schema.ts", "mode": "full" },
 			{
@@ -188,15 +183,33 @@
 						"from": ["legacy-ledger-route-contracts"],
 						"allow": ["legacy-route-contracts"]
 					},
-					{ "from": ["organization-domain"], "allow": ["organization-domain"] },
-					{ "from": ["organization-capability"], "allow": ["organization-domain"] },
+					{
+						"from": ["organization-domain"],
+						"allow": [
+							"organization-domain",
+							"organization-transport",
+							"http",
+							"legacy-entities",
+							"legacy-repo"
+						]
+					},
+					{
+						"from": ["organization-capability"],
+						"allow": ["organization-domain", "legacy-entities"]
+					},
 					{
 						"from": ["organization-repo"],
-						"allow": ["organization-domain", "database", "legacy-repo"]
+						"allow": ["organization-domain", "database", "legacy-entities", "legacy-repo"]
 					},
 					{
 						"from": ["organization-service"],
-						"allow": ["organization-domain", "organization-capability", "organization-repo"]
+						"allow": [
+							"organization-domain",
+							"organization-capability",
+							"organization-repo",
+							"organization-transport",
+							"legacy-entities"
+						]
 					},
 					{
 						"from": ["organization-transport"],
@@ -208,7 +221,8 @@
 							"organization-domain",
 							"organization-service",
 							"organization-transport",
-							"http"
+							"http",
+							"legacy-entities"
 						]
 					},
 					{
@@ -236,6 +250,7 @@
 							"legacy-repo",
 							"config",
 							"database",
+							"http",
 							"organization-composition",
 							"runtime"
 						]

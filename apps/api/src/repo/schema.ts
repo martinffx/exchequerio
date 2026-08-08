@@ -38,6 +38,8 @@ const OrganizationsTable = pgTable("organizations_table", {
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
 
+type OrganizationRow = typeof OrganizationsTable.$inferSelect;
+
 // Ledgers: Chart of accounts container
 const LedgersTable = pgTable(
 	"ledgers",
@@ -421,3 +423,4 @@ export {
 	ledgerEntryDirection,
 	ledgerSettlementStatus,
 };
+export type { OrganizationRow };

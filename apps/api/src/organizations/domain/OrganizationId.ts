@@ -1,24 +1,18 @@
+import { Effect } from "effect";
 import { TypeID } from "typeid-js";
-import { InvalidOrganizationId } from "./OrganizationErrors";
+import { InvalidId } from "./OrganizationErrors";
 
-declare const organizationIdBrand: unique symbol;
-type OrganizationId = string & { readonly [organizationIdBrand]: "OrganizationId" };
+const parseId = <Prefix extends string, Return extends TypeID<Prefix>>(
+	prefix: Prefix,
+	value: string
+): Effect.Effect<Return, InvalidId> =>
+	Effect.try({
+		try: () => {
+			const parsed = TypeID.fromString<Prefix>(value, prefix);
+			if (parsed.toString() !== value) throw new Error("ID is not canonical");
+			return parsed as Return;
+		},
+		catch: cause => new InvalidId(prefix, value, { cause }),
+	});
 
-type OrganizationIdParseResult =
-	| { readonly _tag: "Success"; readonly value: OrganizationId }
-	| { readonly _tag: "Failure"; readonly error: InvalidOrganizationId };
-
-const parseOrganizationId = (value: string): OrganizationIdParseResult => {
-	try {
-		const parsed = TypeID.fromString(value, "org").toString();
-		if (parsed !== value) {
-			return { _tag: "Failure", error: new InvalidOrganizationId(value) };
-		}
-		return { _tag: "Success", value: parsed as OrganizationId };
-	} catch {
-		return { _tag: "Failure", error: new InvalidOrganizationId(value) };
-	}
-};
-
-export type { OrganizationId, OrganizationIdParseResult };
-export { parseOrganizationId };
+export { parseId };

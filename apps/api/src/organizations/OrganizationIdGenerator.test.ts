@@ -1,10 +1,11 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
+import type { OrgID } from "../repo/entities/types";
 import {
 	OrganizationIdGeneratorTag,
 	organizationIdGeneratorLayer,
 } from "./OrganizationIdGenerator";
-import { parseOrganizationId } from "./domain/OrganizationId";
+import { parseId } from "./domain/OrganizationId";
 
 describe("OrganizationIdGeneratorLive", () => {
 	it("generates canonical Organization TypeIDs", async () => {
@@ -15,6 +16,6 @@ describe("OrganizationIdGeneratorLive", () => {
 			)
 		);
 
-		expect(parseOrganizationId(id)).toEqual({ _tag: "Success", value: id });
+		expect(await Effect.runPromise(parseId<"org", OrgID>("org", id.toString()))).toEqual(id);
 	});
 });

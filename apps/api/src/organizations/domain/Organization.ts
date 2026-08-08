@@ -1,76 +1,85 @@
-import type { DateTime } from "luxon";
-import type { OrganizationId } from "./OrganizationId";
-import { InvalidOrganizationDescriptionUpdate } from "./OrganizationErrors";
+import { Effect, Option } from "effect";
+import { DateTime } from "luxon";
+import type { OrgID } from "../../repo/entities/types";
+import type { OrganizationRow } from "../../repo/schema";
+import type { OrganizationUpdateRequest } from "../OrganizationSchema";
+import {
+	type OrganizationInfrastructureError,
+	OrganizationPersistenceDecodingFailure,
+} from "./OrganizationErrors";
+import { parseId } from "./OrganizationId";
 
-interface Organization {
-	readonly id: OrganizationId;
-	readonly name: string;
-	readonly description?: string;
-	readonly created: DateTime;
-	readonly updated: DateTime;
-}
+type OrganizationOpts = {
+	id: OrgID;
+	name: string;
+	description?: string;
+	created?: DateTime;
+	updated?: DateTime;
+};
 
-interface CreateOrganizationInput {
-	readonly name: string;
-	readonly description?: string;
-}
-
-interface OrganizationUpdateRequest {
-	readonly name: string;
-	readonly description?: string;
-}
-
-type OrganizationDescriptionUpdate =
-	| { readonly _tag: "Preserve" }
-	| { readonly _tag: "Replace"; readonly value: string };
-
-interface UpdateOrganizationInput {
-	readonly name: string;
-	readonly description: OrganizationDescriptionUpdate;
-}
-
-type OrganizationUpdateInputResult =
-	| { readonly _tag: "Success"; readonly value: UpdateOrganizationInput }
-	| { readonly _tag: "Failure"; readonly error: InvalidOrganizationDescriptionUpdate };
-
-interface OrganizationFields extends CreateOrganizationInput {
-	readonly id: OrganizationId;
-	readonly created: DateTime;
-	readonly updated: DateTime;
-}
-
-const createOrganization = (fields: OrganizationFields): Organization =>
-	Object.freeze({
-		...fields,
-		created: fields.created.toUTC(),
-		updated: fields.updated.toUTC(),
+const parseDate = (jsDate: Date): Effect.Effect<DateTime, Error> =>
+	Effect.suspend(() => {
+		const date = DateTime.fromJSDate(jsDate, { zone: "utc" });
+		return date.isValid
+			? Effect.succeed(date)
+			: Effect.fail(new Error("Invalid Organization timestamp"));
 	});
 
-const parseOrganizationUpdateInput = (
-	request: OrganizationUpdateRequest
-): OrganizationUpdateInputResult => {
-	if (Object.hasOwn(request, "description") && request.description === undefined) {
-		return { _tag: "Failure", error: new InvalidOrganizationDescriptionUpdate() };
-	}
-	return {
-		_tag: "Success",
-		value: {
-			name: request.name,
-			description:
-				request.description === undefined
-					? { _tag: "Preserve" }
-					: { _tag: "Replace", value: request.description },
-		},
-	};
-};
+class Organization {
+	readonly id: OrgID;
+	readonly name: string;
+	readonly description?: string;
+	readonly created: DateTime;
+	readonly updated: DateTime;
 
-export type {
-	CreateOrganizationInput,
-	Organization,
-	OrganizationDescriptionUpdate,
-	OrganizationFields,
-	OrganizationUpdateInputResult,
-	OrganizationUpdateRequest,
-	UpdateOrganizationInput,
-};
-export { createOrganization, parseOrganizationUpdateInput };
+	private constructor({ id, name, description, created, updated }: OrganizationOpts) {
+		this.id = id;
+		this.name = name;
+		this.description = description;
+		this.created = created ?? DateTime.utc();
+		this.updated = updated ?? DateTime.utc();
+	}
+
+	static fromRequest(id: OrgID, rq: OrganizationUpdateRequest) {
+		return new Organization({
+			id,
+			name: rq.name,
+			description: rq.description,
+		});
+	}
+
+	static fromRow(
+		row: OrganizationRow | undefined
+	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError> {
+		if (row === undefined) return Effect.succeed(Option.none());
+
+		return Effect.gen(function* () {
+			const id = yield* parseId<"org", OrgID>("org", row.id);
+			const created = yield* parseDate(row.created);
+			const updated = yield* parseDate(row.updated);
+
+			const organization = new Organization({
+				id,
+				name: row.name,
+				description: row.description ?? undefined,
+				created,
+				updated,
+			});
+			// eslint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives a value.
+			return Option.some(organization);
+		}).pipe(Effect.mapError(cause => new OrganizationPersistenceDecodingFailure(cause)));
+	}
+
+	toRow(): OrganizationRow {
+		return {
+			id: this.id.toString(),
+			name: this.name,
+			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			description: this.description ?? null,
+			created: this.created.toJSDate(),
+			updated: this.updated.toJSDate(),
+		};
+	}
+}
+
+export { Organization };

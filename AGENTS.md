@@ -54,8 +54,8 @@ Run commands from the repository root unless noted otherwise.
 ```bash
 pnpm install
 
-pnpm run dev              # PostgreSQL, Valkey, and all apps
-pnpm run dev:api          # PostgreSQL, Valkey, and API
+pnpm run dev              # PostgreSQL and all apps
+pnpm run dev:api          # PostgreSQL and API
 pnpm run dev:web          # Web only
 pnpm run dev:docs         # Documentation site only
 
@@ -70,8 +70,6 @@ pnpm --filter=@exchequerio/api db:gen
 pnpm --filter=@exchequerio/api db:migrate
 ```
 
-Tests use Vitest through the package scripts. Start PostgreSQL and Valkey with
-`pnpm run docker:up` before targeted API tests when they are not already running. API startup
-requires `REDIS_URL`; copy `apps/api/.env.example` to `apps/api/.env` for the documented local
-defaults. `ORGANIZATION_RATE_LIMIT_MAX` and `ORGANIZATION_RATE_LIMIT_WINDOW_MS` are optional
-positive integers defaulting to `1000` and `60000`.
+Tests use Vitest through the package scripts. Start PostgreSQL with `pnpm run docker:up` before
+targeted API tests when it is not already running. Copy `apps/api/.env.example` to
+`apps/api/.env` for the documented local defaults.

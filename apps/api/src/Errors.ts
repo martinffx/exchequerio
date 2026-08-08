@@ -1,4 +1,3 @@
-import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { v7 as uuid } from "uuid";
 import type {
 	BadRequestErrorResponse,
@@ -201,28 +200,7 @@ class NotImplementedError extends LedgerError {
 	}
 }
 
-const globalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
-	if (error.code === "FST_ERR_VALIDATION") {
-		const ex = new BadRequestError(error.message);
-		reply.status(ex.status).send(ex.toResponse());
-		return;
-	}
-	if (error.code === "FST_UNDER_PRESSURE") {
-		const ex = new ServiceUnavailableError(error.message);
-		reply.status(ex.status).send(ex.toResponse());
-		return;
-	}
-	if (error instanceof LedgerError) {
-		reply.status(error.status).send(error.toResponse());
-		return;
-	}
-	request.server.log.error(error, "Unknown Error");
-	const ex = new InternalServerError("Internal Server Error", error);
-	reply.status(ex.status).send(ex.toResponse());
-};
-
 export {
-	globalErrorHandler,
 	LedgerError,
 	BadRequestError,
 	UnauthorizedError,

@@ -1,109 +1,41 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
-import { DateTime } from "luxon";
-import { DatabaseTag, type DrizzleDatabase } from "../database/Database";
-import { isPostgresUnavailable, postgresErrorCode } from "../database/PostgresErrors";
+import { DatabaseTag, type DrizzleDatabase } from "../db/Database";
+import { isPostgresUnavailable, postgresErrorCode } from "../db/PostgresErrors";
+import type { OrgID } from "../repo/entities/types";
 import { OrganizationsTable } from "../repo/schema";
-import type { OrganizationListScope } from "./domain/OrganizationAccess";
-import { parseOrganizationId, type OrganizationId } from "./domain/OrganizationId";
-import {
-	createOrganization,
-	type Organization,
-	type CreateOrganizationInput,
-	type UpdateOrganizationInput,
-} from "./domain/Organization";
+import { Organization } from "./domain/Organization";
 import {
 	OrganizationHasDependents,
-	OrganizationPersistenceDecodingFailure,
+	type OrganizationInfrastructureError,
 	OrganizationPersistenceFailure,
 	OrganizationRepositoryUnavailable,
 } from "./domain/OrganizationErrors";
-
-type OrganizationInfrastructureError =
-	| OrganizationPersistenceDecodingFailure
-	| OrganizationPersistenceFailure
-	| OrganizationRepositoryUnavailable;
 
 type OrganizationDeleteRepositoryError =
 	| OrganizationInfrastructureError
 	| OrganizationHasDependents;
 
-interface OrganizationListQuery {
-	readonly scope: OrganizationListScope;
-	readonly offset: number;
-	readonly limit: number;
-}
-
-interface OrganizationCreateRecord extends CreateOrganizationInput {
-	readonly id: OrganizationId;
-}
-
-type OrganizationRowDecodeResult =
-	| { readonly _tag: "Success"; readonly value: Organization }
-	| { readonly _tag: "Failure"; readonly error: OrganizationPersistenceDecodingFailure };
-
-interface OrganizationRowDecodeDiagnostic {
-	readonly rowId?: string;
-	readonly invalidFields: readonly string[];
-}
-
-const decodingFailure = (cause: OrganizationRowDecodeDiagnostic): OrganizationRowDecodeResult => ({
-	_tag: "Failure",
-	error: new OrganizationPersistenceDecodingFailure(cause),
-});
-
-const decodeOrganizationRow = (row: unknown): OrganizationRowDecodeResult => {
-	if (typeof row !== "object" || row === null) return decodingFailure({ invalidFields: ["row"] });
-	const value = row as Record<string, unknown>;
-	const rowId = typeof value.id === "string" ? value.id : undefined;
-	const invalidFields: string[] = [];
-	if (typeof value.id !== "string") invalidFields.push("id");
-	if (typeof value.name !== "string") invalidFields.push("name");
-	if (value.description !== null && typeof value.description !== "string")
-		invalidFields.push("description");
-	if (!(value.created instanceof Date)) invalidFields.push("created");
-	if (!(value.updated instanceof Date)) invalidFields.push("updated");
-	if (invalidFields.length > 0)
-		return decodingFailure({ ...(rowId === undefined ? {} : { rowId }), invalidFields });
-
-	const id = parseOrganizationId(value.id as string);
-	if (id._tag === "Failure")
-		return decodingFailure({ rowId: value.id as string, invalidFields: ["id"] });
-	const created = DateTime.fromJSDate(value.created as Date, { zone: "utc" });
-	if (!created.isValid)
-		return decodingFailure({ rowId: value.id as string, invalidFields: ["created"] });
-	const updated = DateTime.fromJSDate(value.updated as Date, { zone: "utc" });
-	if (!updated.isValid)
-		return decodingFailure({ rowId: value.id as string, invalidFields: ["updated"] });
-
-	return {
-		_tag: "Success",
-		value: createOrganization({
-			id: id.value,
-			name: value.name as string,
-			...(value.description === null ? {} : { description: value.description as string }),
-			created,
-			updated,
-		}),
-	};
+type OrganizationListQuery = {
+	offset: number;
+	limit: number;
 };
 
-abstract class OrganizationRepo {
-	abstract list(
+interface OrganizationRepo {
+	listOrganizations(
 		query: OrganizationListQuery
-	): Effect.Effect<readonly Organization[], OrganizationInfrastructureError>;
-	abstract get(
-		id: OrganizationId
+	): Effect.Effect<Organization[], OrganizationInfrastructureError>;
+	getOrganization(
+		id: OrgID
 	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError>;
-	abstract create(
-		record: OrganizationCreateRecord
+	createOrganization(
+		record: Organization
 	): Effect.Effect<Organization, OrganizationInfrastructureError>;
-	abstract update(
-		id: OrganizationId,
-		input: UpdateOrganizationInput
+	updateOrganization(
+		record: Organization
 	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError>;
-	abstract delete(
-		id: OrganizationId
+	deleteOrganization(
+		id: OrgID
 	): Effect.Effect<Option.Option<Organization>, OrganizationDeleteRepositoryError>;
 }
 
@@ -114,93 +46,97 @@ const mapInfrastructureError = (cause: unknown): OrganizationInfrastructureError
 		? new OrganizationRepositoryUnavailable(cause)
 		: new OrganizationPersistenceFailure(cause);
 
-const mapDeleteError = (cause: unknown, id: OrganizationId): OrganizationDeleteRepositoryError =>
+const mapDeleteError = (cause: unknown, id: OrgID): OrganizationDeleteRepositoryError =>
 	postgresErrorCode(cause) === "23503"
-		? new OrganizationHasDependents(id)
+		? new OrganizationHasDependents(id.toString())
 		: mapInfrastructureError(cause);
+class OrganizationRepoLive implements OrganizationRepo {
+	constructor(private readonly db: DrizzleDatabase) {}
 
-const decodeRow = (row: unknown): Effect.Effect<Organization, OrganizationInfrastructureError> => {
-	const decoded = decodeOrganizationRow(row);
-	return decoded._tag === "Success" ? Effect.succeed(decoded.value) : Effect.fail(decoded.error);
-};
-
-const decodeOptionalRow = (
-	rows: readonly unknown[]
-): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError> =>
-	rows[0] === undefined
-		? Effect.succeed(Option.none())
-		: decodeRow(rows[0]).pipe(Effect.map(Option.some));
-
-class OrganizationRepoLive extends OrganizationRepo {
-	constructor(private readonly db: DrizzleDatabase) {
-		super();
-	}
-
-	list(query: OrganizationListQuery) {
+	listOrganizations(
+		query: OrganizationListQuery
+	): Effect.Effect<Organization[], OrganizationInfrastructureError> {
 		return Effect.tryPromise({
 			try: () =>
 				this.db
 					.select()
 					.from(OrganizationsTable)
-					.where(
-						query.scope._tag === "Organization"
-							? eq(OrganizationsTable.id, query.scope.organizationId)
-							: undefined
-					)
 					.orderBy(asc(OrganizationsTable.id))
 					.limit(query.limit)
 					.offset(query.offset),
 			catch: mapInfrastructureError,
-		}).pipe(Effect.flatMap(rows => Effect.all(rows.map(row => decodeRow(row)))));
+		}).pipe(
+			Effect.flatMap(rows => Effect.all(rows.map(row => Organization.fromRow(row)))),
+			Effect.map(organizations => organizations.flatMap(organization => Option.toArray(organization)))
+		);
 	}
 
-	get(id: OrganizationId) {
-		return Effect.tryPromise({
-			try: () =>
-				this.db.select().from(OrganizationsTable).where(eq(OrganizationsTable.id, id)).limit(1),
-			catch: mapInfrastructureError,
-		}).pipe(Effect.flatMap(decodeOptionalRow));
-	}
-
-	create(record: OrganizationCreateRecord) {
+	getOrganization(
+		id: OrgID
+	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError> {
 		return Effect.tryPromise({
 			try: () =>
 				this.db
+					.select()
+					.from(OrganizationsTable)
+					.where(eq(OrganizationsTable.id, id.toString()))
+					.limit(1),
+			catch: mapInfrastructureError,
+		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
+	}
+
+	createOrganization(
+		record: Organization
+	): Effect.Effect<Organization, OrganizationInfrastructureError> {
+		return Effect.tryPromise({
+			try: () => {
+				const row = record.toRow();
+				return this.db
 					.insert(OrganizationsTable)
 					.values({
-						id: record.id,
-						name: record.name,
-						description: record.description,
+						id: row.id,
+						name: row.name,
+						description: row.description,
 					})
-					.returning(),
+					.returning();
+			},
 			catch: mapInfrastructureError,
 		}).pipe(
-			Effect.flatMap(rows =>
-				rows[0] === undefined
-					? Effect.fail(new OrganizationPersistenceFailure(new Error("INSERT returned no row")))
-					: decodeRow(rows[0])
+			Effect.flatMap(rows => Organization.fromRow(rows[0])),
+			Effect.flatMap(
+				Option.match({
+					onNone: () =>
+						Effect.fail(new OrganizationPersistenceFailure(new Error("INSERT returned no row"))),
+					onSome: Effect.succeed,
+				})
 			)
 		);
 	}
 
-	update(id: OrganizationId, input: UpdateOrganizationInput) {
-		const values = {
-			name: input.name,
-			updated: sql`now()`,
-			...(input.description._tag === "Replace" ? { description: input.description.value } : {}),
-		};
+	updateOrganization(
+		record: Organization
+	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError> {
 		return Effect.tryPromise({
-			try: () =>
-				this.db.update(OrganizationsTable).set(values).where(eq(OrganizationsTable.id, id)).returning(),
+			try: () => {
+				const row = record.toRow();
+				return this.db
+					.update(OrganizationsTable)
+					.set({ name: row.name, description: row.description, updated: row.updated })
+					.where(eq(OrganizationsTable.id, row.id))
+					.returning();
+			},
 			catch: mapInfrastructureError,
-		}).pipe(Effect.flatMap(decodeOptionalRow));
+		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
 	}
 
-	delete(id: OrganizationId) {
+	deleteOrganization(
+		id: OrgID
+	): Effect.Effect<Option.Option<Organization>, OrganizationDeleteRepositoryError> {
 		return Effect.tryPromise({
-			try: () => this.db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id)).returning(),
+			try: () =>
+				this.db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id.toString())).returning(),
 			catch: cause => mapDeleteError(cause, id),
-		}).pipe(Effect.flatMap(decodeOptionalRow));
+		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
 	}
 }
 
@@ -209,16 +145,6 @@ const organizationRepoLayer = Layer.effect(
 	DatabaseTag.pipe(Effect.map(database => new OrganizationRepoLive(database.db)))
 );
 
-export type {
-	OrganizationCreateRecord,
-	OrganizationDeleteRepositoryError,
-	OrganizationInfrastructureError,
-	OrganizationListQuery,
-};
-export {
-	decodeOrganizationRow,
-	OrganizationRepo,
-	OrganizationRepoLive,
-	OrganizationRepoTag,
-	organizationRepoLayer,
-};
+export type { OrganizationDeleteRepositoryError, OrganizationListQuery };
+export type { OrganizationInfrastructureError } from "./domain/OrganizationErrors";
+export { type OrganizationRepo, OrganizationRepoLive, OrganizationRepoTag, organizationRepoLayer };
