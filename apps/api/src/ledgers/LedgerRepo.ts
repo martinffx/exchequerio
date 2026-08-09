@@ -35,7 +35,7 @@ interface LedgerRepo {
 	delete(
 		organizationId: OrgID,
 		ledgerId: LedgerID
-	): Effect.Effect<Option.Option<Ledger>, LedgerDeleteRepositoryError>;
+	): Effect.Effect<Option.Option<void>, LedgerDeleteRepositoryError>;
 }
 
 type LedgerCreateRepositoryError = LedgerInfrastructureError | OrganizationNotFound;
@@ -248,7 +248,7 @@ class LedgerRepoLive implements LedgerRepo {
 	delete(
 		organizationId: OrgID,
 		ledgerId: LedgerID
-	): Effect.Effect<Option.Option<Ledger>, LedgerDeleteRepositoryError> {
+	): Effect.Effect<Option.Option<void>, LedgerDeleteRepositoryError> {
 		return Effect.tryPromise({
 			try: () =>
 				this.db
@@ -259,9 +259,9 @@ class LedgerRepoLive implements LedgerRepo {
 							eq(LedgersTable.organizationId, organizationId.toString())
 						)
 					)
-					.returning(publicColumns),
+					.returning({ id: LedgersTable.id }),
 			catch: cause => mapDeleteError(cause, organizationId, ledgerId),
-		}).pipe(Effect.flatMap(rows => decodeLedger(rows[0])));
+		}).pipe(Effect.map(rows => (rows[0] === undefined ? Option.none() : Option.void)));
 	}
 }
 

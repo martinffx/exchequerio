@@ -22,10 +22,10 @@ type LedgerCreateError =
 type LedgerUpdateError = LedgerNotFound | LedgerInfrastructureError;
 type LedgerDeleteError = LedgerNotFound | LedgerDeleteRepositoryError;
 
-const requireFound = (
+const requireFound = <A>(
 	organizationId: OrgID,
 	ledgerId: LedgerID
-): ((ledger: Option.Option<Ledger>) => Effect.Effect<Ledger, LedgerNotFound>) =>
+): ((value: Option.Option<A>) => Effect.Effect<A, LedgerNotFound>) =>
 	Option.match({
 		onNone: () => Effect.fail(new LedgerNotFound(organizationId.toString(), ledgerId.toString())),
 		onSome: Effect.succeed,
@@ -81,7 +81,7 @@ class LedgerService {
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId)));
 	}
 
-	deleteLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerDeleteError> {
+	deleteLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<void, LedgerDeleteError> {
 		return this.repository
 			.delete(organizationId, ledgerId)
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId)));
