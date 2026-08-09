@@ -17,7 +17,7 @@
             "Existing LedgerID and OrgID branded types",
             "Existing TypeBox and RFC 7807-compatible error conventions"
           ],
-          "description": "Create a Currency-free immutable Ledger domain value and a LedgerWrite value for persistence commands. Add Ledger-specific not-found, dependency, repository-unavailable, decoding, and persistence errors while reusing the public OrganizationNotFound error for a missing parent. Define TypeBox schemas for canonical Ledger IDs, bounded offset pagination, create and update bodies with additionalProperties false, and Currency-free responses. Add the response mapper with ISO timestamps and omission of absent optional fields. The domain must not import Effect, Fastify, TypeBox, Drizzle, database rows, or environment code.",
+          "description": "Create a Currency-free immutable Ledger domain value and a LedgerWrite value for persistence commands. Add Ledger-specific not-found, dependency, repository-unavailable, decoding, and persistence errors while reusing the public OrganizationNotFound error for a missing parent. Define TypeBox schemas for canonical Ledger IDs, offset pagination capped at 10,000, create and update bodies with additionalProperties false, and Currency-free responses. Add the response mapper with ISO timestamps and omission of absent optional fields. The domain must not import Effect, Fastify, TypeBox, Drizzle, database rows, or environment code.",
           "files": {
             "create": [
               "apps/api/src/ledgers/domain/Ledger.ts",
@@ -33,7 +33,7 @@
             "acceptance": [
               "Ledger and LedgerWrite contain no Currency or Minor Unit Exponent",
               "Metadata accepts only string values",
-              "List offset defaults to 0 and limit defaults to 20 with a maximum of 100",
+              "List offset defaults to 0 with a maximum of 10,000, and limit defaults to 20 with a maximum of 100",
               "Create and update schemas remove undeclared input under the existing Fastify AJV configuration",
               "Response mapping emits ISO timestamps and omits absent description and metadata"
             ]
@@ -133,7 +133,7 @@
             "Installed typeid-js library",
             "Existing HttpError hierarchy"
           ],
-          "description": "Add LedgerService with list, get, create, update, and delete operations that receive the authenticated Organization ID explicitly. Generate canonical Ledger IDs directly with typeid-js and construct LedgerWrite values without an ID-generator service. Forward pagination and tenant identifiers unchanged. Convert absent get, update, and delete results to LedgerNotFound. Preserve typed repository failures except during create, where LedgerRepositoryUnavailable becomes a ServiceUnavailableError with retryable false. Export concrete service error-channel types and assemble the service Layer from LedgerRepoTag.",
+          "description": "Add LedgerService with list, get, create, update, and delete operations that receive the authenticated Organization ID explicitly. Generate canonical Ledger IDs directly with typeid-js inside Effect.sync so generation remains lazy, and construct LedgerWrite values without an ID-generator service. Forward pagination and tenant identifiers unchanged. Convert absent get, update, and delete results to LedgerNotFound. Preserve typed repository failures except during create, where LedgerRepositoryUnavailable becomes a ServiceUnavailableError with retryable false. Export concrete service error-channel types and assemble the service Layer from LedgerRepoTag.",
           "files": {
             "create": [
               "apps/api/src/ledgers/LedgerService.ts",
@@ -155,6 +155,7 @@
             ],
             "acceptance": [
               "LedgerService is available through a Context service and Layer",
+              "Ledger ID generation remains lazy inside Effect.sync",
               "The service contains no authentication, rate limiting, retry, or generic execution logic",
               "The focused Ledger service test passes"
             ]
@@ -184,7 +185,7 @@
             "tests": [
               "The five existing permission declarations remain attached",
               "All five handlers pass the authenticated Organization ID to the mocked service",
-              "Pagination defaults and bounds are enforced",
+              "Pagination defaults, the 10,000 maximum offset, and limit bounds are enforced",
               "Malformed and noncanonical Ledger IDs return 400",
               "Currency fields and arbitrary undeclared properties are stripped before POST and PUT reach the service",
               "Missing and malformed declared fields return 400",
@@ -257,7 +258,7 @@
             "Approved compatibility boundary",
             "Repository validation commands from AGENTS.md"
           ],
-          "description": "Keep the physical Ledger Currency columns in the ERD and mark them as temporary compatibility storage. State that the public and Effect Ledger models exclude Currency until step 03 migrates child consumers. Run targeted tests, the complete API suite, repository checks, and the full local CI pipeline. Review the final diff and verify that the implementation adds no migration, schema change, Ledger idempotency, shared AJV change, generic executor, reusable test harness, or HTTP-to-PostgreSQL suite.",
+          "description": "Keep the physical Ledger Currency columns in the ERD and mark them as temporary compatibility storage. State that the public and Effect Ledger models exclude Currency until step 03 migrates child consumers. Run the focused Ledger tests and the full local CI pipeline. Review the final diff and verify that the implementation adds no migration, schema change, Ledger idempotency, shared AJV change, generic executor, reusable test harness, or HTTP-to-PostgreSQL suite.",
           "files": {
             "create": [],
             "modify": [
@@ -267,9 +268,7 @@
           "validation": {
             "tests": [
               "pnpm run docker:up",
-              "pnpm --filter=@exchequerio/api test -- src/ledgers",
-              "pnpm --filter=@exchequerio/api test",
-              "pnpm run check",
+              "pnpm --filter=@exchequerio/api test src/ledgers",
               "pnpm run ci",
               "git diff --check"
             ],

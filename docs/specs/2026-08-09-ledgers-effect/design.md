@@ -27,7 +27,7 @@ distinguish create from update, and preserve legacy Currency reads until step 03
 - Migrate list, get, create, update, and delete Ledger endpoints to Effect.
 - Place the migrated slice under `apps/api/src/ledgers/`.
 - Enforce Organization tenancy on every repository operation.
-- Add stable, bounded offset pagination.
+- Add stable offset pagination with bounded page size and a maximum offset of `10,000`.
 - Remove Currency and Minor Unit Exponent from public Ledger requests, responses, and domain types.
 - Keep the existing Ledger Currency columns and values as temporary compatibility storage.
 - Retain the existing tenant-scoped legacy Ledger read path for unfinished child resources.
@@ -55,7 +55,7 @@ As an Organization user with `ledger:read`, I want to list my Organization's Led
 
 - `GET /api/ledgers` returns only Ledgers owned by the JWT Organization.
 - Results are ordered by Ledger ID ascending.
-- `offset` defaults to `0` and must be a non-negative integer.
+- `offset` defaults to `0` and must be an integer from `0` through `10,000`.
 - `limit` defaults to `20` and must be an integer from `1` through `100`.
 - An Organization with no Ledgers receives an empty array.
 - Invalid pagination returns `400`; authentication and permission failures return `401` and `403`.
@@ -267,9 +267,10 @@ persistence-decoding failure instead of disappearing from the response.
 `LedgerService` is a `Context.Service` with five operations: list, get, create, update, and delete.
 Every operation receives the authenticated Organization ID.
 
-The service generates Ledger IDs directly with the installed TypeID library. A separate generator
-service would have one implementation and no product requirement. Tests assert that generated IDs
-are canonical rather than controlling their exact value.
+The service generates Ledger IDs directly with the installed TypeID library. ID generation runs
+inside `Effect.sync` so it remains lazy. A separate generator service would have one implementation
+and no product requirement. Tests assert that generated IDs are canonical rather than controlling
+their exact value.
 
 The service maps an absent get, update, or delete result to `LedgerNotFound`. Create and update use
 separate repository methods. The service adds no access-policy layer, retries, rate limiting, or
@@ -432,7 +433,7 @@ Tests cover one contract at each active boundary.
 ### Router with mocked Effect service
 
 - Existing permissions remain attached to the five operations.
-- Pagination defaults and bounds are enforced.
+- Pagination defaults and the `10,000` maximum offset are enforced.
 - Malformed and noncanonical IDs return `400`.
 - Currency and other unknown request fields are removed before the mocked service receives the
   body; requests with otherwise valid fields still succeed.
@@ -478,9 +479,9 @@ Approach A temporarily keeps a Currency-free Effect Ledger model beside the lega
 entity. This duplication ends when step 03 removes the compatibility path. It costs less than
 rewiring unfinished child resources and their fixtures now.
 
-Offset pagination preserves the existing API and becomes deterministic through ID ordering.
-Concurrent inserts can still shift later pages. Cursor pagination is deferred because no current
-story requires an API redesign.
+Offset pagination preserves the existing API and becomes deterministic through ID ordering. The
+`10,000` maximum offset bounds the work a caller can request. Concurrent inserts can still shift
+later pages. Cursor pagination is deferred because no current story requires an API redesign.
 
 New Ledgers receive `USD` and exponent `2` until Account Currency exists. Public callers cannot
 choose another Currency during this interval. This is the accepted cost of removing Currency from
