@@ -1,5 +1,10 @@
 # Technical Design: Repository Completion
 
+> Superseded for Ledger and Account Currency ownership by the approved
+> [Accounts Effect design](../../../../../docs/specs/2026-08-09-accounts-effect/design.md).
+> Account stores the Currency pair; Ledger does not. Historical examples below are retained only
+> as context for the earlier repository design.
+
 ## Architecture Overview
 
 This is a completion task to finalize the established layered architecture (Router → Service → Repository → Database) by resolving import issues, implementing repository methods, and completing service integration. The architecture follows proven patterns from LedgerRepo with entity transformations and organization tenancy throughout.

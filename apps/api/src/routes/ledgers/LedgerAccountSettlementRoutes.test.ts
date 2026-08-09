@@ -1,8 +1,15 @@
 import type { FastifyInstance } from "fastify";
+import { Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/auth";
+import { Config } from "@/config";
+import { makeDatabaseLive } from "@/db";
+import { Ledger, LedgerServiceTag, makeCurrency, makeMinorUnits } from "@/ledgers";
+import type { LedgerService } from "@/ledgers";
+import { Account, AccountServiceTag } from "@/ledgers/accounts";
+import type { AccountService } from "@/ledgers/accounts";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import type {
 	LedgerAccountID,
@@ -11,11 +18,8 @@ import type {
 	OrgID,
 } from "@/repo/entities/types";
 import { buildServer } from "@/server";
-import type {
-	LedgerAccountService,
-	LedgerAccountSettlementService,
-	LedgerService,
-} from "@/services";
+import { ServerConfigTag, type ServerRuntimeLayer } from "@/runtime";
+import type { LedgerAccountSettlementService } from "@/services";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -24,19 +28,15 @@ import type {
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
-import {
-	createLedgerAccountFixture,
-	createLedgerAccountSettlementFixture,
-	createLedgerFixture,
-} from "./fixtures";
+import { createLedgerAccountSettlementFixture } from "./fixtures";
 
-const mockLedgerService = vi.mocked<LedgerService>({
+const effectLedgerService = vi.mocked<LedgerService>({
 	getLedger: vi.fn(),
 } as unknown as LedgerService);
 
-const mockLedgerAccountService = vi.mocked<LedgerAccountService>({
-	getLedgerAccount: vi.fn(),
-} as unknown as LedgerAccountService);
+const effectAccountService = vi.mocked<AccountService>({
+	getAccount: vi.fn(),
+} as unknown as AccountService);
 
 const mockLedgerAccountSettlementService = vi.mocked<LedgerAccountSettlementService>({
 	listLedgerAccountSettlements: vi.fn(),
@@ -62,14 +62,34 @@ describe("LedgerAccountSettlementRoutes", () => {
 	const settlementIdStr = settlementId.toString();
 	const fixedDate = new Date("2025-01-01T00:00:00.000Z");
 
-	const mockLedger = createLedgerFixture();
-	const mockSettledAccount = createLedgerAccountFixture({
-		id: settledAccountId,
+	const effectLedger = new Ledger({
+		id: ledgerId,
 		organizationId: orgId,
-		ledgerId,
+		name: "Ledger",
 		created: fixedDate,
 		updated: fixedDate,
 	});
+	const effectAccount = new Account({
+		id: settledAccountId,
+		organizationId: orgId,
+		ledgerId,
+		name: "Settled account",
+		normalBalance: "debit",
+		currency: makeCurrency("USD", 2),
+		pendingAmount: makeMinorUnits(0),
+		postedAmount: makeMinorUnits(0),
+		availableAmount: makeMinorUnits(0),
+		pendingCredits: makeMinorUnits(0),
+		pendingDebits: makeMinorUnits(0),
+		postedCredits: makeMinorUnits(0),
+		postedDebits: makeMinorUnits(0),
+		availableCredits: makeMinorUnits(0),
+		availableDebits: makeMinorUnits(0),
+		lockVersion: 1,
+		created: fixedDate,
+		updated: fixedDate,
+	});
+	const euroAccount = new Account({ ...effectAccount, currency: makeCurrency("EUR", 2) });
 	const mockSettlement = createLedgerAccountSettlementFixture({
 		id: settlementId,
 		organizationId: orgId,
@@ -87,11 +107,18 @@ describe("LedgerAccountSettlementRoutes", () => {
 	});
 
 	beforeAll(async () => {
+		const config = new Config();
+		effectLedgerService.getLedger.mockReturnValue(Effect.succeed(effectLedger));
+		effectAccountService.getAccount.mockReturnValue(Effect.succeed(effectAccount));
 		server = await buildServer({
+			runtimeLayer: Layer.mergeAll(
+				Layer.succeed(ServerConfigTag, config),
+				makeDatabaseLive(config.databaseUrl),
+				Layer.succeed(LedgerServiceTag, effectLedgerService),
+				Layer.succeed(AccountServiceTag, effectAccountService)
+			) as ServerRuntimeLayer,
 			servicePluginOpts: {
 				services: {
-					ledgerService: mockLedgerService,
-					ledgerAccountService: mockLedgerAccountService,
 					ledgerAccountSettlementService: mockLedgerAccountSettlementService,
 				},
 			},
@@ -267,8 +294,6 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Create Ledger Account Settlement", () => {
 		it("should create a settlement", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
 			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockResolvedValue(
 				mockSettlement
 			);
@@ -288,7 +313,37 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
-			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).toHaveBeenCalled();
+			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
+				"USD",
+				2,
+				"debit",
+				expect.objectContaining({
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
+				})
+			);
+		});
+
+		it("rejects accounts with different currency pairs", async () => {
+			effectAccountService.getAccount
+				.mockReturnValueOnce(Effect.succeed(effectAccount))
+				.mockReturnValueOnce(Effect.succeed(euroAccount));
+
+			const rs = await server.inject({
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${ledgerIdStr}/settlements`,
+				payload: {
+					transactionId: new TypeID("ltr").toString(),
+					status: "drafting",
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
+				},
+			});
+
+			expect(rs.statusCode).toBe(409);
+			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).not.toHaveBeenCalled();
 		});
 
 		it("should handle unauthorized error", async () => {
@@ -341,8 +396,6 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
 			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockRejectedValue(
 				new ConflictError("Settlement already exists")
 			);
@@ -365,8 +418,6 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
 			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockRejectedValue(
 				new Error("Internal Server Error")
 			);
@@ -391,8 +442,6 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Update Ledger Account Settlement", () => {
 		it("should update a settlement", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
 			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockResolvedValue(
 				mockSettlement
 			);
@@ -416,8 +465,6 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
 			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
 				new NotFoundError("Settlement not found")
 			);
@@ -489,8 +536,6 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
 			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
 				new ConflictError("Cannot update posted settlement")
 			);
@@ -513,8 +558,6 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerService.getLedger.mockResolvedValue(mockLedger);
-			mockLedgerAccountService.getLedgerAccount.mockResolvedValue(mockSettledAccount);
 			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
 				new Error("Internal Server Error")
 			);

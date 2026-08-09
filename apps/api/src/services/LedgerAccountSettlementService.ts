@@ -3,7 +3,6 @@ import { ConflictError } from "@/lib/errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities";
 import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlementRepo";
-import type { LedgerRepo } from "@/repo/LedgerRepo";
 import type { NormalBalance, SettlementStatus } from "@/routes/ledgers/schema";
 import type { LedgerTransactionService } from "./LedgerTransactionService";
 
@@ -21,7 +20,6 @@ interface LedgerAccountSettlementRequest {
 class LedgerAccountSettlementService {
 	constructor(
 		private readonly ledgerAccountSettlementRepo: LedgerAccountSettlementRepo,
-		private readonly ledgerRepo: LedgerRepo,
 		private readonly ledgerTransactionService: LedgerTransactionService
 	) {}
 
@@ -31,8 +29,6 @@ class LedgerAccountSettlementService {
 		offset: number,
 		limit: number
 	): Promise<LedgerAccountSettlementEntity[]> {
-		// Verify ledger exists
-		await this.ledgerRepo.getLedger(orgId, ledgerId);
 		return this.ledgerAccountSettlementRepo.listSettlements(orgId, ledgerId, offset, limit);
 	}
 
@@ -127,9 +123,6 @@ class LedgerAccountSettlementService {
 
 		// For pending → posted transition, create the ledger transaction
 		if (targetStatus === "posted" && settlement.status === "pending") {
-			// Get the ledger to access currency information
-			const ledger = await this.ledgerRepo.getLedger(orgId, ledgerId);
-
 			// Create a ledger transaction with two entries:
 			// - Debit/Credit the settled account (reduces its balance)
 			// - Credit/Debit the contra account (receives the funds)
@@ -169,7 +162,7 @@ class LedgerAccountSettlementService {
 
 			const transaction = await this.ledgerTransactionService.createTransaction(
 				orgId,
-				ledger.id,
+				ledgerId,
 				transactionRequest
 			);
 

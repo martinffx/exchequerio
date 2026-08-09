@@ -1,7 +1,7 @@
 import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
 import { ConflictError } from "@/lib/errors";
-import { LedgerEntity } from "../repo/entities/LedgerEntity";
+import { LedgerAccountEntity } from "../repo/entities/LedgerAccountEntity";
 import { LedgerTransactionEntity } from "../repo/entities/LedgerTransactionEntity";
 import { LedgerTransactionEntryEntity } from "../repo/entities/LedgerTransactionEntryEntity";
 import type {
@@ -11,7 +11,7 @@ import type {
 	LedgerTransactionID,
 	OrgID,
 } from "../repo/entities/types";
-import type { LedgerRepo } from "../repo/LedgerRepo";
+import type { LedgerAccountRepo } from "../repo/LedgerAccountRepo";
 import type { LedgerTransactionRepo } from "../repo/LedgerTransactionRepo";
 import type { LedgerTransactionRequest } from "../routes/ledgers/schema";
 import { LedgerTransactionService } from "./LedgerTransactionService";
@@ -28,10 +28,10 @@ describe("LedgerTransactionService", () => {
 		postTransaction: vi.fn(),
 		deleteTransactionWithBalanceUpdate: vi.fn(),
 	} as unknown as LedgerTransactionRepo);
-	const mockLedgerRepo = vi.mocked<LedgerRepo>({
-		getLedger: vi.fn(),
-	} as unknown as LedgerRepo);
-	const service = new LedgerTransactionService(mockTransactionRepo, mockLedgerRepo);
+	const mockAccountRepo = vi.mocked<LedgerAccountRepo>({
+		getLedgerAccount: vi.fn(),
+	} as unknown as LedgerAccountRepo);
+	const service = new LedgerTransactionService(mockTransactionRepo, mockAccountRepo);
 
 	afterEach(() => {
 		vi.clearAllMocks();
@@ -169,16 +169,6 @@ describe("LedgerTransactionService", () => {
 	});
 
 	describe("createTransaction", () => {
-		const mockLedger = new LedgerEntity({
-			id: ledgerId,
-			organizationId: orgId,
-			name: "Test Ledger",
-			currency: "USD",
-			currencyExponent: 2,
-			created: new Date(),
-			updated: new Date(),
-		});
-
 		const accountId1 = new TypeID("lat") as LedgerAccountID;
 		const accountId2 = new TypeID("lat") as LedgerAccountID;
 		const entryId1 = new TypeID("lte") as LedgerTransactionEntryID;
@@ -211,6 +201,32 @@ describe("LedgerTransactionService", () => {
 			created: new Date().toISOString(),
 			updated: new Date().toISOString(),
 		};
+		const account = (
+			id: LedgerAccountID,
+			currencyCode = "USD",
+			minorUnitExponent = 2
+		): LedgerAccountEntity =>
+			new LedgerAccountEntity({
+				id,
+				organizationId: orgId,
+				ledgerId,
+				name: "Account",
+				normalBalance: "debit",
+				currencyCode,
+				minorUnitExponent,
+				pendingAmount: 0,
+				postedAmount: 0,
+				availableAmount: 0,
+				pendingCredits: 0,
+				pendingDebits: 0,
+				postedCredits: 0,
+				postedDebits: 0,
+				availableCredits: 0,
+				availableDebits: 0,
+				lockVersion: 1,
+				created: new Date(),
+				updated: new Date(),
+			});
 
 		it("should create transaction successfully", async () => {
 			const mockCreatedTransaction = new LedgerTransactionEntity({
@@ -240,24 +256,39 @@ describe("LedgerTransactionService", () => {
 				),
 			});
 
-			mockLedgerRepo.getLedger.mockResolvedValue(mockLedger);
+			mockAccountRepo.getLedgerAccount
+				.mockResolvedValueOnce(account(accountId1, "EUR", 2))
+				.mockResolvedValueOnce(account(accountId2, "EUR", 2));
 			mockTransactionRepo.createTransaction.mockResolvedValue(mockCreatedTransaction);
 
 			const result = await service.createTransaction(orgId, ledgerId, validRequest);
 
 			expect(result).toEqual(mockCreatedTransaction);
-			expect(mockLedgerRepo.getLedger).toHaveBeenCalledWith(orgId, ledgerId);
 			expect(mockTransactionRepo.createTransaction).toHaveBeenCalledWith(
 				expect.any(LedgerTransactionEntity)
 			);
+			const created = mockTransactionRepo.createTransaction.mock.calls[0]?.[0];
+			expect(created?.entries.every(entry => entry.currency === "EUR")).toBe(true);
 		});
 
-		it("should throw NotFoundError when ledger not found", async () => {
-			// Mock getLedger to throw NotFoundError as the repo does
-			mockLedgerRepo.getLedger.mockRejectedValue(new Error("Ledger not found"));
+		it("should fail when a referenced account is not found", async () => {
+			mockAccountRepo.getLedgerAccount.mockRejectedValue(new Error("Account not found"));
 
-			await expect(service.createTransaction(orgId, ledgerId, validRequest)).rejects.toThrow("Ledger");
+			await expect(service.createTransaction(orgId, ledgerId, validRequest)).rejects.toThrow(
+				"Account"
+			);
 
+			expect(mockTransactionRepo.createTransaction).not.toHaveBeenCalled();
+		});
+
+		it("rejects accounts with different currency pairs", async () => {
+			mockAccountRepo.getLedgerAccount
+				.mockResolvedValueOnce(account(accountId1, "USD", 2))
+				.mockResolvedValueOnce(account(accountId2, "JPY", 0));
+
+			await expect(service.createTransaction(orgId, ledgerId, validRequest)).rejects.toThrow(
+				"same currency"
+			);
 			expect(mockTransactionRepo.createTransaction).not.toHaveBeenCalled();
 		});
 
@@ -290,7 +321,9 @@ describe("LedgerTransactionService", () => {
 				updated: new Date().toISOString(),
 			};
 
-			mockLedgerRepo.getLedger.mockResolvedValue(mockLedger);
+			mockAccountRepo.getLedgerAccount
+				.mockResolvedValueOnce(account(accountId1))
+				.mockResolvedValueOnce(account(accountId2));
 
 			// LedgerTransactionEntity.fromRequest will throw validation error
 			await expect(service.createTransaction(orgId, ledgerId, unbalancedRequest)).rejects.toThrow();
@@ -325,7 +358,7 @@ describe("LedgerTransactionService", () => {
 				updated: new Date().toISOString(),
 			};
 
-			mockLedgerRepo.getLedger.mockResolvedValue(mockLedger);
+			mockAccountRepo.getLedgerAccount.mockResolvedValue(account(accountId1));
 
 			// LedgerTransactionEntity.fromRequest will throw validation error
 			await expect(

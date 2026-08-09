@@ -1,5 +1,10 @@
 # Technical Design: Atomic Transactions
 
+> Superseded for Currency ownership and Account lookup behavior by the approved
+> [Accounts Effect design](../../../../../docs/specs/2026-08-09-accounts-effect/design.md).
+> Transactions derive one exact Currency pair from tenant-scoped referenced Accounts. Historical
+> Currency examples below describe the earlier design.
+
 **See the complete [Entity Relationship Diagram](../../product/erd.md) for detailed database schema visualization with all transaction-related entities and relationships.**
 
 ## Architecture Decision Records (ADRs)

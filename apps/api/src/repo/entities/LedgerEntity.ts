@@ -13,8 +13,6 @@ interface LedgerEntityOptions {
 	organizationId: OrgID;
 	name: string;
 	description?: string;
-	currency: string;
-	currencyExponent: number;
 	metadata?: Record<string, unknown>;
 	created: Date;
 	updated: Date;
@@ -25,8 +23,6 @@ class LedgerEntity {
 	public readonly organizationId: OrgID;
 	public readonly name: string;
 	public readonly description?: string;
-	public readonly currency: string;
-	public readonly currencyExponent: number;
 	public readonly metadata?: Record<string, unknown>;
 	public readonly created: Date;
 	public readonly updated: Date;
@@ -36,8 +32,6 @@ class LedgerEntity {
 		this.organizationId = options.organizationId;
 		this.name = options.name;
 		this.description = options.description;
-		this.currency = options.currency;
-		this.currencyExponent = options.currencyExponent;
 		this.metadata = options.metadata;
 		this.created = options.created;
 		this.updated = options.updated;
@@ -51,8 +45,6 @@ class LedgerEntity {
 			organizationId,
 			name: rq.name,
 			description: rq.description,
-			currency: rq.currency ?? "USD",
-			currencyExponent: rq.currencyExponent ?? 2,
 			metadata: rq.metadata,
 			created: now,
 			updated: now,
@@ -76,8 +68,6 @@ class LedgerEntity {
 			organizationId: TypeID.fromString<"org">(record.organizationId),
 			name: record.name,
 			description: record.description ?? undefined,
-			currency: record.currency,
-			currencyExponent: record.currencyExponent,
 			metadata,
 			created: record.created,
 			updated: record.updated,
@@ -91,8 +81,6 @@ class LedgerEntity {
 			organizationId: this.organizationId.toString(),
 			name: this.name,
 			description: this.description ?? undefined,
-			currency: this.currency,
-			currencyExponent: this.currencyExponent,
 			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
 			created: this.created,
 			updated: this.updated,

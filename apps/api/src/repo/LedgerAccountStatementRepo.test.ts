@@ -39,8 +39,6 @@ describe("LedgerAccountStatementRepo", () => {
 			id: testLedgerId,
 			organizationId: testOrgId,
 			name: "Statement Test Ledger",
-			currency: "USD",
-			currencyExponent: 2,
 		});
 		await ledgerRepo.upsertLedger(ledgerEntity);
 
