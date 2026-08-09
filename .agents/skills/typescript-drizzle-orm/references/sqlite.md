@@ -1,5 +1,9 @@
 # SQLite Patterns with Drizzle ORM
 
+Inspect the owning package's SQLite driver, schema, migration workflow, queries,
+and test fixtures first. Add indexes or migrations only for a current schema,
+query, or operational need.
+
 SQLite-specific patterns, schema definition, and local testing with better-sqlite3.
 
 ## Schema Definition
@@ -93,6 +97,9 @@ bigNumber: blob('big_number', { mode: 'bigint' })
 
 ## Indexes and Constraints
 
+Use constraints for integrity. Add an index only when a current query or measured
+workload requires it.
+
 ```typescript
 export const accounts = sqliteTable('accounts', {
   id: text('id').primaryKey(),
@@ -118,6 +125,9 @@ export const postTags = sqliteTable('post_tags', {
 ```
 
 ## Migrations Configuration
+
+Reuse the repository's migration configuration. Add or run migrations here only
+when the current task changes the schema.
 
 ```typescript
 // drizzle.config.ts
@@ -184,6 +194,9 @@ const db = drizzle(sqlite, { schema })
 ```
 
 ### Test Setup Helper
+
+Reuse an existing database fixture or setup helper. Create this helper only after
+a second current test consumer needs the same setup.
 
 ```typescript
 import { beforeEach, afterEach } from 'vitest'

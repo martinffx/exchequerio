@@ -6,6 +6,20 @@ user-invocable: false
 
 # Effect for TypeScript
 
+Inspect the owning package and existing implementation first. Reuse established
+project types, helpers, errors, lifecycle behavior, and test utilities. The
+patterns below are options, not an implementation checklist. Introduce one only
+when the current task requires it.
+
+## Project-specific rules
+
+- Create services and Layers only for real dependencies or resource lifetimes.
+- Do not require a class, interface, service tag, and Layer for every capability.
+- Reuse existing IDs, errors, validation, database services, and runtime.
+- Keep Effect execution explicit at the application boundary.
+- Use native resource finalizers; do not surround sufficient library cleanup with
+  custom lifecycle machinery.
+
 Effect v3 and v4 share the same programming model but differ in important API names and shapes. Resolve the project's version before writing or reviewing code.
 
 ## Resolve the version first
@@ -37,7 +51,8 @@ For an upgrade from v3 to v4, first read [the migration guide](./references/v3-t
 - Keep `Effect<A, E, R>` lazy and run it only at application boundaries.
 - Model expected failures in `E`; reserve defects for broken invariants and unrecoverable faults.
 - Validate untrusted data at system boundaries with Schema.
-- Express dependencies as services and assemble implementations with layers.
+- Express real dependencies as services and use Layers when construction or resource
+  lifetime requires them.
 - Scope every resource whose acquisition has a release action.
 - Use structured concurrency and explicit concurrency limits.
 - Prefer `Effect.gen` for sequential workflows and `pipe` for focused transformations.

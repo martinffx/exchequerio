@@ -1,5 +1,9 @@
 # Entity Pattern
 
+Use this reference only when the owning package already uses entities or the
+current task needs domain behavior that inferred Drizzle records cannot express.
+Reuse canonical IDs, parsers, errors, and transformation helpers.
+
 Domain entities encapsulate business logic and data transformations between API, domain, and database layers.
 
 ## Core Concept
@@ -400,13 +404,7 @@ export class LedgerEntity {
 
 ## Guidelines
 
-1. **Use immutable readonly properties** - Prevents accidental mutation
-2. **Private constructor** - Forces use of factory methods (fromRequest, fromRecord)
-3. **Four transformation methods** - Clear contracts for each layer boundary
-4. **Business logic in entities** - Domain rules belong in entities, not repos or services
-5. **Return new instances** - When applying changes, return new entity (immutability)
-6. **Parse JSON in fromRecord** - Handle TEXT → object deserialization
-7. **Stringify JSON in toRecord** - Handle object → TEXT serialization
-8. **Format dates in toResponse** - Convert Date → ISO string for API
-9. **Apply defaults in fromRequest** - Ensure defaults are set when creating from API
-10. **Use TypeID for type safety** - Prevents ID mixups across entity types
+1. Follow the owning package's current entity shape and transformation boundaries.
+2. Add only the parsing, formatting, defaults, or behavior required by the current entity.
+3. Reuse canonical IDs and constructors; do not introduce TypeID beside an existing ID system.
+4. Prefer inferred records when no domain behavior justifies an Entity class.

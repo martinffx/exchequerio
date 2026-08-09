@@ -1,6 +1,9 @@
 # Repository Pattern
 
-Repositories wrap database access, providing a clean abstraction layer with error handling, validation, and business logic.
+Use this reference only when the owning package already uses repositories or the
+current task needs a stable abstraction over multiple queries. Do not add a
+repository, error wrapper, retry layer, or entity conversion around a direct query
+that already satisfies the active boundary.
 
 ## Core Concept
 
@@ -467,13 +470,9 @@ export class PostRepo {
 
 ## Guidelines
 
-1. **Constructor injection** - Pass `db` instance to constructor
-2. **Return entities** - Always convert records to entities before returning
-3. **Error context** - Include relevant IDs in error context for debugging
-4. **Multi-tenancy** - Always filter by `organizationId` when applicable
-5. **Optimistic locking** - Use `lockVersion` for resources with concurrent updates
-6. **Transactions** - Use `db.transaction()` for multi-step operations
-7. **Idempotency** - Use `onConflictDoUpdate` with idempotency keys where applicable
-8. **Check returning** - Always check if `.returning()` is empty (means not found)
-9. **Pagination** - Use cursor-based pagination for large result sets
-10. **Error handling** - Wrap DB operations in try/catch and use `handleDBError()`
+1. Reuse the existing repository shape, database service, entities, and errors.
+2. Preserve tenant filters and return contracts already owned by the boundary.
+3. Use transactions and constraints for the current multi-step integrity need.
+4. Add optimistic locking, idempotency, pagination, or retries only when the active
+   query or operational contract requires them.
+5. Preserve native driver errors unless an existing boundary translates them.

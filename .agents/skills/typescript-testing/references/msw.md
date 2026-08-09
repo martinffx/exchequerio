@@ -1,5 +1,10 @@
 # MSW (Mock Service Worker) Patterns
 
+Use MSW when external HTTP behavior is the active test boundary and the owning
+package already uses it or currently needs network-level interception. Reuse its
+server, handlers, and fixtures. Do not repeat a scenario already covered by the
+contract-owning boundary.
+
 Comprehensive guide to mocking HTTP requests at the network level using MSW with Vitest.
 
 ## Installation and Setup

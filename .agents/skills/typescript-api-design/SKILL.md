@@ -6,7 +6,21 @@ user-invocable: false
 
 # API Design Patterns
 
-Best practices for designing REST APIs with consistent structure, error handling, and resource patterns.
+Inspect the owning package and existing implementation first. Reuse established
+project types, helpers, errors, lifecycle behavior, and test utilities. The
+patterns below are options, not an implementation checklist. Introduce one only
+when the current task requires it.
+
+## Project-specific rules
+
+- Preserve existing API contracts during internal migrations.
+- Apply versioning, pagination, error-format, status-code, and idempotency guidance
+  only when the task explicitly changes the public API.
+- Do not turn REST preferences into unrelated migration scope.
+
+Use the following patterns only when the task designs or explicitly changes the
+public API. For internal work, preserve the current routes, payloads, errors,
+status codes, pagination, and idempotency behavior.
 
 ## Additional References
 
@@ -46,7 +60,8 @@ POST   /api/v1/invoices/:id/send           # Send invoice
 
 ## API Versioning
 
-Version APIs in the URL path:
+When a public breaking change requires a new version and the project uses path
+versioning, version APIs in the URL path:
 
 ```
 /api/v1/users
@@ -78,7 +93,8 @@ app.register(v2Routes, { prefix: '/api/v2' })
 
 ## RFC 7807 Problem Details
 
-Standardized error response format:
+Reuse the current public error format. Use RFC 7807 only when the task explicitly
+changes the public error contract and selects this format:
 
 ```typescript
 interface ProblemDetail {
@@ -163,7 +179,9 @@ See [references/error-responses.md](./references/error-responses.md) for complet
 
 ## Pagination (Cursor-Based)
 
-Use cursor-based pagination for large datasets:
+When the task changes a public collection contract and current query behavior
+requires cursor pagination, use an opaque cursor that matches the existing data
+model:
 
 ```typescript
 // Request
@@ -279,7 +297,8 @@ async function listPosts(query: ListPostsQuery): Promise<PaginatedResponse<Post>
 
 ## HTTP Status Codes
 
-Use status codes consistently:
+When changing the public API, choose status codes consistently with the existing
+contract and framework behavior:
 
 ```
 # Success
@@ -355,7 +374,8 @@ toResponse(): UserResponse {
 
 ## Idempotency
 
-Use idempotency keys for safe retries:
+Add idempotency keys only when the public API task requires replay-safe writes and
+the current implementation does not already provide that behavior:
 
 ```typescript
 // Request
@@ -384,13 +404,10 @@ async function createTransaction(rq: CreateTransactionRequest, idempotencyKey: s
 
 ## Guidelines
 
-1. **Plural nouns** - Collections use plural resource names
-2. **Lowercase with hyphens** - Multi-word resources like `ledger-accounts`
-3. **Version in URL** - `/api/v1/`, `/api/v2/` for breaking changes
-4. **RFC 7807 errors** - Standardized error response format
-5. **Cursor pagination** - For large datasets (more stable than offset)
-6. **Query params** - For filtering, sorting, pagination (not in path)
-7. **HTTP status codes** - Use correct codes (200, 201, 204, 400, 404, 409, 500, 503)
-8. **ISO 8601 timestamps** - Always use `.toISOString()` for dates
-9. **Idempotency keys** - For non-idempotent operations (POST, PATCH)
-10. **No unnecessary envelopes** - Return resources directly unless pagination needed
+When the task changes the public API:
+
+1. Start from the existing resource names, versioning strategy, and wire formats.
+2. Choose error formats, status codes, pagination, and idempotency as part of that
+   explicit contract change.
+3. Reuse established timestamp, filtering, sorting, and envelope conventions.
+4. Keep unrelated REST preferences outside migration and refactoring scope.

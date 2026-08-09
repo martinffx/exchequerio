@@ -6,6 +6,21 @@ user-invocable: false
 
 # TypeScript Testing Patterns
 
+Inspect the owning package and existing implementation first. Reuse established
+project types, helpers, errors, lifecycle behavior, and test utilities. The
+patterns below are options, not an implementation checklist. Introduce one only
+when the current task requires it.
+
+## Project-specific rules
+
+- Test changed behavior and one contract per active boundary.
+- Do not repeat the same scenarios through routes, services, repositories, and
+  full-stack suites.
+- Reuse existing database test Layers and fixtures.
+- Create a reusable harness only after a second current consumer demonstrates the
+  same setup.
+- Before testing a wrapper extensively, question whether the wrapper should exist.
+
 Comprehensive testing patterns using Vitest for unit testing, MSW for API mocking, and snapshot testing for complex object validation.
 
 ## Quick Start
@@ -247,7 +262,7 @@ describe('authenticated requests', () => {
 ## Guidelines
 
 1. **Test behavior, not implementation** - Focus on what the code does, not how it does it
-2. **One assertion per test when possible** - Makes failures clearer and tests more focused
+2. **Use enough assertions to verify one behavior** - Keep related evidence together
 3. **Use typed mocks** - `vi.mocked<T>()` provides type safety for mock setup and assertions
 4. **Mock at boundaries** - Mock external dependencies (APIs, databases), not internal functions
 5. **Use MSW for API tests** - Mock at the network level for realistic integration tests
@@ -264,7 +279,8 @@ describe('authenticated requests', () => {
 - **build-tools** - Vitest configuration, test scripts, coverage setup
 - **api-design** - Testing REST API contracts and error responses
 - **fastify** - Testing Fastify routes and plugins
-- **drizzle-orm** - Testing database queries (use MSW or in-memory DB)
+- **drizzle-orm** - Testing database queries with the project's existing database
+  test Layer or fixture
 - **dynamodb-toolbox** - Testing DynamoDB entities and queries
 
 ## Common Patterns

@@ -1,6 +1,9 @@
 # PostgreSQL Patterns with Drizzle ORM
 
-PostgreSQL-specific patterns, connection setup, and error handling.
+Inspect the owning package's schema, driver, connection lifecycle, constraints,
+queries, and errors before using these PostgreSQL patterns. Add migrations,
+indexes, retries, optimistic locking, or pool options only for a current schema,
+query, concurrency, or operational need.
 
 ## Schema Definition
 
@@ -51,7 +54,14 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 export const db = drizzle(pool, { schema })
 ```
 
+Reuse the existing pool configuration. When this module owns the pool, close it
+with the driver's `pool.end()` method from the application's established shutdown
+path; do not add connection tracking around it.
+
 ## Migrations (drizzle-kit)
+
+Use the repository's current migration workflow when the task changes the schema.
+Do not generate an empty or unrelated migration for query-only work.
 
 ```typescript
 // drizzle.config.ts
@@ -102,6 +112,9 @@ metadata: jsonb('metadata').$type<{ key: string }>()
 
 ## Composite Keys & Indexes
 
+Prefer PostgreSQL constraints for data integrity. Add an index only for a current
+query plan, constraint, or measured operational need.
+
 ```typescript
 export const postTags = pgTable('post_tags', {
   postId: integer('post_id').references(() => posts.id),
@@ -120,7 +133,8 @@ export const users = pgTable('users', {
 
 ## PostgreSQL Error Codes
 
-Map database error codes to domain errors:
+First preserve the driver's behavior and reuse the project's existing error
+mapping. Add a mapping only when the active boundary requires that domain error:
 
 ```typescript
 type ErrorContext = {
@@ -155,7 +169,8 @@ function handleDBError(error: unknown, context: ErrorContext = {}): never {
 
 ## Optimistic Locking
 
-Prevent concurrent modification issues with version-based locking:
+Use PostgreSQL transaction or constraint behavior first. Add version-based locking
+only when a current concurrent update contract requires it:
 
 ```typescript
 // Add lockVersion column to schema

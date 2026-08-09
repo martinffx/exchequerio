@@ -1,6 +1,9 @@
 # Effect v4 resource management
 
 Use this guide only after confirming the target package uses Effect v4.
+First use the resource library's native finalizer and the application's existing
+shutdown path. Add Effect lifecycle machinery only when Effect owns an otherwise
+unmanaged resource lifetime.
 
 ## Scoped acquisition and release
 
@@ -75,7 +78,9 @@ const withFinalizer = Effect.scoped(
 )
 ```
 
-Use `Effect.ensuring` for unconditional cleanup around an Effect, `Effect.onExit` when cleanup depends on the outcome, and `Effect.addFinalizer` when attaching cleanup to the current scope.
+For cleanup not already handled by the library, use `Effect.ensuring` around an
+Effect, `Effect.onExit` when cleanup depends on the outcome, or
+`Effect.addFinalizer` when attaching cleanup to the current scope.
 
 ## Resource-owning services
 
@@ -92,7 +97,9 @@ const app = Effect.gen(function*() {
 }).pipe(Effect.provide(databaseLayer))
 ```
 
-`Layer.effect` owns scoped acquisition in v4 and closes resources when the layer scope ends. Use this pattern for application-lifetime pools, clients, servers, and file watchers.
+`Layer.effect` owns scoped acquisition in v4 and closes resources when the Layer
+scope ends. Use this pattern only when the Layer owns an application-lifetime
+pool, client, server, or file watcher.
 
 ## Rules
 

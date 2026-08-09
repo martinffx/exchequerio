@@ -1,8 +1,16 @@
 # Error Response Patterns
 
-Comprehensive error handling patterns using RFC 7807 Problem Details standard.
+Use this reference only when the task explicitly changes the public error
+contract. Inspect and reuse the application's current errors, schemas, handler,
+logging, and wire format first. Do not add a parallel error hierarchy or convert
+an internal migration to RFC 7807 work.
+
+The examples below illustrate RFC 7807 when it is the selected public format.
 
 ## Error Class Hierarchy
+
+Reuse the project's error types. Create a hierarchy like this only when the public
+API change requires new error semantics that existing types cannot express.
 
 ```typescript
 type ErrorContext = {
@@ -114,7 +122,8 @@ class ServiceUnavailableError extends AppError {
 
 ## TypeBox Schemas
 
-Define error response schemas for OpenAPI:
+Reuse registered schemas. Define new response schemas only for new or changed
+public error responses that must appear in OpenAPI:
 
 ```typescript
 import { Type } from '@sinclair/typebox'
@@ -211,6 +220,9 @@ export const ServiceUnavailableErrorResponse = Type.Composite([
 ```
 
 ## Global Error Handler (Fastify)
+
+Reuse the existing global handler. Add this pattern only when the application has
+no error-translation owner and the public API task requires one.
 
 ```typescript
 import type { FastifyError, FastifyRequest, FastifyReply } from 'fastify'
@@ -457,13 +469,8 @@ function handleDBError(error: unknown, context: ErrorContext): never {
 
 ## Guidelines
 
-1. **Use RFC 7807** - Standard ProblemDetail format for all errors
-2. **Include context** - Add relevant IDs to error context for debugging
-3. **Retryable flag** - Mark 409/503 errors as retryable when appropriate
-4. **Validation arrays** - List all validation errors, not just the first one
-5. **Retry-After header** - Include for 429 and 503 responses
-6. **Log server errors** - Always log 500 errors with full stack trace
-7. **Don't expose internals** - Keep error messages user-friendly, not technical
-8. **Consistent types** - Use same error type strings across all services
-9. **TraceId always** - Include request ID for correlating logs
-10. **TypeBox schemas** - Define error response schemas for OpenAPI documentation
+1. Preserve the existing error contract during internal changes.
+2. Reuse canonical error types, schemas, logging, request IDs, and retry metadata.
+3. Add fields or headers only when the explicit public contract requires them.
+4. Keep internal details out of public responses according to the application's
+   existing security and observability policy.

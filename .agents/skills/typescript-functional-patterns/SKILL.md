@@ -1,402 +1,116 @@
 ---
 name: typescript-functional-patterns
-description: Functional programming patterns for reliable TypeScript. Use when modeling state machines, discriminated unions, Result/Option types, branded types, or building type-safe domain models.
+description: Selective use of functional TypeScript patterns. Use when a task explicitly involves an existing state machine or discriminated union, an Option/Result/Either/Effect API, a branded or opaque type, or deciding whether one is warranted. Do not use for ordinary validation or domain modeling that existing schemas and types already cover.
 user-invocable: false
 ---
 
-# Functional Patterns for Reliable TypeScript
-
-Build reliable systems using Algebraic Data Types (ADTs), discriminated unions, Result/Option types, and branded types. These patterns enable the compiler to prove correctness, prevent runtime errors, and make illegal states unrepresentable.
-
-## Why Functional Patterns?
-
-**Reliability through types**: Use the type system to encode business rules, making invalid states impossible to construct. The compiler becomes your safety net, catching errors at build time rather than runtime.
-
-**Key benefits:**
-- Exhaustiveness checking prevents missing cases
-- Impossible states become unrepresentable
-- Business logic encoded in types, not runtime checks
-- Refactoring becomes safe and mechanical
-- Self-documenting code through types
-
-## Quick Reference
-
-For detailed patterns and examples, see:
-- [ADTs (Algebraic Data Types)](./references/adts.md) - Sum types, product types, discriminated unions
-- [Option & Result](./references/option-result.md) - Type-safe error handling and nullable values
-- [Branded Types](./references/branded-types.md) - Smart constructors and nominal typing
-- [Migration Guide](./references/migration-guide.md) - Step-by-step adoption playbook
-
-## Core Patterns Overview
-
-### 1. Discriminated Unions (Sum Types)
-
-Model "one of several variants" with exhaustive pattern matching:
-
-```typescript
-type PaymentMethod =
-  | { kind: "card"; last4: string; brand: string }
-  | { kind: "ach"; accountNumber: string; routingNumber: string }
-  | { kind: "wallet"; provider: "apple" | "google" }
-
-function processPayment(method: PaymentMethod): void {
-  switch (method.kind) {
-    case "card":
-      // TypeScript knows: method.last4 and method.brand exist
-      return processCard(method.last4, method.brand)
-    case "ach":
-      // TypeScript knows: method.accountNumber and method.routingNumber exist
-      return processACH(method.accountNumber, method.routingNumber)
-    case "wallet":
-      // TypeScript knows: method.provider exists
-      return processWallet(method.provider)
-    default:
-      assertNever(method) // Compiler error if cases missing
-  }
-}
-```
-
-### 2. Option Type (Nullable Values)
-
-Explicit handling of "value may be absent":
-
-```typescript
-type Option<T> = { _tag: "None" } | { _tag: "Some"; value: T }
-
-function findUser(id: string): Option<User> {
-  const user = database.get(id)
-  return user ? Some(user) : None
-}
-
-const result = findUser("123")
-switch (result._tag) {
-  case "Some":
-    console.log(result.value.name) // Type-safe access
-    break
-  case "None":
-    console.log("User not found")
-    break
-}
-```
-
-### 3. Result Type (Error Handling)
-
-Explicit error handling without exceptions:
-
-```typescript
-type Result<T, E> = { _tag: "Ok"; value: T } | { _tag: "Err"; error: E }
-
-function parseConfig(raw: string): Result<Config, ParseError> {
-  try {
-    const data = JSON.parse(raw)
-    return Ok(validateConfig(data))
-  } catch (e) {
-    return Err({ message: "Invalid JSON", cause: e })
-  }
-}
-
-const result = parseConfig(rawConfig)
-switch (result._tag) {
-  case "Ok":
-    startServer(result.value)
-    break
-  case "Err":
-    logger.error(result.error.message)
-    break
-}
-```
-
-### 4. Branded Types (Type-Safe Units)
-
-Prevent unit confusion and invalid values:
-
-```typescript
-type Brand<K, T> = K & { __brand: T }
-type Cents = Brand<number, "Cents">
-type Dollars = Brand<number, "Dollars">
-
-const Cents = (n: number): Cents => {
-  if (!Number.isInteger(n) || n < 0) throw new Error("Invalid cents")
-  return n as Cents
-}
-
-const Dollars = (n: number): Dollars => {
-  if (n < 0) throw new Error("Invalid dollars")
-  return n as Dollars
-}
-
-// Compiler prevents mixing units:
-const price: Cents = Cents(100)
-const budget: Dollars = Dollars(10)
-const total: Cents = price + budget // Type error! Cannot mix Cents and Dollars
-```
-
-## When to Use
-
-### Use Discriminated Unions When:
-- Modeling state machines (pending → settled → reconciled)
-- Representing mutually exclusive variants (payment methods, user roles)
-- Building domain models with distinct states
-- Replacing boolean flags with explicit states
-
-### Use Option When:
-- Value may be absent (but absence is expected/valid)
-- Replacing `null` or `undefined` checks
-- Chaining operations that may fail to find values
-- Making nullability explicit in APIs
-
-### Use Result When:
-- Operation may fail with recoverable errors
-- You need to propagate error context
-- Replacing try/catch for expected failures
-- Building error handling into function signatures
-
-### Use Branded Types When:
-- Preventing unit confusion (cents vs dollars, ms vs seconds)
-- Enforcing validation invariants (email format, positive numbers)
-- Creating type-safe IDs (UserId vs OrderId)
-- Domain-driven design with value objects
-
-## Quick Start - Paste-Ready Helpers
-
-Copy these into your project to start using functional patterns:
-
-```typescript
-// ============================================
-// Option Type
-// ============================================
-type None = { _tag: "None" }
-type Some<T> = { _tag: "Some"; value: T }
-type Option<T> = None | Some<T>
-
-const None: None = { _tag: "None" }
-const Some = <T>(value: T): Option<T> => ({ _tag: "Some", value })
-
-// Utilities
-const isNone = <T>(opt: Option<T>): opt is None => opt._tag === "None"
-const isSome = <T>(opt: Option<T>): opt is Some<T> => opt._tag === "Some"
-
-const getOrElse = <T>(opt: Option<T>, defaultValue: T): T =>
-  opt._tag === "Some" ? opt.value : defaultValue
-
-const map = <T, U>(opt: Option<T>, fn: (value: T) => U): Option<U> =>
-  opt._tag === "Some" ? Some(fn(opt.value)) : None
-
-const flatMap = <T, U>(opt: Option<T>, fn: (value: T) => Option<U>): Option<U> =>
-  opt._tag === "Some" ? fn(opt.value) : None
-
-// ============================================
-// Result Type
-// ============================================
-type Ok<T> = { _tag: "Ok"; value: T }
-type Err<E> = { _tag: "Err"; error: E }
-type Result<T, E> = Ok<T> | Err<E>
-
-const Ok = <T>(value: T): Result<T, never> => ({ _tag: "Ok", value })
-const Err = <E>(error: E): Result<never, E> => ({ _tag: "Err", error })
-
-// Utilities
-const isOk = <T, E>(result: Result<T, E>): result is Ok<T> => result._tag === "Ok"
-const isErr = <T, E>(result: Result<T, E>): result is Err<E> => result._tag === "Err"
-
-const mapResult = <T, U, E>(result: Result<T, E>, fn: (value: T) => U): Result<U, E> =>
-  result._tag === "Ok" ? Ok(fn(result.value)) : result
-
-const flatMapResult = <T, U, E>(
-  result: Result<T, E>,
-  fn: (value: T) => Result<U, E>
-): Result<U, E> =>
-  result._tag === "Ok" ? fn(result.value) : result
-
-// ============================================
-// Exhaustiveness Checking
-// ============================================
-const assertNever = (x: never): never => {
-  throw new Error(`Unhandled variant: ${JSON.stringify(x)}`)
-}
-
-// ============================================
-// Branded Types
-// ============================================
-type Brand<K, T> = K & { __brand: T }
-
-// Example: Cents (integer cents to prevent floating point errors)
-type Cents = Brand<number, "Cents">
-const Cents = (n: number): Cents => {
-  if (!Number.isInteger(n)) throw new Error("Cents must be integer")
-  if (n < 0) throw new Error("Cents cannot be negative")
-  return n as Cents
-}
-
-// Example: Email (validated email address)
-type Email = Brand<string, "Email">
-const Email = (s: string): Email => {
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) throw new Error("Invalid email")
-  return s as Email
-}
-
-// Example: Millis (timestamp in milliseconds)
-type Millis = Brand<number, "Millis">
-const Millis = (n: number): Millis => {
-  if (n < 0) throw new Error("Millis cannot be negative")
-  return n as Millis
-}
-```
-
-## Guidelines
-
-### Pattern Matching Best Practices
-
-1. **Always use `assertNever` in default case** for exhaustiveness checking:
-   ```typescript
-   switch (variant.kind) {
-     case "a": return handleA(variant)
-     case "b": return handleB(variant)
-     default: assertNever(variant) // Compiler error if cases missing
-   }
-   ```
-
-2. **Use discriminant field consistently** (`kind`, `type`, `_tag`):
-   ```typescript
-   // Good: consistent discriminant
-   type Result<T, E> = { _tag: "Ok"; value: T } | { _tag: "Err"; error: E }
-
-   // Avoid: mixing discriminants
-   type Bad = { kind: "a" } | { type: "b" } // Inconsistent!
-   ```
-
-3. **Narrow types early** to unlock type safety:
-   ```typescript
-   if (result._tag === "Ok") {
-     // TypeScript knows: result.value exists
-     return result.value.data
-   }
-   ```
-
-### Error Handling Strategy
-
-1. **Use Option for expected absence**:
-   ```typescript
-   function findUser(id: string): Option<User>
-   ```
-
-2. **Use Result for recoverable errors**:
-   ```typescript
-   function parseConfig(raw: string): Result<Config, ParseError>
-   ```
-
-3. **Use exceptions for programmer errors**:
-   ```typescript
-   function unreachable(message: string): never {
-     throw new Error(`Unreachable: ${message}`)
-   }
-   ```
-
-### Branded Types Guidelines
-
-1. **Validate in smart constructor**:
-   ```typescript
-   const PositiveInt = (n: number): PositiveInt => {
-     if (!Number.isInteger(n) || n <= 0) throw new Error("Must be positive integer")
-     return n as PositiveInt
-   }
-   ```
-
-2. **Use branded types for domain concepts**:
-   ```typescript
-   type UserId = Brand<string, "UserId">
-   type OrderId = Brand<string, "OrderId">
-   // Compiler prevents: const userId: UserId = orderId
-   ```
-
-3. **Prevent unit confusion**:
-   ```typescript
-   type Seconds = Brand<number, "Seconds">
-   type Millis = Brand<number, "Millis">
-   // Compiler prevents: const s: Seconds = millis
-   ```
-
-### Migration Strategy
-
-Start small and expand:
-1. New features: Use functional patterns from day one
-2. Bug fixes: Refactor to discriminated unions when touching code
-3. High-risk areas: Prioritize financial calculations, state machines
-4. Team adoption: Share paste-ready helpers, pair on first implementations
-
-Enable TypeScript strict mode flags:
-- `strictNullChecks: true` - Make nullability explicit
-- `noImplicitReturns: true` - Ensure all code paths return
-- `strictFunctionTypes: true` - Safer function signatures
-
-## Examples by Domain
-
-### State Machine (Transaction Lifecycle)
-```typescript
-type TxnState =
-  | { kind: "pending"; createdAt: Millis }
-  | { kind: "settled"; ledgerId: string; settledAt: Millis }
-  | { kind: "failed"; reason: FailureReason; failedAt: Millis }
-  | { kind: "reversed"; originalLedgerId: string; reversedAt: Millis }
-
-function canReverse(state: TxnState): boolean {
-  switch (state.kind) {
-    case "pending": return false
-    case "settled": return true
-    case "failed": return false
-    case "reversed": return false
-    default: assertNever(state)
-  }
-}
-```
-
-### Configuration Parsing
-```typescript
-type ConfigError = { field: string; message: string }
-
-function parsePort(raw: unknown): Result<number, ConfigError> {
-  if (typeof raw !== "number") {
-    return Err({ field: "port", message: "must be number" })
-  }
-  if (raw < 1 || raw > 65535) {
-    return Err({ field: "port", message: "must be 1-65535" })
-  }
-  return Ok(raw)
-}
-```
-
-### Financial Calculations
-```typescript
-type Cents = Brand<number, "Cents">
-
-function addCents(a: Cents, b: Cents): Cents {
-  return Cents(a + b) // Smart constructor validates result
-}
-
-function calculateFee(amount: Cents, bps: number): Cents {
-  const feeAmount = Math.round((amount * bps) / 10000)
-  return Cents(feeAmount)
-}
-```
-
-## Further Reading
-
-- [ADT Reference](./references/adts.md) - Deep dive on sum types, product types, and pattern matching
-- [Option & Result Reference](./references/option-result.md) - Comprehensive error handling patterns
-- [Branded Types Reference](./references/branded-types.md) - Advanced nominal typing techniques
-- [Migration Guide](./references/migration-guide.md) - Step-by-step adoption playbook
-
-## Credits
-
-These patterns are inspired by **[Why Reliability Demands Functional Programming, ADTs, Safety and Critical Infrastructure](https://rastrian.com/why-reliability-demands-functional-programming-adts-safety-and-critical-infrastructure/)** by Rastrian. The blog post explores how functional programming techniques and Algebraic Data Types enable building reliable systems in critical infrastructure contexts.
-
-## When This Skill Loads
-
-This skill automatically loads when discussing:
-- Discriminated unions and sum types
-- State machine modeling
-- Result/Option types and error handling
-- Branded types and smart constructors
-- Type-safe domain models
-- Making illegal states unrepresentable
-- Functional programming in TypeScript
+# Selective functional patterns
+
+Functional patterns solve specific modeling defects. They are not a default
+architecture or an extra layer to place around working project types.
+
+## Start with the owning boundary
+
+Follow this order and stop at the first step that satisfies the task:
+
+1. Reuse the owning boundary's existing schema, generated type, library type, or
+   public contract.
+2. Infer types with the installed tool's supported utilities.
+3. Compose, refine, or extend the canonical schema or type.
+4. Improve the representation at its owner when the task exposes a real gap.
+5. Introduce one minimal custom type only when the hard gate below is satisfied.
+
+Do not continue down the list once the existing representation can express the
+requirement safely.
+
+### Canonical owners
+
+- TypeBox schemas own their request and response shapes. Use
+  `Static<typeof Schema>` and TypeBox composition rather than handwritten mirrors.
+- Drizzle tables own their persistence shapes. Use `typeof table.$inferSelect`,
+  `typeof table.$inferInsert`, or the inference convention already used by the
+  package.
+- DynamoDB Toolbox entities own their item shapes. Use `InputItem<typeof Entity>`,
+  `FormattedItem<typeof Entity>`, and the entity's item schema.
+- Effect Schema and other installed schema libraries own their inferred types,
+  refinements, parse errors, and tagged schemas.
+- Installed functional libraries own their `Option`, `Result`, `Either`, and
+  effect types, constructors, and matching conventions.
+- Existing nullable, throwing, promise-based, generated, and plain TypeScript
+  contracts remain canonical when the project already uses them.
+
+## Do not add a middle model
+
+Do not place a handwritten tagged, branded, or class-based model between an API
+schema and a persistence schema merely to rename fields or repeat validation.
+Convert directly between the two boundary-owned shapes.
+
+Different boundaries may legitimately have different types. A TypeBox request,
+a Drizzle row, and a DynamoDB item do not need a third universal domain type to
+connect them. Reuse an existing behavior-rich domain entity when the package
+already has one, but do not create an entity class solely to wrap a row or item.
+
+## Hard gate for a custom type
+
+Add a custom tagged union, brand, opaque type, `Option`, or `Result` only when all
+of these conditions hold:
+
+1. The changed code contains a concrete defect, invalid state, or unsafe
+   interchange that the type should prevent.
+2. The owning schema, installed library, and current project types cannot express
+   the distinction through composition, refinement, literals, constraints, or
+   their native error model.
+3. The new type prevents the defect instead of restating validation or giving an
+   existing value another name.
+4. One boundary can own construction and validation consistently.
+5. The type does not introduce routine adapters, duplicate serializers, or a
+   second representation across callers, persistence, and tests.
+
+If any condition fails, keep the existing representation.
+
+## Choose the smallest representation
+
+- Use a literal union such as `"pending" | "settled"` before wrapping each value
+  in a tagged object.
+- Use a discriminated union when variants carry different data or when it removes
+  a demonstrated invalid combination of fields.
+- Use a brand only when values with the same primitive representation remain easy
+  to confuse after applying the existing schema and library tools.
+- Use the established nullable or failure contract before considering `Option` or
+  `Result`.
+- Keep runtime validation in the owning schema. A custom compile-time type must
+  not replace boundary validation.
+
+Validation, nullability, recoverable failure, identifiers, and domain terminology
+do not by themselves justify a custom type.
+
+## Working method
+
+1. Inspect imports, package dependencies, schemas, generated types, public
+   contracts, and immediate callers.
+2. Name the specific unsafe state or operation required by the task.
+3. Reuse or extend the highest existing owner that can prevent it.
+4. Keep conversions at active boundaries and preserve public behavior unless the
+   task explicitly changes it.
+5. Test the changed behavior using the package's existing test utilities.
+
+## References
+
+Read only the reference needed for the active problem:
+
+- [ADTs](./references/adts.md) for deciding between literal and discriminated
+  unions
+- [Option and Result](./references/option-result.md) for absence and failure
+  contracts
+- [Branded types](./references/branded-types.md) for nominal distinctions and
+  units
+- [Migration guide](./references/migration-guide.md) for a focused change to an
+  existing codebase
+
+## Review checklist
+
+- The owning schema, library, or project type was identified first.
+- Schema-derived and generated types remain canonical at their boundaries.
+- No unnecessary middle model or generic functional helper was added.
+- Every new custom type passes the hard gate.
+- The change fixes the named problem without spreading a second representation.

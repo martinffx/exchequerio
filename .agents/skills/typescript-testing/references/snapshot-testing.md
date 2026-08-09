@@ -1,5 +1,9 @@
 # Snapshot Testing Patterns
 
+Snapshot only changed behavior at the active contract boundary. Reuse existing
+serializers and fixtures, and avoid repeating the same scenario in lower-level and
+full-stack suites.
+
 Comprehensive guide to snapshot testing with Vitest for validating complex objects, UI output, and generated code.
 
 ## Basic Snapshot Testing
