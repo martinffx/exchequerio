@@ -1,5 +1,9 @@
 # Repository Completion Specification
 
+> Superseded for Ledger and Account behavior by the approved
+> [Accounts Effect design](../../../../../docs/specs/2026-08-09-accounts-effect/design.md).
+> The Effect repositories and services in that design are authoritative.
+
 ## Feature Overview
 
 **Feature Name:** Repository Completion  
@@ -253,4 +257,3 @@ output: { amount: "12.34" } // 1234 / 10^2
 - Use existing working code as reference patterns
 - Validate against existing database schema before changes
 - Test service integration after each repository completion
-

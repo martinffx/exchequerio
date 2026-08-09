@@ -8,7 +8,6 @@ import type {
 	LedgerTransactionRequest,
 	LedgerTransactionResponse,
 } from "@/routes/ledgers/schema";
-import type { LedgerEntity } from "./LedgerEntity";
 import { LedgerTransactionEntryEntity } from "./LedgerTransactionEntryEntity";
 import type { LedgerID, LedgerTransactionID, OrgID } from "./types";
 
@@ -39,7 +38,10 @@ type LedgerTransactionEntityOptions = {
 
 type LedgerTransactionRequestOpts = {
 	rq: LedgerTransactionRequest;
-	ledger: LedgerEntity;
+	organizationId: OrgID;
+	ledgerId: LedgerID;
+	currencyCode: string;
+	minorUnitExponent: number;
 	id?: string;
 };
 
@@ -157,7 +159,10 @@ class LedgerTransactionEntity {
 	 */
 	public static fromRequest({
 		rq,
-		ledger,
+		organizationId,
+		ledgerId,
+		currencyCode,
+		minorUnitExponent,
 		id,
 	}: LedgerTransactionRequestOpts): LedgerTransactionEntity {
 		const transactionId = id ? TypeID.fromString<"ltr">(id) : new TypeID("ltr");
@@ -168,13 +173,13 @@ class LedgerTransactionEntity {
 			entry =>
 				new LedgerTransactionEntryEntity({
 					id: new TypeID("lte"),
-					organizationId: ledger.organizationId,
+					organizationId,
 					transactionId,
 					accountId: TypeID.fromString<"lat">(entry.accountId),
 					direction: entry.direction,
 					amount: entry.amount, // Already integer minor units
-					currency: ledger.currency,
-					currencyExponent: ledger.currencyExponent,
+					currency: currencyCode,
+					currencyExponent: minorUnitExponent,
 					status: rq.status,
 					created,
 					updated: new Date(rq.updated),
@@ -183,8 +188,8 @@ class LedgerTransactionEntity {
 
 		return new LedgerTransactionEntity({
 			id: transactionId,
-			organizationId: ledger.organizationId,
-			ledgerId: ledger.id,
+			organizationId,
+			ledgerId,
 			entries,
 			description: rq.description,
 			status: rq.status,

@@ -26,8 +26,6 @@ function createLedgerFixture(): LedgerEntity {
 		organizationId: new TypeID("org"),
 		name: faker.company.name(),
 		description: faker.lorem.sentence(),
-		currency: "USD",
-		currencyExponent: 2,
 		metadata: undefined,
 		created: now,
 		updated: now,

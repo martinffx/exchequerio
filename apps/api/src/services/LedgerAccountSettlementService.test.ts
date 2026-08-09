@@ -2,7 +2,6 @@ import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities/LedgerAccountSettlementEntity";
-import { LedgerEntity } from "@/repo/entities/LedgerEntity";
 import type {
 	LedgerAccountID,
 	LedgerAccountSettlementID,
@@ -10,7 +9,6 @@ import type {
 	OrgID,
 } from "@/repo/entities/types";
 import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlementRepo";
-import type { LedgerRepo } from "@/repo/LedgerRepo";
 import type { SettlementStatus } from "@/routes/ledgers/schema";
 import { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
 import type { LedgerTransactionService } from "./LedgerTransactionService";
@@ -33,34 +31,17 @@ describe("LedgerAccountSettlementService", () => {
 		updateStatus: vi.fn(),
 		calculateAmount: vi.fn(),
 	} as unknown as LedgerAccountSettlementRepo);
-	const mockLedgerRepo = vi.mocked<LedgerRepo>({
-		getLedger: vi.fn(),
-	} as unknown as LedgerRepo);
 	const mockTransactionService = vi.mocked<LedgerTransactionService>({
 		createTransaction: vi.fn(),
 	} as unknown as LedgerTransactionService);
-	const service = new LedgerAccountSettlementService(
-		mockSettlementRepo,
-		mockLedgerRepo,
-		mockTransactionService
-	);
+	const service = new LedgerAccountSettlementService(mockSettlementRepo, mockTransactionService);
 
 	afterEach(() => {
 		vi.clearAllMocks();
 	});
 
 	describe("listLedgerAccountSettlements", () => {
-		it("should verify ledger exists and return list of settlements", async () => {
-			const mockLedger = new LedgerEntity({
-				id: ledgerId,
-				organizationId: orgId,
-				name: "Test Ledger",
-				currency: "USD",
-				currencyExponent: 2,
-				created: new Date(),
-				updated: new Date(),
-			});
-
+		it("returns the repository settlements", async () => {
 			const mockSettlements = [
 				new LedgerAccountSettlementEntity({
 					id: settlementId,
@@ -77,25 +58,12 @@ describe("LedgerAccountSettlementService", () => {
 				}),
 			];
 
-			mockLedgerRepo.getLedger.mockResolvedValue(mockLedger);
 			mockSettlementRepo.listSettlements.mockResolvedValue(mockSettlements);
 
 			const result = await service.listLedgerAccountSettlements(orgId, ledgerId, 0, 50);
 
 			expect(result).toEqual(mockSettlements);
-			expect(mockLedgerRepo.getLedger).toHaveBeenCalledWith(orgId, ledgerId);
 			expect(mockSettlementRepo.listSettlements).toHaveBeenCalledWith(orgId, ledgerId, 0, 50);
-		});
-
-		it("should propagate NotFoundError if ledger does not exist", async () => {
-			const error = new NotFoundError(`Ledger not found: ${ledgerId.toString()}`);
-			mockLedgerRepo.getLedger.mockRejectedValue(error);
-
-			await expect(service.listLedgerAccountSettlements(orgId, ledgerId, 0, 50)).rejects.toThrow(
-				NotFoundError
-			);
-			expect(mockLedgerRepo.getLedger).toHaveBeenCalledWith(orgId, ledgerId);
-			expect(mockSettlementRepo.listSettlements).not.toHaveBeenCalled();
 		});
 	});
 

@@ -40,6 +40,36 @@
 				"mode": "full"
 			},
 			{ "type": "ledger-transport", "pattern": "src/ledgers/LedgerSchema.ts", "mode": "full" },
+			{
+				"type": "account-composition",
+				"pattern": "src/ledgers/accounts/index.ts",
+				"mode": "full"
+			},
+			{
+				"type": "account-routes",
+				"pattern": "src/ledgers/accounts/AccountRoutes.ts",
+				"mode": "full"
+			},
+			{
+				"type": "account-service",
+				"pattern": "src/ledgers/accounts/AccountService.ts",
+				"mode": "full"
+			},
+			{
+				"type": "account-repo",
+				"pattern": ["src/ledgers/accounts/AccountRepo.ts", "src/ledgers/accounts/AccountErrors.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "account-domain",
+				"pattern": "src/ledgers/accounts/domain/**/*",
+				"mode": "full"
+			},
+			{
+				"type": "account-transport",
+				"pattern": "src/ledgers/accounts/AccountSchema.ts",
+				"mode": "full"
+			},
 			{ "type": "organization-composition", "pattern": "src/organizations/index.ts", "mode": "full" },
 			{ "type": "organization-routes", "pattern": "src/organizations/OrganizationRoutes.ts", "mode": "full" },
 			{ "type": "organization-service", "pattern": "src/organizations/OrganizationService.ts", "mode": "full" },
@@ -157,6 +187,7 @@
 							"legacy-services",
 							"legacy-entities",
 							"ledger-composition",
+							"account-composition",
 							"organization-composition"
 						]
 					},
@@ -242,6 +273,57 @@
 						]
 					},
 					{
+						"from": ["account-domain"],
+						"allow": ["account-domain", "ledger-domain", "legacy-entities"]
+					},
+					{
+						"from": ["account-repo"],
+						"allow": [
+							"account-repo",
+							"account-domain",
+							"ledger-domain",
+							"database",
+							"http",
+							"legacy-entities",
+							"legacy-repo"
+						]
+					},
+					{
+						"from": ["account-service"],
+						"allow": [
+							"account-domain",
+							"account-repo",
+							"account-transport",
+							"ledger-domain",
+							"ledger-service",
+							"http",
+							"legacy-entities"
+						]
+					},
+					{
+						"from": ["account-transport"],
+						"allow": ["account-domain", "ledger-domain"]
+					},
+					{
+						"from": ["account-routes"],
+						"allow": [
+							"account-service",
+							"account-transport",
+							"http",
+							"legacy-entities"
+						]
+					},
+					{
+						"from": ["account-composition"],
+						"allow": [
+							"account-domain",
+							"account-repo",
+							"account-routes",
+							"account-service",
+							"account-transport"
+						]
+					},
+					{
 						"from": ["organization-domain"],
 						"allow": [
 							"organization-domain",
@@ -301,6 +383,7 @@
 							"config",
 							"database",
 							"ledger-composition",
+							"account-composition",
 							"organization-composition",
 							"runtime"
 						]

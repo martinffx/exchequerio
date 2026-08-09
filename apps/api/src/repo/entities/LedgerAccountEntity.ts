@@ -23,6 +23,8 @@ interface LedgerAccountEntityOptions {
 	name: string;
 	description?: string;
 	normalBalance: NormalBalance;
+	currencyCode?: string;
+	minorUnitExponent?: number;
 	// Individual balance fields (integers in minor units)
 	pendingAmount: number;
 	postedAmount: number;
@@ -46,6 +48,8 @@ class LedgerAccountEntity {
 	public readonly name: string;
 	public readonly description?: string;
 	public readonly normalBalance: NormalBalance;
+	public readonly currencyCode: string;
+	public readonly minorUnitExponent: number;
 	// Individual balance fields (integers in minor units)
 	public readonly pendingAmount: number;
 	public readonly postedAmount: number;
@@ -68,6 +72,8 @@ class LedgerAccountEntity {
 		this.name = options.name;
 		this.description = options.description;
 		this.normalBalance = options.normalBalance;
+		this.currencyCode = options.currencyCode ?? "USD";
+		this.minorUnitExponent = options.minorUnitExponent ?? 2;
 		this.pendingAmount = options.pendingAmount;
 		this.postedAmount = options.postedAmount;
 		this.availableAmount = options.availableAmount;
@@ -133,6 +139,8 @@ class LedgerAccountEntity {
 			name: record.name,
 			description: record.description ?? undefined,
 			normalBalance: record.normalBalance as NormalBalance,
+			currencyCode: record.currencyCode,
+			minorUnitExponent: record.minorUnitExponent,
 			// Individual balance fields (already integers from DB)
 			pendingAmount: record.pendingAmount,
 			postedAmount: record.postedAmount,
@@ -158,6 +166,8 @@ class LedgerAccountEntity {
 			name: this.name,
 			description: this.description ?? undefined,
 			normalBalance: this.normalBalance,
+			currencyCode: this.currencyCode,
+			minorUnitExponent: this.minorUnitExponent,
 			// Individual balance fields (integers)
 			pendingAmount: this.pendingAmount,
 			postedAmount: this.postedAmount,

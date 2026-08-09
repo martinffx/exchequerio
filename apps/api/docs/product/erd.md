@@ -8,8 +8,6 @@ erDiagram
         text organization_id FK
         text name
         text description
-        text currency
-        integer currency_exponent
         jsonb metadata
         timestamp created
         timestamp updated
@@ -17,11 +15,22 @@ erDiagram
 
     LEDGER_ACCOUNT {
         text id PK
+        text organization_id FK
         text ledger_id FK
         text name
         text description
         enum normal_balance
-        numeric balance_amount
+        text currency_code
+        integer minor_unit_exponent
+        integer pending_amount
+        integer posted_amount
+        integer available_amount
+        integer pending_credits
+        integer pending_debits
+        integer posted_credits
+        integer posted_debits
+        integer available_credits
+        integer available_debits
         integer lock_version
         jsonb metadata
         timestamp created
@@ -144,11 +153,12 @@ erDiagram
     }
 ```
 
-## Ledger Currency compatibility
+## Currency ownership
 
-The physical `ledgers.currency` and `ledgers.currency_exponent` columns temporarily support
-Account, Transaction, and Settlement consumers. The public API and Effect Ledger models exclude
-these fields. Step 03 migrates the child consumers before removing the compatibility storage.
+Currency belongs to each Ledger Account as the exact pair `currency_code` and
+`minor_unit_exponent`. Transactions and Settlements derive their Currency from their referenced
+Accounts. Ledgers do not store Currency. See the approved
+[Accounts Effect design](../../../../docs/specs/2026-08-09-accounts-effect/design.md).
 
 ## Key Relationships Explained
 

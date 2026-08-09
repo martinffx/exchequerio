@@ -127,8 +127,6 @@ function createLedgerEntity(options: Partial<LedgerEntityOpts> = {}): LedgerEnti
 		organizationId: options.organizationId ?? new TypeID("org"),
 		name: options.name ?? "Ledger",
 		description: options.description,
-		currency: options.currency ?? "EUR",
-		currencyExponent: options.currencyExponent ?? 2,
 		metadata: options.metadata,
 		created: options.created ?? now,
 		updated: options.updated ?? now,

@@ -170,7 +170,13 @@ class LedgerTransactionRepo {
 		const accounts = await this.db
 			.select()
 			.from(LedgerAccountsTable)
-			.where(and(inArray(LedgerAccountsTable.id, accountIds)));
+			.where(
+				and(
+					inArray(LedgerAccountsTable.id, accountIds),
+					eq(LedgerAccountsTable.organizationId, transaction.organizationId.toString()),
+					eq(LedgerAccountsTable.ledgerId, transaction.ledgerId.toString())
+				)
+			);
 
 		// 2. Update balances In-memory
 		const ledgerAccountsById = new Map(

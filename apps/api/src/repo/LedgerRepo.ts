@@ -111,18 +111,12 @@ class LedgerRepo {
 						metadata: record.metadata,
 						updated: record.updated,
 					},
-					where: and(
-						eq(LedgersTable.organizationId, entity.organizationId.toString()),
-						eq(LedgersTable.currency, entity.currency),
-						eq(LedgersTable.currencyExponent, entity.currencyExponent)
-					),
+					where: and(eq(LedgersTable.organizationId, entity.organizationId.toString())),
 				})
 				.returning();
 
 			if (result.length === 0) {
-				throw new ConflictError(
-					"Ledger not found or immutable fields (organizationId, currency, currencyExponent) were changed"
-				);
+				throw new ConflictError("Ledger not found or immutable organizationId was changed");
 			}
 
 			return LedgerEntity.fromRecord(result[0]);

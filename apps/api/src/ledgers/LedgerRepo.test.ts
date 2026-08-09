@@ -157,7 +157,7 @@ describe("LedgerRepoLive", () => {
 		expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);
 	});
 
-	it("creates duplicate names with PostgreSQL timestamps and legacy defaults", async () => {
+	it("creates duplicate names with PostgreSQL timestamps", async () => {
 		const organizationId = await createOrganization();
 		const first = await runRepo(repository => repository.create(ledgerWrite(organizationId)));
 		const second = await runRepo(repository => repository.create(ledgerWrite(organizationId)));
@@ -165,9 +165,6 @@ describe("LedgerRepoLive", () => {
 		expect(first.id).not.toBe(second.id);
 		expect(first.created).toBeInstanceOf(Date);
 		expect(first.updated).toEqual(first.created);
-		const legacy = await getLegacyLedger(organizationId, first.id);
-		expect(legacy.currency).toBe("USD");
-		expect(legacy.currencyExponent).toBe(2);
 	});
 
 	it("maps a missing parent Organization to OrganizationNotFound", async () => {
@@ -204,7 +201,7 @@ describe("LedgerRepoLive", () => {
 		await runDatabase(database =>
 			database.db
 				.update(LedgersTable)
-				.set({ currency: "EUR", currencyExponent: 3, updated: previousUpdated })
+				.set({ updated: previousUpdated })
 				.where(eq(LedgersTable.id, created.id.toString()))
 		);
 
@@ -222,10 +219,6 @@ describe("LedgerRepoLive", () => {
 		expect(value?.metadata).toBeUndefined();
 		expect(value?.created).toEqual(created.created);
 		expect(value?.updated).not.toEqual(previousUpdated);
-
-		const legacy = await getLegacyLedger(organizationId, created.id);
-		expect(legacy.currency).toBe("EUR");
-		expect(legacy.currencyExponent).toBe(3);
 	});
 
 	it("returns absence when update is missing or crosses Organizations and never inserts", async () => {
@@ -285,6 +278,8 @@ describe("LedgerRepoLive", () => {
 				ledgerId: created.id.toString(),
 				name: "Dependent account",
 				normalBalance: "debit",
+				currencyCode: "USD",
+				minorUnitExponent: 2,
 			})
 		);
 
