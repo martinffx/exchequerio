@@ -52,7 +52,7 @@
 				"mode": "full"
 			},
 			{ "type": "database", "pattern": "src/db/**/*", "mode": "full" },
-			{ "type": "runtime", "pattern": "src/runtime/**/*", "mode": "full" },
+			{ "type": "runtime", "pattern": "src/runtime.ts", "mode": "full" },
 			{ "type": "legacy-route-contracts", "pattern": "src/routes/schema.ts", "mode": "full" },
 			{
 				"type": "legacy-ledger-route-contracts",

@@ -262,6 +262,19 @@ describe("LedgerRepoLive", () => {
 		);
 	});
 
+	it("deletes without decoding persisted Ledger fields", async () => {
+		const organizationId = await createOrganization();
+		const ledgerId = newLedgerId();
+		await insertLedger(organizationId, { id: ledgerId.toString(), metadata: "{" });
+
+		const deleted = await runRepo(repository => repository.delete(organizationId, ledgerId));
+
+		expect(Option.isSome(deleted)).toBe(true);
+		expect(await runRepo(repository => repository.get(organizationId, ledgerId))).toEqual(
+			Option.none()
+		);
+	});
+
 	it("maps a real dependent Ledger Account to LedgerHasDependents", async () => {
 		const organizationId = await createOrganization();
 		const created = await runRepo(repository => repository.create(ledgerWrite(organizationId)));

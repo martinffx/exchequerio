@@ -35,6 +35,7 @@ const ledger = new Ledger({
 	updated: new Date("2026-08-09T10:00:00.000Z"),
 });
 const someLedger = Option.fromNullishOr(ledger);
+const deleted = Option.void;
 
 const repository = (overrides: Partial<LedgerRepo> = {}): LedgerRepo =>
 	vi.mocked<LedgerRepo>({
@@ -50,7 +51,7 @@ const repository = (overrides: Partial<LedgerRepo> = {}): LedgerRepo =>
 			)
 		),
 		update: vi.fn(() => Effect.succeed(someLedger)),
-		delete: vi.fn(() => Effect.succeed(someLedger)),
+		delete: vi.fn(() => Effect.succeed(deleted)),
 		...overrides,
 	});
 

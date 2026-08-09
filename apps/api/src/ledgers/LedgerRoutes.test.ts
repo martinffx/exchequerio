@@ -30,7 +30,7 @@ const service = (): LedgerService =>
 		getLedger: vi.fn(() => Effect.succeed(ledger)),
 		createLedger: vi.fn(() => Effect.succeed(ledger)),
 		updateLedger: vi.fn(() => Effect.succeed(ledger)),
-		deleteLedger: vi.fn(() => Effect.succeed(ledger)),
+		deleteLedger: vi.fn(() => Effect.void),
 	} as unknown as LedgerService);
 
 const servers: FastifyInstance[] = [];
