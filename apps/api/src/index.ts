@@ -1,4 +1,4 @@
-import { buildServer } from "./Server";
+import { buildServer } from "@/server";
 
 const start = async () => {
 	const server = await buildServer();

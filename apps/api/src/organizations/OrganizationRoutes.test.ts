@@ -4,7 +4,7 @@ import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { globalErrorHandler } from "@/lib/errors";
 import type { OrgID } from "../repo/entities/types";
-import { ServerRuntime } from "../runtime/ServerRuntime";
+import { ServerRuntime } from "@/runtime";
 import { Organization } from "./domain/Organization";
 import { OrganizationNotFound } from "./domain/OrganizationErrors";
 import type { OrganizationService } from "./OrganizationService";

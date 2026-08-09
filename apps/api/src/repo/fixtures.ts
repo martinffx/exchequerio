@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { DateTime } from "luxon";
 import { Pool } from "pg";
 import { TypeID } from "typeid-js";
-import { Config } from "@/Config";
+import { Config } from "@/config";
 import {
 	LedgerAccountEntity,
 	LedgerEntity,

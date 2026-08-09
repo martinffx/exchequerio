@@ -1,7 +1,7 @@
 import { Context, type Effect, Layer, ManagedRuntime } from "effect";
-import type { Config } from "../Config";
-import { type Database, makeDatabaseLive } from "../db/Database";
-import { organizationLayer, type OrganizationService } from "../organizations";
+import type { Config } from "@/config";
+import { type Database, makeDatabaseLive } from "@/db";
+import { organizationLayer, type OrganizationService } from "@/organizations";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
 
