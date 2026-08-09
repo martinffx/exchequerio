@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { vi } from "vitest";
-import { signJWT } from "@/Auth";
+import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import type {
 	BadRequestErrorResponse,
@@ -10,7 +10,7 @@ import type {
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
-import { buildServer } from "@/Server";
+import { buildServer } from "@/server";
 import type { LedgerService } from "@/services/LedgerService";
 import { createLedgerFixture, createOrganizationFixture } from "./fixtures";
 

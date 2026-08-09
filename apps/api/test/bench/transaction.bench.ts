@@ -6,14 +6,14 @@ import { Pool } from "pg";
 import { retry } from "radash";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { TypeID } from "typeid-js";
-import { signJWT } from "@/Auth";
-import { Config } from "@/Config";
+import { signJWT } from "@/auth";
+import { Config } from "@/config";
 import { LedgerAccountEntity, LedgerEntity, type LedgerID, type OrgID } from "@/repo/entities";
 import { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
 import { LedgerRepo } from "@/repo/LedgerRepo";
 import * as schema from "@/repo/schema";
 import { OrganizationsTable } from "@/repo/schema";
-import { buildServer } from "@/Server";
+import { buildServer } from "@/server";
 import type { DrizzleDB } from "@/repo/types";
 
 interface BenchmarkScenario {

@@ -1,8 +1,8 @@
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { TypeID } from "typeid-js";
 import { afterAll, describe, expect, it } from "vitest";
-import { Config } from "../Config";
-import { makeDatabaseLive } from "../db/Database";
+import { Config } from "@/config";
+import { makeDatabaseLive } from "@/db";
 import type { OrgID } from "../repo/entities/types";
 import { Organization } from "./domain/Organization";
 import {

@@ -3,9 +3,9 @@ import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUI from "@fastify/swagger-ui";
 import fastifyUnderPressure from "@fastify/under-pressure";
 import fastify, { type FastifyInstance } from "fastify";
-import { registerAuth } from "@/Auth";
-import { Config } from "@/Config";
-import { DatabaseTag } from "@/db/Database";
+import { registerAuth } from "@/auth";
+import { Config } from "@/config";
+import { DatabaseTag } from "@/db";
 import { globalErrorHandler } from "@/lib/errors";
 import { RepoPlugin, type RepoPluginOptions } from "@/repo";
 import { RouterPlugin } from "@/routes";
@@ -16,7 +16,7 @@ import {
 	ServerRuntime,
 	type ServerRuntimeLayer,
 	type ServerRuntimeServices,
-} from "@/runtime/ServerRuntime";
+} from "@/runtime";
 
 type ServerOpts = {
 	repoPluginOpts?: Omit<RepoPluginOptions, "db">;

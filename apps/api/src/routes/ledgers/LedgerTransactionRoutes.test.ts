@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { signJWT } from "@/Auth";
+import { signJWT } from "@/auth";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
 import type {
@@ -13,7 +13,7 @@ import type {
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
-import { buildServer } from "@/Server";
+import { buildServer } from "@/server";
 import type { LedgerTransactionService } from "@/services";
 import { createLedgerTransactionFixture } from "./fixtures";
 

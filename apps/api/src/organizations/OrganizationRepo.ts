@@ -1,7 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
-import { DatabaseTag, type DrizzleDatabase } from "../db/Database";
-import { isPostgresUnavailable, postgresErrorCode } from "../db/PostgresErrors";
+import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
 import type { OrgID } from "../repo/entities/types";
 import { OrganizationsTable } from "../repo/schema";
 import { Organization } from "./domain/Organization";
