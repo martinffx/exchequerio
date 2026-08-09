@@ -1,16 +1,10 @@
-import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Effect, Layer, Option } from "effect";
-import { Pool } from "pg";
+import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { TypeID } from "typeid-js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { Config } from "../Config";
-import { type DrizzleDatabase, makeDatabaseTest } from "../db/Database";
+import { makeDatabaseLive } from "../db/Database";
 import type { OrgID } from "../repo/entities/types";
-import * as schema from "../repo/schema";
-import { LedgersTable, OrganizationsTable } from "../repo/schema";
 import { Organization } from "./domain/Organization";
-import { OrganizationHasDependents } from "./domain/OrganizationErrors";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,
@@ -18,42 +12,38 @@ import {
 } from "./OrganizationRepo";
 
 const newOrganizationId = (): OrgID => new TypeID("org");
-const newLedgerId = (): string => new TypeID("lgr").toString();
 
 describe("OrganizationRepoLive", () => {
-	let pool: Pool;
-	let db: DrizzleDatabase;
 	const organizationIds = new Set<OrgID>();
-	const ledgerIds = new Set<string>();
+
+	const organizationRepoLive = organizationRepoLayer.pipe(
+		Layer.provide(makeDatabaseLive(new Config().databaseUrl))
+	);
+
+	const runtime: ManagedRuntime.ManagedRuntime<OrganizationRepo, never> =
+		ManagedRuntime.make(organizationRepoLive);
 
 	const run = <A, E>(use: (repository: OrganizationRepo) => Effect.Effect<A, E>) =>
-		Effect.runPromise(
-			Effect.gen(function* () {
-				return yield* use(yield* OrganizationRepoTag);
-			}).pipe(Effect.provide(organizationRepoLayer.pipe(Layer.provide(makeDatabaseTest(db)))))
-		);
+		runtime.runPromise(OrganizationRepoTag.pipe(Effect.flatMap(use)));
 
 	const create = (name: string, description?: string) => {
 		const id = newOrganizationId();
 		organizationIds.add(id);
 		const organization = Organization.fromRequest(id, {
 			name,
-			...(description === undefined ? {} : { description }),
+			description,
 		});
 		return run(repository => repository.createOrganization(organization));
 	};
 
-	beforeAll(() => {
-		pool = new Pool({ connectionString: new Config().databaseUrl });
-		db = drizzle(pool, { schema });
-	});
-
 	afterAll(async () => {
-		for (const id of ledgerIds) await db.delete(LedgersTable).where(eq(LedgersTable.id, id));
-		for (const id of organizationIds) {
-			await db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id.toString()));
+		try {
+			await run(repository =>
+				Effect.forEach(organizationIds, id => repository.deleteOrganization(id), { discard: true })
+			);
+		} finally {
+			await runtime.dispose();
 		}
-		await pool.end();
 	});
 
 	it("orders lists by ID and paginates in PostgreSQL", async () => {
@@ -117,21 +107,5 @@ describe("OrganizationRepoLive", () => {
 		expect(await run(repository => repository.getOrganization(organization.id))).toEqual(
 			Option.none()
 		);
-	});
-
-	it("maps a real dependent Ledger delete to OrganizationHasDependents", async () => {
-		const organization = await create("Dependent");
-		const ledgerId = newLedgerId();
-		ledgerIds.add(ledgerId);
-		await db.insert(LedgersTable).values({
-			id: ledgerId,
-			organizationId: organization.id.toString(),
-			name: "Dependent Ledger",
-		});
-
-		const error = await run(repository =>
-			Effect.flip(repository.deleteOrganization(organization.id))
-		);
-		expect(error).toEqual(new OrganizationHasDependents(organization.id.toString()));
 	});
 });

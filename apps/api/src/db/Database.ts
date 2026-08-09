@@ -41,7 +41,5 @@ const makeDatabaseLive = (connectionString: string, createPool: PoolFactory = de
 		)
 	);
 
-const makeDatabaseTest = (db: DrizzleDatabase) => Layer.succeed(DatabaseTag, { db });
-
 export type { DrizzleDatabase, PoolFactory };
-export { Database, DatabaseLive, DatabaseTag, makeDatabaseLive, makeDatabaseTest };
+export { Database, DatabaseLive, DatabaseTag, makeDatabaseLive };
