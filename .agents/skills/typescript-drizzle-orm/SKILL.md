@@ -6,6 +6,19 @@ user-invocable: false
 
 # Drizzle ORM
 
+Inspect the owning package and existing implementation first. Reuse established
+project types, helpers, errors, lifecycle behavior, and test utilities. The
+patterns below are options, not an implementation checklist. Introduce one only
+when the current task requires it.
+
+## Project-specific rules
+
+- Prefer PostgreSQL constraints and driver behavior over application machinery.
+- Use the driver’s lifecycle methods before adding connection tracking or shutdown
+  orchestration.
+- Require a current query or operational need before adding indexes, migrations,
+  retries, or pool customization.
+
 Lightweight, type-safe ORM with SQL-like and relational query APIs for PostgreSQL, MySQL, SQLite, Cloudflare D1, and Durable Objects.
 
 ## Quick Start (PostgreSQL)
@@ -18,11 +31,7 @@ import {
   integer,
   timestamp,
   boolean,
-  varchar,
-  uuid,
-  primaryKey,
-  unique,
-  index
+  varchar
 } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
@@ -265,7 +274,8 @@ await db.transaction(async (tx) => {
 
 ## Entity Pattern
 
-Domain entities encapsulate data transformations between API, domain, and database layers.
+Use an Entity pattern only when the owning package already uses it or the current
+task needs a domain boundary that plain inferred records cannot provide.
 
 ```typescript
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm'
@@ -330,7 +340,9 @@ See [references/entity-pattern.md](./references/entity-pattern.md) for detailed 
 
 ## Repository Pattern
 
-Repositories wrap database access with error handling and business logic.
+Use a Repository only when the owning package already has that boundary or the
+current task needs a stable abstraction over multiple queries. Direct Drizzle
+queries are valid when they match the existing implementation.
 
 ```typescript
 import { eq, and } from 'drizzle-orm'
@@ -376,7 +388,8 @@ See [references/repository-pattern.md](./references/repository-pattern.md) for d
 
 ## Database-Specific Guides
 
-For database-specific patterns, connection setup, migrations, and testing:
+Load a database-specific guide only for the current database and task. Its
+migration, index, retry, and connection examples remain conditional:
 
 - **[PostgreSQL patterns](./references/postgresql.md)** - Connection, migrations, column types, error codes, optimistic locking
 - **[SQLite patterns](./references/sqlite.md)** - Schema definition, type differences, better-sqlite3 testing
@@ -384,15 +397,9 @@ For database-specific patterns, connection setup, migrations, and testing:
 
 ## Guidelines
 
-1. Define schema in dedicated `schema.ts` file(s)
-2. Use `$inferSelect` and `$inferInsert` for types - don't duplicate
-3. Always define relations for nested queries with `db.query`
-4. Pass `{ schema }` to `drizzle()` to enable relational queries
-5. Use SQL-like API (`db.select()`) for complex joins
-6. Use relational API (`db.query`) for nested data fetching
-7. Foreign keys need explicit `references(() => table.column)`
-8. Use `returning()` to get inserted/updated/deleted rows
-9. Wrap database access in Repository classes for error handling
-10. Use Entity classes for all data transformations (fromRequest, fromRecord, toRecord, toResponse)
-11. Add `lockVersion` column for optimistic locking on mutable resources
-12. Handle DB errors with specific error types (23505=conflict, 23503=not found, 40001/OC000=retry)
+1. Reuse the existing schema layout, inferred types, query style, and data-access boundaries.
+2. Prefer database constraints and native driver behavior to duplicate application checks.
+3. Add relations, repositories, or entities only when a current query or domain boundary needs them.
+4. Use `returning()` and error translation according to the current driver's behavior and project contract.
+5. Add optimistic locking or retries only for a demonstrated concurrency or operational requirement.
+6. Close owned connections with the driver's lifecycle API in the existing shutdown path.

@@ -1,5 +1,9 @@
 # Cloudflare Patterns with Drizzle ORM
 
+Inspect the owning Worker's bindings, schema, migration workflow, queries, and
+test utilities first. Use runtime-managed connection behavior. Add indexes or
+migrations only for a current schema, query, or operational need.
+
 Drizzle ORM patterns for Cloudflare D1 and Durable Objects SQLite storage.
 
 ## Cloudflare D1
@@ -48,6 +52,9 @@ export default {
 ```
 
 ### D1 Migrations Configuration
+
+Reuse existing D1 migration configuration. Add it only when the current task
+changes the schema and the project lacks a configured workflow.
 
 ```typescript
 // drizzle.config.ts
@@ -118,7 +125,7 @@ export class UserLedger extends DurableObject {
     // Initialize Drizzle with DO storage
     this.db = drizzle(ctx.storage, { schema })
 
-    // Run migrations on first instantiation
+    // Apply configured migrations when the active schema change requires them
     ctx.blockConcurrencyWhile(async () => {
       migrate(this.db, migrations)
     })
@@ -159,6 +166,9 @@ export class UserLedger extends DurableObject {
 ```
 
 ### DO Migrations Configuration
+
+Reuse the Durable Object's current initialization and migration behavior. Do not
+add migration orchestration to unrelated query work.
 
 ```typescript
 // drizzle.config.ts
@@ -367,9 +377,9 @@ const db = drizzle(ctx.storage, { schema })
 
 ### D1
 
-- Use connection pooling (handled by Workers runtime)
+- Use the connection behavior managed by the Workers runtime
 - Batch queries when possible
-- Index frequently queried columns
+- Add an index only for a current query or measured workload
 - Use prepared statements (automatic with Drizzle)
 - Monitor query performance via Cloudflare dashboard
 
@@ -377,7 +387,7 @@ const db = drizzle(ctx.storage, { schema })
 
 - Keep DO instances lightweight (single responsibility)
 - Use `blockConcurrencyWhile()` for initialization
-- Run migrations on first instantiation
+- Preserve the existing migration timing; change it only for an active schema migration
 - Handle alarms for periodic cleanup
 - Design for single-threaded execution
 - Avoid long-running operations in constructor
@@ -386,7 +396,7 @@ const db = drizzle(ctx.storage, { schema })
 
 - Use transactions for multi-step operations
 - Define foreign keys for data integrity
-- Create indexes for query performance
+- Add indexes only for current query requirements
 - Use type inference (`$inferSelect`, `$inferInsert`)
-- Follow repository pattern for data access
+- Follow the application's existing data-access boundary
 - Test with actual CF runtime (`vitest-pool-workers` or `better-sqlite3`)

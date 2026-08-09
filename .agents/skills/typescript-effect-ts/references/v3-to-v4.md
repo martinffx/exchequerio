@@ -8,7 +8,8 @@ Effect v4 preserves the core model—`Effect`, `Layer`, `Schema`, `Stream`, type
 2. Upgrade `effect` and all remaining Effect ecosystem packages to the same v4 release.
 3. Rewrite imports using the package and unstable-module maps.
 4. Apply mechanical renames before structural migrations.
-5. Migrate services and layers, then errors/core APIs, Schema, and resource code.
+5. Migrate existing services and Layers, then errors/core APIs, Schema, and
+   resource code. Do not introduce new service architecture as migration scope.
 6. Type-check after each topic. Do not mix v3 and v4 forms to silence isolated errors.
 
 ## Package organization

@@ -1,6 +1,9 @@
 # Effect v3 services and dependency injection
 
 Use this guide only after confirming the target package uses Effect v3.
+Create a service and Layer only for a real dependency or resource lifetime. Reuse
+existing tags, interfaces, implementations, test Layers, and runtime composition;
+ordinary capabilities can remain functions or values.
 
 ## Define and use services
 
@@ -18,7 +21,9 @@ const getUsers = Effect.gen(function*() {
 })
 ```
 
-Use a unique runtime identifier. Keep interfaces small so live and test implementations are easy to provide.
+When a new service is required, use a unique runtime identifier and keep its
+interface small. Do not add a class, interface, tag, and Layer when the capability
+does not need dependency injection.
 
 ## Build layers
 
@@ -72,7 +77,9 @@ await Effect.runPromise(
 )
 ```
 
-Build dependency layers bottom-up. Use `Layer.merge` for independent outputs, `Layer.provide` to hide dependencies, and `Layer.provideMerge` when callers also need the supplied services.
+For required Layers, build dependencies bottom-up. Use `Layer.merge` for
+independent outputs, `Layer.provide` to hide dependencies, and
+`Layer.provideMerge` when callers also need the supplied services.
 
 ## Testing and lifecycle
 
@@ -82,4 +89,6 @@ const result = await Effect.runPromise(
 )
 ```
 
-Provide complete test implementations instead of mocking Effect internals. Layers are memoized within one provision graph; use `Layer.fresh` only when a service must be rebuilt.
+Reuse existing complete test Layers instead of mocking Effect internals or adding
+parallel fixtures. Layers are memoized within one provision graph; use
+`Layer.fresh` only when a current test requires the service to be rebuilt.

@@ -6,6 +6,11 @@ user-invocable: false
 
 # TypeScript Build Tools
 
+Inspect the owning package and existing implementation first. Reuse established
+project types, helpers, errors, lifecycle behavior, and test utilities. The
+patterns below are options, not an implementation checklist. Introduce one only
+when the current task requires it.
+
 Modern TypeScript build tooling stack: Bun or pnpm for package management and task running, the native TypeScript 7 compiler for typechecking, Vitest for testing, Biome or Oxc for linting/formatting, and Turborepo for monorepo orchestration.
 
 ## Additional References

@@ -1,6 +1,12 @@
 # Fastify Plugin Architecture
 
-Fastify plugins enable modular, testable dependency injection using the `fastify-plugin` wrapper.
+Use this guide only when the owning application already uses Fastify plugins or
+the current task needs Fastify encapsulation, a shared dependency, or a resource
+lifetime. Prefer an explicit route handler for ordinary request behavior. Do not
+turn every repository, service, or capability into a plugin.
+
+Fastify plugins can provide modular dependency injection using the
+`fastify-plugin` wrapper.
 
 ## Core Concept
 
@@ -317,13 +323,9 @@ export default fp(DatabasePlugin)
 
 ## Guidelines
 
-1. **Use `fp()` wrapper** - Wrap utility plugins to prevent scope encapsulation
-2. **Don't wrap routers** - Route plugins should remain encapsulated
-3. **Register in dependency order** - Config → Auth → Repos → Services → Routes
-4. **Extend FastifyInstance** - Use `declare module 'fastify'` for type safety
-5. **Accept options** - Allow dependency injection via plugin options for testing
-6. **Use decorators** - Add functionality to server with `server.decorate()`
-7. **Cleanup in onClose** - Use lifecycle hooks to close connections, timers, etc.
-8. **Async registration** - Use `await server.register()` for proper initialization order
-9. **Type plugin options** - Define interface for plugin configuration
-10. **Mock in tests** - Pass mock implementations via plugin options for unit testing
+1. Reuse the application's plugin registration order, decorators, and option types.
+2. Use `fp()` only when the plugin must intentionally escape Fastify encapsulation.
+3. Keep route plugins encapsulated when that matches the existing route structure.
+4. Add lifecycle hooks only for resources the plugin actually owns; use the
+   resource library's native close method inside the existing shutdown path.
+5. Reuse project test utilities instead of adding plugin options solely for mocks.

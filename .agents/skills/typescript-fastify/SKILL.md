@@ -6,12 +6,26 @@ user-invocable: false
 
 # Fastify
 
+Inspect the owning package and existing implementation first. Reuse established
+project types, helpers, errors, lifecycle behavior, and test utilities. The
+patterns below are options, not an implementation checklist. Introduce one only
+when the current task requires it.
+
+## Project-specific rules
+
+- Prefer explicit route handlers over generic request executors.
+- Reuse existing global error handling and schemas.
+- Preserve current HTTP contracts during internal migrations.
+- Do not mandate new schema IDs, plugins, TypeIDs, or per-resource error stacks.
+
 Fast, low-overhead web framework for Node.js with TypeBox schema validation.
 
 ## Additional References
 
-- [references/plugins.md](./references/plugins.md) - Plugin architecture and dependency injection
-- [references/typeid.md](./references/typeid.md) - Type-safe prefixed identifiers
+- [references/plugins.md](./references/plugins.md) - Plugin architecture when the
+  existing application uses plugins or needs Fastify encapsulation
+- [references/typeid.md](./references/typeid.md) - TypeID integration when TypeID is
+  already canonical or the task explicitly introduces it
 
 ## Setup
 
@@ -170,7 +184,9 @@ app.register(userRoutes, { prefix: '/api/v1' })
 
 ## Error Schemas (RFC 7807)
 
-Use standardized error responses across all routes:
+Reuse the application's existing error schemas. Use this RFC 7807 example only
+when the task explicitly changes the error contract and RFC 7807 is the selected
+format:
 
 ```typescript
 import { Type } from '@sinclair/typebox'
@@ -229,6 +245,9 @@ export const InternalServerErrorResponse = Type.Composite([
 
 ## Error Handling
 
+Reuse the registered global error handler. Add one only when the application lacks
+an owner for error translation and the current task requires it:
+
 ```typescript
 import { FastifyError, FastifyRequest, FastifyReply } from 'fastify'
 
@@ -271,6 +290,10 @@ app.setErrorHandler(globalErrorHandler)
 ```
 
 ## Reusable Schemas (Shared References)
+
+Reuse existing registered schemas and IDs. Add shared references only when more
+than one current route needs the same schema and the application already uses this
+registration pattern:
 
 ```typescript
 // Add schema to instance for $ref usage
@@ -389,17 +412,10 @@ app.delete('/users/:id', {
 
 ## Guidelines
 
-1. Always define schemas with `Type.Object({ ... })` - full JSON Schema required in Fastify v5
-2. Add `$id` to all schemas for OpenAPI generation and reusability
-3. Add `operationId`, `tags`, and `summary` to all routes for documentation
-4. Define response schemas for ALL status codes (200, 400, 401, 403, 404, 500)
-5. Use RFC 7807 ProblemDetail format for errors with `Type.Composite`
-6. Use `Static<typeof Schema>` to derive TypeScript types from schemas
-7. Split input schemas (CreateX) from output schemas (X) - omit generated fields
-8. Use `Type.Optional()` for optional fields, not `?` in the type
-9. Export `FastifyTypebox` type for modular route files
-10. Add format validators: `uuid`, `email`, `date-time`, `uri`
-11. Use `Type.Union([Type.Literal(...)])` for string enums
-12. Use Fastify plugins with `fp()` for dependency injection - see [references/plugins.md](./references/plugins.md)
-13. Use `preHandler` with `hasPermissions()` decorator for protected routes
-14. Use TypeID for type-safe prefixed identifiers - see [references/typeid.md](./references/typeid.md)
+1. Follow the owning application's Fastify version, type provider, and schema style.
+2. Keep route handlers explicit and preserve their current request and response contracts.
+3. Reuse registered schemas, format validators, authentication hooks, and error handling.
+4. Derive TypeScript types from schemas when that is the project's established pattern.
+5. Add route metadata only when the current documentation or OpenAPI task requires it.
+6. Add a plugin only for a real encapsulation, lifecycle, or shared-dependency need.
+7. Reuse canonical identifiers; introduce TypeID only when the task explicitly selects it.

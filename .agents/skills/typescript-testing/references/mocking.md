@@ -1,5 +1,10 @@
 # Mocking Patterns with Vitest
 
+Inspect and reuse the owning package's test utilities first. Mock only the active
+boundary needed to verify changed behavior. Do not repeat the same scenario in
+route, service, repository, and full-stack tests, and do not build a shared mock
+harness until a second current consumer needs the same setup.
+
 Comprehensive guide to mocking modules, functions, classes, and dependencies in Vitest tests.
 
 ## Module Mocking

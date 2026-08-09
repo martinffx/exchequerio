@@ -1,6 +1,9 @@
 # Effect v3 resource management
 
 Use this guide only after confirming the target package uses Effect v3.
+First use the resource library's native finalizer and the application's existing
+shutdown path. Add Effect lifecycle machinery only when Effect owns an otherwise
+unmanaged resource lifetime.
 
 ## Scoped acquisition and release
 
@@ -73,12 +76,15 @@ const app = Effect.gen(function*() {
 }).pipe(Effect.provide(DatabaseLive))
 ```
 
-Use `Layer.scoped` for application-lifetime pools, clients, servers, and watchers.
+Use `Layer.scoped` when a service Layer truly owns an application-lifetime pool,
+client, server, or watcher.
 
 ## Rules
 
 - Acquire lazily inside Effect; do not allocate at module initialization.
 - Register release with acquisition.
 - Do not return a resource beyond its scope.
-- Prefer `acquireUseRelease` for one operation and scoped layers for application services.
-- Use `Effect.ensuring`, `Effect.onExit`, or `Effect.addFinalizer` for additional cleanup.
+- Prefer `acquireUseRelease` for one operation and a scoped Layer for a real
+  application service lifetime.
+- Use `Effect.ensuring`, `Effect.onExit`, or `Effect.addFinalizer` only for cleanup
+  not already supplied by the library or existing runtime.

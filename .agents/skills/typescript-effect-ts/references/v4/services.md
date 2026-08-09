@@ -1,6 +1,9 @@
 # Effect v4 services and layers
 
 Use this guide only after confirming the target package uses Effect v4.
+Create a service and Layer only for a real dependency or resource lifetime. Reuse
+existing services, implementations, test Layers, and runtime composition;
+ordinary capabilities can remain functions or values.
 
 ## Define services with Context.Service
 
@@ -13,7 +16,8 @@ class Database extends Context.Service<Database, {
 }>()("Database") {}
 ```
 
-The identifier string is the runtime key and must be unique. Function-style services are also supported:
+When a new service is required, its identifier string is the runtime key and must
+be unique. Function-style services are also supported:
 
 ```typescript
 interface Logger {
@@ -104,13 +108,16 @@ const program = Effect.gen(function*() {
 await Effect.runPromise(program.pipe(Effect.provide(appLayer)))
 ```
 
-Build dependency layers bottom-up and prefer one composed provision at the application boundary. v4 shares layer memoization across `Effect.provide` calls, but composition remains easier to inspect.
+For required Layers, build dependencies bottom-up and keep execution explicit in
+one composed provision at the application boundary. v4 shares layer memoization
+across `Effect.provide` calls, but composition remains easier to inspect.
 
 Use `Layer.fresh(layer)` or `Effect.provide(layer, { local: true })` when a layer subtree must be rebuilt, such as per-test resource isolation.
 
 ## Testing
 
-Provide a small test layer instead of mocking Effect internals:
+Reuse the project's test Layer. When none exists and the service is real, provide
+a small complete test Layer instead of mocking Effect internals:
 
 ```typescript
 const databaseLayerTest = Layer.succeed(Database, {
@@ -123,4 +130,5 @@ const result = await Effect.runPromise(
 )
 ```
 
-Keep service interfaces small, keep live resource acquisition in layers, and substitute complete implementations in tests.
+Keep required service interfaces small, keep owned resource acquisition in Layers,
+and substitute complete implementations in tests.

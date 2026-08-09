@@ -1,5 +1,10 @@
 # TypeID - Type-Safe Prefixed Identifiers
 
+Use this guide only when TypeID is already the project's canonical identifier or
+the current task explicitly introduces it. Reuse existing ID aliases, schemas,
+parsers, database mappings, fixtures, and error context. Do not add TypeID beside
+another canonical ID system.
+
 TypeID provides type-safe, globally unique identifiers with human-readable prefixes (e.g., `usr_01h455vb4pex5vsknk084sn02q`).
 
 ## Core Concept
@@ -303,13 +308,8 @@ async getUser(userId: TypeID<'usr'>): Promise<UserEntity> {
 
 ## Guidelines
 
-1. **Use TypeID for all entity IDs** - Provides type safety and readability
-2. **Define ID types** - Create typed aliases like `type UserID = TypeID<'usr'>`
-3. **Store as text in DB** - Use `text('id').$type<string>()` in Drizzle schema
-4. **Convert at boundaries** - Parse to TypeID in `fromRecord`, convert to string in `toRecord`
-5. **Validate in schemas** - Use pattern matching to validate TypeID format in API
-6. **Short prefixes** - Use 3-letter prefixes for readability (usr, org, pst)
-7. **Consistent naming** - Standardize prefixes across your application
-8. **Include in errors** - Add TypeIDs to error context for debugging
-9. **Multi-tenancy** - Always include orgId in queries for tenant isolation
-10. **Type safety** - Let TypeScript prevent ID mixups between different entity types
+1. Reuse canonical TypeID aliases, prefixes, schemas, and parsers.
+2. Preserve the existing wire and database representation during internal changes.
+3. Add a new prefix or alias only for a new identifier owned by the current task.
+4. Validate and convert IDs at the same boundaries the application already uses.
+5. Preserve existing tenancy and error-context behavior.
