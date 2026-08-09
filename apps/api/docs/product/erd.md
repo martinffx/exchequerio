@@ -144,6 +144,12 @@ erDiagram
     }
 ```
 
+## Ledger Currency compatibility
+
+The physical `ledgers.currency` and `ledgers.currency_exponent` columns temporarily support
+Account, Transaction, and Settlement consumers. The public API and Effect Ledger models exclude
+these fields. Step 03 migrates the child consumers before removing the compatibility storage.
+
 ## Key Relationships Explained
 
 ### Core Double-Entry Structure
