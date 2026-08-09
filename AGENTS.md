@@ -22,6 +22,9 @@ Read only the documents relevant to the work:
 ## Agent workflow
 
 - Use `atelier-orchestrator` at the start of development work. It selects an Inline Plan for bounded changes or a Spec-backed Plan when durable design and coordination artifacts are warranted.
+- Use `ponytail` at full intensity for development work. Prefer the smallest behavior-preserving change, reuse existing code and platform behavior, and defer shared abstractions until a second current consumer exists.
+- Keep migrations separate from product and infrastructure changes unless the broader scope is explicitly requested.
+- Treat skills as decision guidance, not implementation checklists; the task and existing source determine which patterns apply.
 - Read [domain documentation guidance](./docs/agents/domain.md) before domain-modelling work. Maintain `CONTEXT.md` as a glossary, not an implementation specification.
 - Read [issue-tracker guidance](./docs/agents/issue-tracker.md) when issue tracking is relevant. `plan.json` remains authoritative for Spec-backed task details and dependencies.
 - Preserve unrelated work in a dirty worktree. Do not commit, push, or open a pull request unless explicitly requested.
@@ -45,7 +48,7 @@ Skills provide task guidance; they do not prove that a dependency is installed. 
 - API dependencies flow from Routes to Services to Repositories and Entities to PostgreSQL. Keep transport validation in Routes, business orchestration in Services, persistence in Repositories, and transformations or invariants in Entities.
 - Web work follows React Router framework conventions. Keep route composition in `apps/web/app/routes`, reusable UI in `apps/web/app/components`, and shared helpers in `apps/web/app/lib`.
 - Public documentation uses Docusaurus under `apps/docs`; follow its content standard rather than duplicating writing conventions here.
-- Use stub-driven TDD for behavior changes and keep tests at the narrowest useful layer. API integration tests use PostgreSQL.
+- Use stub-driven TDD for changed behavior and keep tests at the narrowest useful layer. Avoid repeating the same contract across layers. API integration tests use PostgreSQL.
 
 ## Commands
 
