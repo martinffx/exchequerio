@@ -1,10 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
+import { LedgerRoutes } from "@/ledgers";
 import { LedgerAccountBalanceMonitorRoutes } from "./LedgerAccountBalanceMonitorRoutes";
 import { LedgerAccountCategoryRoutes } from "./LedgerAccountCategoryRoutes";
 import { LedgerAccountRoutes } from "./LedgerAccountRoutes";
 import { LedgerAccountSettlementRoutes } from "./LedgerAccountSettlementRoutes";
 import { LedgerAccountStatementRoutes } from "./LedgerAccountStatementRoutes";
-import { LedgerRoutes } from "./LedgerRoutes";
 import { LedgerTransactionRoutes } from "./LedgerTransactionRoutes";
 
 const LedgerRouterPlugin: FastifyPluginAsync = async server => {
