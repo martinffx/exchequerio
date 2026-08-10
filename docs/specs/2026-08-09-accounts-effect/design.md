@@ -40,7 +40,7 @@ generic Effect executor, HTTP adapter, authorization model, test harness, or lif
 | --- | --- | --- | --- |
 | Effect runtime | One managed runtime with `DatabaseTag` | reuse | Run Account effects without per-request runtimes |
 | HTTP boundary | Direct Ledger and Organization handlers | reuse | Keep route control flow visible |
-| Slice structure | Flat Effect slices with a pure `domain/` boundary | reuse | Add Accounts under `ledgers/accounts/` |
+| Slice structure | Flat Effect slices with a domain ownership boundary | reuse | Add Accounts under `ledgers/accounts/` |
 | Account identity | Canonical `lat` TypeID | reuse | Avoid a second Account ID stack |
 | Currency ownership | Compatibility fields on Ledger | delete | Account owns its immutable Currency pair |
 | Account persistence | One legacy upsert | delete | Create and update have different behavior |
@@ -51,7 +51,7 @@ generic Effect executor, HTTP adapter, authorization model, test harness, or lif
 
 ## Architecture
 
-The Account slice lives at `apps/api/src/ledgers/accounts/` and contains a pure Account domain,
+The Account slice lives at `apps/api/src/ledgers/accounts/` and contains an Account domain,
 typed errors, TypeBox schemas, an Effect repository, an Effect service, direct Fastify routes, and
 one public entrypoint.
 
@@ -73,9 +73,10 @@ Settlement routes
 ```
 
 `AccountService` owns parent checks, ID generation, immutable-field preservation, and update
-version handoff. `AccountRepo` owns tenant-scoped SQL, row decoding, optimistic writes, and
-database error classification. The routes own transport validation, authentication, permissions,
-HTTP status codes, and response serialization.
+version handoff. The Account model owns request construction and persisted-row encoding and
+decoding. `AccountRepo` owns tenant-scoped SQL, optimistic writes, and database error
+classification. The routes own transport validation, authentication, permissions, HTTP status
+codes, and response serialization.
 
 The existing server runtime gains the Account Layer. Account routes call it directly. No Promise
 to Effect bridge is introduced.
@@ -104,6 +105,10 @@ An Account contains its identity and ownership, mutable descriptive fields, immu
 and Normal Balance, three balance views, metadata, lock version, and timestamps. Domain and row
 decoding reject invalid Currency, unsafe Minor Units, invalid IDs, invalid metadata, and invalid
 timestamps instead of silently discarding data.
+
+The model exposes create-only `fromRequest`, plus `fromRow` and `toRow`. It may use Effect for lazy
+typed decoding and type-only request or Drizzle row contracts, but it performs no I/O. The
+repository remains responsible for SQL, transactions, and database error translation.
 
 ## API contract
 
@@ -233,8 +238,9 @@ response.
 
 ## Test design
 
-- Pure domain tests cover Currency validation and equality, exponent and Minor Unit validation,
-  negative balances, Normal Balance arithmetic, and immutable fields.
+- Domain tests cover request construction, row-codec round trips, decoding failures, Currency
+  validation and equality, exponent and Minor Unit validation, negative balances, Normal Balance
+  arithmetic, and immutable fields.
 - Route tests mock the Effect service and own permissions, validation, pagination, canonical IDs,
   public success contracts, response shape, and typed error mapping.
 - Service tests mock repositories and the Ledger service and own parent checks, initial state,

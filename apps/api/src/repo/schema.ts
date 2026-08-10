@@ -65,6 +65,8 @@ const LedgersTable = pgTable(
 	})
 );
 
+type LedgerRow = typeof LedgersTable.$inferSelect;
+
 // Ledger Accounts: Individual accounts (merchant wallets, fee accounts, etc.)
 const LedgerAccountsTable = pgTable(
 	"ledger_accounts",
@@ -132,6 +134,8 @@ const LedgerAccountsTable = pgTable(
 		),
 	})
 );
+
+type AccountRow = typeof LedgerAccountsTable.$inferSelect;
 
 // Ledger Transactions: Double-entry transaction containers
 const LedgerTransactionsTable = pgTable(
@@ -452,4 +456,4 @@ export {
 	ledgerEntryDirection,
 	ledgerSettlementStatus,
 };
-export type { OrganizationRow };
+export type { AccountRow, LedgerRow, OrganizationRow };

@@ -3,8 +3,7 @@ import { TypeID } from "typeid-js";
 import { BadRequestError, ServiceUnavailableError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import { type LedgerGetError, LedgerServiceTag, type LedgerService } from "../LedgerService";
-import { makeCurrency } from "../domain/Currency";
-import type { Account } from "./domain/Account";
+import { Account } from "./domain/Account";
 import {
 	type AccountInfrastructureError,
 	AccountNotFound,
@@ -77,33 +76,22 @@ class AccountService {
 		return Effect.gen(
 			function* (this: AccountService) {
 				yield* this.ledgerService.getLedger(organizationId, ledgerId);
-				const currency = yield* Effect.try({
-					try: () => makeCurrency(request.currencyCode, request.minorUnitExponent),
+				const id = yield* Effect.sync(() => new TypeID("lat") as LedgerAccountID);
+				const account = yield* Effect.try({
+					try: () => Account.fromRequest(id, organizationId, ledgerId, request),
 					catch: cause => new BadRequestError("Invalid Account Currency", { cause }),
 				});
-				const id = yield* Effect.sync(() => new TypeID("lat") as LedgerAccountID);
-				return yield* this.repository
-					.create({
-						id,
-						organizationId,
-						ledgerId,
-						name: request.name,
-						description: request.description,
-						normalBalance: request.normalBalance,
-						currency,
-						metadata: request.metadata,
-					})
-					.pipe(
-						Effect.mapError(error =>
-							error instanceof AccountRepositoryUnavailable
-								? new ServiceUnavailableError(error.message, {
-										...error.context,
-										cause: error,
-										retryable: false,
-									})
-								: error
-						)
-					);
+				return yield* this.repository.create(account).pipe(
+					Effect.mapError(error =>
+						error instanceof AccountRepositoryUnavailable
+							? new ServiceUnavailableError(error.message, {
+									...error.context,
+									cause: error,
+									retryable: false,
+								})
+							: error
+					)
+				);
 			}.bind(this)
 		);
 	}

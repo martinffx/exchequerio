@@ -57,12 +57,12 @@
 			},
 			{
 				"type": "account-repo",
-				"pattern": ["src/ledgers/accounts/AccountRepo.ts", "src/ledgers/accounts/AccountErrors.ts"],
+				"pattern": "src/ledgers/accounts/AccountRepo.ts",
 				"mode": "full"
 			},
 			{
 				"type": "account-domain",
-				"pattern": "src/ledgers/accounts/domain/**/*",
+				"pattern": ["src/ledgers/accounts/domain/**/*", "src/ledgers/accounts/AccountErrors.ts"],
 				"mode": "full"
 			},
 			{
@@ -92,6 +92,7 @@
 			{ "type": "legacy-routes", "pattern": "src/routes/**/*", "mode": "full" },
 			{ "type": "legacy-services", "pattern": "src/services/**/*", "mode": "full" },
 			{ "type": "legacy-entities", "pattern": "src/repo/entities/**/*", "mode": "full" },
+			{ "type": "persistence-schema", "pattern": "src/repo/schema.ts", "mode": "full" },
 			{ "type": "legacy-repo", "pattern": "src/repo/**/*", "mode": "full" },
 			{ "type": "config", "pattern": "src/Config.ts", "mode": "full" },
 			{ "type": "server", "pattern": "src/Server.ts", "mode": "full" }
@@ -205,11 +206,13 @@
 						"from": ["legacy-entities"],
 						"allow": [
 							"legacy-entities",
+							"persistence-schema",
 							"legacy-repo",
 							"legacy-route-contracts",
 							"legacy-ledger-route-contracts"
 						]
 					},
+					{ "from": ["persistence-schema"], "disallow": ["*"] },
 					{
 						"from": ["legacy-repo"],
 						"allow": [
@@ -217,6 +220,7 @@
 							"legacy-entities",
 							"legacy-route-contracts",
 							"legacy-ledger-route-contracts",
+							"persistence-schema",
 							"config"
 						]
 					},
@@ -227,7 +231,13 @@
 					},
 					{
 						"from": ["ledger-domain"],
-						"allow": ["ledger-domain", "http", "legacy-entities"]
+						"allow": [
+							"ledger-domain",
+							"ledger-transport",
+							"http",
+							"legacy-entities",
+							"persistence-schema"
+						]
 					},
 					{
 						"from": ["ledger-repo"],
@@ -236,6 +246,7 @@
 							"database",
 							"organization-composition",
 							"legacy-entities",
+							"persistence-schema",
 							"legacy-repo"
 						]
 					},
@@ -274,7 +285,13 @@
 					},
 					{
 						"from": ["account-domain"],
-						"allow": ["account-domain", "ledger-domain", "legacy-entities"]
+						"allow": [
+							"account-domain",
+							"account-transport",
+							"ledger-domain",
+							"legacy-entities",
+							"persistence-schema"
+						]
 					},
 					{
 						"from": ["account-repo"],
@@ -285,6 +302,7 @@
 							"database",
 							"http",
 							"legacy-entities",
+							"persistence-schema",
 							"legacy-repo"
 						]
 					},
@@ -330,7 +348,7 @@
 							"organization-transport",
 							"http",
 							"legacy-entities",
-							"legacy-repo"
+							"persistence-schema"
 						]
 					},
 					{
@@ -339,7 +357,13 @@
 					},
 					{
 						"from": ["organization-repo"],
-						"allow": ["organization-domain", "database", "legacy-entities", "legacy-repo"]
+						"allow": [
+							"organization-domain",
+							"database",
+							"legacy-entities",
+							"persistence-schema",
+							"legacy-repo"
+						]
 					},
 					{
 						"from": ["organization-service"],
@@ -376,7 +400,10 @@
 						]
 					},
 					{ "from": ["http"], "allow": ["http"] },
-					{ "from": ["database"], "allow": ["database", "legacy-repo"] },
+					{
+						"from": ["database"],
+						"allow": ["database", "persistence-schema", "legacy-repo"]
+					},
 					{
 						"from": ["runtime"],
 						"allow": [

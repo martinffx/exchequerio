@@ -20,7 +20,7 @@ import {
 	AccountVersionConflict,
 } from "./AccountErrors";
 import { type AccountRepo, AccountRepoTag, accountRepoLayer } from "./AccountRepo";
-import type { AccountCreate } from "./domain/Account";
+import { Account } from "./domain/Account";
 
 const newOrganizationId = (): OrgID => new TypeID("org");
 const newLedgerId = (): LedgerID => new TypeID("lgr");
@@ -64,16 +64,20 @@ describe("AccountRepoLive", () => {
 	const accountCreate = (
 		organizationId: OrgID,
 		ledgerId: LedgerID,
-		overrides: Partial<AccountCreate> = {}
-	): AccountCreate => ({
-		id: newAccountId(),
-		organizationId,
-		ledgerId,
-		name: "Cash",
-		normalBalance: "debit",
-		currency: makeCurrency("USD", 2),
-		...overrides,
-	});
+		overrides: Partial<
+			Pick<Account, "id" | "name" | "description" | "normalBalance" | "currency" | "metadata">
+		> = {}
+	): Account => {
+		const currency = overrides.currency ?? makeCurrency("USD", 2);
+		return Account.fromRequest(overrides.id ?? newAccountId(), organizationId, ledgerId, {
+			name: overrides.name ?? "Cash",
+			description: overrides.description,
+			normalBalance: overrides.normalBalance ?? "debit",
+			currencyCode: currency.code,
+			minorUnitExponent: currency.minorUnitExponent,
+			metadata: overrides.metadata,
+		});
+	};
 
 	afterAll(async () => {
 		try {

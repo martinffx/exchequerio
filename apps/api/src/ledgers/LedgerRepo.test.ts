@@ -8,7 +8,7 @@ import { OrganizationNotFound } from "@/organizations";
 import { LedgerRepo as LegacyLedgerRepo } from "@/repo/LedgerRepo";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
 import { LedgerAccountsTable, LedgersTable, OrganizationsTable } from "@/repo/schema";
-import type { LedgerWrite } from "./domain/Ledger";
+import { Ledger } from "./domain/Ledger";
 import {
 	LedgerHasDependents,
 	LedgerPersistenceDecodingFailure,
@@ -62,13 +62,13 @@ describe("LedgerRepoLive", () => {
 		);
 	const ledgerWrite = (
 		organizationId: OrgID,
-		overrides: Partial<LedgerWrite> = {}
-	): LedgerWrite => ({
-		id: newLedgerId(),
-		organizationId,
-		name: "Ledger",
-		...overrides,
-	});
+		overrides: Partial<Pick<Ledger, "id" | "name" | "description" | "metadata">> = {}
+	): Ledger =>
+		Ledger.fromRequest(overrides.id ?? newLedgerId(), organizationId, {
+			name: overrides.name ?? "Ledger",
+			description: overrides.description,
+			metadata: overrides.metadata,
+		});
 	const getLegacyLedger = (organizationId: OrgID, ledgerId: LedgerID) =>
 		runDatabase(database => new LegacyLedgerRepo(database.db).getLedger(organizationId, ledgerId));
 

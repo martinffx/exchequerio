@@ -17,7 +17,7 @@
             "Existing LedgerID and OrgID branded types",
             "Existing TypeBox and RFC 7807-compatible error conventions"
           ],
-          "description": "Create a Currency-free immutable Ledger domain value and a LedgerWrite value for persistence commands. Add Ledger-specific not-found, dependency, repository-unavailable, decoding, and persistence errors while reusing the public OrganizationNotFound error for a missing parent. Define TypeBox schemas for canonical Ledger IDs, offset pagination capped at 10,000, create and update bodies with additionalProperties false, and Currency-free responses. Add the response mapper with ISO timestamps and omission of absent optional fields. The domain must not import Effect, Fastify, TypeBox, Drizzle, database rows, or environment code.",
+          "description": "Create a Currency-free immutable Ledger domain value with fromRequest, fromRow, and toRow transformations. Add Ledger-specific not-found, dependency, repository-unavailable, decoding, and persistence errors while reusing the public OrganizationNotFound error for a missing parent. Define TypeBox schemas for canonical Ledger IDs, offset pagination capped at 10,000, create and update bodies with additionalProperties false, and Currency-free responses. Add the response mapper with ISO timestamps and omission of absent optional fields. The model may use Effect for lazy typed decoding and type-only request or row contracts, but it performs no I/O.",
           "files": {
             "create": [
               "apps/api/src/ledgers/domain/Ledger.ts",
@@ -41,7 +41,7 @@
         },
         {
           "id": "T2",
-          "name": "Implement repository reads and persisted-row decoding",
+          "name": "Implement repository reads with domain row codecs",
           "depends_on": [
             "T1"
           ],
@@ -51,7 +51,7 @@
             "Shared parseId, PostgreSQL availability classifier, and PostgreSQL error-code classifier",
             "Organization repository integration-test Layer pattern"
           ],
-          "description": "Define LedgerRepo, LedgerRepoTag, LedgerRepoLive, and the repository Layer. Add a private decoder for Ledger and Organization IDs, UTC timestamps, JSON object shape, and string-valued metadata. Implement tenant-scoped list and get queries that select only public columns. Order lists by Ledger ID ascending, apply offset and limit in PostgreSQL, and return Option.none for a missing or cross-Organization get. Map unavailable queries to LedgerRepositoryUnavailable, decoding failures to LedgerPersistenceDecodingFailure, and other failures to LedgerPersistenceFailure.",
+          "description": "Define LedgerRepo, LedgerRepoTag, LedgerRepoLive, and the repository Layer. Use Ledger.fromRow and Ledger.toRow for model validation and persistence transformation. Implement tenant-scoped list and get queries that select only public columns. Order lists by Ledger ID ascending, apply offset and limit in PostgreSQL, and return Option.none for a missing or cross-Organization get. Map unavailable queries to LedgerRepositoryUnavailable, decoding failures to LedgerPersistenceDecodingFailure, and other failures to LedgerPersistenceFailure. The repository owns SQL and database error translation.",
           "files": {
             "create": [
               "apps/api/src/ledgers/LedgerRepo.ts",

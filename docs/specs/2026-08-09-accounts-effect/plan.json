@@ -16,7 +16,7 @@
             "Existing Ledger and Organization domain patterns",
             "Canonical TypeID aliases in apps/api/src/repo/entities/types.ts"
           ],
-          "description": "Add pure shared Currency, exponent, Minor Unit, and Normal Balance values and a pure Account model. Reuse the canonical Account ID. Decode invalid persisted values visibly and keep Currency and Normal Balance immutable.",
+          "description": "Add shared Currency, exponent, Minor Unit, and Normal Balance values and an Account model that owns fromRequest, fromRow, and toRow. Reuse the canonical Account ID. Decode invalid persisted values visibly and keep Currency and Normal Balance immutable. Domain invariants remain pure, while the model may use Effect for lazy typed decoding and type-only request or row contracts.",
           "files": {
             "create": [
               "apps/api/src/ledgers/domain/Currency.ts",
@@ -37,7 +37,7 @@
               "builds the three Account balance views"
             ],
             "acceptance": [
-              "Pure domain modules import no Effect, Fastify, Drizzle, or PostgreSQL code",
+              "Domain models perform no I/O; repositories retain SQL, transactions, and database error translation",
               "No duplicate Account ID brand is introduced"
             ]
           }
@@ -89,7 +89,7 @@
             "Existing LedgerRepo Effect conventions",
             "Existing PostgreSQL database test Layer"
           ],
-          "description": "Implement tenant-scoped list, get, create, versioned update, and delete operations with typed row decoding and database error translation. Map only the named Account name constraint to duplicate-name Conflict.",
+          "description": "Implement tenant-scoped list, get, create, versioned update, and delete operations using Account.fromRow and Account.toRow, with database error translation in the repository. Map only the named Account name constraint to duplicate-name Conflict.",
           "files": {
             "create": [
               "apps/api/src/ledgers/accounts/AccountErrors.ts",

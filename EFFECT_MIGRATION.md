@@ -11,7 +11,7 @@ step remains authoritative for that resource's detailed behavior.
 
 ## Goals
 
-- Adopt a pure functional domain core with Effect services and repository interfaces.
+- Adopt domain-owned models and pure business rules with Effect services and repository interfaces.
 - Keep Fastify and TypeBox at the HTTP/OpenAPI boundary.
 - Keep Drizzle as the PostgreSQL adapter.
 - Complete every existing endpoint rather than mechanically preserving placeholder behavior.
@@ -133,7 +133,7 @@ Steps 05 through 08 may be implemented concurrently only after step 04 is integr
 ### Module layout and naming
 
 The completed API uses domain-rooted vertical slices with only the directories that communicate a
-real ownership or purity boundary:
+real ownership boundary:
 
 ```text
 apps/api/src/
@@ -159,9 +159,9 @@ apps/api/src/
   http/
 ```
 
-- `domain/` is the mandatory pure-domain boundary inside each resource family.
+- `domain/` owns the resource model, invariants, and transformations inside each resource family.
 - Application services, repository capabilities, live implementations, HTTP adapters, row
-  decoders, and test Layers live at the owning slice root. Do not create `application/` or
+  database access, and test Layers live at the owning slice root. Do not create `application/` or
   `adapters/` directories.
 - Each migrated slice exposes a public contract and composed Layer from one entrypoint. Concrete
   Live classes, persistence rows, and internal wiring remain private.
@@ -176,7 +176,12 @@ apps/api/src/
 ### Functional core
 
 - Domain invariants and state transitions are pure functions.
-- Pure domain modules do not import Effect, Fastify, Drizzle, PostgreSQL, or environment state.
+- Domain models own `fromRequest`, `fromRow`, and `toRow` transformations when those operations
+  construct or validate the model. They may use Effect for lazy typed decoding and type-only
+  transport or Drizzle row contracts when that avoids duplicate mirror models.
+- Domain code does not perform I/O, execute Effects, query PostgreSQL, read environment state, or
+  depend on Fastify request/reply objects. Repositories own SQL, transactions, and database error
+  translation.
 - Model lifecycle states with discriminated unions and exhaustive matching.
 - Use smart constructors for values with invariants.
 - Use branded types for domain IDs, `CurrencyCode`, `MinorUnitExponent`, and integer
