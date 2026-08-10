@@ -2,7 +2,7 @@ import { Context, Effect, Layer, Option } from "effect";
 import { TypeID } from "typeid-js";
 import { ServiceUnavailableError } from "@/lib/errors";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
-import type { Ledger } from "./domain/Ledger";
+import { Ledger } from "./domain/Ledger";
 import { LedgerNotFound, LedgerRepositoryUnavailable } from "./LedgerErrors";
 import {
 	type LedgerCreateRepositoryError,
@@ -52,13 +52,7 @@ class LedgerService {
 		request: LedgerCreateRequest
 	): Effect.Effect<Ledger, LedgerCreateError> {
 		return Effect.sync(() => new TypeID("lgr") as LedgerID).pipe(
-			Effect.flatMap(id =>
-				this.repository.create({
-					id,
-					organizationId,
-					...request,
-				})
-			),
+			Effect.flatMap(id => this.repository.create(Ledger.fromRequest(id, organizationId, request))),
 			Effect.mapError(error =>
 				error instanceof LedgerRepositoryUnavailable
 					? new ServiceUnavailableError(error.message, {
@@ -77,7 +71,7 @@ class LedgerService {
 		request: LedgerUpdateRequest
 	): Effect.Effect<Ledger, LedgerUpdateError> {
 		return this.repository
-			.update({ id: ledgerId, organizationId, ...request })
+			.update(Ledger.fromRequest(ledgerId, organizationId, request))
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId)));
 	}
 

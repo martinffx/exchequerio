@@ -6,7 +6,7 @@ import { Ledger } from "../domain/Ledger";
 import type { LedgerService } from "../LedgerService";
 import { LedgerServiceTag } from "../LedgerService";
 import { makeCurrency, makeMinorUnits } from "../domain/Currency";
-import { Account, type AccountCreate } from "./domain/Account";
+import { Account } from "./domain/Account";
 import { AccountNotFound } from "./AccountErrors";
 import type { AccountRepo } from "./AccountRepo";
 import { AccountRepoTag } from "./AccountRepo";
@@ -99,14 +99,7 @@ describe("AccountService", () => {
 
 	it("generates a canonical Account ID and creates immutable fields", async () => {
 		const repo = repository({
-			create: vi.fn((record: AccountCreate) =>
-				Effect.succeed(
-					new Account({
-						...account,
-						...record,
-					})
-				)
-			),
+			create: vi.fn((record: Account) => Effect.succeed(record)),
 		});
 		const parent = ledgerService();
 
@@ -121,14 +114,17 @@ describe("AccountService", () => {
 
 		expect(created.id.toString()).toMatch(/^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
 		expect(parent.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
-		expect(repo.create).toHaveBeenCalledWith({
-			id: created.id,
-			organizationId,
-			ledgerId,
-			name: "Broker position",
-			normalBalance: "credit",
-			currency: { code: "US0378331005", minorUnitExponent: 4 },
-		});
+		expect(repo.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: created.id,
+				organizationId,
+				ledgerId,
+				name: "Broker position",
+				normalBalance: "credit",
+				currency: { code: "US0378331005", minorUnitExponent: 4 },
+			})
+		);
+		expect(vi.mocked(repo.create).mock.calls[0]?.[0]).toBeInstanceOf(Account);
 	});
 
 	it("passes the current lock version into update without changing immutable fields", async () => {

@@ -80,8 +80,8 @@ export type { CreateLedgerRequest };
 ```
 
 - Every migrated domain slice exposes its public contract from a root `index.ts`.
-- Cross-slice imports use that entrypoint; concrete Live implementations and persistence row
-  codecs are not public exports.
+- Cross-slice imports use that entrypoint; concrete Live implementations, persistence row types,
+  and codec wiring are not public exports.
 - Add each migrated slice and its explicit dependency edges to the boundary configuration. Child
   slices may depend on an allowed parent; parents do not depend on children, and sibling edges are
   opt-in.
@@ -143,6 +143,11 @@ describe("LedgerService", () => {
 ## Code Organization Patterns
 
 ### Entity Transformation Methods
+
+Entities own transformations that construct or validate the entity, including request and
+persistence-row codecs. This is still a domain boundary: these methods may use Effect for lazy,
+typed decoding and type-only transport or Drizzle contracts, but they do not perform I/O. The
+repository owns SQL, transactions, and database error translation.
 
 ```typescript
 export class LedgerTransactionEntity {

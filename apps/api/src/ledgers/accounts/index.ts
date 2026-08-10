@@ -5,14 +5,7 @@ import { accountServiceLayer } from "./AccountService";
 const accountLayer = accountServiceLayer.pipe(Layer.provide(accountRepoLayer));
 
 export { Account } from "./domain/Account";
-export type {
-	AccountBalance,
-	AccountCreate,
-	AccountDetails,
-	AccountMetadata,
-	AccountOptions,
-	AccountUpdate,
-} from "./domain/Account";
+export type { AccountBalance, AccountMetadata, AccountOptions } from "./domain/Account";
 export {
 	AccountHasDependents,
 	AccountNameConflict,

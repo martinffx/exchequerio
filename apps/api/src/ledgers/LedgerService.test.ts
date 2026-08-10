@@ -3,7 +3,7 @@ import { TypeID } from "typeid-js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { HttpError, InternalServerError, ServiceUnavailableError } from "@/lib/errors";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
-import { Ledger, type LedgerWrite } from "./domain/Ledger";
+import { Ledger } from "./domain/Ledger";
 import {
 	LedgerHasDependents,
 	LedgerNotFound,
@@ -41,15 +41,7 @@ const repository = (overrides: Partial<LedgerRepo> = {}): LedgerRepo =>
 	vi.mocked<LedgerRepo>({
 		list: vi.fn(() => Effect.succeed([ledger])),
 		get: vi.fn(() => Effect.succeed(someLedger)),
-		create: vi.fn((record: LedgerWrite) =>
-			Effect.succeed(
-				new Ledger({
-					...record,
-					created: ledger.created,
-					updated: ledger.updated,
-				})
-			)
-		),
+		create: vi.fn((record: Ledger) => Effect.succeed(record)),
 		update: vi.fn(() => Effect.succeed(someLedger)),
 		delete: vi.fn(() => Effect.succeed(deleted)),
 		...overrides,
@@ -113,13 +105,16 @@ describe("LedgerService", () => {
 		);
 
 		expect(created.id.toString()).toMatch(/^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
-		expect(repo.create).toHaveBeenCalledWith({
-			id: created.id,
-			organizationId,
-			name: "Created",
-			description: "Description",
-			metadata: { externalId: "book-99" },
-		});
+		expect(repo.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: created.id,
+				organizationId,
+				name: "Created",
+				description: "Description",
+				metadata: { externalId: "book-99" },
+			})
+		);
+		expect(vi.mocked(repo.create).mock.calls[0]?.[0]).toBeInstanceOf(Ledger);
 		expect(repo.update).not.toHaveBeenCalled();
 	});
 
@@ -130,11 +125,10 @@ describe("LedgerService", () => {
 			service.updateLedger(organizationId, ledgerId, { name: "Replaced" })
 		);
 
-		expect(repo.update).toHaveBeenCalledWith({
-			id: ledgerId,
-			organizationId,
-			name: "Replaced",
-		});
+		expect(repo.update).toHaveBeenCalledWith(
+			expect.objectContaining({ id: ledgerId, organizationId, name: "Replaced" })
+		);
+		expect(vi.mocked(repo.update).mock.calls[0]?.[0]).toBeInstanceOf(Ledger);
 		expect(repo.create).not.toHaveBeenCalled();
 	});
 

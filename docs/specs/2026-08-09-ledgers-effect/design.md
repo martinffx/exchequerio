@@ -251,16 +251,15 @@ It does not add an ID-generator service, generic HTTP executor, `application/` d
 
 ### Public Ledger domain
 
-`Ledger` is a pure immutable value containing the existing branded Ledger and Organization IDs,
-name, optional description, optional string-valued metadata, and timestamps.
+`Ledger` is an immutable value containing the existing branded Ledger and Organization IDs, name,
+optional description, optional string-valued metadata, and timestamps. It has no Currency or Minor
+Unit Exponent.
 
-The domain imports no Effect, Fastify, TypeBox, Drizzle, database row, or environment code. It has
-no Currency or Minor Unit Exponent. The repository owns row decoding because persisted data is an
-adapter concern.
-
-Normal repository queries select only public columns. The private decoder validates IDs,
-timestamps, JSON structure, and string-valued metadata. Invalid persisted data produces a typed
-persistence-decoding failure instead of disappearing from the response.
+The model owns `fromRequest`, `fromRow`, and `toRow`. `fromRow` uses Effect for lazy typed decoding
+and validates IDs, timestamps, JSON structure, and string-valued metadata. Invalid persisted data
+produces a typed persistence-decoding failure instead of disappearing from the response. This does
+not give the model infrastructure responsibilities: it performs no I/O. The repository owns SQL,
+transactions, and database error classification.
 
 ### Effect service
 

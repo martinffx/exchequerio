@@ -1,22 +1,14 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
-import { makeCurrency, makeMinorUnits, type NormalBalance } from "@/ledgers/domain/Currency";
-import { parseId } from "@/lib/utils";
 import { LedgerNotFound } from "@/ledgers/LedgerErrors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
-import { LedgerAccountsTable } from "@/repo/schema";
-import {
-	Account,
-	type AccountCreate,
-	type AccountMetadata,
-	type AccountUpdate,
-} from "./domain/Account";
+import { type AccountRow, LedgerAccountsTable } from "@/repo/schema";
+import { Account } from "./domain/Account";
 import {
 	AccountHasDependents,
 	type AccountInfrastructureError,
 	AccountNameConflict,
-	AccountPersistenceDecodingFailure,
 	AccountPersistenceFailure,
 	AccountRepositoryUnavailable,
 	AccountVersionConflict,
@@ -25,6 +17,16 @@ import {
 type AccountListQuery = {
 	readonly offset: number;
 	readonly limit: number;
+};
+
+type AccountUpdate = {
+	readonly id: LedgerAccountID;
+	readonly organizationId: OrgID;
+	readonly ledgerId: LedgerID;
+	readonly name: string;
+	readonly description?: string;
+	readonly metadata?: Readonly<Record<string, string>>;
+	readonly expectedLockVersion: number;
 };
 
 type AccountCreateRepositoryError =
@@ -48,7 +50,7 @@ interface AccountRepo {
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Effect.Effect<Option.Option<Account>, AccountInfrastructureError>;
-	create(record: AccountCreate): Effect.Effect<Account, AccountCreateRepositoryError>;
+	create(record: Account): Effect.Effect<Account, AccountCreateRepositoryError>;
 	update(record: AccountUpdate): Effect.Effect<Account, AccountUpdateRepositoryError>;
 	delete(
 		organizationId: OrgID,
@@ -83,85 +85,6 @@ const publicColumns = {
 	updated: LedgerAccountsTable.updated,
 };
 
-type AccountRow = typeof LedgerAccountsTable.$inferSelect;
-
-const decodeDate = (value: Date): Date => {
-	if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
-		throw new Error("Invalid Account timestamp");
-	}
-	return value;
-};
-
-const decodeMetadata = (value: string | null): AccountMetadata | undefined => {
-	if (value === null) return undefined;
-	const decoded: unknown = JSON.parse(value);
-	if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
-		throw new Error("Account metadata must be an object");
-	}
-	if (!Object.values(decoded).every(item => typeof item === "string")) {
-		throw new Error("Account metadata values must be strings");
-	}
-	return decoded as Record<string, string>;
-};
-
-const decodeAccount = (
-	row: AccountRow | undefined
-): Effect.Effect<Option.Option<Account>, AccountPersistenceDecodingFailure> => {
-	if (row === undefined) return Effect.succeed(Option.none());
-
-	return Effect.gen(function* () {
-		const id = yield* parseId<"lat", LedgerAccountID>("lat", row.id);
-		const organizationId = yield* parseId<"org", OrgID>("org", row.organizationId);
-		const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", row.ledgerId);
-		const decoded = yield* Effect.try({
-			try: () => ({
-				currency: makeCurrency(row.currencyCode, row.minorUnitExponent),
-				pendingAmount: makeMinorUnits(row.pendingAmount),
-				postedAmount: makeMinorUnits(row.postedAmount),
-				availableAmount: makeMinorUnits(row.availableAmount),
-				pendingCredits: makeMinorUnits(row.pendingCredits),
-				pendingDebits: makeMinorUnits(row.pendingDebits),
-				postedCredits: makeMinorUnits(row.postedCredits),
-				postedDebits: makeMinorUnits(row.postedDebits),
-				availableCredits: makeMinorUnits(row.availableCredits),
-				availableDebits: makeMinorUnits(row.availableDebits),
-				metadata: decodeMetadata(row.metadata),
-				created: decodeDate(row.created),
-				updated: decodeDate(row.updated),
-			}),
-			catch: cause => cause,
-		});
-		if (!Number.isSafeInteger(row.lockVersion) || row.lockVersion < 0) {
-			return yield* Effect.fail(new Error("Invalid Account lock version"));
-		}
-		return Option.some(
-			// eslint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives a value.
-			new Account({
-				id,
-				organizationId,
-				ledgerId,
-				name: row.name,
-				description: row.description ?? undefined,
-				normalBalance: row.normalBalance as NormalBalance,
-				currency: decoded.currency,
-				pendingAmount: decoded.pendingAmount,
-				postedAmount: decoded.postedAmount,
-				availableAmount: decoded.availableAmount,
-				pendingCredits: decoded.pendingCredits,
-				pendingDebits: decoded.pendingDebits,
-				postedCredits: decoded.postedCredits,
-				postedDebits: decoded.postedDebits,
-				availableCredits: decoded.availableCredits,
-				availableDebits: decoded.availableDebits,
-				lockVersion: row.lockVersion,
-				metadata: decoded.metadata,
-				created: decoded.created,
-				updated: decoded.updated,
-			})
-		);
-	}).pipe(Effect.mapError(cause => new AccountPersistenceDecodingFailure(cause)));
-};
-
 const context = (organizationId: OrgID, ledgerId: LedgerID, accountId?: LedgerAccountID) => ({
 	organizationId: organizationId.toString(),
 	ledgerId: ledgerId.toString(),
@@ -193,7 +116,7 @@ const postgresConstraint = (cause: unknown, seen = new Set<object>()): string | 
 	return undefined;
 };
 
-const mapCreateError = (cause: unknown, record: AccountCreate): AccountCreateRepositoryError => {
+const mapCreateError = (cause: unknown, record: Account): AccountCreateRepositoryError => {
 	if (postgresErrorCode(cause) === "23503") {
 		return new LedgerNotFound(record.organizationId.toString(), record.ledgerId.toString());
 	}
@@ -224,7 +147,7 @@ const requireDecoded = (
 	row: AccountRow | undefined,
 	errorContext: ReturnType<typeof context>
 ): Effect.Effect<Account, AccountInfrastructureError> =>
-	decodeAccount(row).pipe(
+	Account.fromRow(row).pipe(
 		Effect.flatMap(
 			Option.match({
 				onNone: () =>
@@ -277,7 +200,7 @@ class AccountRepoLive implements AccountRepo {
 					.offset(query.offset),
 			catch: cause => mapInfrastructureError(cause, context(organizationId, ledgerId)),
 		}).pipe(
-			Effect.flatMap(rows => Effect.all(rows.map(row => decodeAccount(row)))),
+			Effect.flatMap(rows => Effect.all(rows.map(row => Account.fromRow(row)))),
 			Effect.map(accounts => accounts.flatMap(account => Option.toArray(account)))
 		);
 	}
@@ -301,28 +224,30 @@ class AccountRepoLive implements AccountRepo {
 					)
 					.limit(1),
 			catch: cause => mapInfrastructureError(cause, context(organizationId, ledgerId, accountId)),
-		}).pipe(Effect.flatMap(rows => decodeAccount(rows[0])));
+		}).pipe(Effect.flatMap(rows => Account.fromRow(rows[0])));
 	}
 
-	create(record: AccountCreate): Effect.Effect<Account, AccountCreateRepositoryError> {
+	create(record: Account): Effect.Effect<Account, AccountCreateRepositoryError> {
 		const errorContext = context(record.organizationId, record.ledgerId, record.id);
 		return Effect.tryPromise({
-			try: () =>
-				this.db
+			try: () => {
+				const row = record.toRow();
+				return this.db
 					.insert(LedgerAccountsTable)
 					.values({
-						id: record.id.toString(),
-						organizationId: record.organizationId.toString(),
-						ledgerId: record.ledgerId.toString(),
-						name: record.name,
-						description: record.description,
-						normalBalance: record.normalBalance,
-						currencyCode: record.currency.code,
-						minorUnitExponent: record.currency.minorUnitExponent,
-						metadata: record.metadata === undefined ? undefined : JSON.stringify(record.metadata),
-						lockVersion: 1,
+						id: row.id,
+						organizationId: row.organizationId,
+						ledgerId: row.ledgerId,
+						name: row.name,
+						description: row.description,
+						normalBalance: row.normalBalance,
+						currencyCode: row.currencyCode,
+						minorUnitExponent: row.minorUnitExponent,
+						metadata: row.metadata,
+						lockVersion: row.lockVersion,
 					})
-					.returning(publicColumns),
+					.returning(publicColumns);
+			},
 			catch: cause => mapCreateError(cause, record),
 		}).pipe(Effect.flatMap(rows => requireDecoded(rows[0], errorContext)));
 	}
@@ -379,7 +304,7 @@ class AccountRepoLive implements AccountRepo {
 							accountId.toString()
 						)
 					: mapInfrastructureError(cause, context(organizationId, ledgerId, accountId)),
-		}).pipe(Effect.flatMap(rows => decodeAccount(rows[0])));
+		}).pipe(Effect.flatMap(rows => Account.fromRow(rows[0])));
 	}
 }
 

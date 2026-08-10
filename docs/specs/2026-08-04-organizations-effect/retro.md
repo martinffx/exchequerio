@@ -46,6 +46,9 @@ The implementation followed the SDD faithfully. The SDD specified the redundant 
   permissions and per-actor Redis limiting needed their own user story.
 - Shared errors, ID parsing, and the live database test Layer replaced a parallel error hierarchy
   and a premature full-stack test harness.
+- The Organization model owns `fromRequest`, `fromRow`, and `toRow`. This keeps construction and
+  validation with the type whose invariants they establish, while the repository owns SQL,
+  transactions, and database error classification.
 - Small repetitions at the HTTP boundary kept control flow visible. Focused tests let each active
   layer cover its own contract instead of replaying the CRUD matrix.
 
@@ -64,6 +67,10 @@ the typed error channel, and the server still owns one managed runtime.
    per active boundary.
 5. Review for deletion before final approval. When the result differs from the design, update the
    SDD to record the result.
+6. Define domain purity by behavior, not an import blacklist. Domain code must not perform I/O,
+   but a model may use Effect for typed decoding and type-only request or row contracts.
+7. Treat current source and this retrospective as authoritative when an older design records an
+   implementation choice that cleanup later corrected.
 
 SDD should settle important decisions, not every possible detail. A decision-complete plan must
 remain small.

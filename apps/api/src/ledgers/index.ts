@@ -5,7 +5,7 @@ import { ledgerServiceLayer } from "./LedgerService";
 const ledgerLayer = ledgerServiceLayer.pipe(Layer.provide(ledgerRepoLayer));
 
 export { Ledger } from "./domain/Ledger";
-export type { LedgerMetadata, LedgerOptions, LedgerWrite } from "./domain/Ledger";
+export type { LedgerMetadata, LedgerOptions } from "./domain/Ledger";
 export type {
 	Currency,
 	CurrencyCode,
