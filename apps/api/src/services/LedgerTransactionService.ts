@@ -1,6 +1,6 @@
 import { retry } from "radash";
 import { TypeID } from "typeid-js";
-import { ConflictError } from "@/lib/errors";
+import { BadRequestError, ConflictError } from "@/lib/errors";
 import {
 	type LedgerID,
 	type LedgerAccountID,
@@ -8,14 +8,16 @@ import {
 	type LedgerTransactionID,
 	type OrgID,
 } from "@/repo/entities";
-import type { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
+import type { LedgerAccountReader } from "@/repo/LedgerAccountReader";
 import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
 import type { LedgerTransactionRequest } from "@/routes/ledgers/schema";
+
+const MAX_TRANSACTION_ACCOUNTS = 200;
 
 class LedgerTransactionService {
 	constructor(
 		private readonly ledgerTransactionRepo: LedgerTransactionRepo,
-		private readonly ledgerAccountRepo: LedgerAccountRepo
+		private readonly ledgerAccountReader: LedgerAccountReader
 	) {}
 
 	public async listTransactions(
@@ -51,14 +53,15 @@ class LedgerTransactionService {
 		rq: LedgerTransactionRequest
 	): Promise<LedgerTransactionEntity> {
 		const accountIds = [...new Set(rq.ledgerEntries.map(entry => entry.accountId))];
-		const accounts = await Promise.all(
-			accountIds.map(accountId =>
-				this.ledgerAccountRepo.getLedgerAccount(
-					orgId,
-					ledgerId,
-					TypeID.fromString<"lat">(accountId) as LedgerAccountID
-				)
-			)
+		if (accountIds.length > MAX_TRANSACTION_ACCOUNTS) {
+			throw new BadRequestError(
+				`A Transaction may reference at most ${MAX_TRANSACTION_ACCOUNTS} distinct Accounts`
+			);
+		}
+		const accounts = await this.ledgerAccountReader.getByIds(
+			orgId,
+			ledgerId,
+			accountIds.map(accountId => TypeID.fromString<"lat">(accountId) as LedgerAccountID)
 		);
 		const [currency] = accounts;
 		if (

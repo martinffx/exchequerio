@@ -16,7 +16,7 @@ generic Effect executor, HTTP adapter, authorization model, test harness, or lif
 
 - Migrate list, get, create, update, and delete Account endpoints to Effect.
 - Add Account-owned `currencyCode` and `minorUnitExponent` fields.
-- Introduce shared Currency, Minor Unit, Normal Balance, and Account ID value types.
+- Define Currency in the Account domain and reuse the canonical Account ID type.
 - Require Account currency and normal balance at creation.
 - Split Account create and update persistence and repair first-update optimistic locking.
 - Map duplicate Account names to a typed Conflict.
@@ -89,17 +89,17 @@ entity, repository, service, registrations, and their obsolete tests are removed
 ## Domain model
 
 - `LedgerAccountID` reuses the canonical `lat` TypeID.
-- `CurrencyCode` is a nonblank, case-preserving opaque string. It may contain an ISO code, ISIN,
+- Currency Code is a nonblank, case-preserving string. It may contain an ISO code, ISIN,
   ticker, or Organization-defined value. The API does not normalize it.
-- `MinorUnitExponent` is a nonnegative safe integer.
-- `Currency` is the exact pair of Currency Code and Minor Unit Exponent.
-- `MinorUnits` is a safe integer. Negative values are valid.
-- `NormalBalance` is `debit | credit`.
+- Minor Unit Exponent is a nonnegative safe integer.
+- Currency is an Account-domain value containing the exact Currency Code and Minor Unit Exponent.
+- Minor Units remain validated safe integers. Negative values are valid.
+- Normal Balance remains the validated `debit | credit` union.
 - Currency and Normal Balance are immutable after Account creation.
 
-Shared ledger-domain values live under `apps/api/src/ledgers/domain/` and are exported from the
-Ledger public entrypoint. The Account entrypoint re-exports the canonical Account ID type rather
-than defining another brand.
+Currency lives under `apps/api/src/ledgers/accounts/domain/`. Transactions and Settlements consume
+the Account-owned value through the Account boundary. The Account entrypoint reuses the canonical
+Account ID type rather than defining another brand.
 
 An Account contains its identity and ownership, mutable descriptive fields, immutable Currency
 and Normal Balance, three balance views, metadata, lock version, and timestamps. Domain and row
@@ -210,10 +210,11 @@ created, rollback requires restoring the old database backup with the old applic
 ## Direct consumer behavior
 
 `LedgerTransactionService` replaces its Ledger dependency with the temporary Account reader. It
-loads every referenced Account through Organization and Ledger scoped queries, requires one exact
-Currency pair, and builds every Entry from that pair. Existing Transaction request Currency fields
-remain accepted but ignored until Step 04. `LedgerTransactionRepo` also scopes its Account query
-by Organization and Ledger before updating balances.
+rejects more than 200 distinct Accounts, loads the referenced Accounts in one Organization- and
+Ledger-scoped query, requires one exact Currency pair, and builds every Entry from that pair.
+Existing Transaction request Currency fields remain accepted but ignored until Step 04.
+`LedgerTransactionRepo` reloads the Accounts within its database transaction before updating
+balances.
 
 Settlement create and update load both Accounts through the Effect service, require matching
 Currency pairs, and store the settled Account's Currency and Normal Balance. Settlement listing
@@ -238,18 +239,16 @@ response.
 
 ## Test design
 
-- Domain tests cover request construction, row-codec round trips, decoding failures, Currency
-  validation and equality, exponent and Minor Unit validation, negative balances, Normal Balance
-  arithmetic, and immutable fields.
 - Route tests mock the Effect service and own permissions, validation, pagination, canonical IDs,
   public success contracts, response shape, and typed error mapping.
 - Service tests mock repositories and the Ledger service and own parent checks, initial state,
-  immutable fields, version handoff, and not-found propagation.
+  Currency validation, immutable fields, version handoff, and not-found propagation.
 - PostgreSQL repository tests reuse the existing database Layer and own ordering, tenant scoping,
-  create versus update, duplicate-name mapping, first and concurrent updates, row decoding, and
-  delete dependencies.
+  create versus update, duplicate-name mapping, first and concurrent updates, row decoding,
+  balance validation, and delete dependencies.
 - Focused legacy tests prove Transactions and Settlements derive Currency from Accounts and reject
-  mismatched pairs.
+  mismatched pairs. Transaction service tests also own the 200-Account limit; the temporary reader
+  repository test owns bulk tenancy and missing-Account behavior.
 
 There is no HTTP to PostgreSQL harness and no new test infrastructure.
 
@@ -258,6 +257,9 @@ There is no HTTP to PostgreSQL harness and no new test infrastructure.
 Update the ERD so Account owns Currency and Ledger does not. Add focused supersession notices to
 older repository and Transaction documents that still claim Ledger-owned Currency. Leave
 `CONTEXT.md` unchanged because its glossary already states the intended model.
+
+Verify the generated migration manually against populated v0003 data and one representative
+invalid-data rollback. Do not duplicate the generated SQL in an automated test.
 
 Run the API tests, repository check, build, and a clean PostgreSQL migration. Review the full diff
 for unrelated changes before handoff.

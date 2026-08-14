@@ -4,7 +4,7 @@ import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import { createLedgerEntity, createOrganizationEntity, getRepos } from "./fixtures";
 
 describe("LedgerAccountRepo", () => {
-	const { organizationRepo, ledgerRepo, ledgerAccountRepo } = getRepos();
+	const { organizationRepo, ledgerRepo, ledgerAccountRepo, ledgerAccountReader } = getRepos();
 
 	// Test IDs - shared across test suite
 	let testOrgId: OrgID;
@@ -128,6 +128,66 @@ describe("LedgerAccountRepo", () => {
 			const differentOrgId = new TypeID("org") as OrgID;
 			await expect(
 				ledgerAccountRepo.getLedgerAccount(differentOrgId, testLedgerId, accountId)
+			).rejects.toThrow("Account not found");
+		});
+	});
+
+	describe("LedgerAccountReader.getByIds", () => {
+		const accountIds: LedgerAccountID[] = [];
+
+		afterEach(async () => {
+			await Promise.all(
+				accountIds
+					.splice(0)
+					.map(accountId => ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId))
+			);
+		});
+
+		it("returns tenant-scoped Accounts in one bulk read", async () => {
+			accountIds.push(new TypeID("lat") as LedgerAccountID, new TypeID("lat") as LedgerAccountID);
+			await Promise.all(
+				accountIds.map((accountId, index) =>
+					ledgerAccountRepo.upsertLedgerAccount(
+						LedgerAccountEntity.fromRequest(
+							{ name: `Bulk Account ${index + 1}` },
+							testOrgId,
+							testLedgerId,
+							"debit",
+							accountId.toString()
+						)
+					)
+				)
+			);
+
+			const accounts = await ledgerAccountReader.getByIds(testOrgId, testLedgerId, accountIds);
+
+			expect(accounts.map(account => account.id.toString()).sort()).toEqual(
+				accountIds.map(accountId => accountId.toString()).sort()
+			);
+		});
+
+		it("hides missing and cross-tenant Accounts", async () => {
+			const missingAccountId = new TypeID("lat") as LedgerAccountID;
+			const accountId = new TypeID("lat") as LedgerAccountID;
+			accountIds.push(accountId);
+			await ledgerAccountRepo.upsertLedgerAccount(
+				LedgerAccountEntity.fromRequest(
+					{ name: "Scoped Bulk Account" },
+					testOrgId,
+					testLedgerId,
+					"debit",
+					accountId.toString()
+				)
+			);
+
+			await expect(
+				ledgerAccountReader.getByIds(testOrgId, testLedgerId, [missingAccountId])
+			).rejects.toThrow("Account not found");
+			await expect(
+				ledgerAccountReader.getByIds(new TypeID("org") as OrgID, testLedgerId, [accountId])
+			).rejects.toThrow("Account not found");
+			await expect(
+				ledgerAccountReader.getByIds(testOrgId, new TypeID("lgr") as LedgerID, [accountId])
 			).rejects.toThrow("Account not found");
 		});
 	});
