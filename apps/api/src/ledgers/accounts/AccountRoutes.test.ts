@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { globalErrorHandler } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import { ServerRuntime } from "@/runtime";
-import { makeCurrency, makeMinorUnits } from "../domain/Currency";
 import { Account } from "./domain/Account";
 import { AccountHasDependents, AccountNotFound } from "./AccountErrors";
 import { AccountRoutes } from "./AccountRoutes";
@@ -23,16 +22,16 @@ const account = new Account({
 	name: "Cash",
 	description: "Operating cash",
 	normalBalance: "debit",
-	currency: makeCurrency("USD", 2),
-	pendingAmount: makeMinorUnits(-5),
-	postedAmount: makeMinorUnits(20),
-	availableAmount: makeMinorUnits(15),
-	pendingCredits: makeMinorUnits(10),
-	pendingDebits: makeMinorUnits(5),
-	postedCredits: makeMinorUnits(5),
-	postedDebits: makeMinorUnits(25),
-	availableCredits: makeMinorUnits(7),
-	availableDebits: makeMinorUnits(22),
+	currency: { code: "USD", minorUnitExponent: 2 },
+	pendingAmount: -5,
+	postedAmount: 20,
+	availableAmount: 15,
+	pendingCredits: 10,
+	pendingDebits: 5,
+	postedCredits: 5,
+	postedDebits: 25,
+	availableCredits: 7,
+	availableDebits: 22,
 	lockVersion: 1,
 	metadata: { externalId: "cash-42" },
 	created: new Date("2026-08-09T10:00:00.000Z"),

@@ -6,7 +6,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { signJWT } from "@/auth";
 import { Config } from "@/config";
 import { makeDatabaseLive } from "@/db";
-import { Ledger, LedgerServiceTag, makeCurrency, makeMinorUnits } from "@/ledgers";
+import { Ledger, LedgerServiceTag } from "@/ledgers";
 import type { LedgerService } from "@/ledgers";
 import { Account, AccountServiceTag } from "@/ledgers/accounts";
 import type { AccountService } from "@/ledgers/accounts";
@@ -75,21 +75,20 @@ describe("LedgerAccountSettlementRoutes", () => {
 		ledgerId,
 		name: "Settled account",
 		normalBalance: "debit",
-		currency: makeCurrency("USD", 2),
-		pendingAmount: makeMinorUnits(0),
-		postedAmount: makeMinorUnits(0),
-		availableAmount: makeMinorUnits(0),
-		pendingCredits: makeMinorUnits(0),
-		pendingDebits: makeMinorUnits(0),
-		postedCredits: makeMinorUnits(0),
-		postedDebits: makeMinorUnits(0),
-		availableCredits: makeMinorUnits(0),
-		availableDebits: makeMinorUnits(0),
+		currency: { code: "USD", minorUnitExponent: 2 },
+		pendingAmount: 0,
+		postedAmount: 0,
+		availableAmount: 0,
+		pendingCredits: 0,
+		pendingDebits: 0,
+		postedCredits: 0,
+		postedDebits: 0,
+		availableCredits: 0,
+		availableDebits: 0,
 		lockVersion: 1,
 		created: fixedDate,
 		updated: fixedDate,
 	});
-	const euroAccount = new Account({ ...effectAccount, currency: makeCurrency("EUR", 2) });
 	const mockSettlement = createLedgerAccountSettlementFixture({
 		id: settlementId,
 		organizationId: orgId,
@@ -325,10 +324,14 @@ describe("LedgerAccountSettlementRoutes", () => {
 			);
 		});
 
-		it("rejects accounts with different currency pairs", async () => {
+		it.each([
+			{ label: "code", currency: { code: "EUR", minorUnitExponent: 2 } },
+			{ label: "minor unit exponent", currency: { code: "USD", minorUnitExponent: 0 } },
+		])("rejects accounts with a different currency $label", async ({ currency }) => {
+			const incompatibleAccount = new Account({ ...effectAccount, currency });
 			effectAccountService.getAccount
 				.mockReturnValueOnce(Effect.succeed(effectAccount))
-				.mockReturnValueOnce(Effect.succeed(euroAccount));
+				.mockReturnValueOnce(Effect.succeed(incompatibleAccount));
 
 			const rs = await server.inject({
 				method: "POST",
