@@ -1,7 +1,11 @@
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 import type { OrgID } from "../../repo/entities/types";
-import type { OrganizationRow } from "../../repo/schema";
+import type {
+	OrganizationCreateRow,
+	OrganizationRow,
+	OrganizationUpdateRow,
+} from "../../repo/schema";
 import type { OrganizationUpdateRequest } from "../OrganizationSchema";
 import {
 	type OrganizationInfrastructureError,
@@ -70,13 +74,22 @@ class Organization {
 		}).pipe(Effect.mapError(cause => new OrganizationPersistenceDecodingFailure(cause)));
 	}
 
-	toRow(): OrganizationRow {
+	toCreateRow(): OrganizationCreateRow {
 		return {
 			id: this.id.toString(),
 			name: this.name,
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			description: this.description ?? null,
 			created: this.created.toJSDate(),
+			updated: this.updated.toJSDate(),
+		};
+	}
+
+	toUpdateRow(): OrganizationUpdateRow {
+		return {
+			name: this.name,
+			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			description: this.description ?? null,
 			updated: this.updated.toJSDate(),
 		};
 	}

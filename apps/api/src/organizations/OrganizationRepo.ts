@@ -88,17 +88,7 @@ class OrganizationRepoLive implements OrganizationRepo {
 		record: Organization
 	): Effect.Effect<Organization, OrganizationInfrastructureError> {
 		return Effect.tryPromise({
-			try: () => {
-				const row = record.toRow();
-				return this.db
-					.insert(OrganizationsTable)
-					.values({
-						id: row.id,
-						name: row.name,
-						description: row.description,
-					})
-					.returning();
-			},
+			try: () => this.db.insert(OrganizationsTable).values(record.toCreateRow()).returning(),
 			catch: mapInfrastructureError,
 		}).pipe(
 			Effect.flatMap(rows => Organization.fromRow(rows[0])),
@@ -116,14 +106,12 @@ class OrganizationRepoLive implements OrganizationRepo {
 		record: Organization
 	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError> {
 		return Effect.tryPromise({
-			try: () => {
-				const row = record.toRow();
-				return this.db
+			try: () =>
+				this.db
 					.update(OrganizationsTable)
-					.set({ name: row.name, description: row.description, updated: row.updated })
-					.where(eq(OrganizationsTable.id, row.id))
-					.returning();
-			},
+					.set(record.toUpdateRow())
+					.where(eq(OrganizationsTable.id, record.id.toString()))
+					.returning(),
 			catch: mapInfrastructureError,
 		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
 	}

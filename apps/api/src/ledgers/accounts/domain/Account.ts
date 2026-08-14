@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
-import type { AccountRow } from "@/repo/schema";
+import type { AccountCreateRow, AccountRow, AccountUpdateRow } from "@/repo/schema";
 import { parseId } from "@/lib/utils";
 import type { AccountCreateRequest, AccountUpdateRequest } from "../AccountSchema";
 import { AccountPersistenceDecodingFailure } from "../AccountErrors";
@@ -224,11 +224,11 @@ class Account {
 			lockVersion: this.lockVersion,
 			metadata: rq.metadata,
 			created: this.created,
-			updated: this.updated,
+			updated: new Date(),
 		});
 	}
 
-	toRow(): AccountRow {
+	toCreateRow(): AccountCreateRow {
 		return {
 			id: this.id.toString(),
 			organizationId: this.organizationId.toString(),
@@ -252,6 +252,18 @@ class Account {
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
 			created: this.created,
+			updated: this.updated,
+		};
+	}
+
+	toUpdateRow(): AccountUpdateRow {
+		return {
+			name: this.name,
+			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			description: this.description ?? null,
+			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
+			lockVersion: this.lockVersion + 1,
 			updated: this.updated,
 		};
 	}

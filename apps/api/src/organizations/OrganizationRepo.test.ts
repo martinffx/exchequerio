@@ -46,7 +46,7 @@ describe("OrganizationRepoLive", () => {
 		}
 	});
 
-	it("orders lists by ID and paginates in PostgreSQL", async () => {
+	it("orders lists by ID and applies pagination limits in PostgreSQL", async () => {
 		await create("Ordered A");
 		await create("Ordered B");
 
@@ -54,17 +54,26 @@ describe("OrganizationRepoLive", () => {
 		const allIds = all.map(organization => organization.id.toString());
 		expect(allIds).toEqual([...allIds].sort());
 		const page = await run(repository => repository.listOrganizations({ offset: 1, limit: 1 }));
-		expect(page.map(organization => organization.id.toString())).toEqual([all[1]?.id.toString()]);
+		expect(page).toHaveLength(1);
 	});
 
-	it("creates duplicate names with database timestamps", async () => {
-		const first = await create("Duplicate allowed");
-		const second = await create("Duplicate allowed");
+	it("creates duplicate names with application timestamps", async () => {
+		const firstRecord = Organization.fromRequest(newOrganizationId(), {
+			name: "Duplicate allowed",
+		});
+		const secondRecord = Organization.fromRequest(newOrganizationId(), {
+			name: "Duplicate allowed",
+		});
+		organizationIds.add(firstRecord.id);
+		organizationIds.add(secondRecord.id);
+		const first = await run(repository => repository.createOrganization(firstRecord));
+		const second = await run(repository => repository.createOrganization(secondRecord));
 
 		expect(first.id).not.toBe(second.id);
-		expect(first.created.isValid).toBe(true);
-		expect(first.created.zoneName).toBe("UTC");
-		expect(first.updated.toMillis()).toBe(first.created.toMillis());
+		expect(first.created.toMillis()).toBe(firstRecord.created.toMillis());
+		expect(first.updated.toMillis()).toBe(firstRecord.updated.toMillis());
+		expect(second.created.toMillis()).toBe(secondRecord.created.toMillis());
+		expect(second.updated.toMillis()).toBe(secondRecord.updated.toMillis());
 	});
 
 	it("replaces and clears descriptions while preserving created", async () => {

@@ -146,16 +146,15 @@ describe("AccountRepoLive", () => {
 
 	it("creates at lockVersion 1 and decodes Account Currency", async () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const created = await runAccountRepo(repository =>
-			repository.createAccount(
-				accountCreate(organizationId, ledgerId, {
-					currency: makeCurrency("US0378331005", 4),
-					metadata: { externalId: "cash-42" },
-				})
-			)
-		);
+		const record = accountCreate(organizationId, ledgerId, {
+			currency: makeCurrency("US0378331005", 4),
+			metadata: { externalId: "cash-42" },
+		});
+		const created = await runAccountRepo(repository => repository.createAccount(record));
 
 		expect(created.lockVersion).toBe(1);
+		expect(created.created).toEqual(record.created);
+		expect(created.updated).toEqual(record.updated);
 		expect(created.currency).toEqual({ code: "US0378331005", minorUnitExponent: 4 });
 		expect(created.metadata).toEqual({ externalId: "cash-42" });
 		expect(created.balances.every(balance => balance.amount === 0)).toBe(true);
@@ -196,16 +195,12 @@ describe("AccountRepoLive", () => {
 		const created = await runAccountRepo(repository =>
 			repository.createAccount(accountCreate(organizationId, ledgerId))
 		);
-		const updated = await runAccountRepo(repository =>
-			repository.updateAccount(
-				created.updateFromRequest({
-					name: "Operating Cash",
-				})
-			)
-		);
+		const replacement = created.updateFromRequest({ name: "Operating Cash" });
+		const updated = await runAccountRepo(repository => repository.updateAccount(replacement));
 
 		expect(updated.name).toBe("Operating Cash");
 		expect(updated.lockVersion).toBe(2);
+		expect(updated.updated).toEqual(replacement.updated);
 		const error = await runAccountRepo(repository =>
 			Effect.flip(
 				repository.updateAccount(

@@ -41,6 +41,8 @@ const OrganizationsTable = pgTable("organizations_table", {
 });
 
 type OrganizationRow = typeof OrganizationsTable.$inferSelect;
+type OrganizationCreateRow = Required<typeof OrganizationsTable.$inferInsert>;
+type OrganizationUpdateRow = Pick<OrganizationRow, "name" | "description" | "updated">;
 
 // Ledgers: Chart of accounts container
 const LedgersTable = pgTable(
@@ -66,6 +68,8 @@ const LedgersTable = pgTable(
 );
 
 type LedgerRow = typeof LedgersTable.$inferSelect;
+type LedgerCreateRow = Required<typeof LedgersTable.$inferInsert>;
+type LedgerUpdateRow = Pick<LedgerRow, "name" | "description" | "metadata" | "updated">;
 
 // Ledger Accounts: Individual accounts (merchant wallets, fee accounts, etc.)
 const LedgerAccountsTable = pgTable(
@@ -136,6 +140,11 @@ const LedgerAccountsTable = pgTable(
 );
 
 type AccountRow = typeof LedgerAccountsTable.$inferSelect;
+type AccountCreateRow = Required<typeof LedgerAccountsTable.$inferInsert>;
+type AccountUpdateRow = Pick<
+	AccountRow,
+	"name" | "description" | "metadata" | "lockVersion" | "updated"
+>;
 
 // Ledger Transactions: Double-entry transaction containers
 const LedgerTransactionsTable = pgTable(
@@ -456,4 +465,14 @@ export {
 	ledgerEntryDirection,
 	ledgerSettlementStatus,
 };
-export type { AccountRow, LedgerRow, OrganizationRow };
+export type {
+	AccountCreateRow,
+	AccountRow,
+	AccountUpdateRow,
+	LedgerCreateRow,
+	LedgerRow,
+	LedgerUpdateRow,
+	OrganizationCreateRow,
+	OrganizationRow,
+	OrganizationUpdateRow,
+};

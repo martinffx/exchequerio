@@ -204,24 +204,8 @@ class AccountRepoLive implements AccountRepo {
 	createAccount(record: Account): Effect.Effect<Account, AccountCreateRepositoryError> {
 		const errorContext = context(record.organizationId, record.ledgerId, record.id);
 		return Effect.tryPromise({
-			try: () => {
-				const row = record.toRow();
-				return this.db
-					.insert(LedgerAccountsTable)
-					.values({
-						id: row.id,
-						organizationId: row.organizationId,
-						ledgerId: row.ledgerId,
-						name: row.name,
-						description: row.description,
-						normalBalance: row.normalBalance,
-						currencyCode: row.currencyCode,
-						minorUnitExponent: row.minorUnitExponent,
-						metadata: row.metadata,
-						lockVersion: row.lockVersion,
-					})
-					.returning(publicColumns);
-			},
+			try: () =>
+				this.db.insert(LedgerAccountsTable).values(record.toCreateRow()).returning(publicColumns),
 			catch: cause => mapCreateError(cause, record),
 		}).pipe(Effect.flatMap(rows => requireDecoded(rows[0], errorContext)));
 	}
@@ -231,7 +215,7 @@ class AccountRepoLive implements AccountRepo {
 			try: () =>
 				this.db
 					.update(LedgerAccountsTable)
-					.set({ ...record.toRow(), lockVersion: record.lockVersion + 1 })
+					.set(record.toUpdateRow())
 					.where(
 						and(
 							eq(LedgerAccountsTable.organizationId, record.organizationId.toString()),
