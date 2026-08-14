@@ -1,7 +1,6 @@
 import { Effect, Layer, Option } from "effect";
-import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
-import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
+import { newLedgerAccountID, newLedgerID, newOrgID } from "@/repo/entities/types";
 import { Ledger } from "../domain/Ledger";
 import type { LedgerService } from "../LedgerService";
 import { LedgerServiceTag } from "../LedgerService";
@@ -12,9 +11,9 @@ import type { AccountRepo } from "./AccountRepo";
 import { AccountRepoTag } from "./AccountRepo";
 import { AccountService, AccountServiceTag, accountServiceLayer } from "./AccountService";
 
-const organizationId = new TypeID("org") as OrgID;
-const ledgerId = new TypeID("lgr") as LedgerID;
-const accountId = new TypeID("lat") as LedgerAccountID;
+const organizationId = newOrgID();
+const ledgerId = newLedgerID();
+const accountId = newLedgerAccountID();
 const ledger = new Ledger({
 	id: ledgerId,
 	organizationId,
@@ -47,11 +46,11 @@ const someAccount = Option.some(account);
 
 const repository = (overrides: Partial<AccountRepo> = {}): AccountRepo =>
 	vi.mocked<AccountRepo>({
-		list: vi.fn(() => Effect.succeed([account])),
-		get: vi.fn(() => Effect.succeed(someAccount)),
-		create: vi.fn(() => Effect.succeed(account)),
-		update: vi.fn(() => Effect.succeed(account)),
-		delete: vi.fn(() => Effect.succeed(someAccount)),
+		listAccounts: vi.fn(() => Effect.succeed([account])),
+		getAccount: vi.fn(() => Effect.succeed(someAccount)),
+		createAccount: vi.fn(() => Effect.succeed(account)),
+		updateAccount: vi.fn(() => Effect.succeed(account)),
+		deleteAccount: vi.fn(() => Effect.succeed(someAccount)),
 		...overrides,
 	});
 
@@ -94,12 +93,15 @@ describe("AccountService", () => {
 		);
 
 		expect(parent.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
-		expect(repo.list).toHaveBeenCalledWith(organizationId, ledgerId, { offset: 10, limit: 5 });
+		expect(repo.listAccounts).toHaveBeenCalledWith(organizationId, ledgerId, {
+			offset: 10,
+			limit: 5,
+		});
 	});
 
 	it("generates a canonical Account ID and creates immutable fields", async () => {
 		const repo = repository({
-			create: vi.fn((record: Account) => Effect.succeed(record)),
+			createAccount: vi.fn((record: Account) => Effect.succeed(record)),
 		});
 		const parent = ledgerService();
 
@@ -114,7 +116,7 @@ describe("AccountService", () => {
 
 		expect(created.id.toString()).toMatch(/^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
 		expect(parent.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
-		expect(repo.create).toHaveBeenCalledWith(
+		expect(repo.createAccount).toHaveBeenCalledWith(
 			expect.objectContaining({
 				id: created.id,
 				organizationId,
@@ -124,7 +126,7 @@ describe("AccountService", () => {
 				currency: { code: "US0378331005", minorUnitExponent: 4 },
 			})
 		);
-		expect(vi.mocked(repo.create).mock.calls[0]?.[0]).toBeInstanceOf(Account);
+		expect(vi.mocked(repo.createAccount).mock.calls[0]?.[0]).toBeInstanceOf(Account);
 	});
 
 	it("passes the current lock version into update without changing immutable fields", async () => {
@@ -136,22 +138,25 @@ describe("AccountService", () => {
 			})
 		);
 
-		expect(repo.get).toHaveBeenCalledWith(organizationId, ledgerId, accountId);
-		expect(repo.update).toHaveBeenCalledWith({
-			id: accountId,
-			organizationId,
-			ledgerId,
-			name: "Operating Cash",
-			expectedLockVersion: 1,
-		});
+		expect(repo.getAccount).toHaveBeenCalledWith(organizationId, ledgerId, accountId);
+		expect(repo.updateAccount).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: accountId,
+				organizationId,
+				ledgerId,
+				name: "Operating Cash",
+				lockVersion: 1,
+			})
+		);
+		expect(vi.mocked(repo.updateAccount).mock.calls[0]?.[0]).toBeInstanceOf(Account);
 	});
 
 	it.each(["get", "update", "delete"] as const)(
 		"maps an absent %s Account to AccountNotFound",
 		async operation => {
 			const repo = repository({
-				get: vi.fn(() => Effect.succeed(Option.none())),
-				delete: vi.fn(() => Effect.succeed(Option.none())),
+				getAccount: vi.fn(() => Effect.succeed(Option.none())),
+				deleteAccount: vi.fn(() => Effect.succeed(Option.none())),
 			});
 			const error = await runService(repo, ledgerService(), service =>
 				Effect.flip(

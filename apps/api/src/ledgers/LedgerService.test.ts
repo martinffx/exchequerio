@@ -1,8 +1,7 @@
 import { Effect, Layer, Option } from "effect";
-import { TypeID } from "typeid-js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { HttpError, InternalServerError, ServiceUnavailableError } from "@/lib/errors";
-import type { LedgerID, OrgID } from "@/repo/entities/types";
+import { newLedgerID, newOrgID } from "@/repo/entities/types";
 import { Ledger } from "./domain/Ledger";
 import {
 	LedgerHasDependents,
@@ -23,8 +22,8 @@ import {
 	type LedgerUpdateError,
 } from "./LedgerService";
 
-const organizationId = new TypeID("org") as OrgID;
-const ledgerId = new TypeID("lgr") as LedgerID;
+const organizationId = newOrgID();
+const ledgerId = newLedgerID();
 const ledger = new Ledger({
 	id: ledgerId,
 	organizationId,
@@ -35,15 +34,14 @@ const ledger = new Ledger({
 	updated: new Date("2026-08-09T10:00:00.000Z"),
 });
 const someLedger = Option.fromNullishOr(ledger);
-const deleted = Option.void;
 
 const repository = (overrides: Partial<LedgerRepo> = {}): LedgerRepo =>
 	vi.mocked<LedgerRepo>({
-		list: vi.fn(() => Effect.succeed([ledger])),
-		get: vi.fn(() => Effect.succeed(someLedger)),
-		create: vi.fn((record: Ledger) => Effect.succeed(record)),
-		update: vi.fn(() => Effect.succeed(someLedger)),
-		delete: vi.fn(() => Effect.succeed(deleted)),
+		listLedgers: vi.fn(() => Effect.succeed([ledger])),
+		getLedger: vi.fn(() => Effect.succeed(someLedger)),
+		createLedger: vi.fn((record: Ledger) => Effect.succeed(record)),
+		updateLedger: vi.fn(() => Effect.succeed(someLedger)),
+		deleteLedger: vi.fn(() => Effect.succeed(someLedger)),
 		...overrides,
 	});
 
@@ -88,14 +86,14 @@ describe("LedgerService", () => {
 			])
 		);
 
-		expect(repo.list).toHaveBeenCalledWith(organizationId, { offset: 10, limit: 5 });
-		expect(repo.get).toHaveBeenCalledWith(organizationId, ledgerId);
+		expect(repo.listLedgers).toHaveBeenCalledWith(organizationId, { offset: 10, limit: 5 });
+		expect(repo.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
 	});
 
 	it("generates a canonical Ledger ID lazily and calls only create", async () => {
 		const repo = repository();
 
-		expect(repo.create).not.toHaveBeenCalled();
+		expect(repo.createLedger).not.toHaveBeenCalled();
 		const created = await runService(repo, service =>
 			service.createLedger(organizationId, {
 				name: "Created",
@@ -105,7 +103,7 @@ describe("LedgerService", () => {
 		);
 
 		expect(created.id.toString()).toMatch(/^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
-		expect(repo.create).toHaveBeenCalledWith(
+		expect(repo.createLedger).toHaveBeenCalledWith(
 			expect.objectContaining({
 				id: created.id,
 				organizationId,
@@ -114,8 +112,8 @@ describe("LedgerService", () => {
 				metadata: { externalId: "book-99" },
 			})
 		);
-		expect(vi.mocked(repo.create).mock.calls[0]?.[0]).toBeInstanceOf(Ledger);
-		expect(repo.update).not.toHaveBeenCalled();
+		expect(vi.mocked(repo.createLedger).mock.calls[0]?.[0]).toBeInstanceOf(Ledger);
+		expect(repo.updateLedger).not.toHaveBeenCalled();
 	});
 
 	it("uses only update and forwards replacement fields", async () => {
@@ -125,20 +123,20 @@ describe("LedgerService", () => {
 			service.updateLedger(organizationId, ledgerId, { name: "Replaced" })
 		);
 
-		expect(repo.update).toHaveBeenCalledWith(
+		expect(repo.updateLedger).toHaveBeenCalledWith(
 			expect.objectContaining({ id: ledgerId, organizationId, name: "Replaced" })
 		);
-		expect(vi.mocked(repo.update).mock.calls[0]?.[0]).toBeInstanceOf(Ledger);
-		expect(repo.create).not.toHaveBeenCalled();
+		expect(vi.mocked(repo.updateLedger).mock.calls[0]?.[0]).toBeInstanceOf(Ledger);
+		expect(repo.createLedger).not.toHaveBeenCalled();
 	});
 
 	it.each(["get", "update", "delete"] as const)(
 		"maps an absent %s result to LedgerNotFound",
 		async operation => {
 			const repo = repository({
-				...(operation === "get" ? { get: vi.fn(() => Effect.succeed(Option.none())) } : {}),
-				...(operation === "update" ? { update: vi.fn(() => Effect.succeed(Option.none())) } : {}),
-				...(operation === "delete" ? { delete: vi.fn(() => Effect.succeed(Option.none())) } : {}),
+				...(operation === "get" ? { getLedger: vi.fn(() => Effect.succeed(Option.none())) } : {}),
+				...(operation === "update" ? { updateLedger: vi.fn(() => Effect.succeed(Option.none())) } : {}),
+				...(operation === "delete" ? { deleteLedger: vi.fn(() => Effect.succeed(Option.none())) } : {}),
 			});
 			const error = await runService(repo, service =>
 				Effect.flip(
@@ -156,7 +154,7 @@ describe("LedgerService", () => {
 
 	it("marks create-time repository unavailability as non-retryable", async () => {
 		const failure = new LedgerRepositoryUnavailable(new Error("unavailable"));
-		const repo = repository({ create: vi.fn(() => Effect.fail(failure)) });
+		const repo = repository({ createLedger: vi.fn(() => Effect.fail(failure)) });
 
 		const error = await runService(repo, service =>
 			Effect.flip(service.createLedger(organizationId, { name: "Created" }))
@@ -172,10 +170,10 @@ describe("LedgerService", () => {
 		async operation => {
 			const failure = new LedgerRepositoryUnavailable(new Error("unavailable"));
 			const repo = repository({
-				...(operation === "list" ? { list: vi.fn(() => Effect.fail(failure)) } : {}),
-				...(operation === "get" ? { get: vi.fn(() => Effect.fail(failure)) } : {}),
-				...(operation === "update" ? { update: vi.fn(() => Effect.fail(failure)) } : {}),
-				...(operation === "delete" ? { delete: vi.fn(() => Effect.fail(failure)) } : {}),
+				...(operation === "list" ? { listLedgers: vi.fn(() => Effect.fail(failure)) } : {}),
+				...(operation === "get" ? { getLedger: vi.fn(() => Effect.fail(failure)) } : {}),
+				...(operation === "update" ? { updateLedger: vi.fn(() => Effect.fail(failure)) } : {}),
+				...(operation === "delete" ? { deleteLedger: vi.fn(() => Effect.fail(failure)) } : {}),
 			});
 			const error = await runService(repo, service => Effect.flip(invoke(service, operation)));
 
@@ -189,11 +187,11 @@ describe("LedgerService", () => {
 		const dependency = new LedgerHasDependents(organizationId.toString(), ledgerId.toString());
 
 		const listError = await runService(
-			repository({ list: vi.fn(() => Effect.fail(persistence)) }),
+			repository({ listLedgers: vi.fn(() => Effect.fail(persistence)) }),
 			service => Effect.flip(service.listLedgers(organizationId, { offset: 0, limit: 20 }))
 		);
 		const deleteError = await runService(
-			repository({ delete: vi.fn(() => Effect.fail(dependency)) }),
+			repository({ deleteLedger: vi.fn(() => Effect.fail(dependency)) }),
 			service => Effect.flip(service.deleteLedger(organizationId, ledgerId))
 		);
 
