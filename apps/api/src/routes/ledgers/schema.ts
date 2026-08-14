@@ -535,7 +535,9 @@ const LedgerTransactionRequest = Type.Object(
 				description: "The time at which the ledger transaction happened for reporting purposes.",
 			})
 		),
-		ledgerEntries: Type.Array(LedgerTransactionEntry),
+		ledgerEntries: Type.Array(LedgerTransactionEntry, {
+			description: "Entries may reference at most 200 distinct Ledger Accounts.",
+		}),
 		created: Type.String({
 			description: "The time the ledger transaction was created.",
 		}),

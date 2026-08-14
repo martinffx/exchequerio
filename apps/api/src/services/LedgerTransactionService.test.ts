@@ -1,6 +1,6 @@
 import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
-import { ConflictError } from "@/lib/errors";
+import { BadRequestError, ConflictError } from "@/lib/errors";
 import { LedgerAccountEntity } from "../repo/entities/LedgerAccountEntity";
 import { LedgerTransactionEntity } from "../repo/entities/LedgerTransactionEntity";
 import { LedgerTransactionEntryEntity } from "../repo/entities/LedgerTransactionEntryEntity";
@@ -11,7 +11,7 @@ import type {
 	LedgerTransactionID,
 	OrgID,
 } from "../repo/entities/types";
-import type { LedgerAccountRepo } from "../repo/LedgerAccountRepo";
+import type { LedgerAccountReader } from "../repo/LedgerAccountReader";
 import type { LedgerTransactionRepo } from "../repo/LedgerTransactionRepo";
 import type { LedgerTransactionRequest } from "../routes/ledgers/schema";
 import { LedgerTransactionService } from "./LedgerTransactionService";
@@ -28,10 +28,10 @@ describe("LedgerTransactionService", () => {
 		postTransaction: vi.fn(),
 		deleteTransactionWithBalanceUpdate: vi.fn(),
 	} as unknown as LedgerTransactionRepo);
-	const mockAccountRepo = vi.mocked<LedgerAccountRepo>({
-		getLedgerAccount: vi.fn(),
-	} as unknown as LedgerAccountRepo);
-	const service = new LedgerTransactionService(mockTransactionRepo, mockAccountRepo);
+	const mockAccountReader = vi.mocked<LedgerAccountReader>({
+		getByIds: vi.fn(),
+	} as unknown as LedgerAccountReader);
+	const service = new LedgerTransactionService(mockTransactionRepo, mockAccountReader);
 
 	afterEach(() => {
 		vi.clearAllMocks();
@@ -256,14 +256,20 @@ describe("LedgerTransactionService", () => {
 				),
 			});
 
-			mockAccountRepo.getLedgerAccount
-				.mockResolvedValueOnce(account(accountId1, "EUR", 2))
-				.mockResolvedValueOnce(account(accountId2, "EUR", 2));
+			mockAccountReader.getByIds.mockResolvedValue([
+				account(accountId1, "EUR", 2),
+				account(accountId2, "EUR", 2),
+			]);
 			mockTransactionRepo.createTransaction.mockResolvedValue(mockCreatedTransaction);
 
 			const result = await service.createTransaction(orgId, ledgerId, validRequest);
 
 			expect(result).toEqual(mockCreatedTransaction);
+			expect(mockAccountReader.getByIds).toHaveBeenCalledOnce();
+			expect(mockAccountReader.getByIds).toHaveBeenCalledWith(orgId, ledgerId, [
+				accountId1,
+				accountId2,
+			]);
 			expect(mockTransactionRepo.createTransaction).toHaveBeenCalledWith(
 				expect.any(LedgerTransactionEntity)
 			);
@@ -271,8 +277,53 @@ describe("LedgerTransactionService", () => {
 			expect(created?.entries.every(entry => entry.currency === "EUR")).toBe(true);
 		});
 
+		it("rejects more than 200 distinct accounts before reading accounts", async () => {
+			const request: LedgerTransactionRequest = {
+				...validRequest,
+				ledgerEntries: Array.from({ length: 201 }, (_, index) => ({
+					id: new TypeID("lte").toString(),
+					accountId: new TypeID("lat").toString(),
+					currency: "USD",
+					currencyExponent: 2,
+					amount: 1,
+					direction: index % 2 === 0 ? ("debit" as const) : ("credit" as const),
+					status: "pending" as const,
+				})),
+			};
+
+			await expect(service.createTransaction(orgId, ledgerId, request)).rejects.toEqual(
+				new BadRequestError("A Transaction may reference at most 200 distinct Accounts")
+			);
+			expect(mockAccountReader.getByIds).not.toHaveBeenCalled();
+			expect(mockTransactionRepo.createTransaction).not.toHaveBeenCalled();
+		});
+
+		it("accepts 200 distinct accounts with one bulk read", async () => {
+			const accountIds = Array.from({ length: 200 }, () => new TypeID("lat") as LedgerAccountID);
+			const request: LedgerTransactionRequest = {
+				...validRequest,
+				ledgerEntries: accountIds.map((accountId, index) => ({
+					id: new TypeID("lte").toString(),
+					accountId: accountId.toString(),
+					currency: "USD",
+					currencyExponent: 2,
+					amount: 1,
+					direction: index < 100 ? ("debit" as const) : ("credit" as const),
+					status: "pending" as const,
+				})),
+			};
+			mockAccountReader.getByIds.mockResolvedValue(accountIds.map(accountId => account(accountId)));
+			mockTransactionRepo.createTransaction.mockImplementation(async transaction => transaction);
+
+			const transaction = await service.createTransaction(orgId, ledgerId, request);
+
+			expect(transaction.entries).toHaveLength(200);
+			expect(mockAccountReader.getByIds).toHaveBeenCalledOnce();
+			expect(mockAccountReader.getByIds).toHaveBeenCalledWith(orgId, ledgerId, accountIds);
+		});
+
 		it("should fail when a referenced account is not found", async () => {
-			mockAccountRepo.getLedgerAccount.mockRejectedValue(new Error("Account not found"));
+			mockAccountReader.getByIds.mockRejectedValue(new Error("Account not found"));
 
 			await expect(service.createTransaction(orgId, ledgerId, validRequest)).rejects.toThrow(
 				"Account"
@@ -282,9 +333,10 @@ describe("LedgerTransactionService", () => {
 		});
 
 		it("rejects accounts with different currency pairs", async () => {
-			mockAccountRepo.getLedgerAccount
-				.mockResolvedValueOnce(account(accountId1, "USD", 2))
-				.mockResolvedValueOnce(account(accountId2, "JPY", 0));
+			mockAccountReader.getByIds.mockResolvedValue([
+				account(accountId1, "USD", 2),
+				account(accountId2, "JPY", 0),
+			]);
 
 			await expect(service.createTransaction(orgId, ledgerId, validRequest)).rejects.toThrow(
 				"same currency"
@@ -321,9 +373,7 @@ describe("LedgerTransactionService", () => {
 				updated: new Date().toISOString(),
 			};
 
-			mockAccountRepo.getLedgerAccount
-				.mockResolvedValueOnce(account(accountId1))
-				.mockResolvedValueOnce(account(accountId2));
+			mockAccountReader.getByIds.mockResolvedValue([account(accountId1), account(accountId2)]);
 
 			// LedgerTransactionEntity.fromRequest will throw validation error
 			await expect(service.createTransaction(orgId, ledgerId, unbalancedRequest)).rejects.toThrow();
@@ -358,7 +408,7 @@ describe("LedgerTransactionService", () => {
 				updated: new Date().toISOString(),
 			};
 
-			mockAccountRepo.getLedgerAccount.mockResolvedValue(account(accountId1));
+			mockAccountReader.getByIds.mockResolvedValue([account(accountId1)]);
 
 			// LedgerTransactionEntity.fromRequest will throw validation error
 			await expect(

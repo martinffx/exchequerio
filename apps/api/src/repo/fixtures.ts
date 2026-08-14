@@ -23,6 +23,7 @@ import type { OrgEntityOpts } from "@/repo/entities/OrganizationEntity";
 import type { LedgerID } from "@/repo/entities/types";
 import { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
+import { LedgerAccountReader } from "./LedgerAccountReader";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
 import { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
 import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
@@ -36,7 +37,11 @@ interface OrganizationFixtureRepo {
 	deleteOrganization(id: TypeID<"org">): Promise<void>;
 }
 
-type TestRepos = Repos & { organizationRepo: OrganizationFixtureRepo };
+type TestRepos = Repos & {
+	organizationRepo: OrganizationFixtureRepo;
+	ledgerRepo: LedgerRepo;
+	ledgerAccountRepo: LedgerAccountRepo;
+};
 
 let repos: TestRepos | undefined;
 function getRepos(): TestRepos {
@@ -67,6 +72,7 @@ function getRepos(): TestRepos {
 	};
 	const ledgerRepo = new LedgerRepo(db);
 	const ledgerAccountRepo = new LedgerAccountRepo(db);
+	const ledgerAccountReader = new LedgerAccountReader(db);
 	const ledgerAccountCategoryRepo = new LedgerAccountCategoryRepo(db);
 	const ledgerAccountSettlementRepo = new LedgerAccountSettlementRepo(db);
 	const ledgerAccountStatementRepo = new LedgerAccountStatementRepo(db);
@@ -77,6 +83,7 @@ function getRepos(): TestRepos {
 		organizationRepo,
 		ledgerRepo,
 		ledgerAccountRepo,
+		ledgerAccountReader,
 		ledgerAccountCategoryRepo,
 		ledgerAccountSettlementRepo,
 		ledgerAccountStatementRepo,

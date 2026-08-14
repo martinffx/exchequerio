@@ -31,7 +31,7 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 			new LedgerAccountCategoryService(server.repo.ledgerAccountCategoryRepo);
 		const ledgerTransactionService =
 			opts.services?.ledgerTransactionService ??
-			new LedgerTransactionService(server.repo.ledgerTransactionRepo, server.repo.ledgerAccountRepo);
+			new LedgerTransactionService(server.repo.ledgerTransactionRepo, server.repo.ledgerAccountReader);
 		const ledgerAccountSettlementService =
 			opts.services?.ledgerAccountSettlementService ??
 			new LedgerAccountSettlementService(

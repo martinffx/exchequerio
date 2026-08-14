@@ -9,29 +9,27 @@
       "tasks": [
         {
           "id": "T1",
-          "name": "Add shared ledger values and the Account domain",
+          "name": "Add the Account domain",
           "depends_on": [],
           "inputs": [
             "Approved domain model in design.md",
             "Existing Ledger and Organization domain patterns",
             "Canonical TypeID aliases in apps/api/src/repo/entities/types.ts"
           ],
-          "description": "Add shared Currency, exponent, Minor Unit, and Normal Balance values and an Account model that owns fromRequest, fromRow, and toRow. Reuse the canonical Account ID. Decode invalid persisted values visibly and keep Currency and Normal Balance immutable. Domain invariants remain pure, while the model may use Effect for lazy typed decoding and type-only request or row contracts.",
+          "description": "Add an Account-domain Currency value and an Account model that owns fromRequest, fromRow, and toRow. Keep Minor Units and Normal Balance as validated primitives. Reuse the canonical Account ID, decode invalid persisted values visibly, and keep Currency and Normal Balance immutable.",
           "files": {
             "create": [
-              "apps/api/src/ledgers/domain/Currency.ts",
-              "apps/api/src/ledgers/domain/Currency.test.ts",
-              "apps/api/src/ledgers/accounts/domain/Account.ts",
-              "apps/api/src/ledgers/accounts/domain/Account.test.ts"
+              "apps/api/src/ledgers/accounts/domain/Currency.ts",
+              "apps/api/src/ledgers/accounts/domain/Account.ts"
             ],
             "modify": [
-              "apps/api/src/ledgers/index.ts"
+              "apps/api/src/ledgers/accounts/index.ts"
             ]
           },
           "validation": {
             "tests": [
               "accepts nonblank opaque Currency codes without normalization",
-              "rejects negative or unsafe exponents and Minor Units",
+              "rejects negative or unsafe exponents and Minor Units at their existing service or repository boundary",
               "accepts negative balance amounts",
               "compares Currency by code and exponent",
               "builds the three Account balance views"
@@ -63,14 +61,12 @@
           },
           "validation": {
             "tests": [
-              "fresh migrations apply to PostgreSQL",
-              "existing Accounts receive their Ledger Currency pair",
-              "cross-Organization Account and Ledger pairs are rejected",
-              "Ledger Currency columns no longer exist"
+              "fresh migrations apply to PostgreSQL"
             ],
             "acceptance": [
               "Account Currency columns are non-null and have no defaults",
-              "Migration verification fails before contraction on invalid data"
+              "manual populated-v0003 verification confirms the backfill and Ledger Currency column removal",
+              "manual invalid-data verification confirms rollback before contraction"
             ]
           }
         }
@@ -169,28 +165,37 @@
             "Temporary legacy Account reader",
             "Step 04 scope boundary"
           ],
-          "description": "Replace TransactionService's Ledger dependency with the temporary Account reader, derive one exact Currency pair from referenced tenant-scoped Accounts, reject mixed pairs, and scope repository Account reads by Organization and Ledger. Preserve the legacy Transaction API and lifecycle.",
+          "description": "Replace TransactionService's Ledger dependency with a private read-only Account reader, reject more than 200 distinct Accounts, load referenced Accounts in one Organization- and Ledger-scoped query, and derive one exact Currency pair. Preserve the legacy Transaction request shape and lifecycle.",
           "files": {
-            "create": [],
+            "create": [
+              "apps/api/src/repo/LedgerAccountReader.ts"
+            ],
             "modify": [
               "apps/api/src/repo/entities/LedgerAccountEntity.ts",
               "apps/api/src/repo/entities/LedgerTransactionEntity.ts",
               "apps/api/src/repo/LedgerAccountRepo.ts",
               "apps/api/src/repo/LedgerTransactionRepo.ts",
+              "apps/api/src/repo/index.ts",
+              "apps/api/src/repo/types.ts",
+              "apps/api/src/repo/fixtures.ts",
               "apps/api/src/services/LedgerTransactionService.ts",
               "apps/api/src/services/LedgerTransactionService.test.ts",
-              "apps/api/src/repo/LedgerTransactionRepo.test.ts"
+              "apps/api/src/services/index.ts",
+              "apps/api/src/repo/LedgerAccountRepo.test.ts",
+              "apps/api/src/repo/LedgerTransactionRepo.test.ts",
+              "apps/api/src/routes/ledgers/schema.ts"
             ]
           },
           "validation": {
             "tests": [
               "Transaction entries use Account Currency rather than request or Ledger Currency",
+              "200 distinct Accounts use one reader call and 201 return Bad Request before I/O",
               "mixed Account Currency pairs return Conflict",
               "missing, cross-Ledger, and cross-Organization Accounts are hidden as not found",
               "existing posting and optimistic balance behavior remains green"
             ],
             "acceptance": [
-              "Transaction public schemas and lifecycle remain unchanged",
+              "Transaction request fields and lifecycle remain unchanged; OpenAPI documents the 200-Account rule",
               "Legacy Account reader is private and marked for Step 04 deletion"
             ]
           }
@@ -204,7 +209,7 @@
             "Effect Account and Ledger services",
             "Legacy service and repository plugin registrations"
           ],
-          "description": "Derive Settlement Currency and Normal Balance from Accounts, require both Accounts to share a pair, use Effect Ledger for collection parent checks, and stop rereading Ledger during transitions. Remove unused legacy Ledger and public Account Promise code and registrations.",
+          "description": "Derive Settlement Currency and Normal Balance from Accounts, require both Accounts to share a pair, use Effect Ledger for collection parent checks, and stop rereading Ledger during transitions. Remove the unused legacy Ledger and writable Account repositories from production registration.",
           "files": {
             "create": [],
             "modify": [
@@ -225,7 +230,7 @@
               "no production reader references Ledger Currency"
             ],
             "acceptance": [
-              "Legacy Ledger Currency compatibility files are deleted when unused",
+              "Legacy Ledger and writable Account repositories are absent from production registration",
               "Legacy Settlement HTTP and lifecycle contracts remain unchanged"
             ]
           }
@@ -260,7 +265,8 @@
               "pnpm --filter=@exchequerio/api test",
               "pnpm run check",
               "pnpm run build",
-              "clean PostgreSQL migration run"
+              "clean PostgreSQL migration run",
+              "manual populated-v0003 backfill and invalid-data rollback verification"
             ],
             "acceptance": [
               "ERD shows Account-owned Currency and no Ledger Currency",
