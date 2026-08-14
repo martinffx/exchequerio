@@ -72,11 +72,11 @@ abstract class HttpError extends Error {
 		this.idempotencyKey = options.idempotencyKey;
 		this.retryable = options.retryable;
 		this.context = {
-			...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
-			...(options.ledgerId === undefined ? {} : { ledgerId: options.ledgerId }),
-			...(options.accountId === undefined ? {} : { accountId: options.accountId }),
-			...(options.transactionId === undefined ? {} : { transactionId: options.transactionId }),
-			...(options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
+			organizationId: options.organizationId,
+			ledgerId: options.ledgerId,
+			accountId: options.accountId,
+			transactionId: options.transactionId,
+			idempotencyKey: options.idempotencyKey,
 		};
 	}
 
@@ -88,12 +88,12 @@ abstract class HttpError extends Error {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-			...(this.organizationId === undefined ? {} : { organizationId: this.organizationId }),
-			...(this.ledgerId === undefined ? {} : { ledgerId: this.ledgerId }),
-			...(this.accountId === undefined ? {} : { accountId: this.accountId }),
-			...(this.transactionId === undefined ? {} : { transactionId: this.transactionId }),
-			...(this.idempotencyKey === undefined ? {} : { idempotencyKey: this.idempotencyKey }),
-			...(this.retryable === undefined ? {} : { retryable: this.retryable }),
+			organizationId: this.organizationId,
+			ledgerId: this.ledgerId,
+			accountId: this.accountId,
+			transactionId: this.transactionId,
+			idempotencyKey: this.idempotencyKey,
+			retryable: this.retryable,
 		};
 	}
 }

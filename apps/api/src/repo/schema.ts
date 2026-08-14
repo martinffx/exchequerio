@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
 	bigint,
 	check,
+	foreignKey,
 	index,
 	integer,
 	numeric,
@@ -10,6 +11,7 @@ import {
 	primaryKey,
 	text,
 	timestamp,
+	unique,
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -39,6 +41,8 @@ const OrganizationsTable = pgTable("organizations_table", {
 });
 
 type OrganizationRow = typeof OrganizationsTable.$inferSelect;
+type OrganizationCreateRow = Required<typeof OrganizationsTable.$inferInsert>;
+type OrganizationUpdateRow = Pick<OrganizationRow, "name" | "description" | "updated">;
 
 // Ledgers: Chart of accounts container
 const LedgersTable = pgTable(
@@ -50,16 +54,22 @@ const LedgersTable = pgTable(
 			.references(() => OrganizationsTable.id),
 		name: text("name").notNull(),
 		description: text("description"),
-		currency: text("currency").notNull().default("USD"),
-		currencyExponent: integer("currency_exponent").notNull().default(2),
 		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
 		organizationIdx: index("idx_ledgers_organization").on(table.organizationId),
+		organizationIdIdUnique: unique("unique_ledgers_organization_id_id").on(
+			table.organizationId,
+			table.id
+		),
 	})
 );
+
+type LedgerRow = typeof LedgersTable.$inferSelect;
+type LedgerCreateRow = Required<typeof LedgersTable.$inferInsert>;
+type LedgerUpdateRow = Pick<LedgerRow, "name" | "description" | "metadata" | "updated">;
 
 // Ledger Accounts: Individual accounts (merchant wallets, fee accounts, etc.)
 const LedgerAccountsTable = pgTable(
@@ -69,12 +79,12 @@ const LedgerAccountsTable = pgTable(
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		ledgerId: text("ledger_id")
-			.notNull()
-			.references(() => LedgersTable.id),
+		ledgerId: text("ledger_id").notNull(),
 		name: text("name").notNull(),
 		description: text("description"),
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
+		currencyCode: text("currency_code").notNull(),
+		minorUnitExponent: integer("minor_unit_exponent").notNull(),
 		// Individual balance columns as BIGINT (integer minor units)
 		pendingAmount: bigint("pending_amount", { mode: "number" }).notNull().default(0),
 		postedAmount: bigint("posted_amount", { mode: "number" }).notNull().default(0),
@@ -92,7 +102,32 @@ const LedgerAccountsTable = pgTable(
 	},
 	table => ({
 		organizationIdx: index("idx_ledger_accounts_organization").on(table.organizationId),
+		organizationLedgerFk: foreignKey({
+			name: "ledger_accounts_organization_ledger_fk",
+			columns: [table.organizationId, table.ledgerId],
+			foreignColumns: [LedgersTable.organizationId, LedgersTable.id],
+		}),
 		uniqueNamePerLedger: uniqueIndex("unique_account_name_per_ledger").on(table.ledgerId, table.name),
+		currencyCodeNotBlank: check(
+			"ledger_accounts_currency_code_not_blank",
+			sql`btrim(${table.currencyCode}) <> ''`
+		),
+		minorUnitExponentNonnegative: check(
+			"ledger_accounts_minor_unit_exponent_nonnegative",
+			sql`${table.minorUnitExponent} >= 0`
+		),
+		balancesSafeIntegers: check(
+			"ledger_accounts_balances_safe_integers",
+			sql`${table.pendingAmount} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.postedAmount} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.availableAmount} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.pendingCredits} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.pendingDebits} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.postedCredits} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.postedDebits} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.availableCredits} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.availableDebits} BETWEEN -9007199254740991 AND 9007199254740991`
+		),
 		postedBalanceIdx: index("idx_ledger_accounts_posted_balance").on(
 			table.ledgerId,
 			table.postedAmount
@@ -103,6 +138,13 @@ const LedgerAccountsTable = pgTable(
 		),
 	})
 );
+
+type AccountRow = typeof LedgerAccountsTable.$inferSelect;
+type AccountCreateRow = Required<typeof LedgerAccountsTable.$inferInsert>;
+type AccountUpdateRow = Pick<
+	AccountRow,
+	"name" | "description" | "metadata" | "lockVersion" | "updated"
+>;
 
 // Ledger Transactions: Double-entry transaction containers
 const LedgerTransactionsTable = pgTable(
@@ -423,4 +465,14 @@ export {
 	ledgerEntryDirection,
 	ledgerSettlementStatus,
 };
-export type { OrganizationRow };
+export type {
+	AccountCreateRow,
+	AccountRow,
+	AccountUpdateRow,
+	LedgerCreateRow,
+	LedgerRow,
+	LedgerUpdateRow,
+	OrganizationCreateRow,
+	OrganizationRow,
+	OrganizationUpdateRow,
+};

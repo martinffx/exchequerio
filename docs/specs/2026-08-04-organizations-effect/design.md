@@ -1,5 +1,9 @@
 # Organizations Effect Migration
 
+> Historical design: where domain codec ownership differs, the implemented Organization model and
+> [retrospective](./retro.md) supersede this document. Domain purity prohibits I/O; it is not a ban
+> on Effect-based decoding or type-only request and persistence-row contracts.
+
 ## Problem
 
 The five Organization endpoints currently follow the repository's original Fastify service and repository pattern. Their service is a thin Promise-based wrapper, persistence code raises transport-oriented errors, and the Organization entity mixes HTTP, database, and domain concerns. This makes business behavior difficult to test independently and does not establish the functional-core and Effect architecture required by `EFFECT_MIGRATION.md`.
@@ -8,7 +12,7 @@ The migration needs to prove the target architecture through one complete vertic
 
 The users affected are platform operators who manage every Organization and Organization users who may read or manage only their own Organization. Today those callers use the existing `/api/organizations` routes; this migration keeps those paths and payload shapes while making authorization and failure behavior explicit.
 
-Success means all five Organization endpoints run through a pure domain and Effect application layer, use real PostgreSQL persistence, share a Redis-backed rate limiter, and are covered by an HTTP-to-PostgreSQL integration pattern that later resources can copy.
+Success means all five Organization endpoints run through a domain model and Effect application layer, use real PostgreSQL persistence, share a Redis-backed rate limiter, and are covered by an HTTP-to-PostgreSQL integration pattern that later resources can copy.
 
 ## Scope
 
@@ -154,7 +158,7 @@ Drizzle/PostgreSQL adapter
 
 "Effect" is not a separate business layer. The domain is the pure vocabulary and rules used by the application service. The service represents application use cases: it receives the authenticated actor, applies access policy, orchestrates ID generation and persistence, and returns an Effect describing its dependencies and typed failures.
 
-The physical layout is a flat vertical slice with a dedicated pure-domain boundary:
+The physical layout is a flat vertical slice with a dedicated domain ownership boundary:
 
 ```text
 apps/api/src/organizations/
@@ -178,7 +182,7 @@ apps/api/src/runtime/
 apps/api/src/http/
 ```
 
-`domain/` remains separate because it is a meaningful purity boundary. All other application, HTTP, PostgreSQL, row-decoding, and ID-generation modules live at the slice root; the slice does not create `application/` or `adapters/` directories. Each responsibility-named capability module co-locates its contract, Effect tag, concrete implementation, and production or test Layers. The slice entrypoint exports the public Organization contract and composed Layer while concrete Live classes and row codecs remain private. Cross-slice imports use this entrypoint.
+`domain/` remains separate because it owns the model, invariants, and transformations. All other application, HTTP, PostgreSQL, and ID-generation modules live at the slice root; the slice does not create `application/` or `adapters/` directories. Each responsibility-named capability module co-locates its contract, Effect tag, concrete implementation, and production or test Layers. The slice entrypoint exports the public Organization contract and composed Layer while concrete Live classes and persistence row types remain private. Cross-slice imports use this entrypoint.
 
 ### Functional core
 
@@ -204,7 +208,7 @@ The generated-ID capability is injectable so service tests can remain determinis
 
 ### PostgreSQL adapter
 
-The Drizzle adapter implements the repository capability and is solely responsible for SQL and row decoding:
+The Drizzle adapter implements the repository capability and is solely responsible for SQL and database error translation. It delegates persisted-row validation and construction to `Organization.fromRow`:
 
 - List applies the requested tenant scope, orders by ID ascending, and applies `LIMIT`/`OFFSET`.
 - Get returns an optional domain entity.

@@ -46,6 +46,7 @@ Skills provide task guidance; they do not prove that a dependency is installed. 
 ## Architecture boundaries
 
 - API dependencies flow from Routes to Services to Repositories and Entities to PostgreSQL. Keep transport validation in Routes, business orchestration in Services, persistence in Repositories, and transformations or invariants in Entities.
+- Treat domain purity as a behavioral boundary, not an import ban. Following the Organization model, entities may own `fromRequest`, `fromRow`, and `toRow` with Effect-based decoding and type-only transport or row contracts; they must not perform I/O. Repositories own SQL, transactions, and database error translation.
 - Web work follows React Router framework conventions. Keep route composition in `apps/web/app/routes`, reusable UI in `apps/web/app/components`, and shared helpers in `apps/web/app/lib`.
 - Public documentation uses Docusaurus under `apps/docs`; follow its content standard rather than duplicating writing conventions here.
 - Use stub-driven TDD for changed behavior and keep tests at the narrowest useful layer. Avoid repeating the same contract across layers. API integration tests use PostgreSQL.

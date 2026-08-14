@@ -1,0 +1,281 @@
+{
+  "feature": "accounts-effect",
+  "spec": "docs/specs/2026-08-09-accounts-effect/design.md",
+  "goal": "Migrate Ledger Accounts to Effect and move Currency ownership from Ledger to Account.",
+  "phases": [
+    {
+      "id": "P1",
+      "name": "Domain and schema",
+      "tasks": [
+        {
+          "id": "T1",
+          "name": "Add the Account domain",
+          "depends_on": [],
+          "inputs": [
+            "Approved domain model in design.md",
+            "Existing Ledger and Organization domain patterns",
+            "Canonical TypeID aliases in apps/api/src/repo/entities/types.ts"
+          ],
+          "description": "Add an Account-domain Currency value and an Account model that owns fromRequest, fromRow, and toRow. Keep Minor Units and Normal Balance as validated primitives. Reuse the canonical Account ID, decode invalid persisted values visibly, and keep Currency and Normal Balance immutable.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/accounts/domain/Currency.ts",
+              "apps/api/src/ledgers/accounts/domain/Account.ts"
+            ],
+            "modify": [
+              "apps/api/src/ledgers/accounts/index.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "accepts nonblank opaque Currency codes without normalization",
+              "rejects negative or unsafe exponents and Minor Units at their existing service or repository boundary",
+              "accepts negative balance amounts",
+              "compares Currency by code and exponent",
+              "builds the three Account balance views"
+            ],
+            "acceptance": [
+              "Domain models perform no I/O; repositories retain SQL, transactions, and database error translation",
+              "No duplicate Account ID brand is introduced"
+            ]
+          }
+        },
+        {
+          "id": "T2",
+          "name": "Add the Account schema migration",
+          "depends_on": ["T1"],
+          "inputs": [
+            "Migration sequence in design.md",
+            "Current Drizzle schema and migrations",
+            "Current Account, Entry, Settlement, and Ledger tables"
+          ],
+          "description": "Expand and backfill Account Currency, verify financial and tenancy invariants, add Account constraints and the composite Ledger foreign key, then drop Ledger Currency columns. Update the Drizzle schema to the contracted model.",
+          "files": {
+            "create": [
+              "apps/api/migrations/0004_worthless_chimera.sql"
+            ],
+            "modify": [
+              "apps/api/src/repo/schema.ts",
+              "apps/api/migrations/meta/_journal.json"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "fresh migrations apply to PostgreSQL"
+            ],
+            "acceptance": [
+              "Account Currency columns are non-null and have no defaults",
+              "manual populated-v0003 verification confirms the backfill and Ledger Currency column removal",
+              "manual invalid-data verification confirms rollback before contraction"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Account Effect slice",
+      "tasks": [
+        {
+          "id": "T3",
+          "name": "Implement the Effect Account repository",
+          "depends_on": ["T1", "T2"],
+          "inputs": [
+            "Account domain and contracted Drizzle schema",
+            "Existing LedgerRepo Effect conventions",
+            "Existing PostgreSQL database test Layer"
+          ],
+          "description": "Implement tenant-scoped list, get, create, versioned update, and delete operations using Account.fromRow and Account.toRow, with database error translation in the repository. Map only the named Account name constraint to duplicate-name Conflict.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/accounts/AccountErrors.ts",
+              "apps/api/src/ledgers/accounts/AccountRepo.ts",
+              "apps/api/src/ledgers/accounts/AccountRepo.test.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "list ordering and pagination are stable",
+              "all operations enforce Organization and Ledger scope",
+              "create starts at lockVersion 1",
+              "first update succeeds and overlapping updates conflict",
+              "duplicate names map to AccountNameConflict",
+              "dependent delete maps to AccountHasDependents",
+              "invalid rows map to persistence decoding failure"
+            ],
+            "acceptance": [
+              "Repository methods return Effects with typed expected errors",
+              "Create and update use separate SQL statements"
+            ]
+          }
+        },
+        {
+          "id": "T4",
+          "name": "Implement Account service, schemas, and routes",
+          "depends_on": ["T3"],
+          "inputs": [
+            "Approved Account HTTP contract",
+            "Existing Ledger direct-handler pattern",
+            "Existing permission names and route registration"
+          ],
+          "description": "Implement Account orchestration, TypeBox contracts, serialization, direct Effect handlers, runtime Layer composition, and route registration for all five endpoints. Replace the legacy public Account service and routes.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/accounts/AccountSchema.ts",
+              "apps/api/src/ledgers/accounts/AccountService.ts",
+              "apps/api/src/ledgers/accounts/AccountService.test.ts",
+              "apps/api/src/ledgers/accounts/AccountRoutes.ts",
+              "apps/api/src/ledgers/accounts/AccountRoutes.test.ts",
+              "apps/api/src/ledgers/accounts/index.ts"
+            ],
+            "modify": [
+              "apps/api/src/runtime.ts",
+              "apps/api/src/routes/ledgers/index.ts",
+              ".oxlintrc.json"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "all five routes preserve permissions and paths",
+              "create requires Currency and Normal Balance and returns 201 with Location",
+              "response contains top-level Currency without repeated balance Currency",
+              "update preserves immutable fields and uses internal version checking",
+              "delete returns an empty 204",
+              "routes omit unused 429 responses"
+            ],
+            "acceptance": [
+              "Handlers use the existing server runtime directly",
+              "No generic runner, route adapter, or test harness is added"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "Compatibility switch",
+      "tasks": [
+        {
+          "id": "T5",
+          "name": "Switch Transactions to Account-owned Currency",
+          "depends_on": ["T2", "T3"],
+          "inputs": [
+            "Legacy Transaction service, entity, and repository",
+            "Temporary legacy Account reader",
+            "Step 04 scope boundary"
+          ],
+          "description": "Replace TransactionService's Ledger dependency with a private read-only Account reader, reject more than 200 distinct Accounts, load referenced Accounts in one Organization- and Ledger-scoped query, and derive one exact Currency pair. Preserve the legacy Transaction request shape and lifecycle.",
+          "files": {
+            "create": [
+              "apps/api/src/repo/LedgerAccountReader.ts"
+            ],
+            "modify": [
+              "apps/api/src/repo/entities/LedgerAccountEntity.ts",
+              "apps/api/src/repo/entities/LedgerTransactionEntity.ts",
+              "apps/api/src/repo/LedgerAccountRepo.ts",
+              "apps/api/src/repo/LedgerTransactionRepo.ts",
+              "apps/api/src/repo/index.ts",
+              "apps/api/src/repo/types.ts",
+              "apps/api/src/repo/fixtures.ts",
+              "apps/api/src/services/LedgerTransactionService.ts",
+              "apps/api/src/services/LedgerTransactionService.test.ts",
+              "apps/api/src/services/index.ts",
+              "apps/api/src/repo/LedgerAccountRepo.test.ts",
+              "apps/api/src/repo/LedgerTransactionRepo.test.ts",
+              "apps/api/src/routes/ledgers/schema.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "Transaction entries use Account Currency rather than request or Ledger Currency",
+              "200 distinct Accounts use one reader call and 201 return Bad Request before I/O",
+              "mixed Account Currency pairs return Conflict",
+              "missing, cross-Ledger, and cross-Organization Accounts are hidden as not found",
+              "existing posting and optimistic balance behavior remains green"
+            ],
+            "acceptance": [
+              "Transaction request fields and lifecycle remain unchanged; OpenAPI documents the 200-Account rule",
+              "Legacy Account reader is private and marked for Step 04 deletion"
+            ]
+          }
+        },
+        {
+          "id": "T6",
+          "name": "Switch Settlements and remove Ledger Currency compatibility",
+          "depends_on": ["T4", "T5"],
+          "inputs": [
+            "Legacy Settlement routes and service",
+            "Effect Account and Ledger services",
+            "Legacy service and repository plugin registrations"
+          ],
+          "description": "Derive Settlement Currency and Normal Balance from Accounts, require both Accounts to share a pair, use Effect Ledger for collection parent checks, and stop rereading Ledger during transitions. Remove the unused legacy Ledger and writable Account repositories from production registration.",
+          "files": {
+            "create": [],
+            "modify": [
+              "apps/api/src/routes/ledgers/LedgerAccountSettlementRoutes.ts",
+              "apps/api/src/routes/ledgers/LedgerAccountSettlementRoutes.test.ts",
+              "apps/api/src/services/LedgerAccountSettlementService.ts",
+              "apps/api/src/services/LedgerAccountSettlementService.test.ts",
+              "apps/api/src/services/index.ts",
+              "apps/api/src/repo/index.ts",
+              "apps/api/src/repo/types.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "Settlement create and update derive fields from the settled Account",
+              "mismatched Account pairs return Conflict",
+              "Settlement transition uses the supplied Ledger ID",
+              "no production reader references Ledger Currency"
+            ],
+            "acceptance": [
+              "Legacy Ledger and writable Account repositories are absent from production registration",
+              "Legacy Settlement HTTP and lifecycle contracts remain unchanged"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "name": "Documentation and verification",
+      "tasks": [
+        {
+          "id": "T7",
+          "name": "Update documentation and verify the migration",
+          "depends_on": ["T4", "T5", "T6"],
+          "inputs": [
+            "Completed Account migration",
+            "Current ERD and superseded repository and Transaction documents",
+            "Repository validation commands"
+          ],
+          "description": "Update the ERD and focused supersession notices, then run API tests, repository checks, build, and migration validation. Review the full diff for unintended changes.",
+          "files": {
+            "create": [],
+            "modify": [
+              "apps/api/docs/product/erd.md",
+              "apps/api/docs/spec/repository/design.md",
+              "apps/api/docs/spec/repository/spec.md",
+              "apps/api/docs/spec/transactions/design.md"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "pnpm --filter=@exchequerio/api test",
+              "pnpm run check",
+              "pnpm run build",
+              "clean PostgreSQL migration run",
+              "manual populated-v0003 backfill and invalid-data rollback verification"
+            ],
+            "acceptance": [
+              "ERD shows Account-owned Currency and no Ledger Currency",
+              "Old Currency documentation points to the approved SDD",
+              "Full diff contains no unrelated changes"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

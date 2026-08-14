@@ -1,8 +1,12 @@
 import { Type } from "@sinclair/typebox";
+import { Effect } from "effect";
 import type { FastifyPluginAsync } from "fastify";
 import { TypeID } from "typeid-js";
+import { LedgerServiceTag } from "@/ledgers";
+import { AccountServiceTag, currencyEquals } from "@/ledgers/accounts";
 import {
 	BadRequestErrorResponse,
+	ConflictError,
 	ConflictErrorResponse,
 	ForbiddenErrorResponse,
 	InternalServerErrorResponse,
@@ -56,6 +60,9 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		async (rq: ListLedgerAccountSettlementsRequest): Promise<LedgerAccountSettlementResponse[]> => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
+			await rq.server.runtime.runPromise(
+				LedgerServiceTag.use(service => service.getLedger(orgId, ledgerId))
+			);
 			const settlements =
 				await rq.server.services.ledgerAccountSettlementService.listLedgerAccountSettlements(
 					orgId,
@@ -133,27 +140,23 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 
-			// Get the ledger to retrieve currency information
-			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
-
-			// Validate that both accounts belong to the same ledger
 			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledAccountId);
 			const contraAccountId = TypeID.fromString<"lat">(rq.body.contraAccountId);
-
-			const settledAccount = await rq.server.services.ledgerAccountService.getLedgerAccount(
-				orgId,
-				ledgerId,
-				settledAccountId
+			const [settledAccount, contraAccount] = await rq.server.runtime.runPromise(
+				Effect.all([
+					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, settledAccountId)),
+					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, contraAccountId)),
+				])
 			);
-
-			// This will throw NotFoundError if the contra account doesn't belong to the ledger
-			await rq.server.services.ledgerAccountService.getLedgerAccount(orgId, ledgerId, contraAccountId);
+			if (!currencyEquals(settledAccount.currency, contraAccount.currency)) {
+				throw new ConflictError("Settlement accounts must use the same currency");
+			}
 
 			const created =
 				await rq.server.services.ledgerAccountSettlementService.createLedgerAccountSettlement(
 					orgId,
-					ledger.currency,
-					ledger.currencyExponent,
+					settledAccount.currency.code,
+					settledAccount.currency.minorUnitExponent,
 					settledAccount.normalBalance,
 					rq.body
 				);
@@ -192,28 +195,24 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 
-			// Get the ledger to retrieve currency information
-			const ledger = await rq.server.services.ledgerService.getLedger(orgId, ledgerId);
-
-			// Validate that both accounts belong to the same ledger
 			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledAccountId);
 			const contraAccountId = TypeID.fromString<"lat">(rq.body.contraAccountId);
-
-			const settledAccount = await rq.server.services.ledgerAccountService.getLedgerAccount(
-				orgId,
-				ledgerId,
-				settledAccountId
+			const [settledAccount, contraAccount] = await rq.server.runtime.runPromise(
+				Effect.all([
+					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, settledAccountId)),
+					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, contraAccountId)),
+				])
 			);
-
-			// This will throw NotFoundError if the contra account doesn't belong to the ledger
-			await rq.server.services.ledgerAccountService.getLedgerAccount(orgId, ledgerId, contraAccountId);
+			if (!currencyEquals(settledAccount.currency, contraAccount.currency)) {
+				throw new ConflictError("Settlement accounts must use the same currency");
+			}
 
 			const updated =
 				await rq.server.services.ledgerAccountSettlementService.updateLedgerAccountSettlement(
 					orgId,
 					rq.params.settlementId,
-					ledger.currency,
-					ledger.currencyExponent,
+					settledAccount.currency.code,
+					settledAccount.currency.minorUnitExponent,
 					settledAccount.normalBalance,
 					rq.body
 				);

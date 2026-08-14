@@ -1,19 +1,23 @@
 import { retry } from "radash";
-import { ConflictError, NotFoundError } from "@/lib/errors";
+import { TypeID } from "typeid-js";
+import { BadRequestError, ConflictError } from "@/lib/errors";
 import {
 	type LedgerID,
+	type LedgerAccountID,
 	LedgerTransactionEntity,
 	type LedgerTransactionID,
 	type OrgID,
 } from "@/repo/entities";
-import type { LedgerRepo } from "@/repo/LedgerRepo";
+import type { LedgerAccountReader } from "@/repo/LedgerAccountReader";
 import type { LedgerTransactionRepo } from "@/repo/LedgerTransactionRepo";
 import type { LedgerTransactionRequest } from "@/routes/ledgers/schema";
+
+const MAX_TRANSACTION_ACCOUNTS = 200;
 
 class LedgerTransactionService {
 	constructor(
 		private readonly ledgerTransactionRepo: LedgerTransactionRepo,
-		private readonly ledgerRepo: LedgerRepo
+		private readonly ledgerAccountReader: LedgerAccountReader
 	) {}
 
 	public async listTransactions(
@@ -48,20 +52,36 @@ class LedgerTransactionService {
 		ledgerId: LedgerID,
 		rq: LedgerTransactionRequest
 	): Promise<LedgerTransactionEntity> {
-		// Fetch ledger to get currency information
-		const ledger = await this.ledgerRepo.getLedger(orgId, ledgerId);
-
-		if (!ledger) {
-			throw new NotFoundError(`Ledger ${ledgerId.toString()} not found`, {
-				organizationId: orgId.toString(),
-				ledgerId: ledgerId.toString(),
-			});
+		const accountIds = [...new Set(rq.ledgerEntries.map(entry => entry.accountId))];
+		if (accountIds.length > MAX_TRANSACTION_ACCOUNTS) {
+			throw new BadRequestError(
+				`A Transaction may reference at most ${MAX_TRANSACTION_ACCOUNTS} distinct Accounts`
+			);
+		}
+		const accounts = await this.ledgerAccountReader.getByIds(
+			orgId,
+			ledgerId,
+			accountIds.map(accountId => TypeID.fromString<"lat">(accountId) as LedgerAccountID)
+		);
+		const [currency] = accounts;
+		if (
+			currency === undefined ||
+			accounts.some(
+				account =>
+					account.currencyCode !== currency.currencyCode ||
+					account.minorUnitExponent !== currency.minorUnitExponent
+			)
+		) {
+			throw new ConflictError("Transaction accounts must use the same currency");
 		}
 
 		// Create transaction entity - constructor validates all invariants
 		const transactionEntity = LedgerTransactionEntity.fromRequest({
 			rq,
-			ledger,
+			organizationId: orgId,
+			ledgerId,
+			currencyCode: currency.currencyCode,
+			minorUnitExponent: currency.minorUnitExponent,
 		});
 
 		// Repository validates accounts exist and belong to ledger

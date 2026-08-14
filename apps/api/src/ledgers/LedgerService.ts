@@ -1,8 +1,7 @@
 import { Context, Effect, Layer, Option } from "effect";
-import { TypeID } from "typeid-js";
 import { ServiceUnavailableError } from "@/lib/errors";
-import type { LedgerID, OrgID } from "@/repo/entities/types";
-import type { Ledger } from "./domain/Ledger";
+import { type LedgerID, newLedgerID, type OrgID } from "@/repo/entities/types";
+import { Ledger } from "./domain/Ledger";
 import { LedgerNotFound, LedgerRepositoryUnavailable } from "./LedgerErrors";
 import {
 	type LedgerCreateRepositoryError,
@@ -38,12 +37,12 @@ class LedgerService {
 		organizationId: OrgID,
 		query: LedgerListQuery
 	): Effect.Effect<Ledger[], LedgerListError> {
-		return this.repository.list(organizationId, query);
+		return this.repository.listLedgers(organizationId, query);
 	}
 
 	getLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerGetError> {
 		return this.repository
-			.get(organizationId, ledgerId)
+			.getLedger(organizationId, ledgerId)
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId)));
 	}
 
@@ -51,13 +50,9 @@ class LedgerService {
 		organizationId: OrgID,
 		request: LedgerCreateRequest
 	): Effect.Effect<Ledger, LedgerCreateError> {
-		return Effect.sync(() => new TypeID("lgr") as LedgerID).pipe(
+		return Effect.sync(newLedgerID).pipe(
 			Effect.flatMap(id =>
-				this.repository.create({
-					id,
-					organizationId,
-					...request,
-				})
+				this.repository.createLedger(Ledger.fromRequest(id, organizationId, request))
 			),
 			Effect.mapError(error =>
 				error instanceof LedgerRepositoryUnavailable
@@ -77,13 +72,13 @@ class LedgerService {
 		request: LedgerUpdateRequest
 	): Effect.Effect<Ledger, LedgerUpdateError> {
 		return this.repository
-			.update({ id: ledgerId, organizationId, ...request })
+			.updateLedger(Ledger.fromRequest(ledgerId, organizationId, request))
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId)));
 	}
 
-	deleteLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<void, LedgerDeleteError> {
+	deleteLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerDeleteError> {
 		return this.repository
-			.delete(organizationId, ledgerId)
+			.deleteLedger(organizationId, ledgerId)
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId)));
 	}
 }
