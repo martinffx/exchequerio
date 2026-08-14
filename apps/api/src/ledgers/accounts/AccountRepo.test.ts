@@ -1,15 +1,18 @@
+import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
-import { makeDatabaseLive } from "@/db";
+import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { LedgerNotFound, makeCurrency } from "@/ledgers";
 import {
+	type LedgerAccountID,
 	type LedgerID,
 	newLedgerAccountID,
 	newLedgerID,
 	newOrgID,
 	type OrgID,
 } from "@/repo/entities/types";
+import { LedgerAccountsTable } from "@/repo/schema";
 import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "../LedgerRepo";
 import { Ledger } from "../domain/Ledger";
 import {
@@ -20,6 +23,7 @@ import {
 import { Organization } from "@/organizations/domain/Organization";
 import {
 	AccountNameConflict,
+	AccountPersistenceDecodingFailure,
 	AccountPersistenceFailure,
 	AccountVersionConflict,
 } from "./AccountErrors";
@@ -47,9 +51,9 @@ const accountCreate = (
 describe("AccountRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
 	const reposLayer = Layer.mergeAll(accountRepoLayer, ledgerRepoLayer, organizationRepoLayer).pipe(
-		Layer.provide(databaseLayer)
+		Layer.provideMerge(databaseLayer)
 	);
-	type TestRepos = AccountRepo | LedgerRepo | OrganizationRepo;
+	type TestRepos = AccountRepo | Database | LedgerRepo | OrganizationRepo;
 	const runtime: ManagedRuntime.ManagedRuntime<TestRepos, never> = ManagedRuntime.make(reposLayer);
 	const resources: Array<{ organizationId: OrgID; ledgerId: LedgerID }> = [];
 
@@ -59,6 +63,7 @@ describe("AccountRepoLive", () => {
 		runtime.runPromise(LedgerRepoTag.pipe(Effect.flatMap(use)));
 	const runOrganizationRepo = <A, E>(use: (repository: OrganizationRepo) => Effect.Effect<A, E>) =>
 		runtime.runPromise(OrganizationRepoTag.pipe(Effect.flatMap(use)));
+	const database = () => runtime.runPromise(DatabaseTag);
 
 	const createOrganizationAndLedger = async (): Promise<{
 		organizationId: OrgID;
@@ -144,19 +149,28 @@ describe("AccountRepoLive", () => {
 		).toEqual(Option.none());
 	});
 
-	it("creates at lockVersion 1 and decodes Account Currency", async () => {
+	it.each([
+		{
+			label: "stored optional values",
+			description: "Custody cash",
+			metadata: { externalId: "cash-42" },
+		},
+		{ label: "omitted optional values", description: undefined, metadata: undefined },
+	])("creates and decodes $label", async ({ description, metadata }) => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const record = accountCreate(organizationId, ledgerId, {
+			description,
 			currency: makeCurrency("US0378331005", 4),
-			metadata: { externalId: "cash-42" },
+			metadata,
 		});
 		const created = await runAccountRepo(repository => repository.createAccount(record));
 
 		expect(created.lockVersion).toBe(1);
 		expect(created.created).toEqual(record.created);
 		expect(created.updated).toEqual(record.updated);
+		expect(created.description).toBe(description);
 		expect(created.currency).toEqual({ code: "US0378331005", minorUnitExponent: 4 });
-		expect(created.metadata).toEqual({ externalId: "cash-42" });
+		expect(created.metadata).toEqual(metadata);
 		expect(created.balances.every(balance => balance.amount === 0)).toBe(true);
 	});
 
@@ -190,15 +204,60 @@ describe("AccountRepoLive", () => {
 		expect(error).toBeInstanceOf(LedgerNotFound);
 	});
 
-	it("allows the first update and rejects a stale version", async () => {
+	it.each(["get", "delete"] as const)("returns explicit absence for missing %s", async operation => {
+		const { organizationId, ledgerId } = await createOrganizationAndLedger();
+		const accountId = newLedgerAccountID();
+
+		const result = await runAccountRepo(repository =>
+			operation === "get"
+				? repository.getAccount(organizationId, ledgerId, accountId)
+				: repository.deleteAccount(organizationId, ledgerId, accountId)
+		);
+
+		expect(result).toEqual(Option.none());
+	});
+
+	it("returns a version conflict when the update row is missing", async () => {
+		const { organizationId, ledgerId } = await createOrganizationAndLedger();
+		const missing = accountCreate(organizationId, ledgerId);
+
+		const error = await runAccountRepo(repository => Effect.flip(repository.updateAccount(missing)));
+
+		expect(error).toBeInstanceOf(AccountVersionConflict);
+	});
+
+	it.each([
+		{
+			label: "replaces optional values",
+			description: "Operating funds",
+			metadata: { source: "treasury" },
+		},
+		{ label: "clears optional values", description: undefined, metadata: undefined },
+	])("$label on the first update and rejects a stale version", async testCase => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const created = await runAccountRepo(repository =>
-			repository.createAccount(accountCreate(organizationId, ledgerId))
+			repository.createAccount(
+				accountCreate(organizationId, ledgerId, {
+					description: "Before",
+					metadata: { source: "before" },
+				})
+			)
 		);
-		const replacement = created.updateFromRequest({ name: "Operating Cash" });
+		const replacement = created.updateFromRequest({
+			name: "Operating Cash",
+			description: testCase.description,
+			metadata: testCase.metadata,
+		});
 		const updated = await runAccountRepo(repository => repository.updateAccount(replacement));
 
 		expect(updated.name).toBe("Operating Cash");
+		expect(updated.description).toBe(testCase.description);
+		expect(updated.metadata).toEqual(testCase.metadata);
+		expect(updated.organizationId).toEqual(created.organizationId);
+		expect(updated.ledgerId).toEqual(created.ledgerId);
+		expect(updated.normalBalance).toBe(created.normalBalance);
+		expect(updated.currency).toEqual(created.currency);
+		expect(updated.created).toEqual(created.created);
 		expect(updated.lockVersion).toBe(2);
 		expect(updated.updated).toEqual(replacement.updated);
 		const error = await runAccountRepo(repository =>
@@ -221,5 +280,39 @@ describe("AccountRepoLive", () => {
 		expect(
 			await runAccountRepo(repository => repository.deleteAccount(organizationId, ledgerId, unused.id))
 		).toSatisfy(Option.isSome);
+	});
+
+	it.each([
+		{ label: "invalid ID", id: "not-an-account", metadata: undefined, lockVersion: 1 },
+		{ label: "invalid serialized metadata", id: undefined, metadata: "{", lockVersion: 1 },
+		{
+			label: "non-string metadata value",
+			id: undefined,
+			metadata: JSON.stringify({ source: 42 }),
+			lockVersion: 1,
+		},
+		{ label: "negative lock version", id: undefined, metadata: undefined, lockVersion: -1 },
+	])("returns a typed decoding failure for $label", async testCase => {
+		const { organizationId, ledgerId } = await createOrganizationAndLedger();
+		const id = testCase.id ?? newLedgerAccountID().toString();
+		const db = (await database()).db;
+		const row = accountCreate(organizationId, ledgerId, {
+			name: `Malformed ${testCase.label}`,
+		}).toCreateRow();
+		await db.insert(LedgerAccountsTable).values({
+			...row,
+			id,
+			metadata: testCase.metadata ?? row.metadata,
+			lockVersion: testCase.lockVersion,
+		});
+
+		try {
+			const error = await runAccountRepo(repository =>
+				Effect.flip(repository.getAccount(organizationId, ledgerId, id as unknown as LedgerAccountID))
+			);
+			expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
+		} finally {
+			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, id));
+		}
 	});
 });

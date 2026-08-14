@@ -138,19 +138,37 @@ describe("OrganizationService", () => {
 		}
 	);
 
-	it("creates an Organization with the generated ID", async () => {
-		const repo = repository();
+	it.each([
+		{
+			operation: "create" as const,
+			request: { name: "Created", description: "Description" },
+			expectedId: generatedId,
+		},
+		{
+			operation: "update" as const,
+			request: { name: "Updated" },
+			expectedId: targetId,
+		},
+	])("maps $operation requests to Organization domain values", async testCase => {
+		const repo = repository({
+			createOrganization: vi.fn(record => Effect.succeed(record)),
+			updateOrganization: vi.fn(record => Effect.succeed(Option.fromNullishOr(record))),
+		});
 
-		const created = await runService(repo, service =>
-			service.createOrganization({ name: "Created", description: "Description" })
+		const result = await runService(repo, service =>
+			testCase.operation === "create"
+				? service.createOrganization(testCase.request)
+				: service.updateOrganization(targetId, testCase.request)
 		);
 
-		expect(created).toMatchObject({
-			id: generatedId,
-			name: "Created",
-			description: "Description",
+		expect(result).toMatchObject({
+			id: testCase.expectedId,
+			name: testCase.request.name,
+			description: testCase.request.description,
 		});
-		expect(repo.createOrganization).toHaveBeenCalledWith(created);
+		expect(
+			testCase.operation === "create" ? repo.createOrganization : repo.updateOrganization
+		).toHaveBeenCalledWith(result);
 	});
 
 	it.each(["list", "get", "create", "update", "delete"] as const)(

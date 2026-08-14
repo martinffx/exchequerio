@@ -1,9 +1,17 @@
+import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
-import { makeDatabaseLive } from "@/db";
+import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { OrganizationNotFound } from "@/organizations";
-import { newLedgerAccountID, newLedgerID, newOrgID, type OrgID } from "@/repo/entities/types";
+import {
+	type LedgerID,
+	newLedgerAccountID,
+	newLedgerID,
+	newOrgID,
+	type OrgID,
+} from "@/repo/entities/types";
+import { LedgersTable } from "@/repo/schema";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,
@@ -13,7 +21,11 @@ import { Organization } from "@/organizations/domain/Organization";
 import { type AccountRepo, AccountRepoTag, accountRepoLayer } from "./accounts/AccountRepo";
 import { Account } from "./accounts/domain/Account";
 import { Ledger } from "./domain/Ledger";
-import { LedgerHasDependents, LedgerPersistenceFailure } from "./LedgerErrors";
+import {
+	LedgerHasDependents,
+	LedgerPersistenceDecodingFailure,
+	LedgerPersistenceFailure,
+} from "./LedgerErrors";
 import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "./LedgerRepo";
 
 const ledgerWrite = (
@@ -29,9 +41,9 @@ const ledgerWrite = (
 describe("LedgerRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
 	const reposLayer = Layer.mergeAll(accountRepoLayer, ledgerRepoLayer, organizationRepoLayer).pipe(
-		Layer.provide(databaseLayer)
+		Layer.provideMerge(databaseLayer)
 	);
-	type TestRepos = AccountRepo | LedgerRepo | OrganizationRepo;
+	type TestRepos = AccountRepo | Database | LedgerRepo | OrganizationRepo;
 	const runtime: ManagedRuntime.ManagedRuntime<TestRepos, never> = ManagedRuntime.make(reposLayer);
 	const organizationIds = new Set<OrgID>();
 
@@ -41,6 +53,7 @@ describe("LedgerRepoLive", () => {
 		runtime.runPromise(AccountRepoTag.pipe(Effect.flatMap(use)));
 	const runOrganizationRepo = <A, E>(use: (repository: OrganizationRepo) => Effect.Effect<A, E>) =>
 		runtime.runPromise(OrganizationRepoTag.pipe(Effect.flatMap(use)));
+	const database = () => runtime.runPromise(DatabaseTag);
 
 	const createOrganization = async (): Promise<OrgID> => {
 		const id = newOrgID();
@@ -52,6 +65,7 @@ describe("LedgerRepoLive", () => {
 		);
 		return id;
 	};
+
 	afterAll(async () => {
 		try {
 			for (const organizationId of organizationIds) {
@@ -123,20 +137,29 @@ describe("LedgerRepoLive", () => {
 		);
 	});
 
-	it("decodes string-valued metadata", async () => {
+	it.each([
+		{
+			label: "stored optional values",
+			description: "Primary book",
+			metadata: { externalId: "book-42" },
+		},
+		{ label: "omitted optional values", description: undefined, metadata: undefined },
+	])("creates and decodes $label", async ({ description, metadata }) => {
 		const organizationId = await createOrganization();
 		const ledgerId = newLedgerID();
-		await runRepo(repository =>
-			repository.createLedger(
-				ledgerWrite(organizationId, {
-					id: ledgerId,
-					metadata: { externalId: "book-42" },
-				})
-			)
-		);
+		const record = ledgerWrite(organizationId, {
+			id: ledgerId,
+			description,
+			metadata,
+		});
+		await runRepo(repository => repository.createLedger(record));
 
 		const found = await runRepo(repository => repository.getLedger(organizationId, ledgerId));
-		expect(Option.getOrUndefined(found)?.metadata).toEqual({ externalId: "book-42" });
+		const value = Option.getOrThrow(found);
+		expect(value.description).toBe(description);
+		expect(value.metadata).toEqual(metadata);
+		expect(value.created).toEqual(record.created);
+		expect(value.updated).toEqual(record.updated);
 	});
 
 	it("creates duplicate names with application timestamps", async () => {
@@ -172,29 +195,41 @@ describe("LedgerRepoLive", () => {
 		expect(error).toBeInstanceOf(LedgerPersistenceFailure);
 	});
 
-	it("replaces mutable fields while preserving created", async () => {
-		const organizationId = await createOrganization();
-		const created = await runRepo(repository =>
-			repository.createLedger(
-				ledgerWrite(organizationId, {
-					name: "Before",
-					description: "Remove me",
-					metadata: { externalId: "book-42" },
-				})
-			)
-		);
-		const replacement = ledgerWrite(organizationId, {
-			id: created.id,
-			name: "After",
-		});
-		const updated = await runRepo(repository => repository.updateLedger(replacement));
-		const value = Option.getOrUndefined(updated);
-		expect(value).toMatchObject({ name: "After" });
-		expect(value?.description).toBeUndefined();
-		expect(value?.metadata).toBeUndefined();
-		expect(value?.created).toEqual(created.created);
-		expect(value?.updated).toEqual(replacement.updated);
-	});
+	it.each([
+		{
+			label: "replaces",
+			description: "New description",
+			metadata: { externalId: "book-99" },
+		},
+		{ label: "clears", description: undefined, metadata: undefined },
+	])(
+		"$label optional mutable fields while preserving created",
+		async ({ description, metadata }) => {
+			const organizationId = await createOrganization();
+			const created = await runRepo(repository =>
+				repository.createLedger(
+					ledgerWrite(organizationId, {
+						name: "Before",
+						description: "Remove me",
+						metadata: { externalId: "book-42" },
+					})
+				)
+			);
+			const replacement = ledgerWrite(organizationId, {
+				id: created.id,
+				name: "After",
+				description,
+				metadata,
+			});
+			const updated = await runRepo(repository => repository.updateLedger(replacement));
+			const value = Option.getOrUndefined(updated);
+			expect(value).toMatchObject({ name: "After" });
+			expect(value?.description).toBe(description);
+			expect(value?.metadata).toEqual(metadata);
+			expect(value?.created).toEqual(created.created);
+			expect(value?.updated).toEqual(replacement.updated);
+		}
+	);
 
 	it("returns absence when update is missing or crosses Organizations and never inserts", async () => {
 		const ownerId = await createOrganization();
@@ -257,5 +292,30 @@ describe("LedgerRepoLive", () => {
 			Effect.flip(repository.deleteLedger(organizationId, created.id))
 		);
 		expect(error).toBeInstanceOf(LedgerHasDependents);
+	});
+
+	it.each([
+		{ label: "invalid ID", id: "not-a-ledger", metadata: undefined },
+		{ label: "invalid serialized metadata", id: undefined, metadata: "{" },
+		{
+			label: "non-string metadata value",
+			id: undefined,
+			metadata: JSON.stringify({ externalId: 42 }),
+		},
+	])("returns a typed decoding failure for $label", async testCase => {
+		const organizationId = await createOrganization();
+		const id = testCase.id ?? newLedgerID().toString();
+		const db = (await database()).db;
+		const row = ledgerWrite(organizationId).toCreateRow();
+		await db.insert(LedgersTable).values({ ...row, id, metadata: testCase.metadata ?? row.metadata });
+
+		try {
+			const error = await runRepo(repository =>
+				Effect.flip(repository.getLedger(organizationId, id as unknown as LedgerID))
+			);
+			expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);
+		} finally {
+			await db.delete(LedgersTable).where(eq(LedgersTable.id, id));
+		}
 	});
 });

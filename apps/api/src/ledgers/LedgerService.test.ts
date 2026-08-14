@@ -90,44 +90,42 @@ describe("LedgerService", () => {
 		expect(repo.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
 	});
 
-	it("generates a canonical Ledger ID lazily and calls only create", async () => {
-		const repo = repository();
-
-		expect(repo.createLedger).not.toHaveBeenCalled();
-		const created = await runService(repo, service =>
-			service.createLedger(organizationId, {
+	it.each([
+		{
+			operation: "create" as const,
+			request: {
 				name: "Created",
 				description: "Description",
 				metadata: { externalId: "book-99" },
-			})
+			},
+		},
+		{
+			operation: "update" as const,
+			request: { name: "Replaced" },
+		},
+	])("maps $operation requests to Ledger domain values", async testCase => {
+		const repo = repository({
+			createLedger: vi.fn(record => Effect.succeed(record)),
+			updateLedger: vi.fn(record => Effect.succeed(Option.fromNullishOr(record))),
+		});
+
+		const result = await runService(repo, service =>
+			testCase.operation === "create"
+				? service.createLedger(organizationId, testCase.request)
+				: service.updateLedger(organizationId, ledgerId, testCase.request)
 		);
 
-		expect(created.id.toString()).toMatch(/^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
-		expect(repo.createLedger).toHaveBeenCalledWith(
-			expect.objectContaining({
-				id: created.id,
-				organizationId,
-				name: "Created",
-				description: "Description",
-				metadata: { externalId: "book-99" },
-			})
-		);
-		expect(vi.mocked(repo.createLedger).mock.calls[0]?.[0]).toBeInstanceOf(Ledger);
-		expect(repo.updateLedger).not.toHaveBeenCalled();
-	});
-
-	it("uses only update and forwards replacement fields", async () => {
-		const repo = repository();
-
-		await runService(repo, service =>
-			service.updateLedger(organizationId, ledgerId, { name: "Replaced" })
-		);
-
-		expect(repo.updateLedger).toHaveBeenCalledWith(
-			expect.objectContaining({ id: ledgerId, organizationId, name: "Replaced" })
-		);
-		expect(vi.mocked(repo.updateLedger).mock.calls[0]?.[0]).toBeInstanceOf(Ledger);
-		expect(repo.createLedger).not.toHaveBeenCalled();
+		expect(result).toMatchObject({
+			organizationId,
+			name: testCase.request.name,
+			description: testCase.request.description,
+			metadata: testCase.request.metadata,
+		});
+		expect(result.id.toString()).toMatch(/^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+		if (testCase.operation === "update") expect(result.id).toBe(ledgerId);
+		const called = testCase.operation === "create" ? repo.createLedger : repo.updateLedger;
+		expect(called).toHaveBeenCalledWith(result);
+		expect(vi.mocked(called).mock.calls[0]?.[0]).toBeInstanceOf(Ledger);
 	});
 
 	it.each(["get", "update", "delete"] as const)(

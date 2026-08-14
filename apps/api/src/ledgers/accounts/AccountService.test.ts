@@ -1,5 +1,6 @@
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it, vi } from "vitest";
+import { BadRequestError } from "@/lib/errors";
 import { newLedgerAccountID, newLedgerID, newOrgID } from "@/repo/entities/types";
 import { Ledger } from "../domain/Ledger";
 import type { LedgerService } from "../LedgerService";
@@ -99,33 +100,61 @@ describe("AccountService", () => {
 		});
 	});
 
-	it("generates a canonical Account ID and creates immutable fields", async () => {
+	it.each([
+		{
+			name: "complete values",
+			request: {
+				name: "Broker position",
+				description: "Custody",
+				normalBalance: "credit" as const,
+				currencyCode: "US0378331005",
+				minorUnitExponent: 4,
+				metadata: { externalId: "position-42" },
+			},
+		},
+		{
+			name: "omitted optional values",
+			request: {
+				name: "Cash",
+				description: undefined,
+				normalBalance: "debit" as const,
+				currencyCode: "USD",
+				minorUnitExponent: 2,
+				metadata: undefined,
+			},
+		},
+	])("creates Account domain state from $name", async ({ request }) => {
 		const repo = repository({
 			createAccount: vi.fn((record: Account) => Effect.succeed(record)),
 		});
 		const parent = ledgerService();
 
 		const created = await runService(repo, parent, service =>
-			service.createAccount(organizationId, ledgerId, {
-				name: "Broker position",
-				normalBalance: "credit",
-				currencyCode: "US0378331005",
-				minorUnitExponent: 4,
-			})
+			service.createAccount(organizationId, ledgerId, request)
 		);
 
+		expect(created).toMatchObject({
+			organizationId,
+			ledgerId,
+			name: request.name,
+			description: request.description,
+			normalBalance: request.normalBalance,
+			currency: {
+				code: request.currencyCode,
+				minorUnitExponent: request.minorUnitExponent,
+			},
+			metadata: request.metadata,
+			lockVersion: 1,
+		});
 		expect(created.id.toString()).toMatch(/^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+		expect(created.updated).toEqual(created.created);
+		expect(created.balances).toEqual([
+			{ balanceType: "pending", amount: 0, credits: 0, debits: 0 },
+			{ balanceType: "posted", amount: 0, credits: 0, debits: 0 },
+			{ balanceType: "availableBalance", amount: 0, credits: 0, debits: 0 },
+		]);
 		expect(parent.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
-		expect(repo.createAccount).toHaveBeenCalledWith(
-			expect.objectContaining({
-				id: created.id,
-				organizationId,
-				ledgerId,
-				name: "Broker position",
-				normalBalance: "credit",
-				currency: { code: "US0378331005", minorUnitExponent: 4 },
-			})
-		);
+		expect(repo.createAccount).toHaveBeenCalledWith(created);
 		expect(vi.mocked(repo.createAccount).mock.calls[0]?.[0]).toBeInstanceOf(Account);
 	});
 
@@ -145,11 +174,41 @@ describe("AccountService", () => {
 				organizationId,
 				ledgerId,
 				name: "Operating Cash",
+				normalBalance: account.normalBalance,
+				currency: account.currency,
+				created: account.created,
 				lockVersion: 1,
 			})
 		);
-		expect(vi.mocked(repo.updateAccount).mock.calls[0]?.[0]).toBeInstanceOf(Account);
+		const update = vi.mocked(repo.updateAccount).mock.calls[0]?.[0];
+		expect(update).toBeInstanceOf(Account);
+		expect(update?.balances).toEqual(account.balances);
 	});
+
+	it.each([
+		{ currencyCode: "", minorUnitExponent: 2 },
+		{ currencyCode: "   ", minorUnitExponent: 2 },
+		{ currencyCode: "USD", minorUnitExponent: -1 },
+		{ currencyCode: "USD", minorUnitExponent: 1.5 },
+	])(
+		"maps invalid Account Currency $currencyCode/$minorUnitExponent to BadRequestError",
+		async ({ currencyCode, minorUnitExponent }) => {
+			const repo = repository();
+			const error = await runService(repo, ledgerService(), service =>
+				Effect.flip(
+					service.createAccount(organizationId, ledgerId, {
+						name: "Invalid",
+						normalBalance: "debit",
+						currencyCode,
+						minorUnitExponent,
+					})
+				)
+			);
+
+			expect(error).toBeInstanceOf(BadRequestError);
+			expect(repo.createAccount).not.toHaveBeenCalled();
+		}
+	);
 
 	it.each(["get", "update", "delete"] as const)(
 		"maps an absent %s Account to AccountNotFound",
