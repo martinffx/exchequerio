@@ -2,7 +2,7 @@ import { Effect, Option } from "effect";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { AccountRow } from "@/repo/schema";
 import { parseId } from "@/lib/utils";
-import type { AccountCreateRequest } from "../AccountSchema";
+import type { AccountCreateRequest, AccountUpdateRequest } from "../AccountSchema";
 import { AccountPersistenceDecodingFailure } from "../AccountErrors";
 import {
 	makeCurrency,
@@ -201,6 +201,31 @@ class Account {
 			// eslint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives a value.
 			return Option.some(account);
 		}).pipe(Effect.mapError(cause => new AccountPersistenceDecodingFailure(cause)));
+	}
+
+	updateFromRequest(rq: AccountUpdateRequest): Account {
+		return new Account({
+			id: this.id,
+			organizationId: this.organizationId,
+			ledgerId: this.ledgerId,
+			name: rq.name,
+			description: rq.description,
+			normalBalance: this.normalBalance,
+			currency: this.currency,
+			pendingAmount: this.pendingAmount,
+			postedAmount: this.postedAmount,
+			availableAmount: this.availableAmount,
+			pendingCredits: this.pendingCredits,
+			pendingDebits: this.pendingDebits,
+			postedCredits: this.postedCredits,
+			postedDebits: this.postedDebits,
+			availableCredits: this.availableCredits,
+			availableDebits: this.availableDebits,
+			lockVersion: this.lockVersion,
+			metadata: rq.metadata,
+			created: this.created,
+			updated: this.updated,
+		});
 	}
 
 	toRow(): AccountRow {

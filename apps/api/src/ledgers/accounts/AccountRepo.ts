@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
 import { LedgerNotFound } from "@/ledgers/LedgerErrors";
@@ -13,20 +13,11 @@ import {
 	AccountRepositoryUnavailable,
 	AccountVersionConflict,
 } from "./AccountErrors";
+import { postgresConstraint } from "@/db/errors";
 
 type AccountListQuery = {
 	readonly offset: number;
 	readonly limit: number;
-};
-
-type AccountUpdate = {
-	readonly id: LedgerAccountID;
-	readonly organizationId: OrgID;
-	readonly ledgerId: LedgerID;
-	readonly name: string;
-	readonly description?: string;
-	readonly metadata?: Readonly<Record<string, string>>;
-	readonly expectedLockVersion: number;
 };
 
 type AccountCreateRepositoryError =
@@ -40,19 +31,19 @@ type AccountUpdateRepositoryError =
 type AccountDeleteRepositoryError = AccountInfrastructureError | AccountHasDependents;
 
 interface AccountRepo {
-	list(
+	listAccounts(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		query: AccountListQuery
 	): Effect.Effect<Account[], AccountInfrastructureError>;
-	get(
+	getAccount(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Effect.Effect<Option.Option<Account>, AccountInfrastructureError>;
-	create(record: Account): Effect.Effect<Account, AccountCreateRepositoryError>;
-	update(record: AccountUpdate): Effect.Effect<Account, AccountUpdateRepositoryError>;
-	delete(
+	createAccount(record: Account): Effect.Effect<Account, AccountCreateRepositoryError>;
+	updateAccount(record: Account): Effect.Effect<Account, AccountUpdateRepositoryError>;
+	deleteAccount(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
@@ -88,7 +79,7 @@ const publicColumns = {
 const context = (organizationId: OrgID, ledgerId: LedgerID, accountId?: LedgerAccountID) => ({
 	organizationId: organizationId.toString(),
 	ledgerId: ledgerId.toString(),
-	...(accountId === undefined ? {} : { accountId: accountId.toString() }),
+	accountId: accountId?.toString() ?? undefined,
 });
 
 const mapInfrastructureError = (
@@ -98,23 +89,6 @@ const mapInfrastructureError = (
 	isPostgresUnavailable(cause)
 		? new AccountRepositoryUnavailable(cause, errorContext)
 		: new AccountPersistenceFailure(cause, errorContext);
-
-const isRecord = (value: unknown): value is Record<PropertyKey, unknown> =>
-	typeof value === "object" && value !== null;
-
-const postgresConstraint = (cause: unknown, seen = new Set<object>()): string | undefined => {
-	if (!isRecord(cause) || seen.has(cause)) return undefined;
-	seen.add(cause);
-	if (typeof cause.constraint === "string") return cause.constraint;
-	const nested = postgresConstraint(cause.cause, seen);
-	if (nested !== undefined) return nested;
-	if (!Array.isArray(cause.errors)) return undefined;
-	for (const error of cause.errors) {
-		const constraint = postgresConstraint(error, seen);
-		if (constraint !== undefined) return constraint;
-	}
-	return undefined;
-};
 
 const mapCreateError = (cause: unknown, record: Account): AccountCreateRepositoryError => {
 	if (postgresErrorCode(cause) === "23503") {
@@ -133,7 +107,7 @@ const mapCreateError = (cause: unknown, record: Account): AccountCreateRepositor
 	return mapInfrastructureError(cause, context(record.organizationId, record.ledgerId, record.id));
 };
 
-const mapUpdateError = (cause: unknown, record: AccountUpdate): AccountUpdateRepositoryError =>
+const mapUpdateError = (cause: unknown, record: Account): AccountUpdateRepositoryError =>
 	postgresErrorCode(cause) === "23505" &&
 	postgresConstraint(cause) === "unique_account_name_per_ledger"
 		? new AccountNameConflict(
@@ -164,7 +138,7 @@ const requireDecoded = (
 
 const requireUpdated = (
 	row: AccountRow | undefined,
-	record: AccountUpdate
+	record: Account
 ): Effect.Effect<Account, AccountInfrastructureError | AccountVersionConflict> =>
 	row === undefined
 		? Effect.fail(
@@ -179,10 +153,10 @@ const requireUpdated = (
 class AccountRepoLive implements AccountRepo {
 	constructor(private readonly db: DrizzleDatabase) {}
 
-	list(
+	listAccounts(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
-		query: AccountListQuery
+		{ offset, limit }: AccountListQuery
 	): Effect.Effect<Account[], AccountInfrastructureError> {
 		return Effect.tryPromise({
 			try: () =>
@@ -196,8 +170,8 @@ class AccountRepoLive implements AccountRepo {
 						)
 					)
 					.orderBy(desc(LedgerAccountsTable.created), asc(LedgerAccountsTable.id))
-					.limit(query.limit)
-					.offset(query.offset),
+					.limit(limit)
+					.offset(offset),
 			catch: cause => mapInfrastructureError(cause, context(organizationId, ledgerId)),
 		}).pipe(
 			Effect.flatMap(rows => Effect.all(rows.map(row => Account.fromRow(row)))),
@@ -205,7 +179,7 @@ class AccountRepoLive implements AccountRepo {
 		);
 	}
 
-	get(
+	getAccount(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
@@ -227,7 +201,7 @@ class AccountRepoLive implements AccountRepo {
 		}).pipe(Effect.flatMap(rows => Account.fromRow(rows[0])));
 	}
 
-	create(record: Account): Effect.Effect<Account, AccountCreateRepositoryError> {
+	createAccount(record: Account): Effect.Effect<Account, AccountCreateRepositoryError> {
 		const errorContext = context(record.organizationId, record.ledgerId, record.id);
 		return Effect.tryPromise({
 			try: () => {
@@ -252,26 +226,18 @@ class AccountRepoLive implements AccountRepo {
 		}).pipe(Effect.flatMap(rows => requireDecoded(rows[0], errorContext)));
 	}
 
-	update(record: AccountUpdate): Effect.Effect<Account, AccountUpdateRepositoryError> {
+	updateAccount(record: Account): Effect.Effect<Account, AccountUpdateRepositoryError> {
 		return Effect.tryPromise({
 			try: () =>
 				this.db
 					.update(LedgerAccountsTable)
-					.set({
-						name: record.name,
-						// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
-						description: record.description ?? null,
-						// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
-						metadata: record.metadata === undefined ? null : JSON.stringify(record.metadata),
-						lockVersion: sql`${LedgerAccountsTable.lockVersion} + 1`,
-						updated: sql`CURRENT_TIMESTAMP`,
-					})
+					.set({ ...record.toRow(), lockVersion: record.lockVersion + 1 })
 					.where(
 						and(
 							eq(LedgerAccountsTable.organizationId, record.organizationId.toString()),
 							eq(LedgerAccountsTable.ledgerId, record.ledgerId.toString()),
 							eq(LedgerAccountsTable.id, record.id.toString()),
-							eq(LedgerAccountsTable.lockVersion, record.expectedLockVersion)
+							eq(LedgerAccountsTable.lockVersion, record.lockVersion)
 						)
 					)
 					.returning(publicColumns),
@@ -279,7 +245,7 @@ class AccountRepoLive implements AccountRepo {
 		}).pipe(Effect.flatMap(rows => requireUpdated(rows[0], record)));
 	}
 
-	delete(
+	deleteAccount(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID

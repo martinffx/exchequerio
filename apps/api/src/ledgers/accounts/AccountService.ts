@@ -44,7 +44,7 @@ const requireFound = (
 
 class AccountService {
 	constructor(
-		private readonly repository: AccountRepo,
+		private readonly repo: AccountRepo,
 		private readonly ledgerService: LedgerService
 	) {}
 
@@ -55,7 +55,7 @@ class AccountService {
 	): Effect.Effect<Account[], AccountListError> {
 		return this.ledgerService
 			.getLedger(organizationId, ledgerId)
-			.pipe(Effect.andThen(this.repository.list(organizationId, ledgerId, query)));
+			.pipe(Effect.andThen(this.repo.listAccounts(organizationId, ledgerId, query)));
 	}
 
 	getAccount(
@@ -63,8 +63,8 @@ class AccountService {
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Effect.Effect<Account, AccountGetError> {
-		return this.repository
-			.get(organizationId, ledgerId, accountId)
+		return this.repo
+			.getAccount(organizationId, ledgerId, accountId)
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId, accountId)));
 	}
 
@@ -81,7 +81,7 @@ class AccountService {
 					try: () => Account.fromRequest(id, organizationId, ledgerId, request),
 					catch: cause => new BadRequestError("Invalid Account Currency", { cause }),
 				});
-				return yield* this.repository.create(account).pipe(
+				return yield* this.repo.createAccount(account).pipe(
 					Effect.mapError(error =>
 						error instanceof AccountRepositoryUnavailable
 							? new ServiceUnavailableError(error.message, {
@@ -103,17 +103,10 @@ class AccountService {
 		request: AccountUpdateRequest
 	): Effect.Effect<Account, AccountUpdateError> {
 		return this.getAccount(organizationId, ledgerId, accountId).pipe(
-			Effect.flatMap(current =>
-				this.repository.update({
-					id: accountId,
-					organizationId,
-					ledgerId,
-					name: request.name,
-					description: request.description,
-					metadata: request.metadata,
-					expectedLockVersion: current.lockVersion,
-				})
-			)
+			Effect.flatMap(current => {
+				const account = current.updateFromRequest(request);
+				return this.repo.updateAccount(account);
+			})
 		);
 	}
 
@@ -122,8 +115,8 @@ class AccountService {
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Effect.Effect<Account, AccountDeleteError> {
-		return this.repository
-			.delete(organizationId, ledgerId, accountId)
+		return this.repo
+			.deleteAccount(organizationId, ledgerId, accountId)
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId, accountId)));
 	}
 }

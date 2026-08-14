@@ -20,20 +20,20 @@ type LedgerListQuery = {
 };
 
 interface LedgerRepo {
-	list(
+	listLedgers(
 		organizationId: OrgID,
 		query: LedgerListQuery
 	): Effect.Effect<Ledger[], LedgerInfrastructureError>;
-	get(
+	getLedger(
 		organizationId: OrgID,
 		ledgerId: LedgerID
 	): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError>;
-	create(record: Ledger): Effect.Effect<Ledger, LedgerCreateRepositoryError>;
-	update(record: Ledger): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError>;
-	delete(
+	createLedger(record: Ledger): Effect.Effect<Ledger, LedgerCreateRepositoryError>;
+	updateLedger(record: Ledger): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError>;
+	deleteLedger(
 		organizationId: OrgID,
 		ledgerId: LedgerID
-	): Effect.Effect<Option.Option<void>, LedgerDeleteRepositoryError>;
+	): Effect.Effect<Option.Option<Ledger>, LedgerDeleteRepositoryError>;
 }
 
 type LedgerCreateRepositoryError = LedgerInfrastructureError | OrganizationNotFound;
@@ -102,9 +102,9 @@ const requireDecoded = (
 class LedgerRepoLive implements LedgerRepo {
 	constructor(private readonly db: DrizzleDatabase) {}
 
-	list(
+	listLedgers(
 		organizationId: OrgID,
-		query: LedgerListQuery
+		{ limit, offset }: LedgerListQuery
 	): Effect.Effect<Ledger[], LedgerInfrastructureError> {
 		return Effect.tryPromise({
 			try: () =>
@@ -113,8 +113,8 @@ class LedgerRepoLive implements LedgerRepo {
 					.from(LedgersTable)
 					.where(eq(LedgersTable.organizationId, organizationId.toString()))
 					.orderBy(asc(LedgersTable.id))
-					.limit(query.limit)
-					.offset(query.offset),
+					.limit(limit)
+					.offset(offset),
 			catch: mapInfrastructureError,
 		}).pipe(
 			Effect.flatMap(rows => Effect.all(rows.map(row => Ledger.fromRow(row)))),
@@ -122,7 +122,7 @@ class LedgerRepoLive implements LedgerRepo {
 		);
 	}
 
-	get(
+	getLedger(
 		organizationId: OrgID,
 		ledgerId: LedgerID
 	): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError> {
@@ -142,7 +142,7 @@ class LedgerRepoLive implements LedgerRepo {
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}
 
-	create(record: Ledger): Effect.Effect<Ledger, LedgerCreateRepositoryError> {
+	createLedger(record: Ledger): Effect.Effect<Ledger, LedgerCreateRepositoryError> {
 		return Effect.tryPromise({
 			try: () => {
 				const row = record.toRow();
@@ -161,7 +161,7 @@ class LedgerRepoLive implements LedgerRepo {
 		}).pipe(Effect.flatMap(rows => requireDecoded(rows[0], errorContext(record))));
 	}
 
-	update(record: Ledger): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError> {
+	updateLedger(record: Ledger): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError> {
 		return Effect.tryPromise({
 			try: () => {
 				const row = record.toRow();
@@ -180,10 +180,10 @@ class LedgerRepoLive implements LedgerRepo {
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}
 
-	delete(
+	deleteLedger(
 		organizationId: OrgID,
 		ledgerId: LedgerID
-	): Effect.Effect<Option.Option<void>, LedgerDeleteRepositoryError> {
+	): Effect.Effect<Option.Option<Ledger>, LedgerDeleteRepositoryError> {
 		return Effect.tryPromise({
 			try: () =>
 				this.db
@@ -194,9 +194,9 @@ class LedgerRepoLive implements LedgerRepo {
 							eq(LedgersTable.organizationId, organizationId.toString())
 						)
 					)
-					.returning({ id: LedgersTable.id }),
+					.returning(publicColumns),
 			catch: cause => mapDeleteError(cause, organizationId, ledgerId),
-		}).pipe(Effect.map(rows => (rows[0] === undefined ? Option.none() : Option.void)));
+		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}
 }
 

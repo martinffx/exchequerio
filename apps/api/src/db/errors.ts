@@ -62,4 +62,18 @@ const postgresErrorCode = (cause: unknown, seen = new Set<object>()): string | u
 	return undefined;
 };
 
-export { isPostgresUnavailable, postgresErrorCode };
+const postgresConstraint = (cause: unknown, seen = new Set<object>()): string | undefined => {
+	if (!isRecord(cause) || seen.has(cause)) return undefined;
+	seen.add(cause);
+	if (typeof cause.constraint === "string") return cause.constraint;
+	const nested = postgresConstraint(cause.cause, seen);
+	if (nested !== undefined) return nested;
+	if (!Array.isArray(cause.errors)) return undefined;
+	for (const error of cause.errors) {
+		const constraint = postgresConstraint(error, seen);
+		if (constraint !== undefined) return constraint;
+	}
+	return undefined;
+};
+
+export { isPostgresUnavailable, postgresErrorCode, postgresConstraint };
