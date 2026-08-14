@@ -31,11 +31,22 @@ describe("Ledger", () => {
 		expect(ledger.updated).toEqual(ledger.created);
 	});
 
-	it("round-trips a complete Drizzle row", () => {
+	it("round-trips a complete create row", () => {
 		const ledger = Option.getOrThrow(Effect.runSync(Ledger.fromRow(row)));
 
 		expect(ledger.metadata).toEqual({ externalId: "book-42" });
-		expect(ledger.toRow()).toEqual(row);
+		expect(ledger.toCreateRow()).toEqual(row);
+	});
+
+	it("encodes only mutable fields in an update row", () => {
+		const ledger = Option.getOrThrow(Effect.runSync(Ledger.fromRow(row)));
+
+		expect(ledger.toUpdateRow()).toEqual({
+			name: row.name,
+			description: row.description,
+			metadata: row.metadata,
+			updated: row.updated,
+		});
 	});
 
 	it("returns None when no row exists", () => {

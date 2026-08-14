@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
-import type { LedgerRow } from "@/repo/schema";
+import type { LedgerCreateRow, LedgerRow, LedgerUpdateRow } from "@/repo/schema";
 import { parseId } from "@/lib/utils";
 import type { LedgerCreateRequest, LedgerUpdateRequest } from "../LedgerSchema";
 import { LedgerPersistenceDecodingFailure } from "../LedgerErrors";
@@ -94,7 +94,7 @@ class Ledger {
 		}).pipe(Effect.mapError(cause => new LedgerPersistenceDecodingFailure(cause)));
 	}
 
-	toRow(): LedgerRow {
+	toCreateRow(): LedgerCreateRow {
 		return {
 			id: this.id.toString(),
 			organizationId: this.organizationId.toString(),
@@ -104,6 +104,17 @@ class Ledger {
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
 			created: this.created,
+			updated: this.updated,
+		};
+	}
+
+	toUpdateRow(): LedgerUpdateRow {
+		return {
+			name: this.name,
+			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			description: this.description ?? null,
+			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
 			updated: this.updated,
 		};
 	}

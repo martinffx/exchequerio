@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
 import { OrganizationNotFound } from "@/organizations";
@@ -144,38 +144,24 @@ class LedgerRepoLive implements LedgerRepo {
 
 	createLedger(record: Ledger): Effect.Effect<Ledger, LedgerCreateRepositoryError> {
 		return Effect.tryPromise({
-			try: () => {
-				const row = record.toRow();
-				return this.db
-					.insert(LedgersTable)
-					.values({
-						id: row.id,
-						organizationId: row.organizationId,
-						name: row.name,
-						description: row.description,
-						metadata: row.metadata,
-					})
-					.returning(publicColumns);
-			},
+			try: () => this.db.insert(LedgersTable).values(record.toCreateRow()).returning(publicColumns),
 			catch: cause => mapCreateError(cause, record),
 		}).pipe(Effect.flatMap(rows => requireDecoded(rows[0], errorContext(record))));
 	}
 
 	updateLedger(record: Ledger): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError> {
 		return Effect.tryPromise({
-			try: () => {
-				const row = record.toRow();
-				return this.db
+			try: () =>
+				this.db
 					.update(LedgersTable)
-					.set({
-						name: row.name,
-						description: row.description,
-						metadata: row.metadata,
-						updated: sql`CURRENT_TIMESTAMP`,
-					})
-					.where(and(eq(LedgersTable.id, row.id), eq(LedgersTable.organizationId, row.organizationId)))
-					.returning(publicColumns);
-			},
+					.set(record.toUpdateRow())
+					.where(
+						and(
+							eq(LedgersTable.id, record.id.toString()),
+							eq(LedgersTable.organizationId, record.organizationId.toString())
+						)
+					)
+					.returning(publicColumns),
 			catch: cause => mapInfrastructureError(cause, errorContext(record)),
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}

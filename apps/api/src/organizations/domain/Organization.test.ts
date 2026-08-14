@@ -24,13 +24,23 @@ describe("Organization", () => {
 		expect(organization.created.toISO()).toBe("2026-08-04T10:00:00.000Z");
 	});
 
-	it("encodes a complete Drizzle row and round-trips all domain fields", () => {
+	it("encodes a complete create row and round-trips all domain fields", () => {
 		const organization = Option.getOrThrow(Effect.runSync(Organization.fromRow(row)));
-		const encoded = organization.toRow();
+		const encoded = organization.toCreateRow();
 		const decoded = Option.getOrThrow(Effect.runSync(Organization.fromRow(encoded)));
 
 		expect(encoded).toEqual(row);
-		expect(decoded.toRow()).toEqual(row);
+		expect(decoded.toCreateRow()).toEqual(row);
+	});
+
+	it("encodes only mutable fields in an update row", () => {
+		const organization = Option.getOrThrow(Effect.runSync(Organization.fromRow(row)));
+
+		expect(organization.toUpdateRow()).toEqual({
+			name: row.name,
+			description: row.description,
+			updated: row.updated,
+		});
 	});
 
 	it("returns None when no row exists", () => {

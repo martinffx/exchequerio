@@ -139,14 +139,18 @@ describe("LedgerRepoLive", () => {
 		expect(Option.getOrUndefined(found)?.metadata).toEqual({ externalId: "book-42" });
 	});
 
-	it("creates duplicate names with PostgreSQL timestamps", async () => {
+	it("creates duplicate names with application timestamps", async () => {
 		const organizationId = await createOrganization();
-		const first = await runRepo(repository => repository.createLedger(ledgerWrite(organizationId)));
-		const second = await runRepo(repository => repository.createLedger(ledgerWrite(organizationId)));
+		const firstRecord = ledgerWrite(organizationId);
+		const secondRecord = ledgerWrite(organizationId);
+		const first = await runRepo(repository => repository.createLedger(firstRecord));
+		const second = await runRepo(repository => repository.createLedger(secondRecord));
 
 		expect(first.id).not.toBe(second.id);
-		expect(first.created).toBeInstanceOf(Date);
-		expect(first.updated).toEqual(first.created);
+		expect(first.created).toEqual(firstRecord.created);
+		expect(first.updated).toEqual(firstRecord.updated);
+		expect(second.created).toEqual(secondRecord.created);
+		expect(second.updated).toEqual(secondRecord.updated);
 	});
 
 	it("maps a missing parent Organization to OrganizationNotFound", async () => {
@@ -179,20 +183,17 @@ describe("LedgerRepoLive", () => {
 				})
 			)
 		);
-		const updated = await runRepo(repository =>
-			repository.updateLedger(
-				ledgerWrite(organizationId, {
-					id: created.id,
-					name: "After",
-				})
-			)
-		);
+		const replacement = ledgerWrite(organizationId, {
+			id: created.id,
+			name: "After",
+		});
+		const updated = await runRepo(repository => repository.updateLedger(replacement));
 		const value = Option.getOrUndefined(updated);
 		expect(value).toMatchObject({ name: "After" });
 		expect(value?.description).toBeUndefined();
 		expect(value?.metadata).toBeUndefined();
 		expect(value?.created).toEqual(created.created);
-		expect(value?.updated.getTime()).toBeGreaterThanOrEqual(created.updated.getTime());
+		expect(value?.updated).toEqual(replacement.updated);
 	});
 
 	it("returns absence when update is missing or crosses Organizations and never inserts", async () => {

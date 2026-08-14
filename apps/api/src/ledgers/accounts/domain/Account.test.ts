@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { TypeID } from "typeid-js";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccountRow } from "@/repo/schema";
 import { makeCurrency, makeMinorUnits } from "../../domain/Currency";
 import { AccountPersistenceDecodingFailure } from "../AccountErrors";
@@ -54,6 +54,10 @@ const makeAccount = () =>
 	});
 
 describe("Account", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it("creates immutable fields and initial balances from a request", () => {
 		const id = new TypeID("lat");
 		const organizationId = new TypeID("org");
@@ -79,11 +83,31 @@ describe("Account", () => {
 		]);
 	});
 
-	it("round-trips a complete Drizzle row", () => {
+	it("round-trips a complete create row", () => {
 		const account = Option.getOrThrow(Effect.runSync(Account.fromRow(row)));
 
 		expect(account.metadata).toEqual({ source: "erp" });
-		expect(account.toRow()).toEqual(row);
+		expect(account.toCreateRow()).toEqual(row);
+	});
+
+	it("encodes an update row with application time and the next lock version", () => {
+		vi.useFakeTimers();
+		const updated = new Date("2026-08-10T12:00:00.000Z");
+		vi.setSystemTime(updated);
+		const account = makeAccount().updateFromRequest({
+			name: "Operating Cash",
+			metadata: { source: "treasury" },
+		});
+
+		expect(account.updated).toEqual(updated);
+		expect(account.toUpdateRow()).toEqual({
+			name: "Operating Cash",
+			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			description: null,
+			metadata: JSON.stringify({ source: "treasury" }),
+			lockVersion: 2,
+			updated,
+		});
 	});
 
 	it("returns None when no row exists", () => {
