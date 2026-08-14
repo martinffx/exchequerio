@@ -1,11 +1,12 @@
 import { Context, type Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive } from "@/db";
+import { ledgerLayer, type LedgerService } from "@/ledgers";
 import { organizationLayer, type OrganizationService } from "@/organizations";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
 
-type ServerRuntimeServices = Config | Database | OrganizationService;
+type ServerRuntimeServices = Config | Database | LedgerService | OrganizationService;
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
@@ -21,7 +22,7 @@ const makeServerRuntimeLayer = (
 		Layer.succeed(ServerConfigTag, config),
 		overrides.database ?? makeDatabaseLive(config.databaseUrl)
 	);
-	return organizationLayer.pipe(Layer.provideMerge(infrastructure));
+	return Layer.merge(ledgerLayer, organizationLayer).pipe(Layer.provideMerge(infrastructure));
 };
 
 class ServerRuntime<R, ER> {

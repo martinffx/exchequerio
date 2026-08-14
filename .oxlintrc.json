@@ -30,6 +30,16 @@
 		"boundaries/elements": [
 			{ "type": "tests", "pattern": "src/**/*.test.ts", "mode": "full" },
 			{ "type": "http", "pattern": "src/http/**/*", "mode": "full" },
+			{ "type": "ledger-composition", "pattern": "src/ledgers/index.ts", "mode": "full" },
+			{ "type": "ledger-routes", "pattern": "src/ledgers/LedgerRoutes.ts", "mode": "full" },
+			{ "type": "ledger-service", "pattern": "src/ledgers/LedgerService.ts", "mode": "full" },
+			{ "type": "ledger-repo", "pattern": "src/ledgers/LedgerRepo.ts", "mode": "full" },
+			{
+				"type": "ledger-domain",
+				"pattern": ["src/ledgers/domain/**/*", "src/ledgers/LedgerErrors.ts"],
+				"mode": "full"
+			},
+			{ "type": "ledger-transport", "pattern": "src/ledgers/LedgerSchema.ts", "mode": "full" },
 			{ "type": "organization-composition", "pattern": "src/organizations/index.ts", "mode": "full" },
 			{ "type": "organization-routes", "pattern": "src/organizations/OrganizationRoutes.ts", "mode": "full" },
 			{ "type": "organization-service", "pattern": "src/organizations/OrganizationService.ts", "mode": "full" },
@@ -42,7 +52,7 @@
 				"mode": "full"
 			},
 			{ "type": "database", "pattern": "src/db/**/*", "mode": "full" },
-			{ "type": "runtime", "pattern": "src/runtime/**/*", "mode": "full" },
+			{ "type": "runtime", "pattern": "src/runtime.ts", "mode": "full" },
 			{ "type": "legacy-route-contracts", "pattern": "src/routes/schema.ts", "mode": "full" },
 			{
 				"type": "legacy-ledger-route-contracts",
@@ -146,6 +156,7 @@
 							"legacy-ledger-route-contracts",
 							"legacy-services",
 							"legacy-entities",
+							"ledger-composition",
 							"organization-composition"
 						]
 					},
@@ -182,6 +193,53 @@
 					{
 						"from": ["legacy-ledger-route-contracts"],
 						"allow": ["legacy-route-contracts"]
+					},
+					{
+						"from": ["ledger-domain"],
+						"allow": ["ledger-domain", "http", "legacy-entities"]
+					},
+					{
+						"from": ["ledger-repo"],
+						"allow": [
+							"ledger-domain",
+							"database",
+							"organization-composition",
+							"legacy-entities",
+							"legacy-repo"
+						]
+					},
+					{
+						"from": ["ledger-service"],
+						"allow": [
+							"ledger-domain",
+							"ledger-repo",
+							"ledger-transport",
+							"http",
+							"legacy-entities"
+						]
+					},
+					{
+						"from": ["ledger-transport"],
+						"allow": ["ledger-domain"]
+					},
+					{
+						"from": ["ledger-routes"],
+						"allow": [
+							"ledger-domain",
+							"ledger-service",
+							"ledger-transport",
+							"http",
+							"legacy-entities"
+						]
+					},
+					{
+						"from": ["ledger-composition"],
+						"allow": [
+							"ledger-domain",
+							"ledger-repo",
+							"ledger-routes",
+							"ledger-service"
+						]
 					},
 					{
 						"from": ["organization-domain"],
@@ -239,7 +297,13 @@
 					{ "from": ["database"], "allow": ["database", "legacy-repo"] },
 					{
 						"from": ["runtime"],
-						"allow": ["config", "database", "organization-composition", "runtime"]
+						"allow": [
+							"config",
+							"database",
+							"ledger-composition",
+							"organization-composition",
+							"runtime"
+						]
 					},
 					{ "from": ["config"], "disallow": ["*"] },
 					{

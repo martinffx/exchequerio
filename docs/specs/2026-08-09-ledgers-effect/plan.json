@@ -1,0 +1,287 @@
+{
+  "feature": "ledgers-effect",
+  "spec": "docs/specs/2026-08-09-ledgers-effect/design.md",
+  "goal": "Migrate the five public Ledger operations to the existing Effect runtime while preserving legacy Currency consumers until step 03.",
+  "phases": [
+    {
+      "id": "P1",
+      "name": "Contracts and persistence",
+      "tasks": [
+        {
+          "id": "T1",
+          "name": "Add Ledger domain, error, and transport contracts",
+          "depends_on": [],
+          "inputs": [
+            "Approved Ledgers Effect design",
+            "Ledger terminology and invariants from CONTEXT.md",
+            "Existing LedgerID and OrgID branded types",
+            "Existing TypeBox and RFC 7807-compatible error conventions"
+          ],
+          "description": "Create a Currency-free immutable Ledger domain value and a LedgerWrite value for persistence commands. Add Ledger-specific not-found, dependency, repository-unavailable, decoding, and persistence errors while reusing the public OrganizationNotFound error for a missing parent. Define TypeBox schemas for canonical Ledger IDs, offset pagination capped at 10,000, create and update bodies with additionalProperties false, and Currency-free responses. Add the response mapper with ISO timestamps and omission of absent optional fields. The domain must not import Effect, Fastify, TypeBox, Drizzle, database rows, or environment code.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/domain/Ledger.ts",
+              "apps/api/src/ledgers/LedgerErrors.ts",
+              "apps/api/src/ledgers/LedgerSchema.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "Type-check the API package after adding the contracts"
+            ],
+            "acceptance": [
+              "Ledger and LedgerWrite contain no Currency or Minor Unit Exponent",
+              "Metadata accepts only string values",
+              "List offset defaults to 0 with a maximum of 10,000, and limit defaults to 20 with a maximum of 100",
+              "Create and update schemas remove undeclared input under the existing Fastify AJV configuration",
+              "Response mapping emits ISO timestamps and omits absent description and metadata"
+            ]
+          }
+        },
+        {
+          "id": "T2",
+          "name": "Implement repository reads and persisted-row decoding",
+          "depends_on": [
+            "T1"
+          ],
+          "inputs": [
+            "Ledger domain and error contracts from T1",
+            "DatabaseTag and the existing Drizzle LedgersTable",
+            "Shared parseId, PostgreSQL availability classifier, and PostgreSQL error-code classifier",
+            "Organization repository integration-test Layer pattern"
+          ],
+          "description": "Define LedgerRepo, LedgerRepoTag, LedgerRepoLive, and the repository Layer. Add a private decoder for Ledger and Organization IDs, UTC timestamps, JSON object shape, and string-valued metadata. Implement tenant-scoped list and get queries that select only public columns. Order lists by Ledger ID ascending, apply offset and limit in PostgreSQL, and return Option.none for a missing or cross-Organization get. Map unavailable queries to LedgerRepositoryUnavailable, decoding failures to LedgerPersistenceDecodingFailure, and other failures to LedgerPersistenceFailure.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/LedgerRepo.ts",
+              "apps/api/src/ledgers/LedgerRepo.test.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "List results are ordered by Ledger ID and paginated in PostgreSQL",
+              "List and get enforce Organization isolation",
+              "Get returns explicit absence for missing and cross-Organization rows",
+              "Valid string-valued metadata decodes",
+              "Invalid IDs, malformed JSON, non-object JSON, and non-string metadata values produce LedgerPersistenceDecodingFailure"
+            ],
+            "acceptance": [
+              "Normal queries select only id, organization_id, name, description, metadata, created, and updated",
+              "Every repository read includes the Organization ID in its SQL filter",
+              "Repository failures remain in the typed Effect error channel",
+              "The focused Ledger repository test passes against PostgreSQL"
+            ]
+          }
+        },
+        {
+          "id": "T3",
+          "name": "Implement separate repository writes and compatibility checks",
+          "depends_on": [
+            "T2"
+          ],
+          "inputs": [
+            "Ledger repository read implementation from T2",
+            "Existing database defaults for timestamps, currency, and currency_exponent",
+            "Retained legacy LedgerRepo.getLedger path",
+            "Existing Ledger Account foreign-key schema"
+          ],
+          "description": "Extend LedgerRepo with separate create, update, and delete operations without upsert. Create inserts only the generated ID, Organization ID, and public mutable fields so PostgreSQL supplies timestamps and legacy Currency defaults. Update filters by both IDs, replaces mutable fields, writes SQL NULL for omitted optional fields, sets updated with PostgreSQL time, and never inserts. Delete filters by both IDs and returns explicit absence. Map create 23503 to OrganizationNotFound, generated-ID 23505 to LedgerPersistenceFailure, and delete 23503 to LedgerHasDependents. Keep repository unavailability retryable at this boundary so the service can apply the create-specific policy.",
+          "files": {
+            "create": [],
+            "modify": [
+              "apps/api/src/ledgers/LedgerRepo.ts",
+              "apps/api/src/ledgers/LedgerRepo.test.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "Duplicate Ledger names can be created",
+              "Create receives PostgreSQL timestamps and legacy USD and 2 defaults",
+              "Create with a missing Organization maps 23503 to OrganizationNotFound",
+              "A generated-ID collision maps 23505 to LedgerPersistenceFailure",
+              "Update replaces mutable fields, clears omitted optionals, preserves created, and changes updated",
+              "Update of a missing or cross-Organization Ledger returns absence and never inserts",
+              "Updating a row with non-default legacy Currency and exponent preserves both values through the retained legacy read",
+              "Delete returns absence for missing and cross-Organization rows",
+              "A real dependent Ledger Account maps delete 23503 to LedgerHasDependents"
+            ],
+            "acceptance": [
+              "Create, update, and delete are distinct SQL operations",
+              "No write changes currency or currency_exponent",
+              "Every update and delete includes both Ledger and Organization IDs in its SQL filter",
+              "The complete Ledger repository test passes against PostgreSQL"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Service and HTTP",
+      "tasks": [
+        {
+          "id": "T4",
+          "name": "Add the Effect Ledger service",
+          "depends_on": [
+            "T3"
+          ],
+          "inputs": [
+            "Complete LedgerRepo capability from T3",
+            "Effect 4.0.0-beta.105 Context.Service and Layer conventions",
+            "Installed typeid-js library",
+            "Existing HttpError hierarchy"
+          ],
+          "description": "Add LedgerService with list, get, create, update, and delete operations that receive the authenticated Organization ID explicitly. Generate canonical Ledger IDs directly with typeid-js inside Effect.sync so generation remains lazy, and construct LedgerWrite values without an ID-generator service. Forward pagination and tenant identifiers unchanged. Convert absent get, update, and delete results to LedgerNotFound. Preserve typed repository failures except during create, where LedgerRepositoryUnavailable becomes a ServiceUnavailableError with retryable false. Export concrete service error-channel types and assemble the service Layer from LedgerRepoTag.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/LedgerService.ts",
+              "apps/api/src/ledgers/LedgerService.test.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "All five operations forward the Organization ID",
+              "List also forwards offset and limit",
+              "Create generates a canonical Ledger TypeID and calls only repository create",
+              "Update calls only repository update",
+              "Absent get, update, and delete results map to LedgerNotFound",
+              "Dependency and persistence failures remain typed",
+              "Create unavailability has retryable false",
+              "Unavailability from list, get, update, and delete retains retryable true",
+              "Compile-time assertions show every exported service error extends HttpError"
+            ],
+            "acceptance": [
+              "LedgerService is available through a Context service and Layer",
+              "Ledger ID generation remains lazy inside Effect.sync",
+              "The service contains no authentication, rate limiting, retry, or generic execution logic",
+              "The focused Ledger service test passes"
+            ]
+          }
+        },
+        {
+          "id": "T5",
+          "name": "Replace the public Ledger routes",
+          "depends_on": [
+            "T4"
+          ],
+          "inputs": [
+            "Ledger transport schemas and response mapper from T1",
+            "LedgerServiceTag from T4",
+            "Existing managed runtime and global error handler",
+            "Current Ledger permissions and direct Organization route pattern"
+          ],
+          "description": "Add direct Effect handlers for GET collection, GET item, POST, PUT, and DELETE on the existing Ledger paths. Parse path IDs with parseId, run programs through the managed server runtime, convert Effect results at the HTTP boundary, and throw typed failures to the global handler. Keep existing permissions. Advertise only failures the operations produce, omitting 409 from create and update and omitting 429 from every Ledger route. Return 201 with Location for create and an empty 204 for delete. Keep Fastify's current AJV configuration so additionalProperties false removes undeclared input.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/LedgerRoutes.ts",
+              "apps/api/src/ledgers/LedgerRoutes.test.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "The five existing permission declarations remain attached",
+              "All five handlers pass the authenticated Organization ID to the mocked service",
+              "Pagination defaults, the 10,000 maximum offset, and limit bounds are enforced",
+              "Malformed and noncanonical Ledger IDs return 400",
+              "Currency fields and arbitrary undeclared properties are stripped before POST and PUT reach the service",
+              "Missing and malformed declared fields return 400",
+              "Responses contain no Currency fields",
+              "Create returns 201 with Location and delete returns an empty 204",
+              "Not-found and dependency errors map to 404 and 409",
+              "Create-time unavailability maps to 503 with retryable false"
+            ],
+            "acceptance": [
+              "All five public paths and success representations match the approved design",
+              "Routes use LedgerService through the managed runtime",
+              "No Ledger route advertises 429 or a nonexistent conflict",
+              "The focused Ledger route test passes"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "Composition and verification",
+      "tasks": [
+        {
+          "id": "T6",
+          "name": "Wire the Effect slice and retire the legacy public router",
+          "depends_on": [
+            "T5"
+          ],
+          "inputs": [
+            "Ledger repository, service, and route Layers",
+            "Existing runtime composition and legacy child-resource router",
+            "Current architectural boundary configuration",
+            "Active Account, Transaction, and Settlement legacy Ledger consumers"
+          ],
+          "description": "Add the Ledger composition entrypoint and export only the domain, public errors, service contract and tag, routes, and composed Layer. Merge the Ledger and Organization Layers over the shared database infrastructure and add LedgerService to the runtime service type. Register the new Ledger routes through the existing child-resource router. Add Ledger domain, repository, service, transport, route, and composition elements with explicit dependency edges to the boundary configuration. Delete the old public LedgerRoutes implementation and its tests. Leave the legacy LedgerService, LedgerRepo, LedgerEntity, route schemas, RepoPlugin, and ServicePlugin intact for child-resource compatibility.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/index.ts"
+            ],
+            "modify": [
+              "apps/api/src/runtime.ts",
+              "apps/api/src/routes/ledgers/index.ts",
+              ".oxlintrc.json",
+              "apps/api/src/routes/ledgers/LedgerRoutes.ts",
+              "apps/api/src/routes/ledgers/LedgerRoutes.test.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "Run API type checking and architectural linting",
+              "Run all focused tests under apps/api/src/ledgers"
+            ],
+            "acceptance": [
+              "The server runtime provides both OrganizationService and LedgerService over one DatabaseTag",
+              "The legacy child-resource router registers the new public Ledger routes",
+              "Account, Transaction, and Settlement compatibility imports still resolve through the legacy stack",
+              "The new entrypoint exports no repository implementation, row decoder, or Currency-bearing compatibility model",
+              "The old public Ledger route and route test files are removed"
+            ]
+          }
+        },
+        {
+          "id": "T7",
+          "name": "Update the physical ERD and run complete validation",
+          "depends_on": [
+            "T6"
+          ],
+          "inputs": [
+            "Completed Effect Ledger slice",
+            "Approved compatibility boundary",
+            "Repository validation commands from AGENTS.md"
+          ],
+          "description": "Keep the physical Ledger Currency columns in the ERD and mark them as temporary compatibility storage. State that the public and Effect Ledger models exclude Currency until step 03 migrates child consumers. Run the focused Ledger tests and the full local CI pipeline. Review the final diff and verify that the implementation adds no migration, schema change, Ledger idempotency, shared AJV change, generic executor, reusable test harness, or HTTP-to-PostgreSQL suite.",
+          "files": {
+            "create": [],
+            "modify": [
+              "apps/api/docs/product/erd.md"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "pnpm run docker:up",
+              "pnpm --filter=@exchequerio/api test src/ledgers",
+              "pnpm run ci",
+              "git diff --check"
+            ],
+            "acceptance": [
+              "All targeted and complete checks pass",
+              "The ERD distinguishes temporary physical Currency storage from the public Ledger model",
+              "No migration or database-schema artifact is created",
+              "No unrelated work is changed",
+              "The final implementation matches every acceptance criterion in the approved design"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
