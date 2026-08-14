@@ -5,7 +5,6 @@ import { newLedgerAccountID, newLedgerID, newOrgID } from "@/repo/entities/types
 import { Ledger } from "../domain/Ledger";
 import type { LedgerService } from "../LedgerService";
 import { LedgerServiceTag } from "../LedgerService";
-import { makeCurrency, makeMinorUnits } from "../domain/Currency";
 import { Account } from "./domain/Account";
 import { AccountNotFound } from "./AccountErrors";
 import type { AccountRepo } from "./AccountRepo";
@@ -28,16 +27,16 @@ const account = new Account({
 	ledgerId,
 	name: "Cash",
 	normalBalance: "debit",
-	currency: makeCurrency("USD", 2),
-	pendingAmount: makeMinorUnits(0),
-	postedAmount: makeMinorUnits(0),
-	availableAmount: makeMinorUnits(0),
-	pendingCredits: makeMinorUnits(0),
-	pendingDebits: makeMinorUnits(0),
-	postedCredits: makeMinorUnits(0),
-	postedDebits: makeMinorUnits(0),
-	availableCredits: makeMinorUnits(0),
-	availableDebits: makeMinorUnits(0),
+	currency: { code: "USD", minorUnitExponent: 2 },
+	pendingAmount: 0,
+	postedAmount: 0,
+	availableAmount: 0,
+	pendingCredits: 0,
+	pendingDebits: 0,
+	postedCredits: 0,
+	postedDebits: 0,
+	availableCredits: 0,
+	availableDebits: 0,
 	lockVersion: 1,
 	created: new Date("2026-08-09T10:00:00.000Z"),
 	updated: new Date("2026-08-09T10:00:00.000Z"),
@@ -123,6 +122,17 @@ describe("AccountService", () => {
 				metadata: undefined,
 			},
 		},
+		{
+			name: "case-preserved currency code",
+			request: {
+				name: "Lowercase code",
+				description: undefined,
+				normalBalance: "debit" as const,
+				currencyCode: "usd",
+				minorUnitExponent: 2,
+				metadata: undefined,
+			},
+		},
 	])("creates Account domain state from $name", async ({ request }) => {
 		const repo = repository({
 			createAccount: vi.fn((record: Account) => Effect.succeed(record)),
@@ -190,6 +200,8 @@ describe("AccountService", () => {
 		{ currencyCode: "   ", minorUnitExponent: 2 },
 		{ currencyCode: "USD", minorUnitExponent: -1 },
 		{ currencyCode: "USD", minorUnitExponent: 1.5 },
+		{ currencyCode: "USD", minorUnitExponent: Number.POSITIVE_INFINITY },
+		{ currencyCode: "USD", minorUnitExponent: Number.MAX_SAFE_INTEGER + 1 },
 	])(
 		"maps invalid Account Currency $currencyCode/$minorUnitExponent to BadRequestError",
 		async ({ currencyCode, minorUnitExponent }) => {

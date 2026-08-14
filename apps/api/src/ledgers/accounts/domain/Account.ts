@@ -4,13 +4,7 @@ import type { AccountCreateRow, AccountRow, AccountUpdateRow } from "@/repo/sche
 import { parseId } from "@/lib/utils";
 import type { AccountCreateRequest, AccountUpdateRequest } from "../AccountSchema";
 import { AccountPersistenceDecodingFailure } from "../AccountErrors";
-import {
-	makeCurrency,
-	makeMinorUnits,
-	type Currency,
-	type MinorUnits,
-	type NormalBalance,
-} from "../../domain/Currency";
+import { makeCurrency, type Currency } from "./Currency";
 
 type AccountMetadata = Readonly<Record<string, string>>;
 
@@ -20,17 +14,17 @@ type AccountOptions = {
 	readonly ledgerId: LedgerID;
 	readonly name: string;
 	readonly description?: string;
-	readonly normalBalance: NormalBalance;
+	readonly normalBalance: "debit" | "credit";
 	readonly currency: Currency;
-	readonly pendingAmount: MinorUnits;
-	readonly postedAmount: MinorUnits;
-	readonly availableAmount: MinorUnits;
-	readonly pendingCredits: MinorUnits;
-	readonly pendingDebits: MinorUnits;
-	readonly postedCredits: MinorUnits;
-	readonly postedDebits: MinorUnits;
-	readonly availableCredits: MinorUnits;
-	readonly availableDebits: MinorUnits;
+	readonly pendingAmount: number;
+	readonly postedAmount: number;
+	readonly availableAmount: number;
+	readonly pendingCredits: number;
+	readonly pendingDebits: number;
+	readonly postedCredits: number;
+	readonly postedDebits: number;
+	readonly availableCredits: number;
+	readonly availableDebits: number;
 	readonly lockVersion: number;
 	readonly metadata?: AccountMetadata;
 	readonly created: Date;
@@ -40,9 +34,9 @@ type AccountOptions = {
 type AccountBalanceType = "pending" | "posted" | "availableBalance";
 type AccountBalance = Readonly<{
 	balanceType: AccountBalanceType;
-	credits: MinorUnits;
-	debits: MinorUnits;
-	amount: MinorUnits;
+	credits: number;
+	debits: number;
+	amount: number;
 }>;
 
 const decodeDate = (value: Date): Date => {
@@ -71,23 +65,28 @@ const decodeLockVersion = (value: number): number => {
 	return value;
 };
 
+const decodeMinorUnits = (value: number): number => {
+	if (!Number.isSafeInteger(value)) throw new Error("Invalid Account balance");
+	return value;
+};
+
 class Account {
 	readonly id: LedgerAccountID;
 	readonly organizationId: OrgID;
 	readonly ledgerId: LedgerID;
 	readonly name: string;
 	readonly description?: string;
-	readonly normalBalance: NormalBalance;
+	readonly normalBalance: AccountOptions["normalBalance"];
 	readonly currency: Currency;
-	readonly pendingAmount: MinorUnits;
-	readonly postedAmount: MinorUnits;
-	readonly availableAmount: MinorUnits;
-	readonly pendingCredits: MinorUnits;
-	readonly pendingDebits: MinorUnits;
-	readonly postedCredits: MinorUnits;
-	readonly postedDebits: MinorUnits;
-	readonly availableCredits: MinorUnits;
-	readonly availableDebits: MinorUnits;
+	readonly pendingAmount: number;
+	readonly postedAmount: number;
+	readonly availableAmount: number;
+	readonly pendingCredits: number;
+	readonly pendingDebits: number;
+	readonly postedCredits: number;
+	readonly postedDebits: number;
+	readonly availableCredits: number;
+	readonly availableDebits: number;
 	readonly lockVersion: number;
 	readonly metadata?: AccountMetadata;
 	readonly created: Date;
@@ -123,7 +122,7 @@ class Account {
 		request: AccountCreateRequest
 	): Account {
 		const now = new Date();
-		const zero = makeMinorUnits(0);
+		const zero = 0;
 		return new Account({
 			id,
 			organizationId,
@@ -160,15 +159,15 @@ class Account {
 			const decoded = yield* Effect.try({
 				try: () => ({
 					currency: makeCurrency(row.currencyCode, row.minorUnitExponent),
-					pendingAmount: makeMinorUnits(row.pendingAmount),
-					postedAmount: makeMinorUnits(row.postedAmount),
-					availableAmount: makeMinorUnits(row.availableAmount),
-					pendingCredits: makeMinorUnits(row.pendingCredits),
-					pendingDebits: makeMinorUnits(row.pendingDebits),
-					postedCredits: makeMinorUnits(row.postedCredits),
-					postedDebits: makeMinorUnits(row.postedDebits),
-					availableCredits: makeMinorUnits(row.availableCredits),
-					availableDebits: makeMinorUnits(row.availableDebits),
+					pendingAmount: decodeMinorUnits(row.pendingAmount),
+					postedAmount: decodeMinorUnits(row.postedAmount),
+					availableAmount: decodeMinorUnits(row.availableAmount),
+					pendingCredits: decodeMinorUnits(row.pendingCredits),
+					pendingDebits: decodeMinorUnits(row.pendingDebits),
+					postedCredits: decodeMinorUnits(row.postedCredits),
+					postedDebits: decodeMinorUnits(row.postedDebits),
+					availableCredits: decodeMinorUnits(row.availableCredits),
+					availableDebits: decodeMinorUnits(row.availableDebits),
 					lockVersion: decodeLockVersion(row.lockVersion),
 					metadata: decodeMetadata(row.metadata),
 					created: decodeDate(row.created),

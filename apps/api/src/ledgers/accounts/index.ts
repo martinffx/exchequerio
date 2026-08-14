@@ -6,6 +6,7 @@ const accountLayer = accountServiceLayer.pipe(Layer.provide(accountRepoLayer));
 
 export { Account } from "./domain/Account";
 export type { AccountBalance, AccountMetadata, AccountOptions } from "./domain/Account";
+export { currencyEquals } from "./domain/Currency";
 export {
 	AccountHasDependents,
 	AccountNameConflict,

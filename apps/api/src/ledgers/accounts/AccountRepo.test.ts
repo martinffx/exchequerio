@@ -3,7 +3,7 @@ import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
-import { LedgerNotFound, makeCurrency } from "@/ledgers";
+import { LedgerNotFound } from "@/ledgers";
 import {
 	type LedgerAccountID,
 	type LedgerID,
@@ -37,7 +37,7 @@ const accountCreate = (
 		Pick<Account, "id" | "name" | "description" | "normalBalance" | "currency" | "metadata">
 	> = {}
 ): Account => {
-	const currency = overrides.currency ?? makeCurrency("USD", 2);
+	const currency = overrides.currency ?? { code: "USD", minorUnitExponent: 2 };
 	return Account.fromRequest(overrides.id ?? newLedgerAccountID(), organizationId, ledgerId, {
 		name: overrides.name ?? "Cash",
 		description: overrides.description,
@@ -160,7 +160,7 @@ describe("AccountRepoLive", () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const record = accountCreate(organizationId, ledgerId, {
 			description,
-			currency: makeCurrency("US0378331005", 4),
+			currency: { code: "US0378331005", minorUnitExponent: 4 },
 			metadata,
 		});
 		const created = await runAccountRepo(repository => repository.createAccount(record));
