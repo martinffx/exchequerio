@@ -9,8 +9,11 @@
 	"scripts": {
 		"docker:up": "docker-compose --profile infra up -d",
 		"docker:up:api": "docker-compose --profile api up -d --build",
-		"docker:down": "docker-compose down",
-		"docker:logs": "docker-compose logs -f db",
+		"docker:down": "docker-compose --profile \"*\" down",
+		"docker:logs": "docker-compose --profile \"*\" logs -f",
+		"docker:logs:db": "docker-compose --profile infra logs -f db",
+		"docker:logs:redis": "docker-compose --profile infra logs -f valkey",
+		"docker:logs:api": "docker-compose --profile api logs -f api",
 		"dev": "pnpm run docker:up && turbo dev",
 		"dev:api": "pnpm run docker:up && turbo dev --filter=@exchequerio/api",
 		"dev:web": "turbo dev --filter=@exchequerio/web",
