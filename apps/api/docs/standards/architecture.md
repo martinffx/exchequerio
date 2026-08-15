@@ -10,7 +10,7 @@
 - **Documentation:** Auto-generated OpenAPI/Swagger
 
 ### Supporting Technologies
-- **Testing:** Jest with ts-jest transform
+- **Testing:** Vitest
 - **Linting/Formatting:** Oxlint and Oxfmt
 - **Environment:** @dotenvx/dotenvx for configuration
 - **Containerization:** Docker with docker-compose for development
@@ -22,9 +22,14 @@
 JWT Auth → Routes → Services → Repositories → PostgreSQL Database
 ```
 
+The API is migrating by resource. Effect-based slices and remaining plugin-based resources coexist.
+Transactions live under `src/ledgers/transactions/` and run through the shared managed Effect
+runtime. Legacy resources retain their `src/routes/`, `src/services/`, and `src/repo/` layout until
+they migrate.
+
 ### Layer Responsibilities
 
-#### **Route Layer** (`src/routes/`)
+#### **Route Layer**
 - HTTP request/response handling
 - Runtime type validation using TypeBox schemas
 - JWT authentication and authorization
@@ -36,20 +41,21 @@ JWT Auth → Routes → Services → Repositories → PostgreSQL Database
 - Use TypeBox schemas for request/response validation
 - Implement proper HTTP status codes
 - Include comprehensive error handling
+- Keep migrated routes with their resource slice; keep remaining routes under `src/routes/`
 
-#### **Service Layer** (`src/services/`)
+#### **Service Layer**
 - Domain business logic implementation
 - Transaction orchestration and validation
 - Entity transformation and validation
 - Cross-cutting concerns (logging, monitoring)
 
 **Standards:**
-- Services injected via Fastify plugins
-- Available on `server.services` namespace
+- Migrated slices expose Effect services through the shared managed runtime
+- Remaining services use Fastify plugins and the existing `server.services` namespace
 - No direct HTTP concerns (request/response objects)
 - Implement comprehensive business rule validation
 
-#### **Repository Layer** (`src/repo/`)
+#### **Repository Layer**
 - Data access abstraction
 - Database query implementation
 - Transaction management
@@ -60,31 +66,33 @@ JWT Auth → Routes → Services → Repositories → PostgreSQL Database
 - Implement atomic operations with proper locking
 - Abstract database implementation details
 - Handle database-specific error scenarios
+- Keep migrated repositories with their resource slice; keep remaining repositories under
+  `src/repo/`
 
-#### **Entity Layer** (`src/services/entities/`)
+#### **Entity Layer**
 - Domain model definitions
 - Data transformation methods
 - Input validation logic
 - Business rule enforcement
 
 **Standards:**
-- Implement transformation methods: `fromRequest`, `toRecord`, `toResponse`, `validate`
 - Encapsulate business logic within entities
 - Provide type-safe data contracts
 - Handle data normalization and validation
+- Keep migrated domain types with their resource slice; legacy entities retain their existing
+  location until migration
 
-## Plugin System Architecture
+## Runtime and Plugin Composition
 
-### Core Plugins
-- **RepoPlugin** - Registers database repositories using Drizzle ORM
-- **ServicePlugin** - Registers business logic services with dependency injection
-- **RouterPlugin** - Registers HTTP route handlers with JWT authentication
+Fastify owns one managed Effect runtime for migrated services and disposes it when the server closes.
+Routes run Effect programs through `server.runtime`. The existing repository and service plugins
+continue to compose resources that have not migrated.
 
-### Plugin Registration Pattern
+### Coexistence Pattern
 ```typescript
-// All plugins extend Fastify instance via module declaration
 declare module "fastify" {
   interface FastifyInstance {
+    runtime: ServerRuntime<ServerRuntimeServices, never>
     repositories: RepositoryContainer
     services: ServiceContainer
   }
@@ -117,135 +125,142 @@ declare module "fastify" {
 ### Financial Data Constraints
 ```sql
 -- Race condition prevention
-SELECT ... FOR UPDATE on balance updates
+SELECT ... FROM ledger_accounts ORDER BY id FOR UPDATE;
 
--- Double-entry accounting enforcement
-CHECK (SUM(debit_entries) = SUM(credit_entries)) per transaction
+-- Domain validation before persistence
+Debit totals = Credit totals for each (currency_code, minor_unit_exponent) pair
 
 -- Immutable entries
-No UPDATEs allowed on transaction entries
+Posted Transactions and their Entries cannot change
 
 -- Idempotency support
-UNIQUE constraints on idempotency keys
+UNIQUE (organization_id, idempotency_key)
 ```
 
 ### Database Schema Design
 ```sql
--- Double-entry accounting enforcement
+-- Four authoritative Account counters; balance views are derived
+CREATE TABLE ledger_accounts (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  ledger_id TEXT NOT NULL,
+  currency_code TEXT NOT NULL,
+  minor_unit_exponent INTEGER NOT NULL,
+  pending_credits BIGINT NOT NULL DEFAULT 0,
+  pending_debits BIGINT NOT NULL DEFAULT 0,
+  posted_credits BIGINT NOT NULL DEFAULT 0,
+  posted_debits BIGINT NOT NULL DEFAULT 0,
+  lock_version INTEGER NOT NULL DEFAULT 0,
+  created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  UNIQUE (organization_id, ledger_id, id)
+);
+
 CREATE TABLE ledger_transactions (
   id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
   ledger_id TEXT NOT NULL,
-  description TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'posted', 'archived')),
-  effective_at TIMESTAMP WITH TIME ZONE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  idempotency_key TEXT,
+  description TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'posted', 'voided')),
+  posted_at TIMESTAMP WITH TIME ZONE,
+  created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  UNIQUE (organization_id, ledger_id, id),
+  UNIQUE (organization_id, idempotency_key)
 );
 
--- Immutable transaction entries
 CREATE TABLE ledger_transaction_entries (
   id TEXT PRIMARY KEY,
-  transaction_id TEXT NOT NULL REFERENCES ledger_transactions(id),
-  account_id TEXT NOT NULL REFERENCES ledger_accounts(id),
+  organization_id TEXT NOT NULL,
+  ledger_id TEXT NOT NULL,
+  transaction_id TEXT NOT NULL,
+  account_id TEXT NOT NULL,
   direction TEXT NOT NULL CHECK (direction IN ('debit', 'credit')),
-  amount NUMERIC(15, 2) NOT NULL CHECK (amount >= 0),
-  currency TEXT NOT NULL,
-  description TEXT,
-  effective_at TIMESTAMP WITH TIME ZONE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Balance constraint enforcement
-ALTER TABLE ledger_transaction_entries 
-ADD CONSTRAINT check_transaction_balance 
-CHECK (
-  0 = (
-    SELECT COALESCE(SUM(CASE WHEN direction = 'debit' THEN amount ELSE -amount END), 0)
-    FROM ledger_transaction_entries 
-    WHERE transaction_id = ledger_transaction_entries.transaction_id
-  )
+  amount BIGINT NOT NULL CHECK (amount > 0 AND amount <= 9007199254740991),
+  created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  FOREIGN KEY (organization_id, ledger_id, transaction_id)
+    REFERENCES ledger_transactions (organization_id, ledger_id, id),
+  FOREIGN KEY (organization_id, ledger_id, account_id)
+    REFERENCES ledger_accounts (organization_id, ledger_id, id)
 );
 ```
 
 ### Race Condition Prevention
 ```sql
--- Optimistic locking for balance updates
-ALTER TABLE ledger_accounts 
-ADD COLUMN lock_version INTEGER NOT NULL DEFAULT 1;
-
--- Balance calculation with row locking
-SELECT 
-  account_id,
-  posted_balance,
-  pending_balance,
-  available_balance,
+-- Lock every affected Account in one deterministic order
+SELECT
+  id,
+  pending_credits,
+  pending_debits,
+  posted_credits,
+  posted_debits,
   lock_version
-FROM ledger_accounts 
-WHERE id = $1
+FROM ledger_accounts
+WHERE organization_id = $1
+  AND ledger_id = $2
+  AND id = ANY($3)
+ORDER BY id
 FOR UPDATE;
 ```
 
 ### Performance Optimization
 ```sql
--- Strategic indexing
-CREATE INDEX idx_ledger_accounts_ledger_id ON ledger_accounts(ledger_id);
-CREATE INDEX idx_ledger_transactions_ledger_id ON ledger_transactions(ledger_id);
-CREATE INDEX idx_ledger_transaction_entries_transaction_id ON ledger_transaction_entries(transaction_id);
-CREATE INDEX idx_ledger_transaction_entries_account_id ON ledger_transaction_entries(account_id);
-
--- Time-based queries
-CREATE INDEX idx_ledger_transactions_effective_at ON ledger_transactions(effective_at DESC);
-CREATE INDEX idx_ledger_transaction_entries_effective_at ON ledger_transaction_entries(effective_at DESC);
-
--- Status-based queries
-CREATE INDEX idx_ledger_transactions_status ON ledger_transactions(status) WHERE status IN ('pending', 'posted');
-CREATE INDEX idx_ledger_transaction_entries_status ON ledger_transaction_entries(status) WHERE status IN ('pending', 'posted');
+CREATE INDEX idx_ledger_transactions_ledger_created_id
+  ON ledger_transactions (ledger_id, created DESC, id DESC);
+CREATE INDEX idx_ledger_transactions_organization
+  ON ledger_transactions (organization_id);
+CREATE INDEX idx_ledger_transactions_status
+  ON ledger_transactions (status);
+CREATE INDEX idx_ledger_transaction_entries_transaction
+  ON ledger_transaction_entries (transaction_id);
+CREATE INDEX idx_ledger_transaction_entries_account
+  ON ledger_transaction_entries (account_id);
 ```
 
 ### Data Consistency Standards
 ```sql
--- Atomic transaction creation
 BEGIN;
 
--- Lock accounts for balance updates
-SELECT lock_version FROM ledger_accounts WHERE id = $1 FOR UPDATE;
-SELECT lock_version FROM ledger_accounts WHERE id = $2 FOR UPDATE;
+-- Lock the tenant-scoped Accounts in ascending ID order.
+SELECT id, lock_version
+FROM ledger_accounts
+WHERE organization_id = $1 AND ledger_id = $2 AND id = ANY($3)
+ORDER BY id
+FOR UPDATE;
 
--- Create transaction
-INSERT INTO ledger_transactions (id, ledger_id, description, status, effective_at)
-VALUES ($3, $4, $5, 'pending', $6);
+INSERT INTO ledger_transactions
+  (id, organization_id, ledger_id, idempotency_key, description, status, created, updated)
+VALUES ($4, $1, $2, $5, $6, 'pending', $7, $7);
 
--- Create entries
-INSERT INTO ledger_transaction_entries (id, transaction_id, account_id, direction, amount, currency, effective_at)
-VALUES 
-  ($7, $3, $1, 'debit', $8, $9, $6),
-  ($10, $3, $2, 'credit', $8, $9, $6);
+INSERT INTO ledger_transaction_entries
+  (id, organization_id, ledger_id, transaction_id, account_id, direction, amount, created)
+VALUES
+  ($8, $1, $2, $4, $9, 'debit', $10, $7),
+  ($11, $1, $2, $4, $12, 'credit', $10, $7);
 
--- Update account balances
-UPDATE ledger_accounts 
-SET 
-  posted_balance = posted_balance + CASE WHEN direction = 'credit' THEN amount ELSE -amount END,
-  pending_balance = pending_balance + CASE WHEN direction = 'credit' THEN amount ELSE -amount END,
-  lock_version = lock_version + 1
-FROM ledger_transaction_entries
-WHERE ledger_transaction_entries.account_id = ledger_accounts.id
-  AND ledger_transaction_entries.transaction_id = $3;
+-- Apply one domain-derived aggregate delta per Account.
+UPDATE ledger_accounts
+SET pending_debits = pending_debits + $13,
+    pending_credits = pending_credits + $14,
+    posted_debits = posted_debits + $15,
+    posted_credits = posted_credits + $16,
+    lock_version = lock_version + 1,
+    updated = $7
+WHERE organization_id = $1 AND ledger_id = $2 AND id = $9 AND lock_version = $17;
 
 COMMIT;
 ```
 
 ### Idempotency Support
 ```sql
--- Idempotency key constraints
-ALTER TABLE ledger_transactions 
-ADD CONSTRAINT unique_idempotency_key 
-UNIQUE (idempotency_key);
+CREATE UNIQUE INDEX unique_ledger_transactions_organization_idempotency_key
+  ON ledger_transactions (organization_id, idempotency_key);
 
--- Safe retry handling
-INSERT INTO ledger_transactions (id, ledger_id, description, status, effective_at, idempotency_key)
-VALUES ($1, $2, $3, 'pending', $4, $5)
-ON CONFLICT (idempotency_key) 
+-- PostgreSQL is the exact recovery boundary after a Valkey-first claim.
+INSERT INTO ledger_transactions (id, organization_id, ledger_id, status, idempotency_key)
+VALUES ($1, $2, $3, 'pending', $4)
+ON CONFLICT (organization_id, idempotency_key)
 DO NOTHING
 RETURNING id;
 ```

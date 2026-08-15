@@ -84,18 +84,14 @@ _Avoid_: Settled transaction, finalized transaction
 A retained Pending Transaction that was abandoned and has no balance effect. A Posted Transaction cannot become Voided.
 _Avoid_: Archived transaction, deleted transaction
 
-**Effective Time**:
-The time at which a Transaction applies to balance and reporting calculations. A future-effective Transaction is excluded from current balances until its Effective Time, even when already Posted.
-_Avoid_: Settlement time
-
 **Posted Time**:
-The time at which a Pending Transaction became immutable as a Posted Transaction. It records internal accounting finality, not external settlement.
+The server-recorded time at which a Transaction became Posted. For a Transaction created as Posted, Posted Time equals Created Time; for a Pending Transaction, it records the later transition to Posted. It records internal accounting finality, not external settlement.
 
 **Created Time**:
-The time at which a Ledger resource was first created.
+The server-recorded time at which a Ledger resource was first created.
 
 **Updated Time**:
-The time at which a mutable Ledger resource was most recently changed.
+The server-recorded time at which a mutable Ledger resource was most recently changed. It equals Created Time until the resource changes.
 _Avoid_: Recorded time
 
 ## Balance views
@@ -104,14 +100,14 @@ _Avoid_: Recorded time
 A rebuildable projection of Ledger Entries for one Account or Category, one Asset, and an as-of time. Ledger Entries are the accounting source of truth.
 
 **Posted Balance**:
-The balance calculated from effective Posted Transactions only.
+The balance calculated from Posted Transactions only.
 
 **Pending Balance**:
-The projected balance calculated from effective Posted and Pending Transactions.
+The projected balance calculated from Posted and Pending Transactions.
 _Avoid_: Pending-only balance
 
 **Available Balance**:
-The conservative spendable projection that includes effective Posted increases and both Posted and Pending decreases, while excluding Pending increases.
+The conservative spendable projection that includes Posted increases and both Posted and Pending decreases, while excluding Pending increases.
 _Avoid_: Posted balance, cash balance
 
 **Negative Balance**:
@@ -125,11 +121,8 @@ An immutable, versioned snapshot of an Account for a defined period. It copies t
 _Avoid_: Live account report
 
 **Ledger Account Settlement**:
-A netting operation that selects previously unsettled Posted Entries from one Account and links them to an offsetting Ledger Transaction between that Account and a contra Account. Entries omitted by an earlier cutoff remain eligible, each Entry belongs to at most one active or Posted Settlement, and voiding a Pending Settlement releases its Entries.
+A netting operation that selects previously unsettled Posted Entries from one Account and links them to an offsetting Ledger Transaction between that Account and a contra Account. Entries not selected remain eligible, each Entry belongs to at most one active or Posted Settlement, and voiding a Pending Settlement releases its Entries.
 _Avoid_: Bank settlement, payment settlement
-
-**Settlement Cutoff**:
-The Effective Time upper bound used to select eligible Posted Entries for a Ledger Account Settlement. Entries may instead be selected explicitly while drafting the Settlement.
 
 **Balance Monitor**:
 An alerting rule evaluated against a Ledger Account balance. It emits when its condition crosses from false to true and rearms only after the condition becomes false; it never blocks a Transaction.
@@ -187,4 +180,4 @@ A bank-issued addressing or reconciliation mechanism owned by a payments system.
 >
 > **Developer:** When the Transaction is Posted, it becomes immutable, but that does not claim the broker trade has externally settled.
 >
-> **Domain expert:** Exactly. Its Effective Time controls when it appears in balances, and external settlement can be linked later through an External Reference.
+> **Domain expert:** Exactly. Its Entries affect the Posted Balance immediately, and external settlement can be linked later through an External Reference.

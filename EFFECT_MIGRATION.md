@@ -377,21 +377,22 @@ Every step must satisfy all applicable checks before integration:
 - Permit several Entries for one Account.
 - Permit several currencies in one Transaction, balanced independently by Currency and exponent.
 - Enforce same-Organization and same-Ledger Accounts at application and database boundaries.
-- Implement correct Pending, Posted, and Available balance views.
-- Respect Effective Time for current and as-of balance calculations.
-- Implement reachable client idempotency with replay returning the original result without repeated
-  balance effects.
+- Derive Pending, Posted, and Available balance views from four Account counters.
+- Use server-owned Created, Updated, and Posted Times; Transactions affect current projections
+  immediately according to lifecycle state.
+- Implement Organization-scoped, Valkey-first create idempotency with replay returning the original
+  result without repeated balance effects.
 - Make create, post, update, and void operations atomic and concurrency-safe.
 - Acquire Account locks in deterministic order and retry only typed retryable conflicts.
 - Make Posted Transactions immutable.
-- Replace physical deletion with retained Voided Transactions.
-- Add tests for rollback, concurrency, idempotency, lifecycle races, future Effective Time,
-  multi-Currency balancing, and repeated Entries on one Account.
+- Retain Voided Transactions and their Entries for reads.
+- Add tests for rollback, concurrency, idempotency, lifecycle races, multi-Currency balancing, and
+  repeated Entries on one Account.
 
 ### Brainstorm prompt
 
 ```text
-/spec-brainstorm Migrate Ledger Transactions to Effect and complete all Transaction endpoints. Use Account-owned Currency, allow multi-Currency Transactions that balance independently per Currency, and design Pending/Posted/Voided lifecycle, Effective Time, three balance views, idempotency, atomic persistence, locking, retries, immutability, and full-stack concurrency tests. Use branch feat/transactions-effect and worktree .worktrees/transactions-effect.
+/spec-brainstorm Migrate Ledger Transactions to Effect and complete all Transaction endpoints. Use Account-owned Currency, allow multi-Currency Transactions that balance independently per Currency, and design Pending/Posted/Voided lifecycle, server-owned Created/Updated/Posted Times, the four-counter balance projection, Valkey-first idempotency, atomic persistence, locking, retries, immutability, and full-stack concurrency tests. Use branch feat/transactions-effect and worktree .worktrees/transactions-effect.
 ```
 
 ## Step 05: Categories
@@ -433,20 +434,20 @@ Every step must satisfy all applicable checks before integration:
 - Migrate all eight Settlement endpoints to Effect.
 - Enforce Organization, Ledger, and nested Settlement path scope.
 - Require the settled and contra Accounts to use the same Currency and exponent.
-- Select eligible Posted Entries explicitly or by Effective Time cutoff.
+- Defer Entry selection and cutoff semantics to the approved Settlement design.
 - Calculate the signed net Amount rather than the unsigned gross sum.
 - Enforce one active or Posted Settlement claim per Entry at database level.
 - Allow abandoned/Voided claims to release Entries for later Settlement.
 - Implement the complete Settlement lifecycle with expected-current-state updates.
 - Create and link the offsetting Transaction atomically with the Settlement transition.
-- Return the actual transaction link, cutoff, external reference, Currency, and lifecycle state.
+- Return the actual transaction link, external reference, Currency, and lifecycle state.
 - Test attachment races, release/reuse, signed netting, rollback, and path mismatch through the real
   stack.
 
 ### Brainstorm prompt
 
 ```text
-/spec-brainstorm Migrate Ledger Account Settlements to Effect and complete all eight endpoints. Read EFFECT_MIGRATION.md and design same-Currency Account validation, cutoff and explicit Entry selection, signed netting, database-safe Entry exclusivity, lifecycle and release rules, and atomic creation/linking of the offsetting Transaction. Use branch feat/settlements-effect and worktree .worktrees/settlements-effect.
+/spec-brainstorm Migrate Ledger Account Settlements to Effect and complete all eight endpoints. Read EFFECT_MIGRATION.md and design same-Currency Account validation, Entry selection semantics, signed netting, database-safe Entry exclusivity, lifecycle and release rules, and atomic creation/linking of the offsetting Transaction. Use branch feat/settlements-effect and worktree .worktrees/settlements-effect.
 ```
 
 ## Step 07: Statements

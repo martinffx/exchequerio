@@ -36,7 +36,7 @@ export interface CreateLedgerRequest {
 const ledger = await ledgerRepo.create(request); // Type inferred
 
 // Use const assertions for literal types
-const TRANSACTION_STATUSES = ["pending", "posted", "archived"] as const;
+const TRANSACTION_STATUSES = ["pending", "posted", "voided"] as const;
 type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
 ```
 

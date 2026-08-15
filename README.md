@@ -22,6 +22,10 @@ pnpm run dev
 
 API runs at `http://localhost:3000` • Web dashboard at `http://localhost:5173`
 
+The API reads PostgreSQL from `DATABASE_URL` and Valkey from `VALKEY_URL`. The example environment
+uses `postgresql://postgres:password@localhost:5432/ledger?schema=public` and
+`redis://localhost:6379`.
+
 ## What's Inside
 
 ### Running Applications
@@ -46,9 +50,8 @@ Tests run through the repository's Vitest scripts.
 # Run all tests across all apps (auto-starts PostgreSQL and Valkey, uses Vitest)
 pnpm run test
 
-# Test specific app (uses Vitest)
+# Test the API (uses Vitest)
 pnpm --filter=@exchequerio/api test    # Requires PostgreSQL and Valkey
-pnpm --filter=@exchequerio/web test
 
 # Start PostgreSQL and Valkey manually first (optional)
 pnpm run docker:up
@@ -81,7 +84,7 @@ Transaction creation throughput and latency across different contention levels:
 **Key Insights:**
 - **Throughput degradation** (high vs low contention): 52.25%
 - **P97.5 latency increase** (high vs low contention): 10.92%
-- Optimistic locking with exponential backoff retry (5 attempts, 50ms-1s jitter)
+- Bounded mutation retry: at most 3 total attempts for retryable concurrency conflicts
 - Zero errors across all contention scenarios
 - Hot account patterns demonstrate realistic production workloads
 
@@ -121,7 +124,10 @@ pnpm --filter=@exchequerio/docs build
 # Start PostgreSQL and Valkey
 pnpm run docker:up
 
-# Stop PostgreSQL and Valkey
+# Build and start PostgreSQL, Valkey, and the API
+pnpm run docker:up:api
+
+# Stop every profile
 pnpm run docker:down
 
 # View PostgreSQL logs
@@ -146,8 +152,8 @@ pnpm run ci
 
 - [Getting Started](AGENTS.md) — Full development guide
 - [API Architecture](apps/api/docs/standards/architecture.md) — Backend design patterns and principles
-- [API Guide](apps/api/AGENTS.md) — Backend development
-- [Web Guide](apps/web/AGENTS.md) — Frontend development
+- [API Coding Standards](apps/api/docs/standards/coding.md) — Backend development
+- [Web Architecture](apps/web/docs/standards/architecture.md) — Frontend development
 
 ## Contributing
 
