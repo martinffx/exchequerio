@@ -1,12 +1,15 @@
-import { eq } from "drizzle-orm";
+import { setTimeout as delay } from "node:timers/promises";
+
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, type Result } from "effect";
 import { DateTime } from "luxon";
 import { Pool } from "pg";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
-import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
+import { type Database, DatabaseTag, type DrizzleDatabase, makeDatabaseLive } from "@/db";
+import { AccountNotFound, makeCurrency } from "@/ledgers/accounts";
 import {
 	newLedgerAccountID,
 	newLedgerID,
@@ -26,16 +29,60 @@ import {
 } from "@/repo/schema";
 
 import {
+	type TransactionCreateRepositoryError,
 	type TransactionRepo,
 	TransactionRepoLive,
 	TransactionRepoTag,
 	transactionRepoLayer,
 } from "./TransactionRepo";
+import { Entry, Transaction, type TransactionMutation } from "./domain/Transaction";
 import {
+	TransactionConcurrencyFailure,
 	TransactionPersistenceDecodingFailure,
 	TransactionPersistenceFailure,
 	TransactionRepositoryUnavailable,
+	TransactionValidationFailure,
 } from "./TransactionErrors";
+
+const makeCreate = async (
+	organizationId: OrgID,
+	ledgerId: LedgerID,
+	status: "pending" | "posted",
+	entries: ReadonlyArray<{
+		readonly accountId: ReturnType<typeof newLedgerAccountID>;
+		readonly direction: "debit" | "credit";
+		readonly amount: number;
+		readonly currencyCode?: string;
+	}>
+): Promise<TransactionMutation> => {
+	const created = DateTime.fromISO("2026-08-15T12:00:00.000Z", { zone: "utc" });
+	const domainEntries = await Promise.all(
+		entries.map(entry =>
+			Effect.runPromise(
+				Entry.make({
+					id: newLedgerTransactionEntryID(),
+					accountId: entry.accountId,
+					direction: entry.direction,
+					amount: entry.amount,
+					currency: makeCurrency(entry.currencyCode ?? "EUR", 2),
+				})
+			)
+		)
+	);
+	const common = {
+		id: newLedgerTransactionID(),
+		organizationId,
+		ledgerId,
+		entries: domainEntries,
+		created,
+		updated: created,
+	};
+	return Effect.runPromise(
+		status === "posted"
+			? Transaction.create({ ...common, status, postedAt: created })
+			: Transaction.create({ ...common, status })
+	);
+};
 
 describe("TransactionRepoLive reads", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
@@ -137,6 +184,28 @@ describe("TransactionRepoLive reads", () => {
 			},
 		]);
 		return transactionId;
+	};
+
+	const createAccount = async (
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		overrides: {
+			readonly currencyCode?: string;
+			readonly pendingDebits?: number;
+		} = {}
+	) => {
+		const accountId = newLedgerAccountID();
+		await (await database()).db.insert(LedgerAccountsTable).values({
+			id: accountId.toString(),
+			organizationId: organizationId.toString(),
+			ledgerId: ledgerId.toString(),
+			name: `Create ${accountId.toString()}`,
+			normalBalance: "debit",
+			currencyCode: overrides.currencyCode ?? "EUR",
+			minorUnitExponent: 2,
+			pendingDebits: overrides.pendingDebits,
+		});
+		return accountId;
 	};
 
 	afterAll(async () => {
@@ -352,4 +421,488 @@ describe("TransactionRepoLive reads", () => {
 		);
 		expect(error).toBeInstanceOf(TransactionPersistenceFailure);
 	});
+
+	it.each([
+		{ status: "pending" as const, posted: false },
+		{ status: "posted" as const, posted: true },
+	])("creates a $status Transaction and applies its exact counter sets", async testCase => {
+		const { organizationId, ledgerId } = await createLedger();
+		const debit = await createAccount(organizationId, ledgerId);
+		const credit = await createAccount(organizationId, ledgerId);
+		const mutation = await makeCreate(organizationId, ledgerId, testCase.status, [
+			{ accountId: debit, direction: "debit", amount: 40 },
+			{ accountId: debit, direction: "debit", amount: 60 },
+			{ accountId: credit, direction: "credit", amount: 100 },
+		]);
+
+		const created = await runRepo(repository =>
+			repository.createTransaction(`create-${mutation.transaction.id.toString()}`, mutation)
+		);
+		const rows = await (
+			await database()
+		).db
+			.select()
+			.from(LedgerAccountsTable)
+			.where(
+				and(
+					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+				)
+			);
+		const byId = new Map(rows.map(row => [row.id, row]));
+
+		expect(created.id.toString()).toBe(mutation.transaction.id.toString());
+		expect(created.postedAt?.toISO()).toBe(testCase.posted ? "2026-08-15T12:00:00.000Z" : undefined);
+		expect(byId.get(debit.toString())).toMatchObject({
+			pendingDebits: 100,
+			postedDebits: testCase.posted ? 100 : 0,
+			lockVersion: 1,
+		});
+		expect(byId.get(credit.toString())).toMatchObject({
+			pendingCredits: 100,
+			postedCredits: testCase.posted ? 100 : 0,
+			lockVersion: 1,
+		});
+		expect(
+			await (
+				await database()
+			).db
+				.select()
+				.from(LedgerTransactionEntriesTable)
+				.where(eq(LedgerTransactionEntriesTable.transactionId, created.id.toString()))
+		).toHaveLength(3);
+	});
+
+	it.each([
+		{ label: "missing", account: "missing" as const },
+		{ label: "cross-Organization", account: "other" as const },
+	])("hides a $label Account and rolls back the create", async testCase => {
+		const owner = await createLedger();
+		const other = await createLedger();
+		const owned = await createAccount(owner.organizationId, owner.ledgerId);
+		const invalid =
+			testCase.account === "missing"
+				? newLedgerAccountID()
+				: await createAccount(other.organizationId, other.ledgerId);
+		const mutation = await makeCreate(owner.organizationId, owner.ledgerId, "pending", [
+			{ accountId: invalid, direction: "debit", amount: 10 },
+			{ accountId: owned, direction: "credit", amount: 10 },
+		]);
+
+		const error = await runRepo(repository =>
+			Effect.flip(
+				repository.createTransaction(`invalid-${mutation.transaction.id.toString()}`, mutation)
+			)
+		);
+		expect(error).toBeInstanceOf(AccountNotFound);
+		expect(
+			await (
+				await database()
+			).db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, mutation.transaction.id.toString()))
+		).toHaveLength(0);
+		const [account] = await (
+			await database()
+		).db
+			.select()
+			.from(LedgerAccountsTable)
+			.where(eq(LedgerAccountsTable.id, owned.toString()));
+		expect(account).toMatchObject({ pendingCredits: 0, lockVersion: 0 });
+	});
+
+	it.each([
+		{ label: "Currency mismatch", unsafe: false },
+		{ label: "unsafe resulting counter", unsafe: true },
+	])("rejects $label and rolls back every write", async testCase => {
+		const { organizationId, ledgerId } = await createLedger();
+		const debit = await createAccount(organizationId, ledgerId, {
+			currencyCode: testCase.unsafe ? "EUR" : "USD",
+			pendingDebits: testCase.unsafe ? Number.MAX_SAFE_INTEGER : undefined,
+		});
+		const credit = await createAccount(organizationId, ledgerId);
+		const mutation = await makeCreate(organizationId, ledgerId, "pending", [
+			{ accountId: debit, direction: "debit", amount: 1 },
+			{ accountId: credit, direction: "credit", amount: 1 },
+		]);
+
+		const error = await runRepo(repository =>
+			Effect.flip(
+				repository.createTransaction(`invalid-${mutation.transaction.id.toString()}`, mutation)
+			)
+		);
+		expect(error).toBeInstanceOf(TransactionValidationFailure);
+		expect(
+			await (
+				await database()
+			).db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, mutation.transaction.id.toString()))
+		).toHaveLength(0);
+	});
+
+	it.each([
+		{ label: "nonpositive Amount", amount: 0 },
+		{ label: "unbalanced Entries", amount: 2 },
+	])("revalidates $label inside PostgreSQL and rolls back its claim", async testCase => {
+		const { organizationId, ledgerId } = await createLedger();
+		const debit = await createAccount(organizationId, ledgerId);
+		const credit = await createAccount(organizationId, ledgerId);
+		const valid = await makeCreate(organizationId, ledgerId, "pending", [
+			{ accountId: debit, direction: "debit", amount: 1 },
+			{ accountId: credit, direction: "credit", amount: 1 },
+		]);
+		const invalid = {
+			...valid,
+			transaction: {
+				...valid.transaction,
+				entries: [
+					valid.transaction.entries[0],
+					{
+						...valid.transaction.entries[1],
+						amount: testCase.amount,
+					},
+				],
+			},
+		} as unknown as TransactionMutation;
+
+		const error = await runRepo(repository =>
+			Effect.flip(repository.createTransaction(`invalid-${valid.transaction.id.toString()}`, invalid))
+		);
+		expect(error).toBeInstanceOf(TransactionValidationFailure);
+		expect(
+			await (
+				await database()
+			).db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, valid.transaction.id.toString()))
+		).toHaveLength(0);
+	});
+
+	it("classifies an Entry primary-key fault as unexpected persistence and rolls back", async () => {
+		const { organizationId, ledgerId } = await createLedger();
+		const debit = await createAccount(organizationId, ledgerId);
+		const credit = await createAccount(organizationId, ledgerId);
+		const valid = await makeCreate(organizationId, ledgerId, "pending", [
+			{ accountId: debit, direction: "debit", amount: 3 },
+			{ accountId: credit, direction: "credit", amount: 3 },
+		]);
+		const duplicateEntryId = {
+			...valid,
+			transaction: {
+				...valid.transaction,
+				entries: [
+					valid.transaction.entries[0],
+					{ ...valid.transaction.entries[1], id: valid.transaction.entries[0]!.id },
+				],
+			},
+		} as unknown as TransactionMutation;
+
+		const error = await runRepo(repository =>
+			Effect.flip(repository.createTransaction("duplicate-entry-write", duplicateEntryId))
+		);
+		expect(error).toBeInstanceOf(TransactionPersistenceFailure);
+		expect(
+			await (
+				await database()
+			).db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, valid.transaction.id.toString()))
+		).toHaveLength(0);
+		const [account] = await (
+			await database()
+		).db
+			.select()
+			.from(LedgerAccountsTable)
+			.where(eq(LedgerAccountsTable.id, debit.toString()));
+		expect(account).toMatchObject({ pendingDebits: 0, lockVersion: 0 });
+	});
+
+	it.each([
+		{ label: "Pending with Posted Time", status: "pending", postedAt: "valid" },
+		{ label: "Posted without Posted Time", status: "posted", postedAt: "missing" },
+		{ label: "Posted with invalid Posted Time", status: "posted", postedAt: "invalid" },
+		{ label: "Voided create", status: "voided", postedAt: "missing" },
+	] as const)("rejects malformed $label lifecycle at the repository seam", async testCase => {
+		const { organizationId, ledgerId } = await createLedger();
+		const debit = await createAccount(organizationId, ledgerId);
+		const credit = await createAccount(organizationId, ledgerId);
+		const valid = await makeCreate(organizationId, ledgerId, "pending", [
+			{ accountId: debit, direction: "debit", amount: 7 },
+			{ accountId: credit, direction: "credit", amount: 7 },
+		]);
+		const postedAt =
+			testCase.postedAt === "valid"
+				? DateTime.fromISO("2026-08-15T12:30:00.000Z", { zone: "utc" })
+				: testCase.postedAt === "invalid"
+					? DateTime.invalid("test invalid")
+					: undefined;
+		const malformed = {
+			...valid,
+			transaction: { ...valid.transaction, status: testCase.status, postedAt },
+		} as unknown as TransactionMutation;
+
+		const error = await runRepo(repository =>
+			Effect.flip(
+				repository.createTransaction(`lifecycle-${valid.transaction.id.toString()}`, malformed)
+			)
+		);
+		expect(error).toBeInstanceOf(TransactionValidationFailure);
+		expect(
+			await (
+				await database()
+			).db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, valid.transaction.id.toString()))
+		).toHaveLength(0);
+		expect(
+			await (
+				await database()
+			).db
+				.select()
+				.from(LedgerTransactionEntriesTable)
+				.where(eq(LedgerTransactionEntriesTable.transactionId, valid.transaction.id.toString()))
+		).toHaveLength(0);
+		const accounts = await (
+			await database()
+		).db
+			.select()
+			.from(LedgerAccountsTable)
+			.where(
+				and(
+					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+				)
+			);
+		expect(accounts).toEqual([
+			expect.objectContaining({ pendingDebits: 0, pendingCredits: 0, lockVersion: 0 }),
+			expect.objectContaining({ pendingDebits: 0, pendingCredits: 0, lockVersion: 0 }),
+		]);
+	});
+
+	it("rolls back a completed Account update when a later Account update fails", async () => {
+		const { organizationId, ledgerId } = await createLedger();
+		const accountIds = [
+			await createAccount(organizationId, ledgerId),
+			await createAccount(organizationId, ledgerId),
+		].sort((left, right) => left.toString().localeCompare(right.toString()));
+		const mutation = await makeCreate(organizationId, ledgerId, "pending", [
+			{ accountId: accountIds[0]!, direction: "debit", amount: 11 },
+			{ accountId: accountIds[1]!, direction: "credit", amount: 11 },
+		]);
+		const db = (await database()).db;
+		await db.execute(sql.raw("DROP TRIGGER IF EXISTS t7_fail_later_update ON ledger_accounts"));
+		await db.execute(sql.raw("DROP FUNCTION IF EXISTS t7_fail_later_update()"));
+		await db.execute(sql.raw("DROP SEQUENCE IF EXISTS t7_account_update_attempts"));
+		await db.execute(sql.raw("CREATE SEQUENCE t7_account_update_attempts"));
+		await db.execute(
+			sql.raw(`
+			CREATE FUNCTION t7_fail_later_update() RETURNS trigger AS $$
+			BEGIN
+				IF NEW.organization_id = '${organizationId.toString()}' AND NEW.ledger_id = '${ledgerId.toString()}' THEN
+					PERFORM nextval('t7_account_update_attempts');
+					IF NEW.id = '${accountIds[1]!.toString()}' THEN
+						RAISE EXCEPTION 'forced later Account update failure';
+					END IF;
+				END IF;
+				RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql
+		`)
+		);
+		await db.execute(
+			sql.raw(`
+			CREATE TRIGGER t7_fail_later_update
+			BEFORE UPDATE ON ledger_accounts
+			FOR EACH ROW EXECUTE FUNCTION t7_fail_later_update()
+		`)
+		);
+
+		try {
+			const error = await runRepo(repository =>
+				Effect.flip(repository.createTransaction("partial-account-write", mutation))
+			);
+			expect(error).toBeInstanceOf(TransactionPersistenceFailure);
+			const attempts = await db.execute<{ last_value: string; is_called: boolean }>(
+				sql.raw("SELECT last_value, is_called FROM t7_account_update_attempts")
+			);
+			expect(attempts.rows[0]).toMatchObject({ last_value: "2", is_called: true });
+			expect(
+				await db
+					.select()
+					.from(LedgerTransactionsTable)
+					.where(eq(LedgerTransactionsTable.id, mutation.transaction.id.toString()))
+			).toHaveLength(0);
+			expect(
+				await db
+					.select()
+					.from(LedgerTransactionEntriesTable)
+					.where(eq(LedgerTransactionEntriesTable.transactionId, mutation.transaction.id.toString()))
+			).toHaveLength(0);
+			const accounts = await db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(
+					and(
+						eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+						eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+					)
+				);
+			expect(accounts).toEqual([
+				expect.objectContaining({ pendingDebits: 0, pendingCredits: 0, lockVersion: 0 }),
+				expect.objectContaining({ pendingDebits: 0, pendingCredits: 0, lockVersion: 0 }),
+			]);
+		} finally {
+			await db.execute(sql.raw("DROP TRIGGER IF EXISTS t7_fail_later_update ON ledger_accounts"));
+			await db.execute(sql.raw("DROP FUNCTION IF EXISTS t7_fail_later_update()"));
+			await db.execute(sql.raw("DROP SEQUENCE IF EXISTS t7_account_update_attempts"));
+		}
+	});
+
+	it("elects one PostgreSQL winner for a concurrent Organization-scoped key", async () => {
+		const { organizationId, ledgerId } = await createLedger();
+		const debit = await createAccount(organizationId, ledgerId);
+		const credit = await createAccount(organizationId, ledgerId);
+		const inputs = await Promise.all(
+			[0, 1].map(() =>
+				makeCreate(organizationId, ledgerId, "pending", [
+					{ accountId: debit, direction: "debit", amount: 25 },
+					{ accountId: credit, direction: "credit", amount: 25 },
+				])
+			)
+		);
+		const key = `t7-barrier-${newLedgerTransactionID().toString()}`;
+		const db = (await database()).db;
+		const barrierPool = new Pool({ connectionString: new Config().databaseUrl });
+		const blocker = await barrierPool.connect();
+		await db.execute(sql.raw("DROP TRIGGER IF EXISTS t7_create_barrier ON ledger_transactions"));
+		await db.execute(sql.raw("DROP FUNCTION IF EXISTS t7_create_barrier()"));
+		await db.execute(
+			sql.raw(`
+			CREATE FUNCTION t7_create_barrier() RETURNS trigger AS $$
+			BEGIN
+				IF NEW.idempotency_key LIKE 't7-barrier-%' THEN
+					PERFORM pg_advisory_xact_lock(770007);
+				END IF;
+				RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql
+		`)
+		);
+		await db.execute(
+			sql.raw(`
+			CREATE TRIGGER t7_create_barrier
+			BEFORE INSERT ON ledger_transactions
+			FOR EACH ROW EXECUTE FUNCTION t7_create_barrier()
+		`)
+		);
+		await blocker.query("SELECT pg_advisory_lock(770007)");
+
+		let results: Result.Result<Transaction, TransactionCreateRepositoryError>[] = [];
+		let overlapping = false;
+		try {
+			const pending = inputs.map(mutation =>
+				runRepo(repository => repository.createTransaction(key, mutation).pipe(Effect.result))
+			);
+			for (let attempt = 0; attempt < 100; attempt += 1) {
+				const waiting = await blocker.query<{ count: number }>(`
+					SELECT count(*)::integer AS count
+					FROM pg_stat_activity
+					WHERE wait_event = 'advisory'
+					AND query LIKE 'insert into "ledger_transactions"%'
+				`);
+				if (waiting.rows[0]!.count === 2) {
+					overlapping = true;
+					break;
+				}
+				await delay(10);
+			}
+			await blocker.query("SELECT pg_advisory_unlock(770007)");
+			results = await Promise.all(pending);
+		} finally {
+			await blocker.query("SELECT pg_advisory_unlock(770007)");
+			blocker.release();
+			await barrierPool.end();
+			await db.execute(sql.raw("DROP TRIGGER IF EXISTS t7_create_barrier ON ledger_transactions"));
+			await db.execute(sql.raw("DROP FUNCTION IF EXISTS t7_create_barrier()"));
+		}
+		expect(overlapping).toBe(true);
+		expect(results.filter(result => result._tag === "Success")).toHaveLength(1);
+		const loser = results.find(result => result._tag === "Failure");
+		expect(loser?._tag === "Failure" ? loser.failure : undefined).toBeInstanceOf(
+			TransactionConcurrencyFailure
+		);
+		const [account] = await (
+			await database()
+		).db
+			.select()
+			.from(LedgerAccountsTable)
+			.where(eq(LedgerAccountsTable.id, debit.toString()));
+		expect(account).toMatchObject({ pendingDebits: 25, lockVersion: 1 });
+		expect(
+			await (
+				await database()
+			).db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(
+					and(
+						eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+						eq(LedgerTransactionsTable.idempotencyKey, key)
+					)
+				)
+				.then(rows => rows.length)
+		).toBe(1);
+	});
+
+	it("allows the same idempotency key in different Organizations", async () => {
+		const owners = await Promise.all([createLedger(), createLedger()]);
+		const mutations = await Promise.all(
+			owners.map(async owner => {
+				const debit = await createAccount(owner.organizationId, owner.ledgerId);
+				const credit = await createAccount(owner.organizationId, owner.ledgerId);
+				return makeCreate(owner.organizationId, owner.ledgerId, "pending", [
+					{ accountId: debit, direction: "debit", amount: 5 },
+					{ accountId: credit, direction: "credit", amount: 5 },
+				]);
+			})
+		);
+
+		const created = await Promise.all(
+			mutations.map(mutation =>
+				runRepo(repository => repository.createTransaction("shared-create-key", mutation))
+			)
+		);
+		expect(created).toHaveLength(2);
+	});
+
+	it.each(["40001", "40P01"])(
+		"classifies PostgreSQL %s as retryable concurrency without repository retry",
+		async code => {
+			let attempts = 0;
+			const db = {
+				transaction: () => {
+					attempts += 1;
+					return Promise.reject(Object.assign(new Error("classified failure"), { code }));
+				},
+			} as unknown as DrizzleDatabase;
+			const repository = new TransactionRepoLive(db);
+			const mutation = await makeCreate(newOrgID(), newLedgerID(), "pending", [
+				{ accountId: newLedgerAccountID(), direction: "debit", amount: 1 },
+				{ accountId: newLedgerAccountID(), direction: "credit", amount: 1 },
+			]);
+
+			const error = await Effect.runPromise(
+				Effect.flip(repository.createTransaction("classified", mutation))
+			);
+			expect(error).toBeInstanceOf(TransactionConcurrencyFailure);
+			expect(error.retryable).toBe(true);
+			expect(attempts).toBe(1);
+		}
+	);
 });
