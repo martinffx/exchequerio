@@ -36,6 +36,13 @@
       "when": 1786307635491,
       "tag": "0004_worthless_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786776877777,
+      "tag": "0005_transactions_effect",
+      "breakpoints": true
     }
   ]
 }
