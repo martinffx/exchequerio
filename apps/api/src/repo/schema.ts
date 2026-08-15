@@ -20,7 +20,7 @@ const ledgerNormalBalance = pgEnum("ledger_normal_balance", ["debit", "credit"])
 const ledgerTransactionStatus = pgEnum("ledger_transaction_status", [
 	"pending",
 	"posted",
-	"archived",
+	"voided",
 ]);
 const ledgerEntryDirection = pgEnum("ledger_entry_direction", ["debit", "credit"]);
 const ledgerSettlementStatus = pgEnum("ledger_settlement_status", [
@@ -85,16 +85,11 @@ const LedgerAccountsTable = pgTable(
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
 		currencyCode: text("currency_code").notNull(),
 		minorUnitExponent: integer("minor_unit_exponent").notNull(),
-		// Individual balance columns as BIGINT (integer minor units)
-		pendingAmount: bigint("pending_amount", { mode: "number" }).notNull().default(0),
-		postedAmount: bigint("posted_amount", { mode: "number" }).notNull().default(0),
-		availableAmount: bigint("available_amount", { mode: "number" }).notNull().default(0),
+		// Authoritative balance counters as BIGINT (integer minor units)
 		pendingCredits: bigint("pending_credits", { mode: "number" }).notNull().default(0),
 		pendingDebits: bigint("pending_debits", { mode: "number" }).notNull().default(0),
 		postedCredits: bigint("posted_credits", { mode: "number" }).notNull().default(0),
 		postedDebits: bigint("posted_debits", { mode: "number" }).notNull().default(0),
-		availableCredits: bigint("available_credits", { mode: "number" }).notNull().default(0),
-		availableDebits: bigint("available_debits", { mode: "number" }).notNull().default(0),
 		lockVersion: integer("lock_version").notNull().default(0),
 		metadata: text("metadata"), // TEXT for DSQL compatibility (JSON string)
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
@@ -118,23 +113,15 @@ const LedgerAccountsTable = pgTable(
 		),
 		balancesSafeIntegers: check(
 			"ledger_accounts_balances_safe_integers",
-			sql`${table.pendingAmount} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.postedAmount} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.availableAmount} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.pendingCredits} BETWEEN -9007199254740991 AND 9007199254740991
+			sql`${table.pendingCredits} BETWEEN -9007199254740991 AND 9007199254740991
 				AND ${table.pendingDebits} BETWEEN -9007199254740991 AND 9007199254740991
 				AND ${table.postedCredits} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.postedDebits} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.availableCredits} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.availableDebits} BETWEEN -9007199254740991 AND 9007199254740991`
+				AND ${table.postedDebits} BETWEEN -9007199254740991 AND 9007199254740991`
 		),
-		postedBalanceIdx: index("idx_ledger_accounts_posted_balance").on(
+		organizationLedgerIdUnique: unique("unique_ledger_accounts_organization_ledger_id").on(
+			table.organizationId,
 			table.ledgerId,
-			table.postedAmount
-		),
-		availableBalanceIdx: index("idx_ledger_accounts_available_balance").on(
-			table.ledgerId,
-			table.availableAmount
+			table.id
 		),
 	})
 );
@@ -151,17 +138,14 @@ const LedgerTransactionsTable = pgTable(
 	"ledger_transactions",
 	{
 		id: text("id").primaryKey(),
-		ledgerId: text("ledger_id")
-			.notNull()
-			.references(() => LedgersTable.id),
+		ledgerId: text("ledger_id").notNull(),
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		idempotencyKey: text("idempotency_key").unique(),
+		idempotencyKey: text("idempotency_key"),
 		description: text("description"),
 		status: ledgerTransactionStatus("status").notNull().default("pending"),
-		// When transaction happened for reporting purposes (defaults to created time)
-		effectiveAt: timestamp("effective_at", { withTimezone: true }).defaultNow().notNull(),
+		postedAt: timestamp("posted_at", { withTimezone: true }),
 		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
@@ -169,8 +153,24 @@ const LedgerTransactionsTable = pgTable(
 	table => ({
 		organizationIdx: index("idx_ledger_transactions_organization").on(table.organizationId),
 		statusIdx: index("idx_ledger_transactions_status").on(table.status),
-		createdIdx: index("idx_ledger_transactions_created").on(table.created),
-		effectiveAtIdx: index("idx_ledger_transactions_effective_at").on(table.effectiveAt),
+		organizationLedgerFk: foreignKey({
+			name: "ledger_transactions_organization_ledger_fk",
+			columns: [table.organizationId, table.ledgerId],
+			foreignColumns: [LedgersTable.organizationId, LedgersTable.id],
+		}),
+		organizationLedgerIdUnique: unique("unique_ledger_transactions_organization_ledger_id").on(
+			table.organizationId,
+			table.ledgerId,
+			table.id
+		),
+		organizationIdempotencyKeyUnique: uniqueIndex(
+			"unique_ledger_transactions_organization_idempotency_key"
+		).on(table.organizationId, table.idempotencyKey),
+		ledgerCreatedIdIdx: index("idx_ledger_transactions_ledger_created_id").on(
+			table.ledgerId,
+			table.created.desc(),
+			table.id.desc()
+		),
 	})
 );
 
@@ -179,32 +179,44 @@ const LedgerTransactionEntriesTable = pgTable(
 	"ledger_transaction_entries",
 	{
 		id: text("id").primaryKey(),
-		transactionId: text("transaction_id")
-			.notNull()
-			.references(() => LedgerTransactionsTable.id),
-		accountId: text("account_id")
-			.notNull()
-			.references(() => LedgerAccountsTable.id),
+		transactionId: text("transaction_id").notNull(),
+		accountId: text("account_id").notNull(),
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
+		ledgerId: text("ledger_id").notNull(),
 		direction: ledgerEntryDirection("direction").notNull(),
 		amount: bigint("amount", { mode: "number" }).notNull(), // Integer minor units
-		currency: text("currency").notNull(),
-		currencyExponent: bigint("currency_exponent", { mode: "number" }).notNull(),
-		status: ledgerTransactionStatus("status").notNull().default("pending"),
 		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
-		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
 		// Indexes for performance
 		organizationIdx: index("idx_ledger_transaction_entries_organization").on(table.organizationId),
 		accountIdx: index("idx_ledger_transaction_entries_account").on(table.accountId),
 		transactionIdx: index("idx_ledger_transaction_entries_transaction").on(table.transactionId),
-		statusIdx: index("idx_ledger_transaction_entries_status").on(table.status),
-		// Constraint: amount must be positive
-		positiveAmount: check("positive_amount", sql`${table.amount} > 0`),
+		transactionOwnershipFk: foreignKey({
+			name: "ledger_transaction_entries_transaction_ownership_fk",
+			columns: [table.organizationId, table.ledgerId, table.transactionId],
+			foreignColumns: [
+				LedgerTransactionsTable.organizationId,
+				LedgerTransactionsTable.ledgerId,
+				LedgerTransactionsTable.id,
+			],
+		}),
+		accountOwnershipFk: foreignKey({
+			name: "ledger_transaction_entries_account_ownership_fk",
+			columns: [table.organizationId, table.ledgerId, table.accountId],
+			foreignColumns: [
+				LedgerAccountsTable.organizationId,
+				LedgerAccountsTable.ledgerId,
+				LedgerAccountsTable.id,
+			],
+		}),
+		amountPositiveAndSafe: check(
+			"ledger_transaction_entries_amount_positive_and_safe",
+			sql`${table.amount} > 0 AND ${table.amount} <= 9007199254740991`
+		),
 	})
 );
 
