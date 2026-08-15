@@ -238,7 +238,8 @@
 							"legacy-repo",
 							"legacy-entities",
 							"legacy-route-contracts",
-							"legacy-ledger-route-contracts"
+							"legacy-ledger-route-contracts",
+							"transaction-composition"
 						]
 					},
 					{

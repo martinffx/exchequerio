@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
+import { TransactionServiceTag } from "@/ledgers/transactions";
 import { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonitorService";
 import { LedgerAccountCategoryService } from "./LedgerAccountCategoryService";
 import { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
@@ -34,10 +35,14 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 			new LedgerTransactionService(server.repo.ledgerTransactionRepo, server.repo.ledgerAccountReader);
 		const ledgerAccountSettlementService =
 			opts.services?.ledgerAccountSettlementService ??
-			new LedgerAccountSettlementService(
-				server.repo.ledgerAccountSettlementRepo,
-				ledgerTransactionService
-			);
+			new LedgerAccountSettlementService(server.repo.ledgerAccountSettlementRepo, {
+				createTransaction: (orgId, ledgerId, idempotencyKey, request) =>
+					server.runtime.runPromise(
+						TransactionServiceTag.use(service =>
+							service.createTransaction(orgId, ledgerId, idempotencyKey, request)
+						)
+					),
+			});
 		const ledgerAccountStatementService =
 			opts.services?.ledgerAccountStatementService ??
 			new LedgerAccountStatementService(server.repo.ledgerAccountStatementRepo);
