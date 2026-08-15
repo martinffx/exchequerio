@@ -33,6 +33,8 @@ import {
 import {
 	TransactionConcurrencyFailure,
 	type TransactionInfrastructureError,
+	TransactionLifecycleConflict,
+	TransactionNotFound,
 	TransactionPersistenceDecodingFailure,
 	TransactionPersistenceFailure,
 	TransactionRepositoryUnavailable,
@@ -51,11 +53,23 @@ type TransactionCreateRepositoryError =
 	| TransactionInfrastructureError
 	| TransactionValidationFailure;
 
+type TransactionReplaceRepositoryError =
+	| AccountNotFound
+	| AccountVersionConflict
+	| TransactionConcurrencyFailure
+	| TransactionInfrastructureError
+	| TransactionLifecycleConflict
+	| TransactionNotFound
+	| TransactionValidationFailure;
+
 interface TransactionRepo {
 	createTransaction(
 		idempotencyKey: string,
 		mutation: TransactionMutation
 	): Effect.Effect<Transaction, TransactionCreateRepositoryError>;
+	replaceTransaction(
+		mutation: TransactionMutation
+	): Effect.Effect<Transaction, TransactionReplaceRepositoryError>;
 	listTransactions(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -169,6 +183,33 @@ const mapCreateError = (
 			mutation.transaction.id
 		)
 	);
+};
+
+const mapReplaceError = (
+	cause: unknown,
+	mutation: TransactionMutation
+): TransactionReplaceRepositoryError => {
+	if (
+		cause instanceof AccountNotFound ||
+		cause instanceof AccountVersionConflict ||
+		cause instanceof TransactionConcurrencyFailure ||
+		cause instanceof TransactionLifecycleConflict ||
+		cause instanceof TransactionNotFound ||
+		cause instanceof TransactionPersistenceDecodingFailure ||
+		cause instanceof TransactionValidationFailure
+	) {
+		return cause;
+	}
+	const errorContext = context(
+		mutation.transaction.organizationId,
+		mutation.transaction.ledgerId,
+		mutation.transaction.id
+	);
+	const code = postgresErrorCode(cause);
+	if (code === "40001" || code === "40P01") {
+		return new TransactionConcurrencyFailure(cause, errorContext);
+	}
+	return mapInfrastructureError(cause, errorContext);
 };
 
 const decodeMetadata = (value: string | null): Readonly<Record<string, string>> | undefined => {
@@ -456,6 +497,201 @@ class TransactionRepoLive implements TransactionRepo {
 		});
 	}
 
+	replaceTransaction(
+		mutation: TransactionMutation
+	): Effect.Effect<Transaction, TransactionReplaceRepositoryError> {
+		const requested = mutation.transaction;
+		return Effect.tryPromise({
+			try: () =>
+				this.db.transaction(async tx => {
+					const [row] = await tx
+						.select(transactionColumns)
+						.from(LedgerTransactionsTable)
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, requested.organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, requested.ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, requested.id.toString())
+							)
+						)
+						.limit(1)
+						.for("update");
+					if (row === undefined) {
+						throw new TransactionNotFound(
+							requested.organizationId.toString(),
+							requested.ledgerId.toString(),
+							requested.id.toString()
+						);
+					}
+					if (row.status !== "pending") {
+						throw new TransactionLifecycleConflict(
+							row.id,
+							row.status,
+							"pending",
+							context(requested.organizationId, requested.ledgerId, requested.id)
+						);
+					}
+
+					const oldEntryRows = await tx
+						.select(entryColumns)
+						.from(LedgerTransactionEntriesTable)
+						.innerJoin(
+							LedgerAccountsTable,
+							and(
+								eq(LedgerAccountsTable.id, LedgerTransactionEntriesTable.accountId),
+								eq(LedgerAccountsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
+								eq(LedgerAccountsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
+							)
+						)
+						.where(eq(LedgerTransactionEntriesTable.transactionId, row.id))
+						.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id));
+					const current = await Effect.runPromise(decodeTransaction(row, oldEntryRows));
+					const replacement = await Effect.runPromise(
+						current.replace(
+							{
+								description: requested.description,
+								metadata: requested.metadata,
+								entries: requested.entries,
+							},
+							requested.updated
+						)
+					);
+					const replacementAccountIds = new Set(
+						replacement.transaction.entries.map(entry => entry.accountId.toString())
+					);
+					if (replacementAccountIds.size > 200) {
+						throw new TransactionValidationFailure(
+							"Transaction may reference at most 200 distinct Accounts"
+						);
+					}
+					const accountIds = [
+						...new Set([
+							...current.entries.map(entry => entry.accountId.toString()),
+							...replacementAccountIds,
+						]),
+					].sort();
+					const accounts = await tx
+						.select({
+							id: LedgerAccountsTable.id,
+							currencyCode: LedgerAccountsTable.currencyCode,
+							minorUnitExponent: LedgerAccountsTable.minorUnitExponent,
+							pendingCredits: LedgerAccountsTable.pendingCredits,
+							pendingDebits: LedgerAccountsTable.pendingDebits,
+							postedCredits: LedgerAccountsTable.postedCredits,
+							postedDebits: LedgerAccountsTable.postedDebits,
+							lockVersion: LedgerAccountsTable.lockVersion,
+						})
+						.from(LedgerAccountsTable)
+						.where(
+							and(
+								eq(LedgerAccountsTable.organizationId, requested.organizationId.toString()),
+								eq(LedgerAccountsTable.ledgerId, requested.ledgerId.toString()),
+								inArray(LedgerAccountsTable.id, accountIds)
+							)
+						)
+						.orderBy(asc(LedgerAccountsTable.id))
+						.for("update");
+					const accountsById = new Map(accounts.map(account => [account.id, account]));
+					const missingId = accountIds.find(accountId => !accountsById.has(accountId));
+					if (missingId !== undefined) {
+						throw new AccountNotFound(
+							requested.organizationId.toString(),
+							requested.ledgerId.toString(),
+							missingId
+						);
+					}
+					for (const entry of replacement.transaction.entries) {
+						const account = accountsById.get(entry.accountId.toString())!;
+						if (!Number.isSafeInteger(entry.amount) || entry.amount <= 0) {
+							throw new TransactionValidationFailure("Entry Amount must be a positive safe integer");
+						}
+						if (
+							!currencyEquals(
+								entry.currency,
+								makeCurrency(account.currencyCode, account.minorUnitExponent)
+							)
+						) {
+							throw new TransactionValidationFailure(
+								`Entry Currency does not match Account: ${entry.accountId.toString()}`
+							);
+						}
+					}
+					const deltas = new Map(replacement.deltas.map(delta => [delta.accountId.toString(), delta]));
+					for (const accountId of accountIds) {
+						const account = accountsById.get(accountId)!;
+						const delta = deltas.get(accountId)!;
+						for (const counter of [
+							"pendingCredits",
+							"pendingDebits",
+							"postedCredits",
+							"postedDebits",
+						] as const) {
+							addSafe(account[counter], delta[counter], `Resulting Account ${counter} is unsafe`);
+						}
+					}
+
+					await tx
+						.update(LedgerTransactionsTable)
+						.set({
+							description: replacement.transaction.description ?? sql`null`,
+							metadata: encodeMetadata(replacement.transaction.metadata) ?? sql`null`,
+							updated: replacement.transaction.updated.toJSDate(),
+						})
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, requested.organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, requested.ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, requested.id.toString())
+							)
+						);
+					await tx
+						.delete(LedgerTransactionEntriesTable)
+						.where(eq(LedgerTransactionEntriesTable.transactionId, row.id));
+					await tx.insert(LedgerTransactionEntriesTable).values(
+						replacement.transaction.entries.map(entry => ({
+							id: entry.id.toString(),
+							transactionId: row.id,
+							accountId: entry.accountId.toString(),
+							organizationId: row.organizationId,
+							ledgerId: row.ledgerId,
+							direction: entry.direction,
+							amount: entry.amount,
+							metadata: encodeMetadata(entry.metadata),
+							created: replacement.transaction.updated.toJSDate(),
+						}))
+					);
+					for (const accountId of accountIds) {
+						const account = accountsById.get(accountId)!;
+						const delta = deltas.get(accountId)!;
+						const updated = await tx
+							.update(LedgerAccountsTable)
+							.set({
+								pendingCredits: sql`${LedgerAccountsTable.pendingCredits} + ${delta.pendingCredits}`,
+								pendingDebits: sql`${LedgerAccountsTable.pendingDebits} + ${delta.pendingDebits}`,
+								postedCredits: sql`${LedgerAccountsTable.postedCredits} + ${delta.postedCredits}`,
+								postedDebits: sql`${LedgerAccountsTable.postedDebits} + ${delta.postedDebits}`,
+								lockVersion: sql`${LedgerAccountsTable.lockVersion} + 1`,
+								updated: replacement.transaction.updated.toJSDate(),
+							})
+							.where(
+								and(
+									eq(LedgerAccountsTable.organizationId, row.organizationId),
+									eq(LedgerAccountsTable.ledgerId, row.ledgerId),
+									eq(LedgerAccountsTable.id, accountId),
+									eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+								)
+							)
+							.returning({ id: LedgerAccountsTable.id });
+						if (updated.length !== 1) {
+							throw new AccountVersionConflict(row.organizationId, row.ledgerId, accountId);
+						}
+					}
+					return replacement.transaction;
+				}),
+			catch: cause => mapReplaceError(cause, mutation),
+		});
+	}
+
 	private loadTransactions(
 		rows: readonly PublicTransactionRow[],
 		errorContext: ErrorContext
@@ -573,5 +809,10 @@ const transactionRepoLayer = Layer.effect(
 	DatabaseTag.pipe(Effect.map(database => new TransactionRepoLive(database.db)))
 );
 
-export type { TransactionCreateRepositoryError, TransactionListQuery, TransactionRepo };
+export type {
+	TransactionCreateRepositoryError,
+	TransactionListQuery,
+	TransactionReplaceRepositoryError,
+	TransactionRepo,
+};
 export { TransactionRepoLive, TransactionRepoTag, transactionRepoLayer };
