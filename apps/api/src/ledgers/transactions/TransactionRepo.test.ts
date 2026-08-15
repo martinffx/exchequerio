@@ -9,7 +9,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
 import { type Database, DatabaseTag, type DrizzleDatabase, makeDatabaseLive } from "@/db";
-import { AccountNotFound, makeCurrency } from "@/ledgers/accounts";
+import { AccountNotFound } from "@/ledgers/accounts";
 import {
 	newLedgerAccountID,
 	newLedgerID,
@@ -30,12 +30,15 @@ import {
 
 import {
 	type TransactionCreateRepositoryError,
+	type TransactionCreateRepositoryInput,
 	type TransactionRepo,
+	type TransactionReplaceRepositoryInput,
+	type TransactionRepositoryEntryInput,
 	TransactionRepoLive,
 	TransactionRepoTag,
 	transactionRepoLayer,
 } from "./TransactionRepo";
-import { Entry, Transaction, type TransactionMutation } from "./domain/Transaction";
+import { Entry, Transaction } from "./domain/Transaction";
 import {
 	TransactionConcurrencyFailure,
 	TransactionLifecycleConflict,
@@ -54,63 +57,39 @@ const makeCreate = async (
 		readonly accountId: ReturnType<typeof newLedgerAccountID>;
 		readonly direction: "debit" | "credit";
 		readonly amount: number;
-		readonly currencyCode?: string;
 		readonly metadata?: Readonly<Record<string, string>>;
 	}>,
 	options: {
 		readonly description?: string;
 		readonly metadata?: Readonly<Record<string, string>>;
 	} = {}
-): Promise<TransactionMutation> => {
+): Promise<TransactionCreateRepositoryInput> => {
 	const created = DateTime.fromISO("2026-08-15T12:00:00.000Z", { zone: "utc" });
-	const domainEntries = await Promise.all(
-		entries.map(entry =>
-			Effect.runPromise(
-				Entry.make({
-					id: newLedgerTransactionEntryID(),
-					accountId: entry.accountId,
-					direction: entry.direction,
-					amount: entry.amount,
-					currency: makeCurrency(entry.currencyCode ?? "EUR", 2),
-					metadata: entry.metadata,
-				})
-			)
-		)
-	);
-	const common = {
+	return {
 		id: newLedgerTransactionID(),
 		organizationId,
 		ledgerId,
+		idempotencyKey: `create-${crypto.randomUUID()}`,
 		...options,
-		entries: domainEntries,
+		status,
+		entries: entries.map(entry => ({ id: newLedgerTransactionEntryID(), ...entry })),
+		postedAt: status === "posted" ? created : undefined,
 		created,
 		updated: created,
 	};
-	return Effect.runPromise(
-		status === "posted"
-			? Transaction.create({ ...common, status, postedAt: created })
-			: Transaction.create({ ...common, status })
-	);
 };
 
 const makeBalancedEntries = async (
 	accountIds: readonly ReturnType<typeof newLedgerAccountID>[]
-): Promise<readonly Entry[]> => {
+): Promise<readonly TransactionRepositoryEntryInput[]> => {
 	const debitCount = Math.ceil(accountIds.length / 2);
 	const creditCount = accountIds.length - debitCount;
-	return Promise.all(
-		accountIds.map((accountId, index) =>
-			Effect.runPromise(
-				Entry.make({
-					id: newLedgerTransactionEntryID(),
-					accountId,
-					direction: index < debitCount ? "debit" : "credit",
-					amount: index === debitCount ? debitCount - (creditCount - 1) : 1,
-					currency: makeCurrency("EUR", 2),
-				})
-			)
-		)
-	);
+	return accountIds.map((accountId, index) => ({
+		id: newLedgerTransactionEntryID(),
+		accountId,
+		direction: index < debitCount ? "debit" : "credit",
+		amount: index === debitCount ? debitCount - (creditCount - 1) : 1,
+	}));
 };
 
 const normalizeTransaction = (transaction: Transaction, idempotencyKey: string) => ({
@@ -244,6 +223,7 @@ describe("TransactionRepoLive reads", () => {
 		ledgerId: LedgerID,
 		overrides: {
 			readonly currencyCode?: string;
+			readonly minorUnitExponent?: number;
 			readonly pendingDebits?: number;
 		} = {}
 	) => {
@@ -255,7 +235,7 @@ describe("TransactionRepoLive reads", () => {
 			name: `Create ${accountId.toString()}`,
 			normalBalance: "debit",
 			currencyCode: overrides.currencyCode ?? "EUR",
-			minorUnitExponent: 2,
+			minorUnitExponent: overrides.minorUnitExponent ?? 2,
 			pendingDebits: overrides.pendingDebits,
 		});
 		return accountId;
@@ -488,9 +468,7 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: credit, direction: "credit", amount: 100 },
 		]);
 
-		const created = await runRepo(repository =>
-			repository.createTransaction(`create-${mutation.transaction.id.toString()}`, mutation)
-		);
+		const created = await runRepo(repository => repository.createTransaction(mutation));
 		const rows = await (
 			await database()
 		).db
@@ -504,7 +482,7 @@ describe("TransactionRepoLive reads", () => {
 			);
 		const byId = new Map(rows.map(row => [row.id, row]));
 
-		expect(created.id.toString()).toBe(mutation.transaction.id.toString());
+		expect(created.id.toString()).toBe(mutation.id.toString());
 		expect(created.postedAt?.toISO()).toBe(testCase.posted ? "2026-08-15T12:00:00.000Z" : undefined);
 		expect(byId.get(debit.toString())).toMatchObject({
 			pendingDebits: 100,
@@ -526,6 +504,58 @@ describe("TransactionRepoLive reads", () => {
 		).toHaveLength(3);
 	});
 
+	it("derives mixed Entry currencies from Accounts for currency-free create and replace inputs", async () => {
+		const { organizationId, ledgerId } = await createLedger();
+		const [eurDebit, eurCredit, jpyDebit, jpyCredit] = await Promise.all([
+			createAccount(organizationId, ledgerId),
+			createAccount(organizationId, ledgerId),
+			createAccount(organizationId, ledgerId, { currencyCode: "JPY", minorUnitExponent: 0 }),
+			createAccount(organizationId, ledgerId, { currencyCode: "JPY", minorUnitExponent: 0 }),
+		]);
+		const input = await makeCreate(organizationId, ledgerId, "pending", [
+			{ accountId: eurDebit, direction: "debit", amount: 125 },
+			{ accountId: eurCredit, direction: "credit", amount: 125 },
+			{ accountId: jpyDebit, direction: "debit", amount: 300 },
+			{ accountId: jpyCredit, direction: "credit", amount: 300 },
+		]);
+
+		const created = await runRepo(repository => repository.createTransaction(input));
+		const persisted = Option.getOrThrow(
+			await runRepo(repository => repository.getTransaction(organizationId, ledgerId, created.id))
+		);
+
+		expect(persisted.entries.map(entry => entry.currency)).toEqual([
+			{ code: "EUR", minorUnitExponent: 2 },
+			{ code: "EUR", minorUnitExponent: 2 },
+			{ code: "JPY", minorUnitExponent: 0 },
+			{ code: "JPY", minorUnitExponent: 0 },
+		]);
+
+		await runRepo(repository =>
+			repository.replaceTransaction({
+				id: created.id,
+				organizationId,
+				ledgerId,
+				entries: [
+					{ id: newLedgerTransactionEntryID(), accountId: eurDebit, direction: "debit", amount: 50 },
+					{ id: newLedgerTransactionEntryID(), accountId: eurCredit, direction: "credit", amount: 50 },
+					{ id: newLedgerTransactionEntryID(), accountId: jpyDebit, direction: "debit", amount: 75 },
+					{ id: newLedgerTransactionEntryID(), accountId: jpyCredit, direction: "credit", amount: 75 },
+				],
+				updated: DateTime.fromISO("2026-08-15T12:30:00Z", { zone: "utc" }),
+			})
+		);
+		const replaced = Option.getOrThrow(
+			await runRepo(repository => repository.getTransaction(organizationId, ledgerId, created.id))
+		);
+		expect(replaced.entries.map(entry => entry.currency)).toEqual([
+			{ code: "EUR", minorUnitExponent: 2 },
+			{ code: "EUR", minorUnitExponent: 2 },
+			{ code: "JPY", minorUnitExponent: 0 },
+			{ code: "JPY", minorUnitExponent: 0 },
+		]);
+	});
+
 	it.each([
 		{ label: "missing", account: "missing" as const },
 		{ label: "cross-Organization", account: "other" as const },
@@ -542,11 +572,7 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: owned, direction: "credit", amount: 10 },
 		]);
 
-		const error = await runRepo(repository =>
-			Effect.flip(
-				repository.createTransaction(`invalid-${mutation.transaction.id.toString()}`, mutation)
-			)
-		);
+		const error = await runRepo(repository => Effect.flip(repository.createTransaction(mutation)));
 		expect(error).toBeInstanceOf(AccountNotFound);
 		expect(
 			await (
@@ -554,7 +580,7 @@ describe("TransactionRepoLive reads", () => {
 			).db
 				.select()
 				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.id, mutation.transaction.id.toString()))
+				.where(eq(LedgerTransactionsTable.id, mutation.id.toString()))
 		).toHaveLength(0);
 		const [account] = await (
 			await database()
@@ -580,11 +606,7 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: credit, direction: "credit", amount: 1 },
 		]);
 
-		const error = await runRepo(repository =>
-			Effect.flip(
-				repository.createTransaction(`invalid-${mutation.transaction.id.toString()}`, mutation)
-			)
-		);
+		const error = await runRepo(repository => Effect.flip(repository.createTransaction(mutation)));
 		expect(error).toBeInstanceOf(TransactionValidationFailure);
 		expect(
 			await (
@@ -592,7 +614,7 @@ describe("TransactionRepoLive reads", () => {
 			).db
 				.select()
 				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.id, mutation.transaction.id.toString()))
+				.where(eq(LedgerTransactionsTable.id, mutation.id.toString()))
 		).toHaveLength(0);
 	});
 
@@ -609,21 +631,16 @@ describe("TransactionRepoLive reads", () => {
 		]);
 		const invalid = {
 			...valid,
-			transaction: {
-				...valid.transaction,
-				entries: [
-					valid.transaction.entries[0],
-					{
-						...valid.transaction.entries[1],
-						amount: testCase.amount,
-					},
-				],
-			},
-		} as unknown as TransactionMutation;
+			entries: [
+				valid.entries[0],
+				{
+					...valid.entries[1],
+					amount: testCase.amount,
+				},
+			],
+		} as TransactionCreateRepositoryInput;
 
-		const error = await runRepo(repository =>
-			Effect.flip(repository.createTransaction(`invalid-${valid.transaction.id.toString()}`, invalid))
-		);
+		const error = await runRepo(repository => Effect.flip(repository.createTransaction(invalid)));
 		expect(error).toBeInstanceOf(TransactionValidationFailure);
 		expect(
 			await (
@@ -631,7 +648,7 @@ describe("TransactionRepoLive reads", () => {
 			).db
 				.select()
 				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.id, valid.transaction.id.toString()))
+				.where(eq(LedgerTransactionsTable.id, valid.id.toString()))
 		).toHaveLength(0);
 	});
 
@@ -645,17 +662,11 @@ describe("TransactionRepoLive reads", () => {
 		]);
 		const duplicateEntryId = {
 			...valid,
-			transaction: {
-				...valid.transaction,
-				entries: [
-					valid.transaction.entries[0],
-					{ ...valid.transaction.entries[1], id: valid.transaction.entries[0]!.id },
-				],
-			},
-		} as unknown as TransactionMutation;
+			entries: [valid.entries[0], { ...valid.entries[1], id: valid.entries[0]!.id }],
+		} as TransactionCreateRepositoryInput;
 
 		const error = await runRepo(repository =>
-			Effect.flip(repository.createTransaction("duplicate-entry-write", duplicateEntryId))
+			Effect.flip(repository.createTransaction(duplicateEntryId))
 		);
 		expect(error).toBeInstanceOf(TransactionPersistenceFailure);
 		expect(
@@ -664,7 +675,7 @@ describe("TransactionRepoLive reads", () => {
 			).db
 				.select()
 				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.id, valid.transaction.id.toString()))
+				.where(eq(LedgerTransactionsTable.id, valid.id.toString()))
 		).toHaveLength(0);
 		const [account] = await (
 			await database()
@@ -696,14 +707,11 @@ describe("TransactionRepoLive reads", () => {
 					: undefined;
 		const malformed = {
 			...valid,
-			transaction: { ...valid.transaction, status: testCase.status, postedAt },
-		} as unknown as TransactionMutation;
+			status: testCase.status,
+			postedAt,
+		} as unknown as TransactionCreateRepositoryInput;
 
-		const error = await runRepo(repository =>
-			Effect.flip(
-				repository.createTransaction(`lifecycle-${valid.transaction.id.toString()}`, malformed)
-			)
-		);
+		const error = await runRepo(repository => Effect.flip(repository.createTransaction(malformed)));
 		expect(error).toBeInstanceOf(TransactionValidationFailure);
 		expect(
 			await (
@@ -711,7 +719,7 @@ describe("TransactionRepoLive reads", () => {
 			).db
 				.select()
 				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.id, valid.transaction.id.toString()))
+				.where(eq(LedgerTransactionsTable.id, valid.id.toString()))
 		).toHaveLength(0);
 		expect(
 			await (
@@ -719,7 +727,7 @@ describe("TransactionRepoLive reads", () => {
 			).db
 				.select()
 				.from(LedgerTransactionEntriesTable)
-				.where(eq(LedgerTransactionEntriesTable.transactionId, valid.transaction.id.toString()))
+				.where(eq(LedgerTransactionEntriesTable.transactionId, valid.id.toString()))
 		).toHaveLength(0);
 		const accounts = await (
 			await database()
@@ -777,9 +785,7 @@ describe("TransactionRepoLive reads", () => {
 		);
 
 		try {
-			const error = await runRepo(repository =>
-				Effect.flip(repository.createTransaction("partial-account-write", mutation))
-			);
+			const error = await runRepo(repository => Effect.flip(repository.createTransaction(mutation)));
 			expect(error).toBeInstanceOf(TransactionPersistenceFailure);
 			const attempts = await db.execute<{ last_value: string; is_called: boolean }>(
 				sql.raw("SELECT last_value, is_called FROM t7_account_update_attempts")
@@ -789,13 +795,13 @@ describe("TransactionRepoLive reads", () => {
 				await db
 					.select()
 					.from(LedgerTransactionsTable)
-					.where(eq(LedgerTransactionsTable.id, mutation.transaction.id.toString()))
+					.where(eq(LedgerTransactionsTable.id, mutation.id.toString()))
 			).toHaveLength(0);
 			expect(
 				await db
 					.select()
 					.from(LedgerTransactionEntriesTable)
-					.where(eq(LedgerTransactionEntriesTable.transactionId, mutation.transaction.id.toString()))
+					.where(eq(LedgerTransactionEntriesTable.transactionId, mutation.id.toString()))
 			).toHaveLength(0);
 			const accounts = await db
 				.select()
@@ -860,14 +866,17 @@ describe("TransactionRepoLive reads", () => {
 		let overlapping = false;
 		try {
 			const pending = inputs.map(mutation =>
-				runRepo(repository => repository.createTransaction(key, mutation).pipe(Effect.result))
+				runRepo(repository =>
+					repository.createTransaction({ ...mutation, idempotencyKey: key }).pipe(Effect.result)
+				)
 			);
 			for (let attempt = 0; attempt < 100; attempt += 1) {
 				const waiting = await blocker.query<{ count: number }>(`
 					SELECT count(*)::integer AS count
 					FROM pg_stat_activity
-					WHERE wait_event = 'advisory'
-					AND query LIKE 'insert into "ledger_transactions"%'
+					WHERE wait_event IS NOT NULL
+					AND (query LIKE 'insert into "ledger_transactions"%'
+						OR query LIKE 'select "id", "currency_code"%ledger_accounts%')
 				`);
 				if (waiting.rows[0]!.count === 2) {
 					overlapping = true;
@@ -928,7 +937,9 @@ describe("TransactionRepoLive reads", () => {
 
 		const created = await Promise.all(
 			mutations.map(mutation =>
-				runRepo(repository => repository.createTransaction("shared-create-key", mutation))
+				runRepo(repository =>
+					repository.createTransaction({ ...mutation, idempotencyKey: "shared-create-key" })
+				)
 			)
 		);
 		expect(created).toHaveLength(2);
@@ -951,7 +962,7 @@ describe("TransactionRepoLive reads", () => {
 			]);
 
 			const error = await Effect.runPromise(
-				Effect.flip(repository.createTransaction("classified", mutation))
+				Effect.flip(repository.createTransaction({ ...mutation, idempotencyKey: "classified" }))
 			);
 			expect(error).toBeInstanceOf(TransactionConcurrencyFailure);
 			expect(error.retryable).toBe(true);
@@ -971,33 +982,30 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: shared, direction: "debit", amount: 60 },
 			{ accountId: removed, direction: "credit", amount: 100 },
 		]);
-		const created = await runRepo(repository =>
-			repository.createTransaction(`replace-${original.transaction.id.toString()}`, original)
-		);
-		const replacementEntries = await Promise.all(
-			[
-				Entry.make({
-					id: newLedgerTransactionEntryID(),
-					accountId: shared,
-					direction: "debit",
-					amount: 25,
-					currency: makeCurrency("EUR", 2),
-				}),
-				Entry.make({
-					id: newLedgerTransactionEntryID(),
-					accountId: added,
-					direction: "credit",
-					amount: 25,
-					currency: makeCurrency("EUR", 2),
-				}),
-			].map(effect => Effect.runPromise(effect))
-		);
-		const mutation = await Effect.runPromise(
-			created.replace(
-				{ description: "replacement", metadata: { source: "replace" }, entries: replacementEntries },
-				DateTime.fromISO("2026-08-15T13:00:00.000Z", { zone: "utc" })
-			)
-		);
+		const created = await runRepo(repository => repository.createTransaction(original));
+		const replacementEntries = [
+			{
+				id: newLedgerTransactionEntryID(),
+				accountId: shared,
+				direction: "debit",
+				amount: 25,
+			},
+			{
+				id: newLedgerTransactionEntryID(),
+				accountId: added,
+				direction: "credit",
+				amount: 25,
+			},
+		] as const;
+		const mutation: TransactionReplaceRepositoryInput = {
+			id: created.id,
+			organizationId,
+			ledgerId,
+			description: "replacement",
+			metadata: { source: "replace" },
+			entries: replacementEntries,
+			updated: DateTime.fromISO("2026-08-15T13:00:00.000Z", { zone: "utc" }),
+		};
 
 		const replaced = await runRepo(repository => repository.replaceTransaction(mutation));
 		const accounts = await (
@@ -1032,15 +1040,14 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: debit, direction: "debit", amount: 9 },
 			{ accountId: credit, direction: "credit", amount: 9 },
 		]);
-		const created = await runRepo(repository =>
-			repository.createTransaction(`clear-${original.transaction.id.toString()}`, original)
-		);
-		const mutation = await Effect.runPromise(
-			created.replace(
-				{ entries: created.entries },
-				DateTime.fromISO("2026-08-15T13:01:00.000Z", { zone: "utc" })
-			)
-		);
+		const created = await runRepo(repository => repository.createTransaction(original));
+		const mutation: TransactionReplaceRepositoryInput = {
+			id: created.id,
+			organizationId,
+			ledgerId,
+			entries: original.entries,
+			updated: DateTime.fromISO("2026-08-15T13:01:00.000Z", { zone: "utc" }),
+		};
 
 		const replaced = await runRepo(repository => repository.replaceTransaction(mutation));
 		const [row] = await (
@@ -1064,10 +1071,7 @@ describe("TransactionRepoLive reads", () => {
 				{ accountId: newLedgerAccountID(), direction: "debit", amount: 1 },
 				{ accountId: newLedgerAccountID(), direction: "credit", amount: 1 },
 			]);
-			const mutation = {
-				...replacement,
-				transaction: { ...replacement.transaction, id: transactionId },
-			} as TransactionMutation;
+			const mutation = { ...replacement, id: transactionId };
 
 			const error = await runRepo(repository => Effect.flip(repository.replaceTransaction(mutation)));
 			expect(error).toBeInstanceOf(TransactionLifecycleConflict);
@@ -1094,10 +1098,7 @@ describe("TransactionRepoLive reads", () => {
 				scenario === "missing"
 					? newLedgerTransactionID()
 					: await createTransaction(other.organizationId, other.ledgerId);
-			const replacement = {
-				...mutation,
-				transaction: { ...mutation.transaction, id: target },
-			} as TransactionMutation;
+			const replacement = { ...mutation, id: target };
 
 			const error = await runRepo(repository =>
 				Effect.flip(repository.replaceTransaction(replacement))
@@ -1106,7 +1107,7 @@ describe("TransactionRepoLive reads", () => {
 		}
 	);
 
-	it.each(["ownership", "currency", "balance", "amount", "safe-result"] as const)(
+	it.each(["ownership", "balance", "amount", "safe-result"] as const)(
 		"rolls back the exact original state after a replacement %s failure",
 		async scenario => {
 			const owner = await createLedger();
@@ -1119,43 +1120,39 @@ describe("TransactionRepoLive reads", () => {
 				{ accountId: debit, direction: "debit", amount: 1 },
 				{ accountId: credit, direction: "credit", amount: 1 },
 			]);
-			const created = await runRepo(repository =>
-				repository.createTransaction(`rollback-${original.transaction.id.toString()}`, original)
-			);
-			const validEntries = await Promise.all(
-				[
-					Entry.make({
-						id: newLedgerTransactionEntryID(),
-						accountId: extra,
-						direction: "debit",
-						amount: 2,
-						currency: makeCurrency("EUR", 2),
-					}),
-					Entry.make({
-						id: newLedgerTransactionEntryID(),
-						accountId: credit,
-						direction: "credit",
-						amount: 2,
-						currency: makeCurrency("EUR", 2),
-					}),
-				].map(effect => Effect.runPromise(effect))
-			);
+			const created = await runRepo(repository => repository.createTransaction(original));
+			const validEntries = [
+				{
+					id: newLedgerTransactionEntryID(),
+					accountId: extra,
+					direction: "debit",
+					amount: 2,
+				},
+				{
+					id: newLedgerTransactionEntryID(),
+					accountId: credit,
+					direction: "credit",
+					amount: 2,
+				},
+			] as const;
 			const entries = [
 				{
 					...validEntries[0]!,
 					accountId: scenario === "ownership" ? newLedgerAccountID() : validEntries[0]!.accountId,
-					currency: scenario === "currency" ? makeCurrency("USD", 2) : validEntries[0]!.currency,
 					amount: scenario === "amount" ? 0 : validEntries[0]!.amount,
 				},
 				{
 					...validEntries[1]!,
 					amount: scenario === "amount" ? 0 : scenario === "balance" ? 1 : validEntries[1]!.amount,
 				},
-			] as unknown as Transaction["entries"];
-			const replacement = {
-				transaction: { ...created, entries },
-				deltas: [],
-			} as unknown as TransactionMutation;
+			] as TransactionRepositoryEntryInput[];
+			const replacement: TransactionReplaceRepositoryInput = {
+				id: created.id,
+				organizationId: owner.organizationId,
+				ledgerId: owner.ledgerId,
+				entries,
+				updated: DateTime.fromISO("2026-08-15T13:00:00Z", { zone: "utc" }),
+			};
 			const db = (await database()).db;
 			const beforeTransaction = await db
 				.select()
@@ -1205,14 +1202,15 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: debit, direction: "debit", amount: 8 },
 			{ accountId: credit, direction: "credit", amount: 8 },
 		]);
-		const created = await runRepo(repository =>
-			repository.createTransaction(`entry-rollback-${original.transaction.id.toString()}`, original)
-		);
-		const duplicate = { ...created.entries[1], id: created.entries[0]!.id } as Entry;
-		const mutation = {
-			transaction: { ...created, entries: [created.entries[0], duplicate] },
-			deltas: [],
-		} as unknown as TransactionMutation;
+		const created = await runRepo(repository => repository.createTransaction(original));
+		const duplicate = { ...original.entries[1]!, id: original.entries[0]!.id };
+		const mutation: TransactionReplaceRepositoryInput = {
+			id: created.id,
+			organizationId: owner.organizationId,
+			ledgerId: owner.ledgerId,
+			entries: [original.entries[0]!, duplicate],
+			updated: DateTime.fromISO("2026-08-15T13:00:00Z", { zone: "utc" }),
+		};
 		const db = (await database()).db;
 		const before = await Promise.all([
 			db
@@ -1258,15 +1256,14 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: accountIds[0]!, direction: "debit", amount: 6 },
 			{ accountId: accountIds[1]!, direction: "credit", amount: 6 },
 		]);
-		const created = await runRepo(repository =>
-			repository.createTransaction(`late-rollback-${original.transaction.id.toString()}`, original)
-		);
-		const mutation = await Effect.runPromise(
-			created.replace(
-				{ entries: created.entries },
-				DateTime.fromISO("2026-08-15T13:02:00.000Z", { zone: "utc" })
-			)
-		);
+		const created = await runRepo(repository => repository.createTransaction(original));
+		const mutation: TransactionReplaceRepositoryInput = {
+			id: created.id,
+			organizationId: owner.organizationId,
+			ledgerId: owner.ledgerId,
+			entries: original.entries,
+			updated: DateTime.fromISO("2026-08-15T13:02:00.000Z", { zone: "utc" }),
+		};
 		const db = (await database()).db;
 		const before = await Promise.all([
 			db
@@ -1347,26 +1344,24 @@ describe("TransactionRepoLive reads", () => {
 			}))
 		);
 		const createdAt = DateTime.fromISO("2026-08-15T12:00:00.000Z", { zone: "utc" });
-		const original = await Effect.runPromise(
-			Transaction.create({
-				id: newLedgerTransactionID(),
-				organizationId: owner.organizationId,
-				ledgerId: owner.ledgerId,
-				status: "pending",
-				entries: await makeBalancedEntries(oldAccountIds),
-				created: createdAt,
-				updated: createdAt,
-			})
-		);
-		const created = await runRepo(repository =>
-			repository.createTransaction(`cap-union-${original.transaction.id.toString()}`, original)
-		);
-		const replacement = await Effect.runPromise(
-			created.replace(
-				{ entries: await makeBalancedEntries(replacementAccountIds) },
-				DateTime.fromISO("2026-08-15T13:03:00.000Z", { zone: "utc" })
-			)
-		);
+		const original: TransactionCreateRepositoryInput = {
+			id: newLedgerTransactionID(),
+			organizationId: owner.organizationId,
+			ledgerId: owner.ledgerId,
+			idempotencyKey: `cap-union-${crypto.randomUUID()}`,
+			status: "pending",
+			entries: await makeBalancedEntries(oldAccountIds),
+			created: createdAt,
+			updated: createdAt,
+		};
+		const created = await runRepo(repository => repository.createTransaction(original));
+		const replacement: TransactionReplaceRepositoryInput = {
+			id: created.id,
+			organizationId: owner.organizationId,
+			ledgerId: owner.ledgerId,
+			entries: await makeBalancedEntries(replacementAccountIds),
+			updated: DateTime.fromISO("2026-08-15T13:03:00.000Z", { zone: "utc" }),
+		};
 
 		const replaced = await runRepo(repository => repository.replaceTransaction(replacement));
 		expect(replaced.entries).toHaveLength(101);
@@ -1378,14 +1373,13 @@ describe("TransactionRepoLive reads", () => {
 		expect(oldAccountIds.every(id => byId.get(id.toString())?.lockVersion === 2)).toBe(true);
 		expect(replacementAccountIds.every(id => byId.get(id.toString())?.lockVersion === 1)).toBe(true);
 
-		const tooMany = await Effect.runPromise(
-			replaced.replace(
-				{
-					entries: await makeBalancedEntries(Array.from({ length: 201 }, () => newLedgerAccountID())),
-				},
-				DateTime.fromISO("2026-08-15T13:04:00.000Z", { zone: "utc" })
-			)
-		);
+		const tooMany: TransactionReplaceRepositoryInput = {
+			id: replaced.id,
+			organizationId: owner.organizationId,
+			ledgerId: owner.ledgerId,
+			entries: await makeBalancedEntries(Array.from({ length: 201 }, () => newLedgerAccountID())),
+			updated: DateTime.fromISO("2026-08-15T13:04:00.000Z", { zone: "utc" }),
+		};
 		const before = await Promise.all([
 			db
 				.select()
@@ -1422,9 +1416,7 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: debit, direction: "debit", amount: 11 },
 			{ accountId: credit, direction: "credit", amount: 11 },
 		]);
-		const created = await runRepo(repository =>
-			repository.createTransaction(`transition-${mutation.transaction.id.toString()}`, mutation)
-		);
+		const created = await runRepo(repository => repository.createTransaction(mutation));
 		const changedAt = DateTime.fromISO("2026-08-15T14:00:00.000Z", { zone: "utc" });
 		const transition = (repository: TransactionRepo) =>
 			testCase.operation === "post"
@@ -1573,12 +1565,7 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: accountIds[0]!, direction: "debit", amount: 17 },
 			{ accountId: accountIds[1]!, direction: "credit", amount: 17 },
 		]);
-		const created = await runRepo(repository =>
-			repository.createTransaction(
-				`transition-rollback-${mutation.transaction.id.toString()}`,
-				mutation
-			)
-		);
+		const created = await runRepo(repository => repository.createTransaction(mutation));
 		const db = (await database()).db;
 		const before = await Promise.all([
 			db
@@ -1671,9 +1658,9 @@ describe("TransactionRepoLive reads", () => {
 					metadata: { scenario },
 				}
 			);
-			const idempotencyKey = `race-${scenario}-${mutation.transaction.id.toString()}`;
+			const idempotencyKey = `race-${scenario}-${mutation.id.toString()}`;
 			const transaction = await runRepo(repository =>
-				repository.createTransaction(idempotencyKey, mutation)
+				repository.createTransaction({ ...mutation, idempotencyKey })
 			);
 			const at = DateTime.fromISO("2026-08-15T14:04:00.000Z", { zone: "utc" });
 			const replacementEntries = await Promise.all(
@@ -1683,7 +1670,7 @@ describe("TransactionRepoLive reads", () => {
 						accountId: debit,
 						direction: "debit",
 						amount: 7,
-						currency: makeCurrency("EUR", 2),
+						currency: transaction.entries.find(entry => entry.accountId === debit)!.currency,
 						metadata: { side: "replacement-debit" },
 					}),
 					Entry.make({
@@ -1691,12 +1678,12 @@ describe("TransactionRepoLive reads", () => {
 						accountId: credit,
 						direction: "credit",
 						amount: 7,
-						currency: makeCurrency("EUR", 2),
+						currency: transaction.entries.find(entry => entry.accountId === credit)!.currency,
 						metadata: { side: "replacement-credit" },
 					}),
 				].map(effect => Effect.runPromise(effect))
 			);
-			const replacement = await Effect.runPromise(
+			const replacementMutation = await Effect.runPromise(
 				transaction.replace(
 					{
 						description: "raced replacement",
@@ -1706,10 +1693,20 @@ describe("TransactionRepoLive reads", () => {
 					at
 				)
 			);
+			const replacement: TransactionReplaceRepositoryInput = {
+				id: transaction.id,
+				organizationId: owner.organizationId,
+				ledgerId: owner.ledgerId,
+				description: "raced replacement",
+				metadata: { scenario: "update/post" },
+				entries: replacementEntries.map(({ currency: _currency, ...entry }) => entry),
+				updated: at,
+			};
 			const expectedPosted = await Effect.runPromise(
-				(scenario === "update/post" ? replacement.transaction : transaction).post(at)
+				(scenario === "update/post" ? replacementMutation.transaction : transaction).post(at)
 			).then(result => result.transaction);
-			const expectedFirst = scenario === "update/post" ? replacement.transaction : expectedPosted;
+			const expectedFirst =
+				scenario === "update/post" ? replacementMutation.transaction : expectedPosted;
 			const db = (await database()).db;
 			const barrierPool = new Pool({ connectionString: new Config().databaseUrl });
 			const blocker = await barrierPool.connect();
@@ -1851,9 +1848,7 @@ describe("TransactionRepoLive reads", () => {
 			{ accountId: debit, direction: "debit", amount: 1 },
 			{ accountId: credit, direction: "credit", amount: 1 },
 		]);
-		const created = await runRepo(repository =>
-			repository.createTransaction(`unsafe-post-${mutation.transaction.id.toString()}`, mutation)
-		);
+		const created = await runRepo(repository => repository.createTransaction(mutation));
 		const db = (await database()).db;
 		await db
 			.update(LedgerAccountsTable)
@@ -1928,12 +1923,16 @@ describe("TransactionRepoLive reads", () => {
 			}
 		);
 		const idempotencyKeys = [
-			`overlap-a-${firstMutation.transaction.id.toString()}`,
-			`overlap-b-${secondMutation.transaction.id.toString()}`,
+			`overlap-a-${firstMutation.id.toString()}`,
+			`overlap-b-${secondMutation.id.toString()}`,
 		] as const;
 		const [first, second] = await Promise.all([
-			runRepo(repository => repository.createTransaction(idempotencyKeys[0], firstMutation)),
-			runRepo(repository => repository.createTransaction(idempotencyKeys[1], secondMutation)),
+			runRepo(repository =>
+				repository.createTransaction({ ...firstMutation, idempotencyKey: idempotencyKeys[0] })
+			),
+			runRepo(repository =>
+				repository.createTransaction({ ...secondMutation, idempotencyKey: idempotencyKeys[1] })
+			),
 		]);
 		const at = DateTime.fromISO("2026-08-15T14:06:00.000Z", { zone: "utc" });
 		const expectedPosts = await Promise.all(
