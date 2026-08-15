@@ -20,7 +20,6 @@
 		"db:migrate": "dotenvx run -- drizzle-kit migrate"
 	},
 	"dependencies": {
-		"@dotenvx/dotenvx": "^1.51.1",
 		"@fastify/auth": "^5.0.3",
 		"@fastify/jwt": "^10.0.0",
 		"@fastify/rate-limit": "^11.2.0",
@@ -34,15 +33,16 @@
 		"fast-jwt": "^6.0.2",
 		"fastify": "^5.6.2",
 		"fastify-plugin": "^5.1.0",
+		"ioredis": "^6.0.0",
 		"luxon": "^3.7.2",
 		"pg": "^8.16.3",
 		"pino-pretty": "^13.1.2",
 		"radash": "^12.1.1",
-		"tsx": "4.20.6",
 		"typeid-js": "^1.2.0",
 		"uuid": "^13.0.0"
 	},
 	"devDependencies": {
+		"@dotenvx/dotenvx": "^1.75.1",
 		"@exchequerio/typescript-config": "workspace:*",
 		"@faker-js/faker": "^10.1.0",
 		"@tsconfig/node-lts": "^24.0.0",
@@ -54,6 +54,8 @@
 		"@vitest/coverage-v8": "^4.0.14",
 		"autocannon": "^8.0.0",
 		"drizzle-kit": "^0.31.7",
+		"tsdown": "^0.22.14",
+		"tsx": "4.20.6",
 		"typescript": "npm:@typescript/typescript6@6.0.2",
 		"vitest": "^4.0.14"
 	}

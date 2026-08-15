@@ -3,6 +3,10 @@ import type { Config } from "@/config";
 import { type Database, makeDatabaseLive } from "@/db";
 import { ledgerLayer, type LedgerService } from "@/ledgers";
 import { accountLayer, type AccountService } from "@/ledgers/accounts";
+import {
+	makeTransactionIdempotencyRepoLive,
+	type TransactionIdempotencyRepo,
+} from "@/ledgers/transactions/TransactionIdempotencyRepo";
 import { organizationLayer, type OrganizationService } from "@/organizations";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
@@ -12,12 +16,14 @@ type ServerRuntimeServices =
 	| Database
 	| LedgerService
 	| AccountService
+	| TransactionIdempotencyRepo
 	| OrganizationService;
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
 interface ServerRuntimeLayerOverrides {
 	readonly database?: Layer.Layer<Database, never, never>;
+	readonly transactionIdempotency?: Layer.Layer<TransactionIdempotencyRepo, never, never>;
 }
 
 const makeServerRuntimeLayer = (
@@ -26,7 +32,8 @@ const makeServerRuntimeLayer = (
 ): ServerRuntimeLayer => {
 	const infrastructure = Layer.mergeAll(
 		Layer.succeed(ServerConfigTag, config),
-		overrides.database ?? makeDatabaseLive(config.databaseUrl)
+		overrides.database ?? makeDatabaseLive(config.databaseUrl),
+		overrides.transactionIdempotency ?? makeTransactionIdempotencyRepoLive(config.valkeyUrl)
 	);
 	const accountWithLedger = accountLayer.pipe(Layer.provide(ledgerLayer));
 	return Layer.mergeAll(ledgerLayer, accountWithLedger, organizationLayer).pipe(
