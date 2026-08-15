@@ -62,6 +62,8 @@ type TransactionReplaceRepositoryError =
 	| TransactionNotFound
 	| TransactionValidationFailure;
 
+type TransactionTransitionRepositoryError = TransactionReplaceRepositoryError;
+
 interface TransactionRepo {
 	createTransaction(
 		idempotencyKey: string,
@@ -70,6 +72,18 @@ interface TransactionRepo {
 	replaceTransaction(
 		mutation: TransactionMutation
 	): Effect.Effect<Transaction, TransactionReplaceRepositoryError>;
+	postTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		postedAt: DateTime
+	): Effect.Effect<Transaction, TransactionTransitionRepositoryError>;
+	voidTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		updated: DateTime
+	): Effect.Effect<Transaction, TransactionTransitionRepositoryError>;
 	listTransactions(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -205,6 +219,31 @@ const mapReplaceError = (
 		mutation.transaction.ledgerId,
 		mutation.transaction.id
 	);
+	const code = postgresErrorCode(cause);
+	if (code === "40001" || code === "40P01") {
+		return new TransactionConcurrencyFailure(cause, errorContext);
+	}
+	return mapInfrastructureError(cause, errorContext);
+};
+
+const mapTransitionError = (
+	cause: unknown,
+	organizationId: OrgID,
+	ledgerId: LedgerID,
+	transactionId: LedgerTransactionID
+): TransactionTransitionRepositoryError => {
+	if (
+		cause instanceof AccountNotFound ||
+		cause instanceof AccountVersionConflict ||
+		cause instanceof TransactionConcurrencyFailure ||
+		cause instanceof TransactionLifecycleConflict ||
+		cause instanceof TransactionNotFound ||
+		cause instanceof TransactionPersistenceDecodingFailure ||
+		cause instanceof TransactionValidationFailure
+	) {
+		return cause;
+	}
+	const errorContext = context(organizationId, ledgerId, transactionId);
 	const code = postgresErrorCode(cause);
 	if (code === "40001" || code === "40P01") {
 		return new TransactionConcurrencyFailure(cause, errorContext);
@@ -692,6 +731,211 @@ class TransactionRepoLive implements TransactionRepo {
 		});
 	}
 
+	private transitionTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		operation: "post" | "void",
+		changedAt: DateTime
+	): Effect.Effect<Transaction, TransactionTransitionRepositoryError> {
+		return Effect.tryPromise({
+			try: () =>
+				this.db.transaction(async tx => {
+					const [row] = await tx
+						.select(transactionColumns)
+						.from(LedgerTransactionsTable)
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, transactionId.toString())
+							)
+						)
+						.limit(1)
+						.for("update");
+					if (row === undefined) {
+						throw new TransactionNotFound(
+							organizationId.toString(),
+							ledgerId.toString(),
+							transactionId.toString()
+						);
+					}
+					const targetStatus = operation === "post" ? "posted" : "voided";
+					if (row.status === targetStatus) {
+						const entryRows = await tx
+							.select(entryColumns)
+							.from(LedgerTransactionEntriesTable)
+							.innerJoin(
+								LedgerAccountsTable,
+								and(
+									eq(LedgerAccountsTable.id, LedgerTransactionEntriesTable.accountId),
+									eq(LedgerAccountsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
+									eq(LedgerAccountsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
+								)
+							)
+							.where(
+								and(
+									eq(LedgerTransactionEntriesTable.organizationId, organizationId.toString()),
+									eq(LedgerTransactionEntriesTable.ledgerId, ledgerId.toString()),
+									eq(LedgerTransactionEntriesTable.transactionId, row.id)
+								)
+							)
+							.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id));
+						return Effect.runPromise(decodeTransaction(row, entryRows));
+					}
+					if (row.status !== "pending") {
+						throw new TransactionLifecycleConflict(
+							row.id,
+							row.status,
+							targetStatus,
+							context(organizationId, ledgerId, transactionId)
+						);
+					}
+
+					const persistedEntries = await tx
+						.select({
+							id: LedgerTransactionEntriesTable.id,
+							transactionId: LedgerTransactionEntriesTable.transactionId,
+							accountId: LedgerTransactionEntriesTable.accountId,
+							direction: LedgerTransactionEntriesTable.direction,
+							amount: LedgerTransactionEntriesTable.amount,
+							metadata: LedgerTransactionEntriesTable.metadata,
+						})
+						.from(LedgerTransactionEntriesTable)
+						.where(
+							and(
+								eq(LedgerTransactionEntriesTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionEntriesTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionEntriesTable.transactionId, row.id)
+							)
+						)
+						.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id));
+					const accountIds = [...new Set(persistedEntries.map(entry => entry.accountId))].sort();
+					const accounts =
+						accountIds.length === 0
+							? []
+							: await tx
+									.select({
+										id: LedgerAccountsTable.id,
+										currencyCode: LedgerAccountsTable.currencyCode,
+										minorUnitExponent: LedgerAccountsTable.minorUnitExponent,
+										pendingCredits: LedgerAccountsTable.pendingCredits,
+										pendingDebits: LedgerAccountsTable.pendingDebits,
+										postedCredits: LedgerAccountsTable.postedCredits,
+										postedDebits: LedgerAccountsTable.postedDebits,
+										lockVersion: LedgerAccountsTable.lockVersion,
+									})
+									.from(LedgerAccountsTable)
+									.where(
+										and(
+											eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+											eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
+											inArray(LedgerAccountsTable.id, accountIds)
+										)
+									)
+									.orderBy(asc(LedgerAccountsTable.id))
+									.for("update");
+					const accountsById = new Map(accounts.map(account => [account.id, account]));
+					const missingId = accountIds.find(accountId => !accountsById.has(accountId));
+					if (missingId !== undefined) {
+						throw new AccountNotFound(organizationId.toString(), ledgerId.toString(), missingId);
+					}
+					const entryRows: EntryRow[] = persistedEntries.map(entry => {
+						const account = accountsById.get(entry.accountId)!;
+						return {
+							...entry,
+							currencyCode: account.currencyCode,
+							minorUnitExponent: account.minorUnitExponent,
+						};
+					});
+					const current = await Effect.runPromise(decodeTransaction(row, entryRows));
+					const transition = await Effect.runPromise(
+						operation === "post" ? current.post(changedAt) : current.void(changedAt)
+					);
+					if (transition.deltas.length === 0) return current;
+
+					for (const delta of transition.deltas) {
+						const account = accountsById.get(delta.accountId.toString());
+						if (account === undefined) {
+							throw new AccountNotFound(
+								organizationId.toString(),
+								ledgerId.toString(),
+								delta.accountId.toString()
+							);
+						}
+						for (const counter of [
+							"pendingCredits",
+							"pendingDebits",
+							"postedCredits",
+							"postedDebits",
+						] as const) {
+							addSafe(account[counter], delta[counter], `Resulting Account ${counter} is unsafe`);
+						}
+					}
+
+					await tx
+						.update(LedgerTransactionsTable)
+						.set({
+							status: transition.transaction.status,
+							postedAt: transition.transaction.postedAt?.toJSDate() ?? sql`null`,
+							updated: transition.transaction.updated.toJSDate(),
+						})
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, transactionId.toString())
+							)
+						);
+					for (const delta of transition.deltas) {
+						const account = accountsById.get(delta.accountId.toString())!;
+						const updated = await tx
+							.update(LedgerAccountsTable)
+							.set({
+								pendingCredits: sql`${LedgerAccountsTable.pendingCredits} + ${delta.pendingCredits}`,
+								pendingDebits: sql`${LedgerAccountsTable.pendingDebits} + ${delta.pendingDebits}`,
+								postedCredits: sql`${LedgerAccountsTable.postedCredits} + ${delta.postedCredits}`,
+								postedDebits: sql`${LedgerAccountsTable.postedDebits} + ${delta.postedDebits}`,
+								lockVersion: sql`${LedgerAccountsTable.lockVersion} + 1`,
+								updated: transition.transaction.updated.toJSDate(),
+							})
+							.where(
+								and(
+									eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+									eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
+									eq(LedgerAccountsTable.id, account.id),
+									eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+								)
+							)
+							.returning({ id: LedgerAccountsTable.id });
+						if (updated.length !== 1) {
+							throw new AccountVersionConflict(organizationId.toString(), ledgerId.toString(), account.id);
+						}
+					}
+					return transition.transaction;
+				}),
+			catch: cause => mapTransitionError(cause, organizationId, ledgerId, transactionId),
+		});
+	}
+
+	postTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		postedAt: DateTime
+	): Effect.Effect<Transaction, TransactionTransitionRepositoryError> {
+		return this.transitionTransaction(organizationId, ledgerId, transactionId, "post", postedAt);
+	}
+
+	voidTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		updated: DateTime
+	): Effect.Effect<Transaction, TransactionTransitionRepositoryError> {
+		return this.transitionTransaction(organizationId, ledgerId, transactionId, "void", updated);
+	}
+
 	private loadTransactions(
 		rows: readonly PublicTransactionRow[],
 		errorContext: ErrorContext
@@ -813,6 +1057,7 @@ export type {
 	TransactionCreateRepositoryError,
 	TransactionListQuery,
 	TransactionReplaceRepositoryError,
+	TransactionTransitionRepositoryError,
 	TransactionRepo,
 };
 export { TransactionRepoLive, TransactionRepoTag, transactionRepoLayer };

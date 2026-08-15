@@ -55,7 +55,12 @@ const makeCreate = async (
 		readonly direction: "debit" | "credit";
 		readonly amount: number;
 		readonly currencyCode?: string;
-	}>
+		readonly metadata?: Readonly<Record<string, string>>;
+	}>,
+	options: {
+		readonly description?: string;
+		readonly metadata?: Readonly<Record<string, string>>;
+	} = {}
 ): Promise<TransactionMutation> => {
 	const created = DateTime.fromISO("2026-08-15T12:00:00.000Z", { zone: "utc" });
 	const domainEntries = await Promise.all(
@@ -67,6 +72,7 @@ const makeCreate = async (
 					direction: entry.direction,
 					amount: entry.amount,
 					currency: makeCurrency(entry.currencyCode ?? "EUR", 2),
+					metadata: entry.metadata,
 				})
 			)
 		)
@@ -75,6 +81,7 @@ const makeCreate = async (
 		id: newLedgerTransactionID(),
 		organizationId,
 		ledgerId,
+		...options,
 		entries: domainEntries,
 		created,
 		updated: created,
@@ -105,6 +112,30 @@ const makeBalancedEntries = async (
 		)
 	);
 };
+
+const normalizeTransaction = (transaction: Transaction, idempotencyKey: string) => ({
+	id: transaction.id.toString(),
+	organizationId: transaction.organizationId.toString(),
+	ledgerId: transaction.ledgerId.toString(),
+	idempotencyKey,
+	description: transaction.description,
+	metadata: transaction.metadata,
+	status: transaction.status,
+	postedAt: transaction.postedAt?.toUTC().toISO(),
+	created: transaction.created.toUTC().toISO(),
+	updated: transaction.updated.toUTC().toISO(),
+	entries: transaction.entries.map(entry => ({
+		id: entry.id.toString(),
+		accountId: entry.accountId.toString(),
+		direction: entry.direction,
+		amount: entry.amount,
+		currency: {
+			code: entry.currency.code,
+			minorUnitExponent: entry.currency.minorUnitExponent,
+		},
+		metadata: entry.metadata,
+	})),
+});
 
 describe("TransactionRepoLive reads", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
@@ -1378,5 +1409,651 @@ describe("TransactionRepoLive reads", () => {
 				.where(eq(LedgerTransactionEntriesTable.transactionId, replaced.id.toString())),
 		]);
 		expect(after).toEqual(before);
+	});
+
+	it.each([
+		{ operation: "post" as const, expectedStatus: "posted", pending: 11, posted: 11 },
+		{ operation: "void" as const, expectedStatus: "voided", pending: 0, posted: 0 },
+	])("atomically applies and idempotently repeats $operation", async testCase => {
+		const owner = await createLedger();
+		const debit = await createAccount(owner.organizationId, owner.ledgerId);
+		const credit = await createAccount(owner.organizationId, owner.ledgerId);
+		const mutation = await makeCreate(owner.organizationId, owner.ledgerId, "pending", [
+			{ accountId: debit, direction: "debit", amount: 11 },
+			{ accountId: credit, direction: "credit", amount: 11 },
+		]);
+		const created = await runRepo(repository =>
+			repository.createTransaction(`transition-${mutation.transaction.id.toString()}`, mutation)
+		);
+		const changedAt = DateTime.fromISO("2026-08-15T14:00:00.000Z", { zone: "utc" });
+		const transition = (repository: TransactionRepo) =>
+			testCase.operation === "post"
+				? repository.postTransaction(owner.organizationId, owner.ledgerId, created.id, changedAt)
+				: repository.voidTransaction(owner.organizationId, owner.ledgerId, created.id, changedAt);
+
+		const first = await runRepo(transition);
+		const afterFirst = await (
+			await database()
+		).db
+			.select()
+			.from(LedgerAccountsTable)
+			.where(inArray(LedgerAccountsTable.id, [debit.toString(), credit.toString()]));
+		const second = await runRepo(transition);
+		const afterSecond = await (
+			await database()
+		).db
+			.select()
+			.from(LedgerAccountsTable)
+			.where(inArray(LedgerAccountsTable.id, [debit.toString(), credit.toString()]));
+
+		expect(first.status).toBe(testCase.expectedStatus);
+		expect(second.updated.toISO()).toBe(first.updated.toISO());
+		expect(second.postedAt?.toISO()).toBe(first.postedAt?.toISO());
+		expect(afterFirst).toEqual(afterSecond);
+		expect(afterFirst.find(account => account.id === debit.toString())).toMatchObject({
+			pendingDebits: testCase.pending,
+			postedDebits: testCase.posted,
+			lockVersion: 2,
+		});
+		expect(afterFirst.find(account => account.id === credit.toString())).toMatchObject({
+			pendingCredits: testCase.pending,
+			postedCredits: testCase.posted,
+			lockVersion: 2,
+		});
+		expect(first.entries.map(entry => entry.id.toString())).toEqual(
+			created.entries.map(entry => entry.id.toString())
+		);
+
+		const lockPool = new Pool({ connectionString: new Config().databaseUrl });
+		const locker = await lockPool.connect();
+		let repeatedWhileAccountLocked: Transaction | "blocked" = "blocked";
+		let repeatPromise: Promise<Transaction> | undefined;
+		try {
+			await locker.query("BEGIN");
+			await locker.query("SELECT id FROM ledger_accounts WHERE id = $1 FOR UPDATE", [
+				debit.toString(),
+			]);
+			repeatPromise = runRepo(transition);
+			repeatedWhileAccountLocked = await Promise.race([
+				repeatPromise,
+				delay(500).then(() => "blocked" as const),
+			]);
+		} finally {
+			await locker.query("ROLLBACK");
+			locker.release();
+			await lockPool.end();
+		}
+		await repeatPromise;
+		expect(repeatedWhileAccountLocked).not.toBe("blocked");
+	});
+
+	it.each([
+		{ operation: "post" as const, initial: "voided" as const },
+		{ operation: "void" as const, initial: "posted" as const },
+	])("rejects $operation on $initial without changing persisted state", async testCase => {
+		const owner = await createLedger();
+		const transactionId = await createTransaction(owner.organizationId, owner.ledgerId, {
+			status: testCase.initial,
+		});
+		const db = (await database()).db;
+		const before = await Promise.all([
+			db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, transactionId.toString())),
+			db
+				.select()
+				.from(LedgerTransactionEntriesTable)
+				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toString())),
+			db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.ledgerId, owner.ledgerId.toString())),
+		]);
+		const changedAt = DateTime.fromISO("2026-08-15T14:01:00.000Z", { zone: "utc" });
+		const error = await runRepo(repository =>
+			Effect.flip(
+				testCase.operation === "post"
+					? repository.postTransaction(owner.organizationId, owner.ledgerId, transactionId, changedAt)
+					: repository.voidTransaction(owner.organizationId, owner.ledgerId, transactionId, changedAt)
+			)
+		);
+
+		expect(error).toBeInstanceOf(TransactionLifecycleConflict);
+		expect(
+			await Promise.all([
+				db
+					.select()
+					.from(LedgerTransactionsTable)
+					.where(eq(LedgerTransactionsTable.id, transactionId.toString())),
+				db
+					.select()
+					.from(LedgerTransactionEntriesTable)
+					.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toString())),
+				db
+					.select()
+					.from(LedgerAccountsTable)
+					.where(eq(LedgerAccountsTable.ledgerId, owner.ledgerId.toString())),
+			])
+		).toEqual(before);
+	});
+
+	it.each(["missing", "cross-Organization", "cross-Ledger"] as const)(
+		"hides %s lifecycle targets as absence",
+		async scenario => {
+			const owner = await createLedger();
+			const other = await createLedger();
+			const transactionId = await createTransaction(other.organizationId, other.ledgerId);
+			const id = scenario === "missing" ? newLedgerTransactionID() : transactionId;
+			const organizationId =
+				scenario === "cross-Organization" ? owner.organizationId : other.organizationId;
+			const ledgerId = scenario === "cross-Ledger" ? owner.ledgerId : other.ledgerId;
+
+			const error = await runRepo(repository =>
+				Effect.flip(
+					repository.postTransaction(
+						organizationId,
+						ledgerId,
+						id,
+						DateTime.fromISO("2026-08-15T14:02:00.000Z", { zone: "utc" })
+					)
+				)
+			);
+			expect(error).toBeInstanceOf(TransactionNotFound);
+		}
+	);
+
+	it("rolls back lifecycle and every Account when a later transition write fails", async () => {
+		const owner = await createLedger();
+		const accountIds = [
+			await createAccount(owner.organizationId, owner.ledgerId),
+			await createAccount(owner.organizationId, owner.ledgerId),
+		].sort((left, right) => left.toString().localeCompare(right.toString()));
+		const mutation = await makeCreate(owner.organizationId, owner.ledgerId, "pending", [
+			{ accountId: accountIds[0]!, direction: "debit", amount: 17 },
+			{ accountId: accountIds[1]!, direction: "credit", amount: 17 },
+		]);
+		const created = await runRepo(repository =>
+			repository.createTransaction(
+				`transition-rollback-${mutation.transaction.id.toString()}`,
+				mutation
+			)
+		);
+		const db = (await database()).db;
+		const before = await Promise.all([
+			db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, created.id.toString())),
+			db
+				.select()
+				.from(LedgerTransactionEntriesTable)
+				.where(eq(LedgerTransactionEntriesTable.transactionId, created.id.toString())),
+			db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.ledgerId, owner.ledgerId.toString())),
+		]);
+		await db.execute(sql.raw("DROP TRIGGER IF EXISTS t9_fail_later_update ON ledger_accounts"));
+		await db.execute(sql.raw("DROP FUNCTION IF EXISTS t9_fail_later_update()"));
+		await db.execute(
+			sql.raw(`
+			CREATE FUNCTION t9_fail_later_update() RETURNS trigger AS $$
+			BEGIN
+				IF NEW.organization_id = '${owner.organizationId.toString()}'
+					AND NEW.ledger_id = '${owner.ledgerId.toString()}'
+					AND NEW.id = '${accountIds[1]!.toString()}' THEN
+					RAISE EXCEPTION 'forced later T9 Account update failure';
+				END IF;
+				RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql
+		`)
+		);
+		await db.execute(
+			sql.raw(`
+			CREATE TRIGGER t9_fail_later_update
+			BEFORE UPDATE ON ledger_accounts
+			FOR EACH ROW EXECUTE FUNCTION t9_fail_later_update()
+		`)
+		);
+
+		try {
+			const error = await runRepo(repository =>
+				Effect.flip(
+					repository.postTransaction(
+						owner.organizationId,
+						owner.ledgerId,
+						created.id,
+						DateTime.fromISO("2026-08-15T14:03:00.000Z", { zone: "utc" })
+					)
+				)
+			);
+			expect(error).toBeInstanceOf(TransactionPersistenceFailure);
+			expect(
+				await Promise.all([
+					db
+						.select()
+						.from(LedgerTransactionsTable)
+						.where(eq(LedgerTransactionsTable.id, created.id.toString())),
+					db
+						.select()
+						.from(LedgerTransactionEntriesTable)
+						.where(eq(LedgerTransactionEntriesTable.transactionId, created.id.toString())),
+					db
+						.select()
+						.from(LedgerAccountsTable)
+						.where(eq(LedgerAccountsTable.ledgerId, owner.ledgerId.toString())),
+				])
+			).toEqual(before);
+		} finally {
+			await db.execute(sql.raw("DROP TRIGGER IF EXISTS t9_fail_later_update ON ledger_accounts"));
+			await db.execute(sql.raw("DROP FUNCTION IF EXISTS t9_fail_later_update()"));
+		}
+	});
+
+	it.each(["post/post", "post/void", "update/post"] as const)(
+		"deterministically serializes %s after the Transaction lock",
+		async scenario => {
+			const owner = await createLedger();
+			const debit = await createAccount(owner.organizationId, owner.ledgerId);
+			const credit = await createAccount(owner.organizationId, owner.ledgerId);
+			const mutation = await makeCreate(
+				owner.organizationId,
+				owner.ledgerId,
+				"pending",
+				[
+					{ accountId: debit, direction: "debit", amount: 4, metadata: { side: "debit" } },
+					{ accountId: credit, direction: "credit", amount: 4, metadata: { side: "credit" } },
+				],
+				{
+					description: `original ${scenario}`,
+					metadata: { scenario },
+				}
+			);
+			const idempotencyKey = `race-${scenario}-${mutation.transaction.id.toString()}`;
+			const transaction = await runRepo(repository =>
+				repository.createTransaction(idempotencyKey, mutation)
+			);
+			const at = DateTime.fromISO("2026-08-15T14:04:00.000Z", { zone: "utc" });
+			const replacementEntries = await Promise.all(
+				[
+					Entry.make({
+						id: newLedgerTransactionEntryID(),
+						accountId: debit,
+						direction: "debit",
+						amount: 7,
+						currency: makeCurrency("EUR", 2),
+						metadata: { side: "replacement-debit" },
+					}),
+					Entry.make({
+						id: newLedgerTransactionEntryID(),
+						accountId: credit,
+						direction: "credit",
+						amount: 7,
+						currency: makeCurrency("EUR", 2),
+						metadata: { side: "replacement-credit" },
+					}),
+				].map(effect => Effect.runPromise(effect))
+			);
+			const replacement = await Effect.runPromise(
+				transaction.replace(
+					{
+						description: "raced replacement",
+						metadata: { scenario: "update/post" },
+						entries: replacementEntries,
+					},
+					at
+				)
+			);
+			const expectedPosted = await Effect.runPromise(
+				(scenario === "update/post" ? replacement.transaction : transaction).post(at)
+			).then(result => result.transaction);
+			const expectedFirst = scenario === "update/post" ? replacement.transaction : expectedPosted;
+			const db = (await database()).db;
+			const barrierPool = new Pool({ connectionString: new Config().databaseUrl });
+			const blocker = await barrierPool.connect();
+			await db.execute(
+				sql.raw("DROP TRIGGER IF EXISTS t9_transaction_barrier ON ledger_transactions")
+			);
+			await db.execute(sql.raw("DROP FUNCTION IF EXISTS t9_transaction_barrier()"));
+			await db.execute(
+				sql.raw(`
+			CREATE FUNCTION t9_transaction_barrier() RETURNS trigger AS $$
+			BEGIN
+				IF NEW.id = '${transaction.id.toString()}' THEN
+					PERFORM pg_advisory_xact_lock(790009);
+				END IF;
+				RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql
+		`)
+			);
+			await db.execute(
+				sql.raw(`
+			CREATE TRIGGER t9_transaction_barrier
+			BEFORE UPDATE ON ledger_transactions
+			FOR EACH ROW EXECUTE FUNCTION t9_transaction_barrier()
+		`)
+			);
+			await blocker.query("SELECT pg_advisory_lock(790009)");
+			const started: Promise<unknown>[] = [];
+
+			try {
+				const first =
+					scenario === "update/post"
+						? runRepo(repository => repository.replaceTransaction(replacement).pipe(Effect.result))
+						: runRepo(repository =>
+								repository
+									.postTransaction(owner.organizationId, owner.ledgerId, transaction.id, at)
+									.pipe(Effect.result)
+							);
+				started.push(first);
+				let firstBlocked = false;
+				for (let attempt = 0; attempt < 100; attempt += 1) {
+					const waiting = await blocker.query<{ count: number }>(`
+					SELECT count(*)::integer AS count FROM pg_stat_activity
+					WHERE wait_event = 'advisory' AND query LIKE 'update "ledger_transactions"%'
+				`);
+					if (waiting.rows[0]!.count === 1) {
+						firstBlocked = true;
+						break;
+					}
+					await delay(10);
+				}
+				expect(firstBlocked).toBe(true);
+				const second = runRepo(repository =>
+					(scenario === "post/void"
+						? repository.voidTransaction(owner.organizationId, owner.ledgerId, transaction.id, at)
+						: repository.postTransaction(owner.organizationId, owner.ledgerId, transaction.id, at)
+					).pipe(Effect.result)
+				);
+				started.push(second);
+				let competitorBlocked = false;
+				for (let attempt = 0; attempt < 100; attempt += 1) {
+					const waiting = await blocker.query<{ count: number }>(`
+					SELECT count(*)::integer AS count FROM pg_stat_activity
+					WHERE wait_event IS NOT NULL AND query LIKE '%"ledger_transactions"%'
+				`);
+					if (waiting.rows[0]!.count >= 2) {
+						competitorBlocked = true;
+						break;
+					}
+					await delay(10);
+				}
+				expect(competitorBlocked).toBe(true);
+				await blocker.query("SELECT pg_advisory_unlock(790009)");
+				const [firstResult, secondResult] = await Promise.all([first, second]);
+				expect(firstResult._tag).toBe("Success");
+				if (firstResult._tag === "Success") {
+					expect(normalizeTransaction(firstResult.success, idempotencyKey)).toEqual(
+						normalizeTransaction(expectedFirst, idempotencyKey)
+					);
+				}
+				if (scenario === "post/void") {
+					expect(secondResult._tag).toBe("Failure");
+					if (secondResult._tag === "Failure") {
+						expect(secondResult.failure).toBeInstanceOf(TransactionLifecycleConflict);
+					}
+				} else {
+					expect(secondResult._tag).toBe("Success");
+					if (secondResult._tag === "Success") {
+						expect(normalizeTransaction(secondResult.success, idempotencyKey)).toEqual(
+							normalizeTransaction(expectedPosted, idempotencyKey)
+						);
+					}
+				}
+				const persisted = Option.getOrThrow(
+					await runRepo(repository =>
+						repository.getTransaction(owner.organizationId, owner.ledgerId, transaction.id)
+					)
+				);
+				expect(normalizeTransaction(persisted, idempotencyKey)).toEqual(
+					normalizeTransaction(expectedPosted, idempotencyKey)
+				);
+				const amount = scenario === "update/post" ? 7 : 4;
+				const rows = await db
+					.select()
+					.from(LedgerAccountsTable)
+					.where(inArray(LedgerAccountsTable.id, [debit.toString(), credit.toString()]));
+				expect(rows.find(account => account.id === debit.toString())).toMatchObject({
+					pendingDebits: amount,
+					pendingCredits: 0,
+					postedDebits: amount,
+					postedCredits: 0,
+					lockVersion: scenario === "update/post" ? 3 : 2,
+				});
+				expect(rows.find(account => account.id === credit.toString())).toMatchObject({
+					pendingDebits: 0,
+					pendingCredits: amount,
+					postedDebits: 0,
+					postedCredits: amount,
+					lockVersion: scenario === "update/post" ? 3 : 2,
+				});
+			} finally {
+				await blocker.query("SELECT pg_advisory_unlock(790009)");
+				await Promise.allSettled(started);
+				blocker.release();
+				await barrierPool.end();
+				await db.execute(
+					sql.raw("DROP TRIGGER IF EXISTS t9_transaction_barrier ON ledger_transactions")
+				);
+				await db.execute(sql.raw("DROP FUNCTION IF EXISTS t9_transaction_barrier()"));
+			}
+		}
+	);
+
+	it("rejects an unsafe resulting Posted counter and rolls back the lifecycle", async () => {
+		const owner = await createLedger();
+		const debit = await createAccount(owner.organizationId, owner.ledgerId);
+		const credit = await createAccount(owner.organizationId, owner.ledgerId);
+		const mutation = await makeCreate(owner.organizationId, owner.ledgerId, "pending", [
+			{ accountId: debit, direction: "debit", amount: 1 },
+			{ accountId: credit, direction: "credit", amount: 1 },
+		]);
+		const created = await runRepo(repository =>
+			repository.createTransaction(`unsafe-post-${mutation.transaction.id.toString()}`, mutation)
+		);
+		const db = (await database()).db;
+		await db
+			.update(LedgerAccountsTable)
+			.set({ postedDebits: Number.MAX_SAFE_INTEGER })
+			.where(eq(LedgerAccountsTable.id, debit.toString()));
+		const before = await Promise.all([
+			db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, created.id.toString())),
+			db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.ledgerId, owner.ledgerId.toString())),
+		]);
+
+		const error = await runRepo(repository =>
+			Effect.flip(
+				repository.postTransaction(
+					owner.organizationId,
+					owner.ledgerId,
+					created.id,
+					DateTime.fromISO("2026-08-15T14:05:00.000Z", { zone: "utc" })
+				)
+			)
+		);
+		expect(error).toBeInstanceOf(TransactionValidationFailure);
+		expect(
+			await Promise.all([
+				db
+					.select()
+					.from(LedgerTransactionsTable)
+					.where(eq(LedgerTransactionsTable.id, created.id.toString())),
+				db
+					.select()
+					.from(LedgerAccountsTable)
+					.where(eq(LedgerAccountsTable.ledgerId, owner.ledgerId.toString())),
+			])
+		).toEqual(before);
+	});
+
+	it("deterministically serializes opposite Entry-order overlapping Account transitions", async () => {
+		const owner = await createLedger();
+		const accountIds = [
+			await createAccount(owner.organizationId, owner.ledgerId),
+			await createAccount(owner.organizationId, owner.ledgerId),
+		];
+		const firstMutation = await makeCreate(
+			owner.organizationId,
+			owner.ledgerId,
+			"pending",
+			[
+				{ accountId: accountIds[0]!, direction: "debit", amount: 4, metadata: { order: "a1" } },
+				{ accountId: accountIds[1]!, direction: "credit", amount: 4, metadata: { order: "a2" } },
+			],
+			{
+				description: "overlap a",
+				metadata: { overlap: "a" },
+			}
+		);
+		const secondMutation = await makeCreate(
+			owner.organizationId,
+			owner.ledgerId,
+			"pending",
+			[
+				{ accountId: accountIds[1]!, direction: "credit", amount: 4, metadata: { order: "b1" } },
+				{ accountId: accountIds[0]!, direction: "debit", amount: 4, metadata: { order: "b2" } },
+			],
+			{
+				description: "overlap b",
+				metadata: { overlap: "b" },
+			}
+		);
+		const idempotencyKeys = [
+			`overlap-a-${firstMutation.transaction.id.toString()}`,
+			`overlap-b-${secondMutation.transaction.id.toString()}`,
+		] as const;
+		const [first, second] = await Promise.all([
+			runRepo(repository => repository.createTransaction(idempotencyKeys[0], firstMutation)),
+			runRepo(repository => repository.createTransaction(idempotencyKeys[1], secondMutation)),
+		]);
+		const at = DateTime.fromISO("2026-08-15T14:06:00.000Z", { zone: "utc" });
+		const expectedPosts = await Promise.all(
+			[first, second].map(transaction =>
+				Effect.runPromise(transaction.post(at)).then(result => result.transaction)
+			)
+		);
+		const db = (await database()).db;
+		const barrierPool = new Pool({ connectionString: new Config().databaseUrl });
+		const blocker = await barrierPool.connect();
+		await db.execute(sql.raw("DROP TRIGGER IF EXISTS t9_account_barrier ON ledger_accounts"));
+		await db.execute(sql.raw("DROP FUNCTION IF EXISTS t9_account_barrier()"));
+		await db.execute(
+			sql.raw(`
+			CREATE FUNCTION t9_account_barrier() RETURNS trigger AS $$
+			BEGIN
+				IF NEW.organization_id = '${owner.organizationId.toString()}' THEN
+					PERFORM pg_advisory_xact_lock(790010);
+				END IF;
+				RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql
+		`)
+		);
+		await db.execute(
+			sql.raw(`
+			CREATE TRIGGER t9_account_barrier
+			BEFORE UPDATE ON ledger_accounts
+			FOR EACH ROW EXECUTE FUNCTION t9_account_barrier()
+		`)
+		);
+		await blocker.query("SELECT pg_advisory_lock(790010)");
+		const started: Promise<unknown>[] = [];
+
+		try {
+			const firstPost = runRepo(repository =>
+				repository
+					.postTransaction(owner.organizationId, owner.ledgerId, first.id, at)
+					.pipe(Effect.result)
+			);
+			started.push(firstPost);
+			let firstBlocked = false;
+			for (let attempt = 0; attempt < 100; attempt += 1) {
+				const waiting = await blocker.query<{ count: number }>(`
+					SELECT count(*)::integer AS count FROM pg_stat_activity
+					WHERE wait_event = 'advisory' AND query LIKE 'update "ledger_accounts"%'
+				`);
+				if (waiting.rows[0]!.count === 1) {
+					firstBlocked = true;
+					break;
+				}
+				await delay(10);
+			}
+			expect(firstBlocked).toBe(true);
+			const secondPost = runRepo(repository =>
+				repository
+					.postTransaction(owner.organizationId, owner.ledgerId, second.id, at)
+					.pipe(Effect.result)
+			);
+			started.push(secondPost);
+			let competitorBlocked = false;
+			for (let attempt = 0; attempt < 100; attempt += 1) {
+				const waiting = await blocker.query<{ count: number }>(`
+					SELECT count(*)::integer AS count FROM pg_stat_activity
+					WHERE wait_event IS NOT NULL AND query LIKE '%"ledger_accounts"%'
+				`);
+				if (waiting.rows[0]!.count >= 2) {
+					competitorBlocked = true;
+					break;
+				}
+				await delay(10);
+			}
+			expect(competitorBlocked).toBe(true);
+			await blocker.query("SELECT pg_advisory_unlock(790010)");
+			const overlappingPosts = await Promise.all([firstPost, secondPost]);
+			for (const [index, result] of overlappingPosts.entries()) {
+				expect(result._tag).toBe("Success");
+				if (result._tag === "Success") {
+					expect(normalizeTransaction(result.success, idempotencyKeys[index]!)).toEqual(
+						normalizeTransaction(expectedPosts[index]!, idempotencyKeys[index]!)
+					);
+				}
+			}
+			const persisted = await Promise.all(
+				[first, second].map(transaction =>
+					runRepo(repository =>
+						repository.getTransaction(owner.organizationId, owner.ledgerId, transaction.id)
+					).then(option => Option.getOrThrow(option))
+				)
+			);
+			for (const [index, posted] of persisted.entries()) {
+				expect(normalizeTransaction(posted, idempotencyKeys[index]!)).toEqual(
+					normalizeTransaction(expectedPosts[index]!, idempotencyKeys[index]!)
+				);
+			}
+			const accounts = await db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(inArray(LedgerAccountsTable.id, accountIds.map(String)));
+			expect(accounts.find(account => account.id === accountIds[0]!.toString())).toMatchObject({
+				pendingDebits: 8,
+				pendingCredits: 0,
+				postedDebits: 8,
+				postedCredits: 0,
+				lockVersion: 4,
+			});
+			expect(accounts.find(account => account.id === accountIds[1]!.toString())).toMatchObject({
+				pendingDebits: 0,
+				pendingCredits: 8,
+				postedDebits: 0,
+				postedCredits: 8,
+				lockVersion: 4,
+			});
+		} finally {
+			await blocker.query("SELECT pg_advisory_unlock(790010)");
+			await Promise.allSettled(started);
+			blocker.release();
+			await barrierPool.end();
+			await db.execute(sql.raw("DROP TRIGGER IF EXISTS t9_account_barrier ON ledger_accounts"));
+			await db.execute(sql.raw("DROP FUNCTION IF EXISTS t9_account_barrier()"));
+		}
 	});
 });
