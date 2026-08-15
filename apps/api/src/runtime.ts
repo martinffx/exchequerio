@@ -3,6 +3,7 @@ import type { Config } from "@/config";
 import { type Database, makeDatabaseLive } from "@/db";
 import { ledgerLayer, type LedgerService } from "@/ledgers";
 import { accountLayer, type AccountService } from "@/ledgers/accounts";
+import { transactionLayer, type TransactionService } from "@/ledgers/transactions";
 import {
 	makeTransactionIdempotencyRepoLive,
 	type TransactionIdempotencyRepo,
@@ -16,6 +17,7 @@ type ServerRuntimeServices =
 	| Database
 	| LedgerService
 	| AccountService
+	| TransactionService
 	| TransactionIdempotencyRepo
 	| OrganizationService;
 
@@ -36,9 +38,13 @@ const makeServerRuntimeLayer = (
 		overrides.transactionIdempotency ?? makeTransactionIdempotencyRepoLive(config.valkeyUrl)
 	);
 	const accountWithLedger = accountLayer.pipe(Layer.provide(ledgerLayer));
-	return Layer.mergeAll(ledgerLayer, accountWithLedger, organizationLayer).pipe(
-		Layer.provideMerge(infrastructure)
-	);
+	const transactionWithLedger = transactionLayer.pipe(Layer.provide(ledgerLayer));
+	return Layer.mergeAll(
+		ledgerLayer,
+		accountWithLedger,
+		transactionWithLedger,
+		organizationLayer
+	).pipe(Layer.provideMerge(infrastructure));
 };
 
 class ServerRuntime<R, ER> {

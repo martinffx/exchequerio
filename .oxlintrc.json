@@ -70,6 +70,44 @@
 				"pattern": "src/ledgers/accounts/AccountSchema.ts",
 				"mode": "full"
 			},
+			{
+				"type": "transaction-composition",
+				"pattern": "src/ledgers/transactions/index.ts",
+				"mode": "full"
+			},
+			{
+				"type": "transaction-routes",
+				"pattern": "src/ledgers/transactions/TransactionRoutes.ts",
+				"mode": "full"
+			},
+			{
+				"type": "transaction-service",
+				"pattern": "src/ledgers/transactions/TransactionService.ts",
+				"mode": "full"
+			},
+			{
+				"type": "transaction-repo",
+				"pattern": "src/ledgers/transactions/TransactionRepo.ts",
+				"mode": "full"
+			},
+			{
+				"type": "transaction-capability",
+				"pattern": "src/ledgers/transactions/TransactionIdempotencyRepo.ts",
+				"mode": "full"
+			},
+			{
+				"type": "transaction-domain",
+				"pattern": [
+					"src/ledgers/transactions/domain/**/*",
+					"src/ledgers/transactions/TransactionErrors.ts"
+				],
+				"mode": "full"
+			},
+			{
+				"type": "transaction-transport",
+				"pattern": "src/ledgers/transactions/TransactionSchema.ts",
+				"mode": "full"
+			},
 			{ "type": "organization-composition", "pattern": "src/organizations/index.ts", "mode": "full" },
 			{ "type": "organization-routes", "pattern": "src/organizations/OrganizationRoutes.ts", "mode": "full" },
 			{ "type": "organization-service", "pattern": "src/organizations/OrganizationService.ts", "mode": "full" },
@@ -189,6 +227,7 @@
 							"legacy-entities",
 							"ledger-composition",
 							"account-composition",
+							"transaction-composition",
 							"organization-composition"
 						]
 					},
@@ -342,6 +381,58 @@
 						]
 					},
 					{
+						"from": ["transaction-domain"],
+						"allow": [
+							"transaction-domain",
+							"account-composition",
+							"http",
+							"legacy-entities",
+							"persistence-schema"
+						]
+					},
+					{
+						"from": ["transaction-repo"],
+						"allow": [
+							"transaction-repo",
+							"transaction-domain",
+							"account-composition",
+							"database",
+							"http",
+							"legacy-entities",
+							"persistence-schema"
+						]
+					},
+					{
+						"from": ["transaction-capability"],
+						"allow": ["transaction-domain", "http", "legacy-entities"]
+					},
+					{
+						"from": ["transaction-service"],
+						"allow": [
+							"transaction-domain",
+							"transaction-repo",
+							"transaction-capability",
+							"transaction-transport",
+							"account-composition",
+							"ledger-service",
+							"database",
+							"http",
+							"legacy-entities"
+						]
+					},
+					{
+						"from": ["transaction-transport"],
+						"allow": ["transaction-domain"]
+					},
+					{
+						"from": ["transaction-routes"],
+						"allow": ["transaction-service", "transaction-transport", "http", "legacy-entities"]
+					},
+					{
+						"from": ["transaction-composition"],
+						"allow": ["transaction-repo", "transaction-routes", "transaction-service"]
+					},
+					{
 						"from": ["organization-domain"],
 						"allow": [
 							"organization-domain",
@@ -411,6 +502,8 @@
 							"database",
 							"ledger-composition",
 							"account-composition",
+							"transaction-composition",
+							"transaction-capability",
 							"organization-composition",
 							"runtime"
 						]
