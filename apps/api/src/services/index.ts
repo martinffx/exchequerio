@@ -5,14 +5,12 @@ import { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonito
 import { LedgerAccountCategoryService } from "./LedgerAccountCategoryService";
 import { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
 import { LedgerAccountStatementService } from "./LedgerAccountStatementService";
-import { LedgerTransactionService } from "./LedgerTransactionService";
 
 type Services = {
 	ledgerAccountCategoryService: LedgerAccountCategoryService;
 	ledgerAccountSettlementService: LedgerAccountSettlementService;
 	ledgerAccountStatementService: LedgerAccountStatementService;
 	ledgerAccountBalanceMonitorService: LedgerAccountBalanceMonitorService;
-	ledgerTransactionService: LedgerTransactionService;
 };
 
 type ServicePluginOpts = {
@@ -30,9 +28,6 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 		const ledgerAccountCategoryService =
 			opts.services?.ledgerAccountCategoryService ??
 			new LedgerAccountCategoryService(server.repo.ledgerAccountCategoryRepo);
-		const ledgerTransactionService =
-			opts.services?.ledgerTransactionService ??
-			new LedgerTransactionService(server.repo.ledgerTransactionRepo, server.repo.ledgerAccountReader);
 		const ledgerAccountSettlementService =
 			opts.services?.ledgerAccountSettlementService ??
 			new LedgerAccountSettlementService(server.repo.ledgerAccountSettlementRepo, {
@@ -54,7 +49,6 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 			ledgerAccountSettlementService,
 			ledgerAccountStatementService,
 			ledgerAccountBalanceMonitorService,
-			ledgerTransactionService,
 		});
 	}
 );
@@ -64,5 +58,4 @@ export { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonito
 export { LedgerAccountCategoryService } from "./LedgerAccountCategoryService";
 export { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
 export { LedgerAccountStatementService } from "./LedgerAccountStatementService";
-export { LedgerTransactionService } from "./LedgerTransactionService";
 export { ServicePlugin, type ServicePluginOpts };

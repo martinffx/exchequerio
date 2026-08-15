@@ -277,14 +277,13 @@ describe("LedgerAccountSettlementService", () => {
 				created: new Date(),
 				updated: new Date(),
 			});
-			const linked = settlement.withTransactionId(transactionId);
-			const posted = linked.withStatus("posted");
+			const posted = settlement.withTransactionId(transactionId).withStatus("posted");
 			mockSettlementRepo.getSettlement.mockResolvedValue(settlement);
 			mockTransactionService.createTransaction.mockResolvedValue({
 				id: transactionId,
 				status: "posted",
 			});
-			mockSettlementRepo.updateSettlement.mockResolvedValue(linked);
+			mockSettlementRepo.updateSettlement.mockResolvedValue(settlement);
 			mockSettlementRepo.updateStatus.mockResolvedValue(posted);
 
 			const result = await service.transitionSettlementStatus(orgId, ledgerId, settlementId, "posted");
@@ -314,7 +313,27 @@ describe("LedgerAccountSettlementService", () => {
 					],
 				}
 			);
-			expect(mockSettlementRepo.updateSettlement).toHaveBeenCalledWith(linked);
+			const linked = mockSettlementRepo.updateSettlement.mock.calls[0][0];
+			expect(linked).toMatchObject({
+				id: settlement.id,
+				organizationId: settlement.organizationId,
+				transactionId,
+				settledAccountId: settlement.settledAccountId,
+				contraAccountId: settlement.contraAccountId,
+				amount: settlement.amount,
+				normalBalance: settlement.normalBalance,
+				currency: settlement.currency,
+				currencyExponent: settlement.currencyExponent,
+				status: settlement.status,
+				description: settlement.description,
+				externalReference: settlement.externalReference,
+				effectiveAtUpperBound: settlement.effectiveAtUpperBound,
+				metadata: settlement.metadata,
+				created: settlement.created,
+			});
+			expect(linked.updated).toBeInstanceOf(Date);
+			expect(Number.isNaN(linked.updated.getTime())).toBe(false);
+			expect(linked.updated.getTime()).toBeGreaterThanOrEqual(settlement.updated.getTime());
 			expect(mockSettlementRepo.updateStatus).toHaveBeenCalledWith(orgId, settlementId, "posted");
 		});
 

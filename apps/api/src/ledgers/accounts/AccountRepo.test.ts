@@ -230,11 +230,6 @@ describe("AccountRepoLive", () => {
 		await db.insert(LedgerAccountsTable).values({
 			...record.toCreateRow(),
 			...testCase.counters,
-			pendingAmount: 101,
-			postedAmount: 102,
-			availableAmount: 103,
-			availableCredits: 104,
-			availableDebits: 105,
 		});
 
 		const decoded = await runAccountRepo(repository =>
