@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { DateTime } from "luxon";
 import { afterAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
@@ -158,8 +159,22 @@ describe("LedgerRepoLive", () => {
 		const value = Option.getOrThrow(found);
 		expect(value.description).toBe(description);
 		expect(value.metadata).toEqual(metadata);
+		expect(record.toCreateRow().created).toBeInstanceOf(Date);
+		expect(record.toCreateRow().updated).toBeInstanceOf(Date);
+		expect(DateTime.isDateTime(value.created)).toBe(true);
+		expect(DateTime.isDateTime(value.updated)).toBe(true);
 		expect(value.created).toEqual(record.created);
 		expect(value.updated).toEqual(record.updated);
+	});
+
+	it("returns a typed decoding failure for an invalid timestamp", async () => {
+		const organizationId = newOrgID();
+		const row = ledgerWrite(organizationId).toCreateRow();
+		const error = await Effect.runPromise(
+			Effect.flip(Ledger.fromRow({ ...row, created: new Date(Number.NaN) }))
+		);
+
+		expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);
 	});
 
 	it("creates duplicate names with application timestamps", async () => {

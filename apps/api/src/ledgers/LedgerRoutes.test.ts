@@ -1,6 +1,7 @@
 import fastifySwagger from "@fastify/swagger";
 import { Effect, Layer } from "effect";
 import fastify, { type FastifyInstance } from "fastify";
+import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { globalErrorHandler, ServiceUnavailableError } from "@/lib/errors";
@@ -20,8 +21,8 @@ const ledger = new Ledger({
 	name: "Operating Ledger",
 	description: "Primary book",
 	metadata: { externalId: "book-42" },
-	created: new Date("2026-08-09T10:00:00.000Z"),
-	updated: new Date("2026-08-09T10:00:00.000Z"),
+	created: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
+	updated: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
 });
 
 const service = (): LedgerService =>

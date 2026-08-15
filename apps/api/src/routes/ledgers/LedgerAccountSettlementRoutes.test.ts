@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { Effect, Layer } from "effect";
+import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -61,13 +62,14 @@ describe("LedgerAccountSettlementRoutes", () => {
 	const ledgerIdStr = ledgerId.toString();
 	const settlementIdStr = settlementId.toString();
 	const fixedDate = new Date("2025-01-01T00:00:00.000Z");
+	const fixedDateTime = DateTime.fromJSDate(fixedDate, { zone: "utc" });
 
 	const effectLedger = new Ledger({
 		id: ledgerId,
 		organizationId: orgId,
 		name: "Ledger",
-		created: fixedDate,
-		updated: fixedDate,
+		created: fixedDateTime,
+		updated: fixedDateTime,
 	});
 	const effectAccount = new Account({
 		id: settledAccountId,
@@ -86,8 +88,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		availableCredits: 0,
 		availableDebits: 0,
 		lockVersion: 1,
-		created: fixedDate,
-		updated: fixedDate,
+		created: fixedDateTime,
+		updated: fixedDateTime,
 	});
 	const mockSettlement = createLedgerAccountSettlementFixture({
 		id: settlementId,

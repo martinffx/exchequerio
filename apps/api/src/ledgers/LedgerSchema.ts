@@ -1,4 +1,5 @@
 import { type Static, Type } from "@sinclair/typebox";
+import type { DateTime } from "luxon";
 import type { Ledger } from "./domain/Ledger";
 
 const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
@@ -39,13 +40,19 @@ type LedgerCreateRequest = Static<typeof LedgerCreateRequest>;
 type LedgerUpdateRequest = Static<typeof LedgerUpdateRequest>;
 type LedgerResponse = Static<typeof LedgerResponse>;
 
+const toIso = (value: DateTime): string => {
+	const encoded = value.toISO();
+	if (encoded === null) throw new Error("Ledger contains an invalid timestamp");
+	return encoded;
+};
+
 const toLedgerResponse = (ledger: Ledger): LedgerResponse => ({
 	id: ledger.id.toString(),
 	name: ledger.name,
 	...(ledger.description === undefined ? {} : { description: ledger.description }),
 	...(ledger.metadata === undefined ? {} : { metadata: ledger.metadata }),
-	created: ledger.created.toISOString(),
-	updated: ledger.updated.toISOString(),
+	created: toIso(ledger.created),
+	updated: toIso(ledger.updated),
 });
 
 export {

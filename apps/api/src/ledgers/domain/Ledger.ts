@@ -1,4 +1,5 @@
 import { Effect, Option } from "effect";
+import { DateTime } from "luxon";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
 import type { LedgerCreateRow, LedgerRow, LedgerUpdateRow } from "@/repo/schema";
 import { parseId } from "@/lib/utils";
@@ -13,15 +14,14 @@ type LedgerOptions = {
 	readonly name: string;
 	readonly description?: string;
 	readonly metadata?: LedgerMetadata;
-	readonly created: Date;
-	readonly updated: Date;
+	readonly created: DateTime;
+	readonly updated: DateTime;
 };
 
-const decodeDate = (value: Date): Date => {
-	if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
-		throw new Error("Invalid Ledger timestamp");
-	}
-	return value;
+const decodeDate = (value: Date): DateTime => {
+	const date = DateTime.fromJSDate(value, { zone: "utc" });
+	if (!date.isValid) throw new Error("Invalid Ledger timestamp");
+	return date;
 };
 
 const decodeMetadata = (value: string | null): LedgerMetadata | undefined => {
@@ -42,8 +42,8 @@ class Ledger {
 	readonly name: string;
 	readonly description?: string;
 	readonly metadata?: LedgerMetadata;
-	readonly created: Date;
-	readonly updated: Date;
+	readonly created: DateTime;
+	readonly updated: DateTime;
 
 	constructor(options: LedgerOptions) {
 		this.id = options.id;
@@ -60,7 +60,7 @@ class Ledger {
 		organizationId: OrgID,
 		request: LedgerCreateRequest | LedgerUpdateRequest
 	): Ledger {
-		const now = new Date();
+		const now = DateTime.utc();
 		return new Ledger({ id, organizationId, ...request, created: now, updated: now });
 	}
 
@@ -103,8 +103,8 @@ class Ledger {
 			description: this.description ?? null,
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
-			created: this.created,
-			updated: this.updated,
+			created: this.created.toJSDate(),
+			updated: this.updated.toJSDate(),
 		};
 	}
 
@@ -115,7 +115,7 @@ class Ledger {
 			description: this.description ?? null,
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
-			updated: this.updated,
+			updated: this.updated.toJSDate(),
 		};
 	}
 }

@@ -1,4 +1,5 @@
 import { Effect, Option } from "effect";
+import { DateTime } from "luxon";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { AccountCreateRow, AccountRow, AccountUpdateRow } from "@/repo/schema";
 import { parseId } from "@/lib/utils";
@@ -27,8 +28,8 @@ type AccountOptions = {
 	readonly availableDebits: number;
 	readonly lockVersion: number;
 	readonly metadata?: AccountMetadata;
-	readonly created: Date;
-	readonly updated: Date;
+	readonly created: DateTime;
+	readonly updated: DateTime;
 };
 
 type AccountBalanceType = "pending" | "posted" | "availableBalance";
@@ -39,11 +40,10 @@ type AccountBalance = Readonly<{
 	amount: number;
 }>;
 
-const decodeDate = (value: Date): Date => {
-	if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
-		throw new Error("Invalid Account timestamp");
-	}
-	return value;
+const decodeDate = (value: Date): DateTime => {
+	const date = DateTime.fromJSDate(value, { zone: "utc" });
+	if (!date.isValid) throw new Error("Invalid Account timestamp");
+	return date;
 };
 
 const decodeMetadata = (value: string | null): AccountMetadata | undefined => {
@@ -89,8 +89,8 @@ class Account {
 	readonly availableDebits: number;
 	readonly lockVersion: number;
 	readonly metadata?: AccountMetadata;
-	readonly created: Date;
-	readonly updated: Date;
+	readonly created: DateTime;
+	readonly updated: DateTime;
 
 	constructor(options: AccountOptions) {
 		this.id = options.id;
@@ -121,7 +121,7 @@ class Account {
 		ledgerId: LedgerID,
 		request: AccountCreateRequest
 	): Account {
-		const now = new Date();
+		const now = DateTime.utc();
 		const zero = 0;
 		return new Account({
 			id,
@@ -223,7 +223,7 @@ class Account {
 			lockVersion: this.lockVersion,
 			metadata: rq.metadata,
 			created: this.created,
-			updated: new Date(),
+			updated: DateTime.utc(),
 		});
 	}
 
@@ -250,8 +250,8 @@ class Account {
 			lockVersion: this.lockVersion,
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
-			created: this.created,
-			updated: this.updated,
+			created: this.created.toJSDate(),
+			updated: this.updated.toJSDate(),
 		};
 	}
 
@@ -263,7 +263,7 @@ class Account {
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
 			lockVersion: this.lockVersion + 1,
-			updated: this.updated,
+			updated: this.updated.toJSDate(),
 		};
 	}
 

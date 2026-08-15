@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { DateTime } from "luxon";
 import { afterAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
@@ -119,7 +120,7 @@ describe("AccountRepoLive", () => {
 		);
 		const expected = [...created].sort(
 			(left, right) =>
-				right.created.getTime() - left.created.getTime() ||
+				right.created.toMillis() - left.created.toMillis() ||
 				left.id.toString().localeCompare(right.id.toString())
 		);
 		expect(accounts.map(account => account.id)).toEqual(expected.map(account => account.id));
@@ -166,12 +167,25 @@ describe("AccountRepoLive", () => {
 		const created = await runAccountRepo(repository => repository.createAccount(record));
 
 		expect(created.lockVersion).toBe(1);
+		expect(record.toCreateRow().created).toBeInstanceOf(Date);
+		expect(record.toCreateRow().updated).toBeInstanceOf(Date);
+		expect(DateTime.isDateTime(created.created)).toBe(true);
+		expect(DateTime.isDateTime(created.updated)).toBe(true);
 		expect(created.created).toEqual(record.created);
 		expect(created.updated).toEqual(record.updated);
 		expect(created.description).toBe(description);
 		expect(created.currency).toEqual({ code: "US0378331005", minorUnitExponent: 4 });
 		expect(created.metadata).toEqual(metadata);
 		expect(created.balances.every(balance => balance.amount === 0)).toBe(true);
+	});
+
+	it("returns a typed decoding failure for an invalid timestamp", async () => {
+		const row = accountCreate(newOrgID(), newLedgerID()).toCreateRow();
+		const error = await Effect.runPromise(
+			Effect.flip(Account.fromRow({ ...row, created: new Date(Number.NaN) }))
+		);
+
+		expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
 	});
 
 	it("maps duplicate names but not ID collisions to their public Conflict", async () => {

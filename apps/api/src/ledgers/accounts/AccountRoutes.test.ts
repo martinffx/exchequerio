@@ -1,6 +1,7 @@
 import fastifySwagger from "@fastify/swagger";
 import { Effect, Layer } from "effect";
 import fastify, { type FastifyInstance } from "fastify";
+import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { globalErrorHandler } from "@/lib/errors";
@@ -34,8 +35,8 @@ const account = new Account({
 	availableDebits: 22,
 	lockVersion: 1,
 	metadata: { externalId: "cash-42" },
-	created: new Date("2026-08-09T10:00:00.000Z"),
-	updated: new Date("2026-08-09T11:00:00.000Z"),
+	created: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
+	updated: DateTime.fromISO("2026-08-09T11:00:00.000Z", { zone: "utc" }),
 });
 
 const service = (): AccountService =>
@@ -110,6 +111,8 @@ describe("AccountRoutes", () => {
 					{ balanceType: "posted", amount: 20, credits: 5, debits: 25 },
 					{ balanceType: "availableBalance", amount: 15, credits: 7, debits: 22 },
 				],
+				created: "2026-08-09T10:00:00.000Z",
+				updated: "2026-08-09T11:00:00.000Z",
 			},
 		]);
 		expect(response.body).not.toContain('"currency":');

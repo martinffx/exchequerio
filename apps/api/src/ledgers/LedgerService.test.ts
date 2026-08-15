@@ -1,4 +1,5 @@
 import { Effect, Layer, Option } from "effect";
+import { DateTime } from "luxon";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { HttpError, InternalServerError, ServiceUnavailableError } from "@/lib/errors";
 import { newLedgerID, newOrgID } from "@/repo/entities/types";
@@ -30,8 +31,8 @@ const ledger = new Ledger({
 	name: "Operating Ledger",
 	description: "Primary book",
 	metadata: { externalId: "book-42" },
-	created: new Date("2026-08-09T10:00:00.000Z"),
-	updated: new Date("2026-08-09T10:00:00.000Z"),
+	created: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
+	updated: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
 });
 const someLedger = Option.fromNullishOr(ledger);
 
@@ -122,6 +123,8 @@ describe("LedgerService", () => {
 			metadata: testCase.request.metadata,
 		});
 		expect(result.id.toString()).toMatch(/^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+		expect(DateTime.isDateTime(result.created)).toBe(true);
+		expect(DateTime.isDateTime(result.updated)).toBe(true);
 		if (testCase.operation === "update") expect(result.id).toBe(ledgerId);
 		const called = testCase.operation === "create" ? repo.createLedger : repo.updateLedger;
 		expect(called).toHaveBeenCalledWith(result);

@@ -1,4 +1,5 @@
 import { Effect, Layer, Option } from "effect";
+import { DateTime } from "luxon";
 import { describe, expect, it, vi } from "vitest";
 import { BadRequestError } from "@/lib/errors";
 import { newLedgerAccountID, newLedgerID, newOrgID } from "@/repo/entities/types";
@@ -18,8 +19,8 @@ const ledger = new Ledger({
 	id: ledgerId,
 	organizationId,
 	name: "Ledger",
-	created: new Date("2026-08-09T10:00:00.000Z"),
-	updated: new Date("2026-08-09T10:00:00.000Z"),
+	created: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
+	updated: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
 });
 const account = new Account({
 	id: accountId,
@@ -38,8 +39,8 @@ const account = new Account({
 	availableCredits: 0,
 	availableDebits: 0,
 	lockVersion: 1,
-	created: new Date("2026-08-09T10:00:00.000Z"),
-	updated: new Date("2026-08-09T10:00:00.000Z"),
+	created: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
+	updated: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
 });
 // oxlint-disable-next-line unicorn/no-array-callback-reference -- Effect Option constructor, not an iterator.
 const someAccount = Option.some(account);
@@ -157,6 +158,8 @@ describe("AccountService", () => {
 			lockVersion: 1,
 		});
 		expect(created.id.toString()).toMatch(/^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+		expect(DateTime.isDateTime(created.created)).toBe(true);
+		expect(DateTime.isDateTime(created.updated)).toBe(true);
 		expect(created.updated).toEqual(created.created);
 		expect(created.balances).toEqual([
 			{ balanceType: "pending", amount: 0, credits: 0, debits: 0 },
