@@ -179,6 +179,71 @@ describe("AccountRepoLive", () => {
 		expect(created.balances.every(balance => balance.amount === 0)).toBe(true);
 	});
 
+	it("encodes only the four authoritative counters on creation", () => {
+		const row = accountCreate(newOrgID(), newLedgerID()).toCreateRow();
+
+		expect(row).toMatchObject({
+			pendingCredits: 0,
+			pendingDebits: 0,
+			postedCredits: 0,
+			postedDebits: 0,
+		});
+		for (const column of [
+			"pendingAmount",
+			"postedAmount",
+			"availableAmount",
+			"availableCredits",
+			"availableDebits",
+		]) {
+			expect(row).not.toHaveProperty(column);
+		}
+	});
+
+	it.each([
+		{
+			label: "debit-normal balances",
+			normalBalance: "debit" as const,
+			counters: { pendingCredits: 20, pendingDebits: 5, postedCredits: 30, postedDebits: 10 },
+			expected: [
+				{ balanceType: "pending", amount: -15, credits: 20, debits: 5 },
+				{ balanceType: "posted", amount: -20, credits: 30, debits: 10 },
+				{ balanceType: "availableBalance", amount: -10, credits: 20, debits: 10 },
+			],
+		},
+		{
+			label: "credit-normal balances",
+			normalBalance: "credit" as const,
+			counters: { pendingCredits: 5, pendingDebits: 20, postedCredits: 10, postedDebits: 30 },
+			expected: [
+				{ balanceType: "pending", amount: -15, credits: 5, debits: 20 },
+				{ balanceType: "posted", amount: -20, credits: 10, debits: 30 },
+				{ balanceType: "availableBalance", amount: -10, credits: 10, debits: 20 },
+			],
+		},
+	])("derives $label from authoritative counters when decoding rows", async testCase => {
+		const { organizationId, ledgerId } = await createOrganizationAndLedger();
+		const record = accountCreate(organizationId, ledgerId, {
+			name: testCase.label,
+			normalBalance: testCase.normalBalance,
+		});
+		const db = (await database()).db;
+		await db.insert(LedgerAccountsTable).values({
+			...record.toCreateRow(),
+			...testCase.counters,
+			pendingAmount: 101,
+			postedAmount: 102,
+			availableAmount: 103,
+			availableCredits: 104,
+			availableDebits: 105,
+		});
+
+		const decoded = await runAccountRepo(repository =>
+			repository.getAccount(organizationId, ledgerId, record.id)
+		);
+
+		expect(Option.getOrThrow(decoded).balances).toEqual(testCase.expected);
+	});
+
 	it("returns a typed decoding failure for an invalid timestamp", async () => {
 		const row = accountCreate(newOrgID(), newLedgerID()).toCreateRow();
 		const error = await Effect.runPromise(

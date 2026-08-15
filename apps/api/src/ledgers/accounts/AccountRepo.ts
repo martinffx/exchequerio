@@ -3,7 +3,7 @@ import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
 import { LedgerNotFound } from "@/ledgers/LedgerErrors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
-import { type AccountRow, LedgerAccountsTable } from "@/repo/schema";
+import { LedgerAccountsTable } from "@/repo/schema";
 import { Account } from "./domain/Account";
 import {
 	AccountHasDependents,
@@ -61,15 +61,10 @@ const publicColumns = {
 	normalBalance: LedgerAccountsTable.normalBalance,
 	currencyCode: LedgerAccountsTable.currencyCode,
 	minorUnitExponent: LedgerAccountsTable.minorUnitExponent,
-	pendingAmount: LedgerAccountsTable.pendingAmount,
-	postedAmount: LedgerAccountsTable.postedAmount,
-	availableAmount: LedgerAccountsTable.availableAmount,
 	pendingCredits: LedgerAccountsTable.pendingCredits,
 	pendingDebits: LedgerAccountsTable.pendingDebits,
 	postedCredits: LedgerAccountsTable.postedCredits,
 	postedDebits: LedgerAccountsTable.postedDebits,
-	availableCredits: LedgerAccountsTable.availableCredits,
-	availableDebits: LedgerAccountsTable.availableDebits,
 	lockVersion: LedgerAccountsTable.lockVersion,
 	metadata: LedgerAccountsTable.metadata,
 	created: LedgerAccountsTable.created,
@@ -118,7 +113,7 @@ const mapUpdateError = (cause: unknown, record: Account): AccountUpdateRepositor
 		: mapInfrastructureError(cause, context(record.organizationId, record.ledgerId, record.id));
 
 const requireDecoded = (
-	row: AccountRow | undefined,
+	row: Parameters<typeof Account.fromRow>[0],
 	errorContext: ReturnType<typeof context>
 ): Effect.Effect<Account, AccountInfrastructureError> =>
 	Account.fromRow(row).pipe(
@@ -137,7 +132,7 @@ const requireDecoded = (
 	);
 
 const requireUpdated = (
-	row: AccountRow | undefined,
+	row: Parameters<typeof Account.fromRow>[0],
 	record: Account
 ): Effect.Effect<Account, AccountInfrastructureError | AccountVersionConflict> =>
 	row === undefined

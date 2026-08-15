@@ -8,6 +8,14 @@ import { AccountPersistenceDecodingFailure } from "../AccountErrors";
 import { makeCurrency, type Currency } from "./Currency";
 
 type AccountMetadata = Readonly<Record<string, string>>;
+type DerivedBalanceColumn =
+	| "pendingAmount"
+	| "postedAmount"
+	| "availableAmount"
+	| "availableCredits"
+	| "availableDebits";
+type AccountPersistenceRow = Omit<AccountRow, DerivedBalanceColumn>;
+type AccountCreatePersistenceRow = Omit<AccountCreateRow, DerivedBalanceColumn>;
 
 type AccountOptions = {
 	readonly id: LedgerAccountID;
@@ -17,15 +25,10 @@ type AccountOptions = {
 	readonly description?: string;
 	readonly normalBalance: "debit" | "credit";
 	readonly currency: Currency;
-	readonly pendingAmount: number;
-	readonly postedAmount: number;
-	readonly availableAmount: number;
 	readonly pendingCredits: number;
 	readonly pendingDebits: number;
 	readonly postedCredits: number;
 	readonly postedDebits: number;
-	readonly availableCredits: number;
-	readonly availableDebits: number;
 	readonly lockVersion: number;
 	readonly metadata?: AccountMetadata;
 	readonly created: DateTime;
@@ -78,15 +81,10 @@ class Account {
 	readonly description?: string;
 	readonly normalBalance: AccountOptions["normalBalance"];
 	readonly currency: Currency;
-	readonly pendingAmount: number;
-	readonly postedAmount: number;
-	readonly availableAmount: number;
 	readonly pendingCredits: number;
 	readonly pendingDebits: number;
 	readonly postedCredits: number;
 	readonly postedDebits: number;
-	readonly availableCredits: number;
-	readonly availableDebits: number;
 	readonly lockVersion: number;
 	readonly metadata?: AccountMetadata;
 	readonly created: DateTime;
@@ -100,15 +98,10 @@ class Account {
 		this.description = options.description;
 		this.normalBalance = options.normalBalance;
 		this.currency = options.currency;
-		this.pendingAmount = options.pendingAmount;
-		this.postedAmount = options.postedAmount;
-		this.availableAmount = options.availableAmount;
 		this.pendingCredits = options.pendingCredits;
 		this.pendingDebits = options.pendingDebits;
 		this.postedCredits = options.postedCredits;
 		this.postedDebits = options.postedDebits;
-		this.availableCredits = options.availableCredits;
-		this.availableDebits = options.availableDebits;
 		this.lockVersion = options.lockVersion;
 		this.metadata = options.metadata;
 		this.created = options.created;
@@ -131,15 +124,10 @@ class Account {
 			description: request.description,
 			normalBalance: request.normalBalance,
 			currency: makeCurrency(request.currencyCode, request.minorUnitExponent),
-			pendingAmount: zero,
-			postedAmount: zero,
-			availableAmount: zero,
 			pendingCredits: zero,
 			pendingDebits: zero,
 			postedCredits: zero,
 			postedDebits: zero,
-			availableCredits: zero,
-			availableDebits: zero,
 			lockVersion: 1,
 			metadata: request.metadata,
 			created: now,
@@ -148,7 +136,7 @@ class Account {
 	}
 
 	static fromRow(
-		row: AccountRow | undefined
+		row: AccountPersistenceRow | undefined
 	): Effect.Effect<Option.Option<Account>, AccountPersistenceDecodingFailure> {
 		if (row === undefined) return Effect.succeed(Option.none());
 
@@ -159,15 +147,10 @@ class Account {
 			const decoded = yield* Effect.try({
 				try: () => ({
 					currency: makeCurrency(row.currencyCode, row.minorUnitExponent),
-					pendingAmount: decodeMinorUnits(row.pendingAmount),
-					postedAmount: decodeMinorUnits(row.postedAmount),
-					availableAmount: decodeMinorUnits(row.availableAmount),
 					pendingCredits: decodeMinorUnits(row.pendingCredits),
 					pendingDebits: decodeMinorUnits(row.pendingDebits),
 					postedCredits: decodeMinorUnits(row.postedCredits),
 					postedDebits: decodeMinorUnits(row.postedDebits),
-					availableCredits: decodeMinorUnits(row.availableCredits),
-					availableDebits: decodeMinorUnits(row.availableDebits),
 					lockVersion: decodeLockVersion(row.lockVersion),
 					metadata: decodeMetadata(row.metadata),
 					created: decodeDate(row.created),
@@ -183,15 +166,10 @@ class Account {
 				description: row.description ?? undefined,
 				normalBalance: row.normalBalance,
 				currency: decoded.currency,
-				pendingAmount: decoded.pendingAmount,
-				postedAmount: decoded.postedAmount,
-				availableAmount: decoded.availableAmount,
 				pendingCredits: decoded.pendingCredits,
 				pendingDebits: decoded.pendingDebits,
 				postedCredits: decoded.postedCredits,
 				postedDebits: decoded.postedDebits,
-				availableCredits: decoded.availableCredits,
-				availableDebits: decoded.availableDebits,
 				lockVersion: decoded.lockVersion,
 				metadata: decoded.metadata,
 				created: decoded.created,
@@ -211,15 +189,10 @@ class Account {
 			description: rq.description,
 			normalBalance: this.normalBalance,
 			currency: this.currency,
-			pendingAmount: this.pendingAmount,
-			postedAmount: this.postedAmount,
-			availableAmount: this.availableAmount,
 			pendingCredits: this.pendingCredits,
 			pendingDebits: this.pendingDebits,
 			postedCredits: this.postedCredits,
 			postedDebits: this.postedDebits,
-			availableCredits: this.availableCredits,
-			availableDebits: this.availableDebits,
 			lockVersion: this.lockVersion,
 			metadata: rq.metadata,
 			created: this.created,
@@ -227,7 +200,7 @@ class Account {
 		});
 	}
 
-	toCreateRow(): AccountCreateRow {
+	toCreateRow(): AccountCreatePersistenceRow {
 		return {
 			id: this.id.toString(),
 			organizationId: this.organizationId.toString(),
@@ -238,15 +211,10 @@ class Account {
 			normalBalance: this.normalBalance,
 			currencyCode: this.currency.code,
 			minorUnitExponent: this.currency.minorUnitExponent,
-			pendingAmount: this.pendingAmount,
-			postedAmount: this.postedAmount,
-			availableAmount: this.availableAmount,
 			pendingCredits: this.pendingCredits,
 			pendingDebits: this.pendingDebits,
 			postedCredits: this.postedCredits,
 			postedDebits: this.postedDebits,
-			availableCredits: this.availableCredits,
-			availableDebits: this.availableDebits,
 			lockVersion: this.lockVersion,
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
@@ -268,24 +236,31 @@ class Account {
 	}
 
 	get balances(): readonly AccountBalance[] {
+		const debitNormal = this.normalBalance === "debit";
 		return [
 			{
 				balanceType: "pending",
 				credits: this.pendingCredits,
 				debits: this.pendingDebits,
-				amount: this.pendingAmount,
+				amount: debitNormal
+					? this.pendingDebits - this.pendingCredits
+					: this.pendingCredits - this.pendingDebits,
 			},
 			{
 				balanceType: "posted",
 				credits: this.postedCredits,
 				debits: this.postedDebits,
-				amount: this.postedAmount,
+				amount: debitNormal
+					? this.postedDebits - this.postedCredits
+					: this.postedCredits - this.postedDebits,
 			},
 			{
 				balanceType: "availableBalance",
-				credits: this.availableCredits,
-				debits: this.availableDebits,
-				amount: this.availableAmount,
+				credits: debitNormal ? this.pendingCredits : this.postedCredits,
+				debits: debitNormal ? this.postedDebits : this.pendingDebits,
+				amount: debitNormal
+					? this.postedDebits - this.pendingCredits
+					: this.postedCredits - this.pendingDebits,
 			},
 		];
 	}

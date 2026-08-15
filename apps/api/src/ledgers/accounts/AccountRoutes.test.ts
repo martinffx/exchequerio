@@ -24,28 +24,32 @@ const account = new Account({
 	description: "Operating cash",
 	normalBalance: "debit",
 	currency: { code: "USD", minorUnitExponent: 2 },
-	pendingAmount: -5,
-	postedAmount: 20,
-	availableAmount: 15,
 	pendingCredits: 10,
 	pendingDebits: 5,
 	postedCredits: 5,
 	postedDebits: 25,
-	availableCredits: 7,
-	availableDebits: 22,
 	lockVersion: 1,
 	metadata: { externalId: "cash-42" },
 	created: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
 	updated: DateTime.fromISO("2026-08-09T11:00:00.000Z", { zone: "utc" }),
 });
 
-const service = (): AccountService =>
+const creditNormalAccount = new Account({
+	...account,
+	normalBalance: "credit",
+	pendingCredits: 5,
+	pendingDebits: 20,
+	postedCredits: 10,
+	postedDebits: 30,
+});
+
+const service = (result = account): AccountService =>
 	vi.mocked<AccountService>({
-		listAccounts: vi.fn(() => Effect.succeed([account])),
-		getAccount: vi.fn(() => Effect.succeed(account)),
-		createAccount: vi.fn(() => Effect.succeed(account)),
-		updateAccount: vi.fn(() => Effect.succeed(account)),
-		deleteAccount: vi.fn(() => Effect.succeed(account)),
+		listAccounts: vi.fn(() => Effect.succeed([result])),
+		getAccount: vi.fn(() => Effect.succeed(result)),
+		createAccount: vi.fn(() => Effect.succeed(result)),
+		updateAccount: vi.fn(() => Effect.succeed(result)),
+		deleteAccount: vi.fn(() => Effect.succeed(result)),
 	} as unknown as AccountService);
 
 const servers: FastifyInstance[] = [];
@@ -109,7 +113,7 @@ describe("AccountRoutes", () => {
 				balances: [
 					{ balanceType: "pending", amount: -5, credits: 10, debits: 5 },
 					{ balanceType: "posted", amount: 20, credits: 5, debits: 25 },
-					{ balanceType: "availableBalance", amount: 15, credits: 7, debits: 22 },
+					{ balanceType: "availableBalance", amount: 15, credits: 10, debits: 25 },
 				],
 				created: "2026-08-09T10:00:00.000Z",
 				updated: "2026-08-09T11:00:00.000Z",
@@ -119,6 +123,23 @@ describe("AccountRoutes", () => {
 		expect(implementation.listAccounts).toHaveBeenCalledWith(organizationId, ledgerId, {
 			offset: 10,
 			limit: 5,
+		});
+	});
+
+	it("serializes credit-normal derived balances from authoritative counters", async () => {
+		const { server } = await buildRouteServer(service(creditNormalAccount));
+		const response = await server.inject({
+			method: "GET",
+			url: `/api/ledgers/${ledgerId.toString()}/accounts/${accountId.toString()}`,
+		});
+
+		expect(response.statusCode).toBe(200);
+		expect(response.json()).toMatchObject({
+			balances: [
+				{ balanceType: "pending", amount: -15, credits: 5, debits: 20 },
+				{ balanceType: "posted", amount: -20, credits: 10, debits: 30 },
+				{ balanceType: "availableBalance", amount: -10, credits: 10, debits: 20 },
+			],
 		});
 	});
 
