@@ -7,18 +7,20 @@ Transaction contains at least two Entries and changes every affected Account ato
 
 All paths are relative to `/api/ledgers/:ledgerId/transactions`.
 
-| Method | Path | Result |
-| --- | --- | --- |
-| `GET` | `/` | Lists Transactions in `created DESC, id DESC` order. |
-| `GET` | `/:transactionId` | Returns one Transaction and its Entries. |
-| `POST` | `/` | Creates a Pending or Posted Transaction. Requires `Idempotency-Key`. |
-| `PUT` | `/:transactionId` | Replaces a Pending Transaction's description, metadata, and Entries. |
-| `POST` | `/:transactionId/post` | Posts a Pending Transaction. Repeating the request is a no-op. |
-| `DELETE` | `/:transactionId` | Voids a Pending Transaction and returns `204`. Repeating it is a no-op. |
+| Method   | Path                   | Result                                                                  |
+| -------- | ---------------------- | ----------------------------------------------------------------------- |
+| `GET`    | `/`                    | Lists Transaction summaries in `created DESC, id DESC` order.           |
+| `GET`    | `/:transactionId`      | Returns one Transaction and its Entries.                                |
+| `POST`   | `/`                    | Creates a Pending or Posted Transaction. Requires `Idempotency-Key`.    |
+| `PUT`    | `/:transactionId`      | Updates a Pending Transaction's description, metadata, and Entries.     |
+| `POST`   | `/:transactionId/post` | Posts a Pending Transaction. Repeating the request is a no-op.          |
+| `DELETE` | `/:transactionId`      | Voids a Pending Transaction and returns `204`. Repeating it is a no-op. |
 
 The server owns Transaction IDs, Entry IDs, Created Time, Updated Time, and Posted Time. Create and
-replace requests contain Account IDs, directions, Amounts, and optional string metadata. Responses
-derive each Entry's Currency Code and Minor Unit Exponent from its Account.
+update requests contain Account IDs, directions, Amounts, Currency Codes, and optional string
+metadata. The Account remains authoritative: a supplied Currency Code must match its Account.
+Item and mutation responses derive each Entry's Currency Code and Minor Unit Exponent from its
+Account. List responses omit Entries.
 
 `GET /` accepts `offset` from 0 to 10,000 and `limit` from 1 to 100. Defaults are 0 and 20.
 
@@ -40,7 +42,7 @@ Pending --post--> Posted
 Pending --void--> Voided
 ```
 
-Only Pending Transactions can be replaced. Posted Transactions are immutable and cannot be Voided.
+Only Pending Transactions can be updated. Posted Transactions are immutable and cannot be Voided.
 Voiding retains the Transaction and Entries for reads; no Transaction endpoint physically deletes
 accounting data.
 
@@ -51,7 +53,7 @@ transaction.
 
 - Pending create adds Entries to Pending Credits or Pending Debits.
 - Posted create adds Entries to both Pending and Posted counters.
-- Pending replacement removes the old Pending effects and adds the replacements.
+- Pending update removes the old Pending effects and adds the updated effects.
 - Posting adds the existing Entries to Posted counters; Pending counters already include them.
 - Voiding removes the existing Entries from Pending counters.
 
@@ -67,18 +69,19 @@ Negative balances are valid.
 
 `Idempotency-Key` is required and scoped by Organization. The create flow is:
 
-1. Read the Organization-scoped key from Valkey.
-2. Validate the request and distinct-Account cap, then create a candidate identity and currency-free
-   repository input with server-owned Transaction and Entry IDs and times.
-3. Atomically claim the Valkey key with the Transaction ID for 24 hours.
-4. In PostgreSQL, lock the Accounts, derive their Currency, construct and validate the Transaction
-   domain entity, and save the Transaction, Entries, and Account effects atomically.
+1. Generate a candidate Transaction ID and atomically claim the Organization-scoped Valkey key for
+   five minutes.
+2. If the claim already exists, wait briefly for the winner's commit and load its Transaction ID.
+3. If this request wins, validate the request and distinct-Account cap.
+4. In PostgreSQL, read the Accounts and their lock versions, derive their Currency, construct and
+   validate the Transaction domain entity, and save the Transaction, Entries, and Account effects
+   atomically using optimistic concurrency control.
 5. If the save fails, compare and delete the Valkey key only when it still contains that candidate
    ID.
 
-A caller that loses the claim reads and returns the winning Transaction. PostgreSQL enforces exact
-uniqueness on `(organization_id, idempotency_key)`. If Valkey lost or expired a mapping but
-PostgreSQL already contains the Transaction, the service loads that row and repopulates Valkey.
+A caller that loses the claim returns the winning Transaction. Valkey is the sole idempotency store;
+the key is never persisted in PostgreSQL. A process crash may leave a stale claim until its
+five-minute expiry.
 
 ## HTTP behavior
 
@@ -89,5 +92,5 @@ PostgreSQL already contains the Transaction, the service loads that row and repo
 - `409 Conflict` reports invalid lifecycle changes or exhausted concurrency retries.
 - `503 Service Unavailable` reports PostgreSQL or Valkey availability failures.
 
-Read operations require `ledger:transaction:read`. Create, replace, and post require
+Read operations require `ledger:transaction:read`. Create, update, and post require
 `ledger:transaction:write`; void requires `ledger:transaction:delete`.

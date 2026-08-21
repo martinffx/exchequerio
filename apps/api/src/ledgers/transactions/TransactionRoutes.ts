@@ -21,8 +21,9 @@ import {
 	TransactionItemParameters,
 	TransactionListQuery,
 	TransactionListResponse,
-	TransactionReplaceRequest,
+	TransactionUpdateRequest,
 	TransactionResponse,
+	toTransactionListItemResponse,
 	toTransactionResponse,
 } from "./TransactionSchema";
 import { TransactionServiceTag } from "./TransactionService";
@@ -65,7 +66,8 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: transactions => transactions.map(transaction => toTransactionResponse(transaction)),
+				onSuccess: transactions =>
+					transactions.map(transaction => toTransactionListItemResponse(transaction)),
 				onFailure: error => {
 					throw error;
 				},
@@ -156,16 +158,16 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.put<{ Params: TransactionItemParameters; Body: TransactionReplaceRequest }>(
+	server.put<{ Params: TransactionItemParameters; Body: TransactionUpdateRequest }>(
 		"/:transactionId",
 		{
 			preHandler: [server.hasPermissions(["ledger:transaction:write"])],
 			schema: {
-				operationId: "replaceLedgerTransaction",
+				operationId: "updateLedgerTransaction",
 				tags: ["Ledger Transactions"],
-				summary: "Replace a Ledger Transaction",
+				summary: "Update a Ledger Transaction",
 				params: TransactionItemParameters,
-				body: TransactionReplaceRequest,
+				body: TransactionUpdateRequest,
 				response: {
 					200: TransactionResponse,
 					404: NotFoundProblem,
@@ -178,7 +180,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 			const effect = parseItemIds(request.params.ledgerId, request.params.transactionId).pipe(
 				Effect.flatMap(([ledgerId, transactionId]) =>
 					TransactionServiceTag.use(service =>
-						service.replaceTransaction(request.token.orgId, ledgerId, transactionId, request.body)
+						service.updateTransaction(request.token.orgId, ledgerId, transactionId, request.body)
 					)
 				)
 			);

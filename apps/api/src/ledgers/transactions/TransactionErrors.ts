@@ -43,6 +43,17 @@ class TransactionConcurrencyFailure extends ConflictError {
 	}
 }
 
+class TransactionVersionConflict extends ConflictError {
+	constructor(organizationId: string, ledgerId: string, transactionId: string) {
+		super(`Transaction was modified by another operation: ${transactionId}`, {
+			organizationId,
+			ledgerId,
+			transactionId,
+			retryable: true,
+		});
+	}
+}
+
 class TransactionRepositoryUnavailable extends ServiceUnavailableError {
 	constructor(cause: unknown, context: ErrorContext = {}) {
 		super("Transaction repository unavailable", { ...context, cause });
@@ -83,4 +94,5 @@ export {
 	TransactionPersistenceFailure,
 	TransactionRepositoryUnavailable,
 	TransactionValidationFailure,
+	TransactionVersionConflict,
 };

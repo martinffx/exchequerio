@@ -1,4 +1,5 @@
 import { type Static, Type } from "@sinclair/typebox";
+import { Option } from "effect";
 import type { DateTime } from "luxon";
 import type { Transaction } from "./domain/Transaction";
 
@@ -29,11 +30,13 @@ const TransactionCreateHeaders = Type.Object({
 const TransactionMetadataSchema = Type.Record(Type.String(), Type.String());
 const EntryDirectionSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 const AmountSchema = Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
+const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });
 const TransactionRequestEntry = Type.Object(
 	{
 		accountId: AccountIdSchema,
 		direction: EntryDirectionSchema,
 		amount: AmountSchema,
+		currencyCode: CurrencyCodeSchema,
 		metadata: Type.Optional(TransactionMetadataSchema),
 	},
 	{ additionalProperties: false }
@@ -47,7 +50,7 @@ const TransactionCreateRequest = Type.Object(
 	},
 	{ additionalProperties: false }
 );
-const TransactionReplaceRequest = Type.Object(
+const TransactionUpdateRequest = Type.Object(
 	{
 		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(TransactionMetadataSchema),
@@ -56,7 +59,6 @@ const TransactionReplaceRequest = Type.Object(
 	{ additionalProperties: false }
 );
 
-const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });
 const MinorUnitExponentSchema = Type.Integer({ minimum: 0, maximum: 2_147_483_647 });
 const TransactionResponseEntry = Type.Object(
 	{
@@ -84,7 +86,8 @@ const TransactionResponse = Type.Object(
 	},
 	{ additionalProperties: false }
 );
-const TransactionListResponse = Type.Array(TransactionResponse);
+const TransactionListItemResponse = Type.Omit(TransactionResponse, ["ledgerEntries"]);
+const TransactionListResponse = Type.Array(TransactionListItemResponse);
 const TransactionDeleteResponse = Type.Null();
 
 type TransactionCollectionParameters = Static<typeof TransactionCollectionParameters>;
@@ -93,9 +96,10 @@ type TransactionListQuery = Static<typeof TransactionListQuery>;
 type TransactionCreateHeaders = Static<typeof TransactionCreateHeaders>;
 type TransactionRequestEntry = Static<typeof TransactionRequestEntry>;
 type TransactionCreateRequest = Static<typeof TransactionCreateRequest>;
-type TransactionReplaceRequest = Static<typeof TransactionReplaceRequest>;
+type TransactionUpdateRequest = Static<typeof TransactionUpdateRequest>;
 type TransactionResponseEntry = Static<typeof TransactionResponseEntry>;
 type TransactionResponse = Static<typeof TransactionResponse>;
+type TransactionListItemResponse = Static<typeof TransactionListItemResponse>;
 type TransactionListResponse = Static<typeof TransactionListResponse>;
 type TransactionDeleteResponse = Static<typeof TransactionDeleteResponse>;
 
@@ -105,13 +109,20 @@ const toIso = (value: DateTime): string => {
 	return encoded;
 };
 
-const toTransactionResponse = (transaction: Transaction): TransactionResponse => ({
+const toTransactionListItemResponse = (transaction: Transaction): TransactionListItemResponse => ({
 	id: transaction.id.toString(),
 	ledgerId: transaction.ledgerId.toString(),
 	...(transaction.description === undefined ? {} : { description: transaction.description }),
 	status: transaction.status,
 	...(transaction.metadata === undefined ? {} : { metadata: transaction.metadata }),
-	ledgerEntries: transaction.entries.map(entry => ({
+	...(transaction.postedAt === undefined ? {} : { postedAt: toIso(transaction.postedAt) }),
+	created: toIso(transaction.created),
+	updated: toIso(transaction.updated),
+});
+
+const toTransactionResponse = (transaction: Transaction): TransactionResponse => ({
+	...toTransactionListItemResponse(transaction),
+	ledgerEntries: Option.getOrThrow(transaction.entries).map(entry => ({
 		id: entry.id.toString(),
 		accountId: entry.accountId.toString(),
 		direction: entry.direction,
@@ -120,9 +131,6 @@ const toTransactionResponse = (transaction: Transaction): TransactionResponse =>
 		minorUnitExponent: entry.currency.minorUnitExponent,
 		...(entry.metadata === undefined ? {} : { metadata: entry.metadata }),
 	})),
-	...(transaction.postedAt === undefined ? {} : { postedAt: toIso(transaction.postedAt) }),
-	created: toIso(transaction.created),
-	updated: toIso(transaction.updated),
 });
 
 export {
@@ -137,11 +145,13 @@ export {
 	TransactionIdSchema,
 	TransactionItemParameters,
 	TransactionListQuery,
+	TransactionListItemResponse,
 	TransactionListResponse,
 	TransactionMetadataSchema,
-	TransactionReplaceRequest,
+	TransactionUpdateRequest,
 	TransactionRequestEntry,
 	TransactionResponse,
 	TransactionResponseEntry,
+	toTransactionListItemResponse,
 	toTransactionResponse,
 };

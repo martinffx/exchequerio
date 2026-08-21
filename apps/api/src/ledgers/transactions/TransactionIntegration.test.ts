@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Result } from "effect";
 import type { FastifyInstance, InjectOptions } from "fastify";
 import { Pool } from "pg";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -25,10 +25,7 @@ import {
 import { makeServerRuntimeLayer } from "@/runtime";
 import { buildServer } from "@/server";
 
-import {
-	type TransactionIdempotencyRepo,
-	TransactionIdempotencyRepoTag,
-} from "./TransactionIdempotencyRepo";
+import { type TransactionIdemService, TransactionIdemServiceTag } from "./TransactionIdemService";
 
 type JsonObject = Record<string, unknown>;
 
@@ -40,29 +37,24 @@ const idempotencyValues = new Map<string, LedgerTransactionID>();
 
 const cacheKey = (organizationId: OrgID, key: string) => `${organizationId.toString()}:${key}`;
 
-const idempotencyRepo = {
-	lookup: (organizationId, key) =>
-		Effect.succeed(idempotencyValues.get(cacheKey(organizationId, key))),
-	claim: (organizationId, key, candidate) =>
+const idempotencyService = {
+	claimTransactionId: (organizationId, key) =>
 		Effect.sync(() => {
 			const scopedKey = cacheKey(organizationId, key);
-			const winner = idempotencyValues.get(scopedKey) ?? candidate;
-			idempotencyValues.set(scopedKey, winner);
-			return winner;
+			const existing = idempotencyValues.get(scopedKey);
+			if (existing !== undefined) return Result.fail(existing);
+			const transactionId = newLedgerTransactionID();
+			idempotencyValues.set(scopedKey, transactionId);
+			return Result.succeed(transactionId);
 		}),
-	repopulate: (organizationId, key, canonicalId) =>
-		Effect.sync(() => {
-			idempotencyValues.set(cacheKey(organizationId, key), canonicalId);
-			return canonicalId;
-		}),
-	cleanup: (organizationId, key, claimedId) =>
+	releaseTransactionId: (organizationId, key, claimedId) =>
 		Effect.sync(() => {
 			const scopedKey = cacheKey(organizationId, key);
 			if (idempotencyValues.get(scopedKey)?.toString() === claimedId.toString()) {
 				idempotencyValues.delete(scopedKey);
 			}
 		}),
-} satisfies TransactionIdempotencyRepo;
+} satisfies TransactionIdemService;
 
 const auth = (organizationId: string) => ({
 	Authorization: `Bearer ${signJWT({ sub: organizationId, scope: ["org_admin"] })}`,
@@ -84,7 +76,7 @@ describe("Transaction assembled journeys", () => {
 	beforeAll(async () => {
 		server = await buildServer({
 			runtimeLayer: makeServerRuntimeLayer(config, {
-				transactionIdempotency: Layer.succeed(TransactionIdempotencyRepoTag, idempotencyRepo),
+				transactionIdempotency: Layer.succeed(TransactionIdemServiceTag, idempotencyService),
 			}),
 		});
 	});
@@ -160,7 +152,7 @@ describe("Transaction assembled journeys", () => {
 		return response.json<JsonObject>();
 	};
 
-	it("moves Pending balances through replacement and posting, while a separate Pending void stays queryable", async () => {
+	it("moves Pending balances through update and posting, while a separate Pending void stays queryable", async () => {
 		const organizationId = await createOrganization();
 		const ledger = await createLedger(organizationId, "Pending journey");
 		const ledgerId = ledger.id as string;
@@ -178,8 +170,8 @@ describe("Transaction assembled journeys", () => {
 				status: "pending",
 				description: "Initial pending transfer",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 100 },
-					{ accountId: creditId, direction: "credit", amount: 100 },
+					{ accountId: debitId, direction: "debit", amount: 100, currencyCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: 100, currencyCode: "EUR" },
 				],
 			},
 		});
@@ -217,8 +209,8 @@ describe("Transaction assembled journeys", () => {
 			payload: {
 				description: "Expanded pending transfer",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 175 },
-					{ accountId: creditId, direction: "credit", amount: 175 },
+					{ accountId: debitId, direction: "debit", amount: 175, currencyCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: 175, currencyCode: "EUR" },
 				],
 			},
 		});
@@ -290,8 +282,8 @@ describe("Transaction assembled journeys", () => {
 				status: "pending",
 				description: "Void this pending transaction",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 25 },
-					{ accountId: creditId, direction: "credit", amount: 25 },
+					{ accountId: debitId, direction: "debit", amount: 25, currencyCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: 25, currencyCode: "EUR" },
 				],
 			},
 		});
@@ -372,8 +364,8 @@ describe("Transaction assembled journeys", () => {
 				status: "posted",
 				description: "First body wins",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 240 },
-					{ accountId: creditId, direction: "credit", amount: 240 },
+					{ accountId: debitId, direction: "debit", amount: 240, currencyCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: 240, currencyCode: "EUR" },
 				],
 			},
 		});
@@ -391,8 +383,8 @@ describe("Transaction assembled journeys", () => {
 				status: "pending",
 				description: "Ignored second body",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 999 },
-					{ accountId: creditId, direction: "credit", amount: 999 },
+					{ accountId: debitId, direction: "debit", amount: 999, currencyCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: 999, currencyCode: "EUR" },
 				],
 			},
 		});
@@ -426,6 +418,43 @@ describe("Transaction assembled journeys", () => {
 		});
 	});
 
+	it("commits concurrent writes to hot Accounts through OCC retries", async () => {
+		const organizationId = await createOrganization();
+		const ledger = await createLedger(organizationId, "Hot Account contention");
+		const ledgerId = ledger.id as string;
+		const debit = await createAccount(organizationId, ledgerId, "Hot debit", "debit");
+		const credit = await createAccount(organizationId, ledgerId, "Hot credit", "credit");
+		const debitId = debit.id as string;
+		const creditId = credit.id as string;
+		const writes = 10;
+
+		const responses = await Promise.all(
+			Array.from({ length: writes }, (_, index) =>
+				inject(organizationId, {
+					method: "POST",
+					url: `/api/ledgers/${ledgerId}/transactions`,
+					headers: { "idempotency-key": `hot-account-${index}` },
+					payload: {
+						status: "pending",
+						ledgerEntries: [
+							{ accountId: debitId, direction: "debit", amount: 1, currencyCode: "EUR" },
+							{ accountId: creditId, direction: "credit", amount: 1, currencyCode: "EUR" },
+						],
+					},
+				})
+			)
+		);
+
+		expect(responses.map(response => response.statusCode)).toEqual(Array(writes).fill(201));
+		const hotDebit = await getAccount(organizationId, ledgerId, debitId);
+		expect(balance(hotDebit, "pending")).toEqual({
+			balanceType: "pending",
+			credits: 0,
+			debits: writes,
+			amount: writes,
+		});
+	});
+
 	it("returns indistinguishable 404 contracts for missing and cross-tenant resources", async () => {
 		const ownerId = await createOrganization();
 		const requesterId = await createOrganization();
@@ -442,8 +471,8 @@ describe("Transaction assembled journeys", () => {
 			payload: {
 				status: "pending",
 				ledgerEntries: [
-					{ accountId: ownerDebit.id, direction: "debit", amount: 10 },
-					{ accountId: ownerCredit.id, direction: "credit", amount: 10 },
+					{ accountId: ownerDebit.id, direction: "debit", amount: 10, currencyCode: "EUR" },
+					{ accountId: ownerCredit.id, direction: "credit", amount: 10, currencyCode: "EUR" },
 				],
 			},
 		});

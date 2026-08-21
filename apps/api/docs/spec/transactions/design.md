@@ -5,14 +5,13 @@
 The Transaction slice follows Routes → Service → Repository → PostgreSQL.
 
 - `TransactionRoutes` owns Fastify validation, permissions, status codes, and response mapping.
-- `TransactionService` owns IDs, UTC time, idempotency orchestration, request limits, and retry
-  selection.
-- `TransactionRepo` owns tenant-scoped SQL, transaction boundaries, row locks, Account-derived
-  Currency, domain construction after locks, Account counter updates, and PostgreSQL error
+- `TransactionService` owns UTC time, idempotency orchestration, request limits, and retry selection.
+- `TransactionRepo` owns tenant-scoped SQL, transaction boundaries, Account-derived Currency,
+  optimistic concurrency, Account counter updates, and PostgreSQL error
   translation.
 - `Transaction` and `Entry` own lifecycle, balancing, metadata, Amount, and counter-delta rules. They
   use Effect values for typed failures and perform no I/O.
-- `TransactionIdempotencyRepo` owns the Valkey key and managed ioredis client.
+- `TransactionIdemService` owns the Valkey claim and release operations.
 
 Fastify composes these services once into its managed Effect runtime. Routes call the Effect service
 directly; no legacy Promise Transaction service or repository remains.
@@ -45,12 +44,12 @@ Currency remains the authority; Entry rows store neither Currency nor lifecycle 
 
 Account rows store four signed, safe-integer counters:
 
-| Counter | Includes |
-| --- | --- |
+| Counter         | Includes                                          |
+| --------------- | ------------------------------------------------- |
 | Pending Credits | Credit Entries on Pending and Posted Transactions |
-| Pending Debits | Debit Entries on Pending and Posted Transactions |
-| Posted Credits | Credit Entries on Posted Transactions |
-| Posted Debits | Debit Entries on Posted Transactions |
+| Pending Debits  | Debit Entries on Pending and Posted Transactions  |
+| Posted Credits  | Credit Entries on Posted Transactions             |
+| Posted Debits   | Debit Entries on Posted Transactions              |
 
 For a debit-normal Account:
 
@@ -72,42 +71,41 @@ Derived balance columns do not exist. Negative results remain valid.
 
 ## Atomic writes and concurrency
 
-Create, replace, post, and void run in one PostgreSQL transaction. Each mutation:
+Create, update, post, and void run in one PostgreSQL transaction. Each mutation:
 
 1. Loads and validates the tenant-scoped Transaction and Accounts.
-2. Locks affected Accounts in ascending ID order.
+2. Reads affected Accounts and their lock versions.
 3. Builds the domain mutation and validates all resulting safe-integer counters.
 4. Writes the Transaction and Entries.
 5. Applies one aggregate delta per Account with its lock version predicate.
 6. Commits every change or rolls back every change.
 
-Replacement also locks the Transaction, reads its existing Entries, and considers the union of old
-and new Accounts. Transitions lock the Transaction before deriving their effects. Repeated post of a
-Posted Transaction and repeated void of a Voided Transaction return the current resource without
-counter changes.
+Update reads the Transaction and existing Entries, then considers the union of old and new Accounts.
+Update, post, and void conditionally update the Transaction using its observed lock version before
+applying Account deltas. An Account conflict rolls back the whole PostgreSQL transaction, including
+the Transaction update. Repeated post of a Posted Transaction and repeated void of a Voided
+Transaction return the current resource without counter changes.
 
-The service retries Account version conflicts, PostgreSQL deadlocks (`40P01`), and serialization
-failures (`40001`) twice after the first attempt. It exposes an exhausted race as a typed conflict.
+The service retries Account and Transaction version conflicts, PostgreSQL deadlocks (`40P01`), and
+serialization failures (`40001`) with 50-millisecond exponential jitter for up to two seconds. It
+exposes an exhausted race as a typed conflict.
 
 ## Create idempotency
 
-Valkey provides the fast, shared claim; PostgreSQL provides durable uniqueness. The key is:
+Valkey is the sole idempotency store. The key is:
 
 ```text
 exchequer:transactions:idempotency:<organizationId>:<idempotencyKey>
 ```
 
-Create reads Valkey first. On a miss, the service validates the request and distinct-Account cap,
-then creates a candidate identity and currency-free repository input with server-owned IDs and UTC
-times. One Lua command stores the candidate Transaction ID with `SET NX` and a 24-hour expiry. After
-the claim, the winning repository call locks the Accounts, derives their Currency, and constructs and
-validates the Transaction domain entity inside the PostgreSQL transaction. A loser reads the stored
-ID, waits briefly for the winner's commit, and returns the canonical row.
+Create atomically claims a generated Transaction ID in Valkey before any repository query. The claim
+returns a `Result`: success contains the newly claimed ID and failure contains the existing ID. The
+winning repository call creates the Transaction with that exact ID. A loser waits briefly for the
+winner's commit and loads the Transaction by ID.
 
 If PostgreSQL rejects the winner's save, cleanup uses compare-and-delete so it cannot remove another
-caller's claim. A PostgreSQL uniqueness race on `(organization_id, idempotency_key)` loads the exact
-canonical row and repopulates Valkey. Normal cache misses do not perform a PostgreSQL lookup before
-the claim.
+caller's claim. Claims expire after five minutes; a process crash can leave a stale claim until then.
+Idempotency keys are never sent to PostgreSQL.
 
 Valkey command and connection failures map to a typed availability error. The client connects lazily,
 so Valkey readiness does not block server startup or unrelated endpoints. The runtime closes its one
@@ -133,8 +131,7 @@ the public problem response.
 ## Test seams
 
 - Route tests inject Fastify requests with a mock Transaction service Layer.
-- Service tests inject mock Transaction and idempotency repositories and a deterministic clock and
-  ID source.
+- Service tests inject mock Transaction repositories and idempotency services.
 - Repository and migration tests use real PostgreSQL.
 - Idempotency and cross-instance tests use real Valkey.
 - Authenticated journeys use Fastify and PostgreSQL to prove assembled wiring without repeating each

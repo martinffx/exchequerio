@@ -90,7 +90,7 @@ const LedgerAccountsTable = pgTable(
 		pendingDebits: bigint("pending_debits", { mode: "number" }).notNull().default(0),
 		postedCredits: bigint("posted_credits", { mode: "number" }).notNull().default(0),
 		postedDebits: bigint("posted_debits", { mode: "number" }).notNull().default(0),
-		lockVersion: integer("lock_version").notNull().default(0),
+		lockVersion: integer("lock_version").notNull().default(1),
 		metadata: text("metadata"), // TEXT for DSQL compatibility (JSON string)
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
@@ -147,6 +147,7 @@ const LedgerTransactionsTable = pgTable(
 		status: ledgerTransactionStatus("status").notNull().default("pending"),
 		postedAt: timestamp("posted_at", { withTimezone: true }),
 		metadata: text("metadata"),
+		lockVersion: integer("lock_version").notNull().default(1),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -173,6 +174,9 @@ const LedgerTransactionsTable = pgTable(
 		),
 	})
 );
+
+type LedgerTransactionRow = typeof LedgerTransactionsTable.$inferSelect;
+type LedgerTransactionCreateRow = typeof LedgerTransactionsTable.$inferInsert;
 
 // Ledger Transaction Entries: Individual debit/credit entries
 const LedgerTransactionEntriesTable = pgTable(
@@ -484,6 +488,8 @@ export type {
 	LedgerCreateRow,
 	LedgerRow,
 	LedgerUpdateRow,
+	LedgerTransactionRow,
+	LedgerTransactionCreateRow,
 	OrganizationCreateRow,
 	OrganizationRow,
 	OrganizationUpdateRow,

@@ -18,6 +18,7 @@ type SettlementTransactionRequest = {
 		readonly accountId: string;
 		readonly direction: "debit" | "credit";
 		readonly amount: number;
+		readonly currencyCode: string;
 		readonly metadata?: Record<string, string>;
 	}>;
 };
@@ -163,12 +164,14 @@ class LedgerAccountSettlementService {
 						accountId: settlement.settledAccountId.toString(),
 						direction: settlement.normalBalance === "debit" ? ("credit" as const) : ("debit" as const),
 						amount: settlement.amount,
+						currencyCode: settlement.currency,
 						metadata: {},
 					},
 					{
 						accountId: settlement.contraAccountId.toString(),
 						direction: settlement.normalBalance === "debit" ? ("debit" as const) : ("credit" as const),
 						amount: settlement.amount,
+						currencyCode: settlement.currency,
 						metadata: {},
 					},
 				],

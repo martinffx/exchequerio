@@ -1,22 +1,17 @@
 import fastifySwagger from "@fastify/swagger";
 import { Effect, Layer } from "effect";
 import fastify, { type FastifyInstance } from "fastify";
-import { DateTime } from "luxon";
+import { Settings } from "luxon";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LedgerNotFound } from "@/ledgers/LedgerErrors";
+import { makeCurrency } from "@/ledgers/accounts";
 import { globalErrorHandler } from "@/lib/errors";
-import type {
-	LedgerAccountID,
-	LedgerID,
-	LedgerTransactionEntryID,
-	LedgerTransactionID,
-	OrgID,
-} from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
 import { ServerRuntime } from "@/runtime";
 
-import { Entry, Transaction } from "./domain/Transaction";
+import { Transaction } from "./domain/Transaction";
 import {
 	TransactionConcurrencyFailure,
 	TransactionIdempotencyUnavailable,
@@ -35,49 +30,49 @@ const ledgerId = new TypeID("lgr") as LedgerID;
 const transactionId = new TypeID("ltr") as LedgerTransactionID;
 const debitAccountId = new TypeID("lat") as LedgerAccountID;
 const creditAccountId = new TypeID("lat") as LedgerAccountID;
-const created = DateTime.fromISO("2026-08-15T08:00:00.000Z", { zone: "utc" });
-
-const entry = (
-	id: LedgerTransactionEntryID,
-	accountId: LedgerAccountID,
-	direction: "debit" | "credit"
-) =>
-	Effect.runSync(
-		Entry.make({
-			id,
-			accountId,
-			direction,
-			amount: 500,
-			currency: { code: "EUR", minorUnitExponent: 2 },
-		})
-	);
-
-const transaction = Effect.runSync(
-	Transaction.make({
-		id: transactionId,
-		organizationId,
-		ledgerId,
-		status: "pending",
-		entries: [
-			entry(new TypeID("lte") as LedgerTransactionEntryID, debitAccountId, "debit"),
-			entry(new TypeID("lte") as LedgerTransactionEntryID, creditAccountId, "credit"),
-		],
-		created,
-		updated: created,
-	})
-);
 
 const createBody = {
 	status: "pending" as const,
 	description: "Transfer",
 	ledgerEntries: [
-		{ accountId: debitAccountId.toString(), direction: "debit" as const, amount: 500 },
-		{ accountId: creditAccountId.toString(), direction: "credit" as const, amount: 500 },
+		{
+			accountId: debitAccountId.toString(),
+			direction: "debit" as const,
+			amount: 500,
+			currencyCode: "EUR",
+		},
+		{
+			accountId: creditAccountId.toString(),
+			direction: "credit" as const,
+			amount: 500,
+			currencyCode: "EUR",
+		},
 	],
 };
 
-const replaceBody = {
-	description: "Replacement",
+const transaction = (() => {
+	const previousNow = Settings.now;
+	Settings.now = () => Date.parse("2026-08-15T08:00:00.000Z");
+	try {
+		return Effect.runSync(
+			Transaction.fromRequest(
+				transactionId,
+				organizationId,
+				ledgerId,
+				createBody,
+				new Map([
+					[debitAccountId.toString(), makeCurrency("EUR", 2)],
+					[creditAccountId.toString(), makeCurrency("EUR", 2)],
+				])
+			)
+		);
+	} finally {
+		Settings.now = previousNow;
+	}
+})();
+
+const updateBody = {
+	description: "Updated",
 	ledgerEntries: createBody.ledgerEntries,
 };
 
@@ -86,7 +81,7 @@ const service = (): TransactionService =>
 		listTransactions: vi.fn(() => Effect.succeed([transaction])),
 		getTransaction: vi.fn(() => Effect.succeed(transaction)),
 		createTransaction: vi.fn(() => Effect.succeed(transaction)),
-		replaceTransaction: vi.fn(() => Effect.succeed(transaction)),
+		updateTransaction: vi.fn(() => Effect.succeed(transaction)),
 		postTransaction: vi.fn(() => Effect.succeed(transaction)),
 		voidTransaction: vi.fn(() => Effect.succeed(transaction)),
 	} as unknown as TransactionService);
@@ -139,11 +134,23 @@ describe("TransactionRoutes", () => {
 		]);
 	});
 
+	it("omits Entries from the list response", async () => {
+		const { server } = await buildRouteServer(service());
+		const response = await server.inject({
+			method: "GET",
+			url: `/api/ledgers/${ledgerId.toString()}/transactions`,
+		});
+
+		expect(response.statusCode).toBe(200);
+		const [item] = response.json<Array<Record<string, unknown>>>();
+		expect(item).not.toHaveProperty("ledgerEntries");
+	});
+
 	it.each([
 		["list", "GET", "", undefined, undefined, 200],
 		["get", "GET", `/${transactionId.toString()}`, undefined, undefined, 200],
 		["create", "POST", "", createBody, { "idempotency-key": "create-42" }, 201],
-		["replace", "PUT", `/${transactionId.toString()}`, replaceBody, undefined, 200],
+		["update", "PUT", `/${transactionId.toString()}`, updateBody, undefined, 200],
 		["post", "POST", `/${transactionId.toString()}/post`, undefined, undefined, 200],
 		["void", "DELETE", `/${transactionId.toString()}`, undefined, undefined, 204],
 	] as const)(
@@ -166,7 +173,7 @@ describe("TransactionRoutes", () => {
 		}
 	);
 
-	it("passes canonical tenant scope, defaults, header, and replacement input", async () => {
+	it("passes canonical tenant scope, defaults, header, and update input", async () => {
 		const implementation = service();
 		const { server } = await buildRouteServer(implementation);
 
@@ -180,7 +187,7 @@ describe("TransactionRoutes", () => {
 		await server.inject({
 			method: "PUT",
 			url: `/api/ledgers/${ledgerId.toString()}/transactions/${transactionId.toString()}`,
-			payload: { ...replaceBody, ignored: true },
+			payload: { ...updateBody, ignored: true },
 		});
 		await server.inject({
 			method: "GET",
@@ -205,11 +212,11 @@ describe("TransactionRoutes", () => {
 			"create-42",
 			createBody
 		);
-		expect(implementation.replaceTransaction).toHaveBeenCalledWith(
+		expect(implementation.updateTransaction).toHaveBeenCalledWith(
 			organizationId,
 			ledgerId,
 			transactionId,
-			replaceBody
+			updateBody
 		);
 		expect(implementation.getTransaction).toHaveBeenCalledWith(
 			organizationId,
@@ -245,10 +252,10 @@ describe("TransactionRoutes", () => {
 			id: transactionId.toString(),
 			ledgerId: ledgerId.toString(),
 			status: "pending",
+			description: "Transfer",
 			created: "2026-08-15T08:00:00.000Z",
 			updated: "2026-08-15T08:00:00.000Z",
 		});
-		expect(response.json()).not.toHaveProperty("description");
 		expect(response.json()).not.toHaveProperty("metadata");
 		expect(response.json()).not.toHaveProperty("postedAt");
 	});
@@ -343,11 +350,11 @@ describe("TransactionRoutes", () => {
 			503,
 		],
 		[
-			"replace concurrency",
-			"replaceTransaction",
+			"update concurrency",
+			"updateTransaction",
 			"PUT",
 			`/${transactionId.toString()}`,
-			replaceBody,
+			updateBody,
 			undefined,
 			new TransactionConcurrencyFailure(new Error("race")),
 			409,

@@ -10,9 +10,9 @@ export type {
 	TransactionCreateError,
 	TransactionGetError,
 	TransactionListError,
-	TransactionReplaceError,
 	TransactionService,
 	TransactionTransitionError,
+	TransactionUpdateError,
 } from "./TransactionService";
 export { TransactionServiceTag } from "./TransactionService";
 export { transactionLayer };

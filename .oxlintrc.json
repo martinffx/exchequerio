@@ -92,7 +92,7 @@
 			},
 			{
 				"type": "transaction-capability",
-				"pattern": "src/ledgers/transactions/TransactionIdempotencyRepo.ts",
+				"pattern": "src/ledgers/transactions/TransactionIdemService.ts",
 				"mode": "full"
 			},
 			{
@@ -109,11 +109,27 @@
 				"mode": "full"
 			},
 			{ "type": "organization-composition", "pattern": "src/organizations/index.ts", "mode": "full" },
-			{ "type": "organization-routes", "pattern": "src/organizations/OrganizationRoutes.ts", "mode": "full" },
-			{ "type": "organization-service", "pattern": "src/organizations/OrganizationService.ts", "mode": "full" },
-			{ "type": "organization-repo", "pattern": "src/organizations/OrganizationRepo.ts", "mode": "full" },
+			{
+				"type": "organization-routes",
+				"pattern": "src/organizations/OrganizationRoutes.ts",
+				"mode": "full"
+			},
+			{
+				"type": "organization-service",
+				"pattern": "src/organizations/OrganizationService.ts",
+				"mode": "full"
+			},
+			{
+				"type": "organization-repo",
+				"pattern": "src/organizations/OrganizationRepo.ts",
+				"mode": "full"
+			},
 			{ "type": "organization-domain", "pattern": "src/organizations/domain/**/*", "mode": "full" },
-			{ "type": "organization-capability", "pattern": "src/organizations/OrganizationIdGenerator.ts", "mode": "full" },
+			{
+				"type": "organization-capability",
+				"pattern": "src/organizations/OrganizationIdGenerator.ts",
+				"mode": "full"
+			},
 			{
 				"type": "organization-transport",
 				"pattern": "src/organizations/OrganizationSchema.ts",
@@ -292,13 +308,7 @@
 					},
 					{
 						"from": ["ledger-service"],
-						"allow": [
-							"ledger-domain",
-							"ledger-repo",
-							"ledger-transport",
-							"http",
-							"legacy-entities"
-						]
+						"allow": ["ledger-domain", "ledger-repo", "ledger-transport", "http", "legacy-entities"]
 					},
 					{
 						"from": ["ledger-transport"],
@@ -306,22 +316,11 @@
 					},
 					{
 						"from": ["ledger-routes"],
-						"allow": [
-							"ledger-domain",
-							"ledger-service",
-							"ledger-transport",
-							"http",
-							"legacy-entities"
-						]
+						"allow": ["ledger-domain", "ledger-service", "ledger-transport", "http", "legacy-entities"]
 					},
 					{
 						"from": ["ledger-composition"],
-						"allow": [
-							"ledger-domain",
-							"ledger-repo",
-							"ledger-routes",
-							"ledger-service"
-						]
+						"allow": ["ledger-domain", "ledger-repo", "ledger-routes", "ledger-service"]
 					},
 					{
 						"from": ["account-domain"],
@@ -364,12 +363,7 @@
 					},
 					{
 						"from": ["account-routes"],
-						"allow": [
-							"account-service",
-							"account-transport",
-							"http",
-							"legacy-entities"
-						]
+						"allow": ["account-service", "account-transport", "http", "legacy-entities"]
 					},
 					{
 						"from": ["account-composition"],
@@ -385,6 +379,7 @@
 						"from": ["transaction-domain"],
 						"allow": [
 							"transaction-domain",
+							"transaction-transport",
 							"account-composition",
 							"http",
 							"legacy-entities",

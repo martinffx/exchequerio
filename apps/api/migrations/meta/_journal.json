@@ -43,6 +43,13 @@
       "when": 1786776877777,
       "tag": "0005_transactions_effect",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787036320576,
+      "tag": "0006_yielding_doctor_faustus",
+      "breakpoints": true
     }
   ]
 }

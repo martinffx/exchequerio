@@ -2,11 +2,11 @@ import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import type { AccountCreateRow, AccountRow, AccountUpdateRow } from "@/repo/schema";
-import { parseId } from "@/lib/utils";
+import { parseId, parseDate, parseMetadata } from "@/lib/utils";
 import type { AccountCreateRequest, AccountUpdateRequest } from "../AccountSchema";
 import { AccountPersistenceDecodingFailure } from "../AccountErrors";
-import { makeCurrency, type Currency } from "./Currency";
 
+type CurrencyCode = string
 type AccountMetadata = Readonly<Record<string, string>>;
 type DerivedBalanceColumn =
 	| "pendingAmount"
@@ -24,7 +24,7 @@ type AccountOptions = {
 	readonly name: string;
 	readonly description?: string;
 	readonly normalBalance: "debit" | "credit";
-	readonly currency: Currency;
+	readonly currency: CurrencyCode;
 	readonly pendingCredits: number;
 	readonly pendingDebits: number;
 	readonly postedCredits: number;
@@ -43,36 +43,6 @@ type AccountBalance = Readonly<{
 	amount: number;
 }>;
 
-const decodeDate = (value: Date): DateTime => {
-	const date = DateTime.fromJSDate(value, { zone: "utc" });
-	if (!date.isValid) throw new Error("Invalid Account timestamp");
-	return date;
-};
-
-const decodeMetadata = (value: string | null): AccountMetadata | undefined => {
-	if (value === null) return undefined;
-	const decoded: unknown = JSON.parse(value);
-	if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
-		throw new Error("Account metadata must be an object");
-	}
-	if (!Object.values(decoded).every(item => typeof item === "string")) {
-		throw new Error("Account metadata values must be strings");
-	}
-	return decoded as Record<string, string>;
-};
-
-const decodeLockVersion = (value: number): number => {
-	if (!Number.isSafeInteger(value) || value < 0) {
-		throw new Error("Invalid Account lock version");
-	}
-	return value;
-};
-
-const decodeMinorUnits = (value: number): number => {
-	if (!Number.isSafeInteger(value)) throw new Error("Invalid Account balance");
-	return value;
-};
-
 class Account {
 	readonly id: LedgerAccountID;
 	readonly organizationId: OrgID;
@@ -80,7 +50,7 @@ class Account {
 	readonly name: string;
 	readonly description?: string;
 	readonly normalBalance: AccountOptions["normalBalance"];
-	readonly currency: Currency;
+	readonly currency: CurrencyCode;
 	readonly pendingCredits: number;
 	readonly pendingDebits: number;
 	readonly postedCredits: number;
@@ -123,7 +93,7 @@ class Account {
 			name: request.name,
 			description: request.description,
 			normalBalance: request.normalBalance,
-			currency: makeCurrency(request.currencyCode, request.minorUnitExponent),
+			currency: request.currencyCode,
 			pendingCredits: zero,
 			pendingDebits: zero,
 			postedCredits: zero,
@@ -135,49 +105,42 @@ class Account {
 		});
 	}
 
-	static fromRow(
-		row: AccountPersistenceRow | undefined
-	): Effect.Effect<Option.Option<Account>, AccountPersistenceDecodingFailure> {
-		if (row === undefined) return Effect.succeed(Option.none());
+  static fromRow(
+    row: AccountPersistenceRow | undefined
+  ): Effect.Effect<Option.Option<Account>, AccountPersistenceDecodingFailure> {
+    if (row === undefined) return Effect.succeed(Option.none());
 
-		return Effect.gen(function* () {
-			const id = yield* parseId<"lat", LedgerAccountID>("lat", row.id);
-			const organizationId = yield* parseId<"org", OrgID>("org", row.organizationId);
-			const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", row.ledgerId);
-			const decoded = yield* Effect.try({
-				try: () => ({
-					currency: makeCurrency(row.currencyCode, row.minorUnitExponent),
-					pendingCredits: decodeMinorUnits(row.pendingCredits),
-					pendingDebits: decodeMinorUnits(row.pendingDebits),
-					postedCredits: decodeMinorUnits(row.postedCredits),
-					postedDebits: decodeMinorUnits(row.postedDebits),
-					lockVersion: decodeLockVersion(row.lockVersion),
-					metadata: decodeMetadata(row.metadata),
-					created: decodeDate(row.created),
-					updated: decodeDate(row.updated),
-				}),
-				catch: cause => cause,
-			});
-			const account = new Account({
-				id,
-				organizationId,
-				ledgerId,
-				name: row.name,
-				description: row.description ?? undefined,
-				normalBalance: row.normalBalance,
-				currency: decoded.currency,
-				pendingCredits: decoded.pendingCredits,
-				pendingDebits: decoded.pendingDebits,
-				postedCredits: decoded.postedCredits,
-				postedDebits: decoded.postedDebits,
-				lockVersion: decoded.lockVersion,
-				metadata: decoded.metadata,
-				created: decoded.created,
-				updated: decoded.updated,
-			});
-			// eslint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives a value.
-			return Option.some(account);
-		}).pipe(Effect.mapError(cause => new AccountPersistenceDecodingFailure(cause)));
+    return Effect.all([
+      parseId<"lat", LedgerAccountID>("lat", row.id),
+      parseId<"org", OrgID>("org", row.organizationId),
+      parseId<"lgr", LedgerID>("lgr", row.ledgerId),
+      parseMetadata(row.metadata),
+      parseDate(row.created),
+      parseDate(row.updated)
+         ]
+    ).pipe(
+      Effect.map(([id, organizationId, ledgerId, metadata, created, updated]) => {
+        const account = new Account({
+          id,
+          organizationId,
+          ledgerId,
+          name: row.name,
+          description: row.description ?? undefined,
+          normalBalance: row.normalBalance,
+          currency: row.currencyCode,
+          pendingCredits: row.pendingCredits,
+          pendingDebits: row.pendingDebits,
+          postedCredits: row.postedCredits,
+          postedDebits: row.postedDebits,
+          lockVersion: row.lockVersion,
+          metadata,
+          created,
+          updated,
+        })
+        // oxlint-disable-next-line unicorn/no-array-callback-reference
+        return Option.some(account)
+      }),
+    ).pipe(Effect.mapError(cause => new AccountPersistenceDecodingFailure(cause)));
 	}
 
 	updateFromRequest(rq: AccountUpdateRequest): Account {
@@ -209,8 +172,7 @@ class Account {
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			description: this.description ?? null,
 			normalBalance: this.normalBalance,
-			currencyCode: this.currency.code,
-			minorUnitExponent: this.currency.minorUnitExponent,
+			currencyCode: this.currency,
 			pendingCredits: this.pendingCredits,
 			pendingDebits: this.pendingDebits,
 			postedCredits: this.postedCredits,
@@ -266,5 +228,5 @@ class Account {
 	}
 }
 
-export type { AccountBalance, AccountMetadata, AccountOptions };
+export type { AccountBalance, AccountMetadata, AccountOptions, CurrencyCode };
 export { Account };

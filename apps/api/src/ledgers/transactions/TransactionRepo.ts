@@ -1,25 +1,22 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
-import { DateTime } from "luxon";
+import type { DateTime } from "luxon";
 
 import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
-import { postgresConstraint } from "@/db/errors";
 import { AccountNotFound, AccountVersionConflict, makeCurrency } from "@/ledgers/accounts";
-import { parseId } from "@/lib/utils";
-import type {
-	LedgerAccountID,
-	LedgerID,
-	LedgerTransactionEntryID,
-	LedgerTransactionID,
-	OrgID,
-} from "@/repo/entities/types";
+import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
 import {
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
 	LedgerTransactionsTable,
 } from "@/repo/schema";
 
-import { Entry, Transaction, type AccountCounterDelta } from "./domain/Transaction";
+import {
+	Transaction,
+	type AccountCounterDelta,
+	type TransactionCreateRequest,
+	type TransactionUpdateRequest,
+} from "./domain/Transaction";
 import {
 	TransactionConcurrencyFailure,
 	type TransactionInfrastructureError,
@@ -29,44 +26,10 @@ import {
 	TransactionPersistenceFailure,
 	TransactionRepositoryUnavailable,
 	TransactionValidationFailure,
+	TransactionVersionConflict,
 } from "./TransactionErrors";
 
-type TransactionListQuery = {
-	readonly offset: number;
-	readonly limit: number;
-};
-
-type TransactionRepositoryEntryInput = Readonly<{
-	id: LedgerTransactionEntryID;
-	accountId: LedgerAccountID;
-	direction: "debit" | "credit";
-	amount: number;
-	metadata?: Readonly<Record<string, string>>;
-}>;
-
-type TransactionCreateRepositoryInput = Readonly<{
-	id: LedgerTransactionID;
-	organizationId: OrgID;
-	ledgerId: LedgerID;
-	idempotencyKey: string;
-	status: "pending" | "posted";
-	description?: string;
-	metadata?: Readonly<Record<string, string>>;
-	entries: readonly TransactionRepositoryEntryInput[];
-	postedAt?: DateTime;
-	created: DateTime;
-	updated: DateTime;
-}>;
-
-type TransactionReplaceRepositoryInput = Readonly<{
-	id: LedgerTransactionID;
-	organizationId: OrgID;
-	ledgerId: LedgerID;
-	description?: string;
-	metadata?: Readonly<Record<string, string>>;
-	entries: readonly TransactionRepositoryEntryInput[];
-	updated: DateTime;
-}>;
+type TransactionListQuery = Readonly<{ offset: number; limit: number }>;
 
 type TransactionCreateRepositoryError =
 	| AccountNotFound
@@ -75,24 +38,41 @@ type TransactionCreateRepositoryError =
 	| TransactionInfrastructureError
 	| TransactionValidationFailure;
 
-type TransactionReplaceRepositoryError =
+type TransactionUpdateRepositoryError =
 	| AccountNotFound
 	| AccountVersionConflict
 	| TransactionConcurrencyFailure
 	| TransactionInfrastructureError
 	| TransactionLifecycleConflict
 	| TransactionNotFound
-	| TransactionValidationFailure;
+	| TransactionValidationFailure
+	| TransactionVersionConflict;
 
-type TransactionTransitionRepositoryError = TransactionReplaceRepositoryError;
+type TransactionTransitionRepositoryError = TransactionUpdateRepositoryError;
 
 interface TransactionRepo {
+	listTransactions(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		query: TransactionListQuery
+	): Effect.Effect<Transaction[], TransactionInfrastructureError>;
+	getTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID
+	): Effect.Effect<Option.Option<Transaction>, TransactionInfrastructureError>;
 	createTransaction(
-		input: TransactionCreateRepositoryInput
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		request: TransactionCreateRequest
 	): Effect.Effect<Transaction, TransactionCreateRepositoryError>;
-	replaceTransaction(
-		input: TransactionReplaceRepositoryInput
-	): Effect.Effect<Transaction, TransactionReplaceRepositoryError>;
+	updateTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		request: TransactionUpdateRequest
+	): Effect.Effect<Transaction, TransactionUpdateRepositoryError>;
 	postTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -105,20 +85,6 @@ interface TransactionRepo {
 		transactionId: LedgerTransactionID,
 		updated: DateTime
 	): Effect.Effect<Transaction, TransactionTransitionRepositoryError>;
-	listTransactions(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		query: TransactionListQuery
-	): Effect.Effect<Transaction[], TransactionInfrastructureError>;
-	getTransaction(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID
-	): Effect.Effect<Option.Option<Transaction>, TransactionInfrastructureError>;
-	getTransactionByIdempotencyKey(
-		organizationId: OrgID,
-		idempotencyKey: string
-	): Effect.Effect<Option.Option<Transaction>, TransactionInfrastructureError>;
 }
 
 const TransactionRepoTag = Context.Service<TransactionRepo>("TransactionRepo");
@@ -131,6 +97,7 @@ const transactionColumns = {
 	description: LedgerTransactionsTable.description,
 	metadata: LedgerTransactionsTable.metadata,
 	postedAt: LedgerTransactionsTable.postedAt,
+	lockVersion: LedgerTransactionsTable.lockVersion,
 	created: LedgerTransactionsTable.created,
 	updated: LedgerTransactionsTable.updated,
 };
@@ -146,24 +113,24 @@ const entryColumns = {
 	minorUnitExponent: LedgerAccountsTable.minorUnitExponent,
 };
 
-type TransactionRow = typeof LedgerTransactionsTable.$inferSelect;
-type PublicTransactionRow = Pick<TransactionRow, keyof typeof transactionColumns>;
-type EntryRow = {
-	readonly id: string;
-	readonly transactionId: string;
-	readonly accountId: string;
-	readonly direction: "debit" | "credit";
-	readonly amount: number;
-	readonly metadata: string | null;
-	readonly currencyCode: string;
-	readonly minorUnitExponent: number;
+const accountColumns = {
+	id: LedgerAccountsTable.id,
+	currencyCode: LedgerAccountsTable.currencyCode,
+	minorUnitExponent: LedgerAccountsTable.minorUnitExponent,
+	pendingCredits: LedgerAccountsTable.pendingCredits,
+	pendingDebits: LedgerAccountsTable.pendingDebits,
+	postedCredits: LedgerAccountsTable.postedCredits,
+	postedDebits: LedgerAccountsTable.postedDebits,
+	lockVersion: LedgerAccountsTable.lockVersion,
 };
 
-type ErrorContext = {
-	readonly organizationId?: string;
-	readonly ledgerId?: string;
-	readonly transactionId?: string;
-};
+type DatabaseTransaction = Parameters<Parameters<DrizzleDatabase["transaction"]>[0]>[0];
+type AccountRow = Pick<typeof LedgerAccountsTable.$inferSelect, keyof typeof accountColumns>;
+type ErrorContext = Readonly<{
+	organizationId?: string;
+	ledgerId?: string;
+	transactionId?: string;
+}>;
 
 const context = (
 	organizationId: OrgID,
@@ -183,726 +150,119 @@ const mapInfrastructureError = (
 		? new TransactionRepositoryUnavailable(cause, errorContext)
 		: new TransactionPersistenceFailure(cause, errorContext);
 
+const mapConcurrentOrInfrastructure = (cause: unknown, errorContext: ErrorContext) =>
+	postgresErrorCode(cause) === "40001" || postgresErrorCode(cause) === "40P01"
+		? new TransactionConcurrencyFailure(cause, errorContext)
+		: mapInfrastructureError(cause, errorContext);
+
 const mapCreateError = (
 	cause: unknown,
-	input: TransactionCreateRepositoryInput
-): TransactionCreateRepositoryError => {
-	if (
-		cause instanceof AccountNotFound ||
-		cause instanceof AccountVersionConflict ||
-		cause instanceof TransactionConcurrencyFailure ||
-		cause instanceof TransactionValidationFailure
-	) {
-		return cause;
-	}
-	const code = postgresErrorCode(cause);
-	if (
-		(code === "23505" &&
-			postgresConstraint(cause) === "unique_ledger_transactions_organization_idempotency_key") ||
-		code === "40001" ||
-		code === "40P01"
-	) {
-		return new TransactionConcurrencyFailure(cause, {
-			...context(input.organizationId, input.ledgerId, input.id),
-		});
-	}
-	return mapInfrastructureError(cause, context(input.organizationId, input.ledgerId, input.id));
-};
+	errorContext: ErrorContext
+): TransactionCreateRepositoryError =>
+	cause instanceof AccountNotFound ||
+	cause instanceof AccountVersionConflict ||
+	cause instanceof TransactionValidationFailure
+		? cause
+		: mapConcurrentOrInfrastructure(cause, errorContext);
 
-const mapReplaceError = (
+const mapMutationError = (
 	cause: unknown,
-	input: TransactionReplaceRepositoryInput
-): TransactionReplaceRepositoryError => {
-	if (
-		cause instanceof AccountNotFound ||
-		cause instanceof AccountVersionConflict ||
-		cause instanceof TransactionConcurrencyFailure ||
-		cause instanceof TransactionLifecycleConflict ||
-		cause instanceof TransactionNotFound ||
-		cause instanceof TransactionPersistenceDecodingFailure ||
-		cause instanceof TransactionValidationFailure
-	) {
-		return cause;
-	}
-	const errorContext = context(input.organizationId, input.ledgerId, input.id);
-	const code = postgresErrorCode(cause);
-	if (code === "40001" || code === "40P01") {
-		return new TransactionConcurrencyFailure(cause, errorContext);
-	}
-	return mapInfrastructureError(cause, errorContext);
-};
+	errorContext: ErrorContext
+): TransactionUpdateRepositoryError =>
+	cause instanceof AccountNotFound ||
+	cause instanceof AccountVersionConflict ||
+	cause instanceof TransactionLifecycleConflict ||
+	cause instanceof TransactionNotFound ||
+	cause instanceof TransactionPersistenceDecodingFailure ||
+	cause instanceof TransactionValidationFailure ||
+	cause instanceof TransactionVersionConflict
+		? cause
+		: mapConcurrentOrInfrastructure(cause, errorContext);
 
-const mapTransitionError = (
-	cause: unknown,
-	organizationId: OrgID,
-	ledgerId: LedgerID,
-	transactionId: LedgerTransactionID
-): TransactionTransitionRepositoryError => {
-	if (
-		cause instanceof AccountNotFound ||
-		cause instanceof AccountVersionConflict ||
-		cause instanceof TransactionConcurrencyFailure ||
-		cause instanceof TransactionLifecycleConflict ||
-		cause instanceof TransactionNotFound ||
-		cause instanceof TransactionPersistenceDecodingFailure ||
-		cause instanceof TransactionValidationFailure
-	) {
-		return cause;
-	}
-	const errorContext = context(organizationId, ledgerId, transactionId);
-	const code = postgresErrorCode(cause);
-	if (code === "40001" || code === "40P01") {
-		return new TransactionConcurrencyFailure(cause, errorContext);
-	}
-	return mapInfrastructureError(cause, errorContext);
-};
+// const validateCounters = (
+// 	deltas: readonly AccountCounterDelta[],
+// 	accounts: ReadonlyMap<string, AccountRow>
+// ): void => {
+// 	for (const delta of deltas) {
+// 		const account = accounts.get(delta.accountId.toString());
+// 		if (account === undefined) continue;
+// 		for (const counter of [
+// 			"pendingCredits",
+// 			"pendingDebits",
+// 			"postedCredits",
+// 			"postedDebits",
+// 		] as const) {
+// 			if (!Number.isSafeInteger(account[counter] + delta[counter])) {
+// 				throw new TransactionValidationFailure(`Resulting Account ${counter} is unsafe`);
+// 			}
+// 		}
+// 	}
+// };
 
-const decodeMetadata = (value: string | null): Readonly<Record<string, string>> | undefined => {
-	if (value === null) return undefined;
-	const decoded: unknown = JSON.parse(value);
-	if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
-		throw new Error("Transaction metadata must be an object");
-	}
-	if (!Object.values(decoded).every(item => typeof item === "string")) {
-		throw new Error("Transaction metadata values must be strings");
-	}
-	return decoded as Record<string, string>;
-};
+// const applyDeltas = async (
+// 	tx: DatabaseTransaction,
+// 	transaction: Transaction,
+// 	deltas: readonly AccountCounterDelta[],
+// 	accounts: ReadonlyMap<string, AccountRow>
+// ): Promise<void> => {
+// 	for (const delta of deltas) {
+// 		const accountId = delta.accountId.toString();
+// 		const account = accounts.get(accountId);
+// 		if (account === undefined) {
+// 			throw new AccountNotFound(
+// 				transaction.organizationId.toString(),
+// 				transaction.ledgerId.toString(),
+// 				accountId
+// 			);
+// 		}
+// 		const updated = await tx
+// 			.update(LedgerAccountsTable)
+// 			.set({
+// 				pendingCredits: sql`${LedgerAccountsTable.pendingCredits} + ${delta.pendingCredits}`,
+// 				pendingDebits: sql`${LedgerAccountsTable.pendingDebits} + ${delta.pendingDebits}`,
+// 				postedCredits: sql`${LedgerAccountsTable.postedCredits} + ${delta.postedCredits}`,
+// 				postedDebits: sql`${LedgerAccountsTable.postedDebits} + ${delta.postedDebits}`,
+// 				lockVersion: sql`${LedgerAccountsTable.lockVersion} + 1`,
+// 				updated: transaction.updated.toJSDate(),
+// 			})
+// 			.where(
+// 				and(
+// 					eq(LedgerAccountsTable.organizationId, transaction.organizationId.toString()),
+// 					eq(LedgerAccountsTable.ledgerId, transaction.ledgerId.toString()),
+// 					eq(LedgerAccountsTable.id, accountId),
+// 					eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+// 				)
+// 			)
+// 			.returning({ id: LedgerAccountsTable.id });
+// 		if (updated.length !== 1) {
+// 			throw new AccountVersionConflict(
+// 				transaction.organizationId.toString(),
+// 				transaction.ledgerId.toString(),
+// 				accountId
+// 			);
+// 		}
+// 	}
+// };
 
-const decodeDate = (value: Date, label: string): DateTime => {
-	const decoded = DateTime.fromJSDate(value, { zone: "utc" });
-	if (!decoded.isValid) throw new Error(`Invalid Transaction ${label}`);
-	return decoded;
-};
-
-type LockedAccount = Pick<
-	typeof LedgerAccountsTable.$inferSelect,
-	| "id"
-	| "currencyCode"
-	| "minorUnitExponent"
-	| "pendingCredits"
-	| "pendingDebits"
-	| "postedCredits"
-	| "postedDebits"
-	| "lockVersion"
->;
-
-const addSafe = (left: number, right: number, message: string): number => {
-	const value = left + right;
-	if (!Number.isSafeInteger(value)) throw new TransactionValidationFailure(message);
-	return value;
-};
-
-const makeEntries = async (
-	inputs: readonly TransactionRepositoryEntryInput[],
-	accounts: ReadonlyMap<string, LockedAccount>
-): Promise<readonly Entry[]> =>
-	Effect.runPromise(
-		Effect.all(
-			inputs.map(input => {
-				const account = accounts.get(input.accountId.toString())!;
-				return Entry.make({
-					...input,
-					currency: makeCurrency(account.currencyCode, account.minorUnitExponent),
-				});
-			})
-		)
-	);
-
-const validateResultingCounters = (
-	deltas: readonly AccountCounterDelta[],
-	accounts: ReadonlyMap<string, LockedAccount>
-) => {
-	for (const delta of deltas) {
-		const account = accounts.get(delta.accountId.toString())!;
-		for (const counter of [
-			"pendingCredits",
-			"pendingDebits",
-			"postedCredits",
-			"postedDebits",
-		] as const) {
-			addSafe(account[counter], delta[counter], `Resulting Account ${counter} is unsafe`);
-		}
-	}
-};
-
-const encodeMetadata = (metadata: Readonly<Record<string, string>> | undefined) =>
-	metadata === undefined ? undefined : JSON.stringify(metadata);
-
-const decodeEntry = (row: EntryRow) =>
-	Effect.gen(function* () {
-		const id = yield* parseId<"lte", LedgerTransactionEntryID>("lte", row.id);
-		const accountId = yield* parseId<"lat", LedgerAccountID>("lat", row.accountId);
-		const decoded = yield* Effect.try({
-			try: () => ({
-				currency: makeCurrency(row.currencyCode, row.minorUnitExponent),
-				metadata: decodeMetadata(row.metadata),
-			}),
-			catch: cause => cause,
-		});
-		return yield* Entry.make({
-			id,
-			accountId,
-			direction: row.direction,
-			amount: row.amount,
-			currency: decoded.currency,
-			metadata: decoded.metadata,
-		});
-	});
-
-const decodeTransaction = (row: PublicTransactionRow, entryRows: readonly EntryRow[]) =>
-	Effect.gen(function* () {
-		const id = yield* parseId<"ltr", LedgerTransactionID>("ltr", row.id);
-		const organizationId = yield* parseId<"org", OrgID>("org", row.organizationId);
-		const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", row.ledgerId);
-		const entries = yield* Effect.all(entryRows.map(row => decodeEntry(row)));
-		const decoded = yield* Effect.try({
-			try: () => ({
-				metadata: decodeMetadata(row.metadata),
-				postedAt: row.postedAt === null ? undefined : decodeDate(row.postedAt, "Posted Time"),
-				created: decodeDate(row.created, "Created Time"),
-				updated: decodeDate(row.updated, "Updated Time"),
-			}),
-			catch: cause => cause,
-		});
-		return yield* Transaction.make({
-			id,
-			organizationId,
-			ledgerId,
-			status: row.status,
-			description: row.description ?? undefined,
-			metadata: decoded.metadata,
-			entries,
-			postedAt: decoded.postedAt,
-			created: decoded.created,
-			updated: decoded.updated,
-		});
-	}).pipe(Effect.mapError(cause => new TransactionPersistenceDecodingFailure(cause)));
+// const requireTransaction = (
+// 	transaction: Option.Option<Transaction>,
+// 	organizationId: OrgID,
+// 	ledgerId: LedgerID,
+// 	transactionId: LedgerTransactionID
+// ): Transaction => {
+// 	const value = Option.getOrUndefined(transaction);
+// 	if (value === undefined) {
+// 		throw new TransactionNotFound(
+// 			organizationId.toString(),
+// 			ledgerId.toString(),
+// 			transactionId.toString()
+// 		);
+// 	}
+// 	return value;
+// };
 
 class TransactionRepoLive implements TransactionRepo {
 	constructor(private readonly db: DrizzleDatabase) {}
-
-	createTransaction(
-		input: TransactionCreateRepositoryInput
-	): Effect.Effect<Transaction, TransactionCreateRepositoryError> {
-		const accountIds = [...new Set(input.entries.map(entry => entry.accountId.toString()))].sort();
-		if (accountIds.length > 200) {
-			return Effect.fail(
-				new TransactionValidationFailure("Transaction may reference at most 200 distinct Accounts")
-			);
-		}
-		if (input.status !== "pending" && input.status !== "posted") {
-			return Effect.fail(
-				new TransactionValidationFailure("Create Transaction status must be Pending or Posted")
-			);
-		}
-		return Effect.tryPromise({
-			try: () =>
-				this.db.transaction(async tx => {
-					const accounts = await tx
-						.select({
-							id: LedgerAccountsTable.id,
-							currencyCode: LedgerAccountsTable.currencyCode,
-							minorUnitExponent: LedgerAccountsTable.minorUnitExponent,
-							pendingCredits: LedgerAccountsTable.pendingCredits,
-							pendingDebits: LedgerAccountsTable.pendingDebits,
-							postedCredits: LedgerAccountsTable.postedCredits,
-							postedDebits: LedgerAccountsTable.postedDebits,
-							lockVersion: LedgerAccountsTable.lockVersion,
-						})
-						.from(LedgerAccountsTable)
-						.where(
-							and(
-								eq(LedgerAccountsTable.organizationId, input.organizationId.toString()),
-								eq(LedgerAccountsTable.ledgerId, input.ledgerId.toString()),
-								inArray(LedgerAccountsTable.id, accountIds)
-							)
-						)
-						.orderBy(asc(LedgerAccountsTable.id))
-						.for("update");
-					const accountsById = new Map(accounts.map(account => [account.id, account]));
-					const missingId = accountIds.find(accountId => !accountsById.has(accountId));
-					if (missingId !== undefined) {
-						throw new AccountNotFound(
-							input.organizationId.toString(),
-							input.ledgerId.toString(),
-							missingId
-						);
-					}
-					const entries = await makeEntries(input.entries, accountsById);
-					const mutation = await Effect.runPromise(
-						Transaction.create({
-							...input,
-							entries,
-						} as Parameters<typeof Transaction.create>[0])
-					);
-					const transaction = mutation.transaction;
-					validateResultingCounters(mutation.deltas, accountsById);
-
-					await tx.insert(LedgerTransactionsTable).values({
-						id: transaction.id.toString(),
-						organizationId: transaction.organizationId.toString(),
-						ledgerId: transaction.ledgerId.toString(),
-						idempotencyKey: input.idempotencyKey,
-						status: transaction.status,
-						description: transaction.description,
-						metadata: encodeMetadata(transaction.metadata),
-						postedAt: transaction.postedAt?.toJSDate(),
-						created: transaction.created.toJSDate(),
-						updated: transaction.updated.toJSDate(),
-					});
-
-					await tx.insert(LedgerTransactionEntriesTable).values(
-						transaction.entries.map(entry => ({
-							id: entry.id.toString(),
-							transactionId: transaction.id.toString(),
-							accountId: entry.accountId.toString(),
-							organizationId: transaction.organizationId.toString(),
-							ledgerId: transaction.ledgerId.toString(),
-							direction: entry.direction,
-							amount: entry.amount,
-							metadata: encodeMetadata(entry.metadata),
-							created: transaction.created.toJSDate(),
-						}))
-					);
-
-					for (const delta of mutation.deltas) {
-						const account = accountsById.get(delta.accountId.toString())!;
-						const updated = await tx
-							.update(LedgerAccountsTable)
-							.set({
-								pendingCredits: sql`${LedgerAccountsTable.pendingCredits} + ${delta.pendingCredits}`,
-								pendingDebits: sql`${LedgerAccountsTable.pendingDebits} + ${delta.pendingDebits}`,
-								postedCredits: sql`${LedgerAccountsTable.postedCredits} + ${delta.postedCredits}`,
-								postedDebits: sql`${LedgerAccountsTable.postedDebits} + ${delta.postedDebits}`,
-								lockVersion: sql`${LedgerAccountsTable.lockVersion} + 1`,
-								updated: transaction.updated.toJSDate(),
-							})
-							.where(
-								and(
-									eq(LedgerAccountsTable.organizationId, transaction.organizationId.toString()),
-									eq(LedgerAccountsTable.ledgerId, transaction.ledgerId.toString()),
-									eq(LedgerAccountsTable.id, account.id),
-									eq(LedgerAccountsTable.lockVersion, account.lockVersion)
-								)
-							)
-							.returning({ id: LedgerAccountsTable.id });
-						if (updated.length !== 1) {
-							throw new AccountVersionConflict(
-								transaction.organizationId.toString(),
-								transaction.ledgerId.toString(),
-								account.id
-							);
-						}
-					}
-					return transaction;
-				}),
-			catch: cause => mapCreateError(cause, input),
-		});
-	}
-
-	replaceTransaction(
-		input: TransactionReplaceRepositoryInput
-	): Effect.Effect<Transaction, TransactionReplaceRepositoryError> {
-		const requested = input;
-		const replacementAccountIds = new Set(input.entries.map(entry => entry.accountId.toString()));
-		if (replacementAccountIds.size > 200) {
-			return Effect.fail(
-				new TransactionValidationFailure("Transaction may reference at most 200 distinct Accounts")
-			);
-		}
-		return Effect.tryPromise({
-			try: () =>
-				this.db.transaction(async tx => {
-					const [row] = await tx
-						.select(transactionColumns)
-						.from(LedgerTransactionsTable)
-						.where(
-							and(
-								eq(LedgerTransactionsTable.organizationId, requested.organizationId.toString()),
-								eq(LedgerTransactionsTable.ledgerId, requested.ledgerId.toString()),
-								eq(LedgerTransactionsTable.id, requested.id.toString())
-							)
-						)
-						.limit(1)
-						.for("update");
-					if (row === undefined) {
-						throw new TransactionNotFound(
-							requested.organizationId.toString(),
-							requested.ledgerId.toString(),
-							requested.id.toString()
-						);
-					}
-					if (row.status !== "pending") {
-						throw new TransactionLifecycleConflict(
-							row.id,
-							row.status,
-							"pending",
-							context(requested.organizationId, requested.ledgerId, requested.id)
-						);
-					}
-
-					const oldEntryRows = await tx
-						.select(entryColumns)
-						.from(LedgerTransactionEntriesTable)
-						.innerJoin(
-							LedgerAccountsTable,
-							and(
-								eq(LedgerAccountsTable.id, LedgerTransactionEntriesTable.accountId),
-								eq(LedgerAccountsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
-								eq(LedgerAccountsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
-							)
-						)
-						.where(eq(LedgerTransactionEntriesTable.transactionId, row.id))
-						.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id));
-					const current = await Effect.runPromise(decodeTransaction(row, oldEntryRows));
-					const accountIds = [
-						...new Set([
-							...current.entries.map(entry => entry.accountId.toString()),
-							...replacementAccountIds,
-						]),
-					].sort();
-					const accounts = await tx
-						.select({
-							id: LedgerAccountsTable.id,
-							currencyCode: LedgerAccountsTable.currencyCode,
-							minorUnitExponent: LedgerAccountsTable.minorUnitExponent,
-							pendingCredits: LedgerAccountsTable.pendingCredits,
-							pendingDebits: LedgerAccountsTable.pendingDebits,
-							postedCredits: LedgerAccountsTable.postedCredits,
-							postedDebits: LedgerAccountsTable.postedDebits,
-							lockVersion: LedgerAccountsTable.lockVersion,
-						})
-						.from(LedgerAccountsTable)
-						.where(
-							and(
-								eq(LedgerAccountsTable.organizationId, requested.organizationId.toString()),
-								eq(LedgerAccountsTable.ledgerId, requested.ledgerId.toString()),
-								inArray(LedgerAccountsTable.id, accountIds)
-							)
-						)
-						.orderBy(asc(LedgerAccountsTable.id))
-						.for("update");
-					const accountsById = new Map(accounts.map(account => [account.id, account]));
-					const missingId = accountIds.find(accountId => !accountsById.has(accountId));
-					if (missingId !== undefined) {
-						throw new AccountNotFound(
-							requested.organizationId.toString(),
-							requested.ledgerId.toString(),
-							missingId
-						);
-					}
-					const entries = await makeEntries(input.entries, accountsById);
-					const replacement = await Effect.runPromise(
-						current.replace(
-							{ description: input.description, metadata: input.metadata, entries },
-							input.updated
-						)
-					);
-					const deltas = new Map(replacement.deltas.map(delta => [delta.accountId.toString(), delta]));
-					validateResultingCounters(replacement.deltas, accountsById);
-
-					await tx
-						.update(LedgerTransactionsTable)
-						.set({
-							description: replacement.transaction.description ?? sql`null`,
-							metadata: encodeMetadata(replacement.transaction.metadata) ?? sql`null`,
-							updated: replacement.transaction.updated.toJSDate(),
-						})
-						.where(
-							and(
-								eq(LedgerTransactionsTable.organizationId, requested.organizationId.toString()),
-								eq(LedgerTransactionsTable.ledgerId, requested.ledgerId.toString()),
-								eq(LedgerTransactionsTable.id, requested.id.toString())
-							)
-						);
-					await tx
-						.delete(LedgerTransactionEntriesTable)
-						.where(eq(LedgerTransactionEntriesTable.transactionId, row.id));
-					await tx.insert(LedgerTransactionEntriesTable).values(
-						replacement.transaction.entries.map(entry => ({
-							id: entry.id.toString(),
-							transactionId: row.id,
-							accountId: entry.accountId.toString(),
-							organizationId: row.organizationId,
-							ledgerId: row.ledgerId,
-							direction: entry.direction,
-							amount: entry.amount,
-							metadata: encodeMetadata(entry.metadata),
-							created: replacement.transaction.updated.toJSDate(),
-						}))
-					);
-					for (const accountId of accountIds) {
-						const account = accountsById.get(accountId)!;
-						const delta = deltas.get(accountId)!;
-						const updated = await tx
-							.update(LedgerAccountsTable)
-							.set({
-								pendingCredits: sql`${LedgerAccountsTable.pendingCredits} + ${delta.pendingCredits}`,
-								pendingDebits: sql`${LedgerAccountsTable.pendingDebits} + ${delta.pendingDebits}`,
-								postedCredits: sql`${LedgerAccountsTable.postedCredits} + ${delta.postedCredits}`,
-								postedDebits: sql`${LedgerAccountsTable.postedDebits} + ${delta.postedDebits}`,
-								lockVersion: sql`${LedgerAccountsTable.lockVersion} + 1`,
-								updated: replacement.transaction.updated.toJSDate(),
-							})
-							.where(
-								and(
-									eq(LedgerAccountsTable.organizationId, row.organizationId),
-									eq(LedgerAccountsTable.ledgerId, row.ledgerId),
-									eq(LedgerAccountsTable.id, accountId),
-									eq(LedgerAccountsTable.lockVersion, account.lockVersion)
-								)
-							)
-							.returning({ id: LedgerAccountsTable.id });
-						if (updated.length !== 1) {
-							throw new AccountVersionConflict(row.organizationId, row.ledgerId, accountId);
-						}
-					}
-					return replacement.transaction;
-				}),
-			catch: cause => mapReplaceError(cause, input),
-		});
-	}
-
-	private transitionTransaction(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID,
-		operation: "post" | "void",
-		changedAt: DateTime
-	): Effect.Effect<Transaction, TransactionTransitionRepositoryError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db.transaction(async tx => {
-					const [row] = await tx
-						.select(transactionColumns)
-						.from(LedgerTransactionsTable)
-						.where(
-							and(
-								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
-								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
-								eq(LedgerTransactionsTable.id, transactionId.toString())
-							)
-						)
-						.limit(1)
-						.for("update");
-					if (row === undefined) {
-						throw new TransactionNotFound(
-							organizationId.toString(),
-							ledgerId.toString(),
-							transactionId.toString()
-						);
-					}
-					const targetStatus = operation === "post" ? "posted" : "voided";
-					if (row.status === targetStatus) {
-						const entryRows = await tx
-							.select(entryColumns)
-							.from(LedgerTransactionEntriesTable)
-							.innerJoin(
-								LedgerAccountsTable,
-								and(
-									eq(LedgerAccountsTable.id, LedgerTransactionEntriesTable.accountId),
-									eq(LedgerAccountsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
-									eq(LedgerAccountsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
-								)
-							)
-							.where(
-								and(
-									eq(LedgerTransactionEntriesTable.organizationId, organizationId.toString()),
-									eq(LedgerTransactionEntriesTable.ledgerId, ledgerId.toString()),
-									eq(LedgerTransactionEntriesTable.transactionId, row.id)
-								)
-							)
-							.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id));
-						return Effect.runPromise(decodeTransaction(row, entryRows));
-					}
-					if (row.status !== "pending") {
-						throw new TransactionLifecycleConflict(
-							row.id,
-							row.status,
-							targetStatus,
-							context(organizationId, ledgerId, transactionId)
-						);
-					}
-
-					const persistedEntries = await tx
-						.select({
-							id: LedgerTransactionEntriesTable.id,
-							transactionId: LedgerTransactionEntriesTable.transactionId,
-							accountId: LedgerTransactionEntriesTable.accountId,
-							direction: LedgerTransactionEntriesTable.direction,
-							amount: LedgerTransactionEntriesTable.amount,
-							metadata: LedgerTransactionEntriesTable.metadata,
-						})
-						.from(LedgerTransactionEntriesTable)
-						.where(
-							and(
-								eq(LedgerTransactionEntriesTable.organizationId, organizationId.toString()),
-								eq(LedgerTransactionEntriesTable.ledgerId, ledgerId.toString()),
-								eq(LedgerTransactionEntriesTable.transactionId, row.id)
-							)
-						)
-						.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id));
-					const accountIds = [...new Set(persistedEntries.map(entry => entry.accountId))].sort();
-					const accounts =
-						accountIds.length === 0
-							? []
-							: await tx
-									.select({
-										id: LedgerAccountsTable.id,
-										currencyCode: LedgerAccountsTable.currencyCode,
-										minorUnitExponent: LedgerAccountsTable.minorUnitExponent,
-										pendingCredits: LedgerAccountsTable.pendingCredits,
-										pendingDebits: LedgerAccountsTable.pendingDebits,
-										postedCredits: LedgerAccountsTable.postedCredits,
-										postedDebits: LedgerAccountsTable.postedDebits,
-										lockVersion: LedgerAccountsTable.lockVersion,
-									})
-									.from(LedgerAccountsTable)
-									.where(
-										and(
-											eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-											eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-											inArray(LedgerAccountsTable.id, accountIds)
-										)
-									)
-									.orderBy(asc(LedgerAccountsTable.id))
-									.for("update");
-					const accountsById = new Map(accounts.map(account => [account.id, account]));
-					const missingId = accountIds.find(accountId => !accountsById.has(accountId));
-					if (missingId !== undefined) {
-						throw new AccountNotFound(organizationId.toString(), ledgerId.toString(), missingId);
-					}
-					const entryRows: EntryRow[] = persistedEntries.map(entry => {
-						const account = accountsById.get(entry.accountId)!;
-						return {
-							...entry,
-							currencyCode: account.currencyCode,
-							minorUnitExponent: account.minorUnitExponent,
-						};
-					});
-					const current = await Effect.runPromise(decodeTransaction(row, entryRows));
-					const transition = await Effect.runPromise(
-						operation === "post" ? current.post(changedAt) : current.void(changedAt)
-					);
-					if (transition.deltas.length === 0) return current;
-
-					for (const delta of transition.deltas) {
-						const account = accountsById.get(delta.accountId.toString());
-						if (account === undefined) {
-							throw new AccountNotFound(
-								organizationId.toString(),
-								ledgerId.toString(),
-								delta.accountId.toString()
-							);
-						}
-						for (const counter of [
-							"pendingCredits",
-							"pendingDebits",
-							"postedCredits",
-							"postedDebits",
-						] as const) {
-							addSafe(account[counter], delta[counter], `Resulting Account ${counter} is unsafe`);
-						}
-					}
-
-					await tx
-						.update(LedgerTransactionsTable)
-						.set({
-							status: transition.transaction.status,
-							postedAt: transition.transaction.postedAt?.toJSDate() ?? sql`null`,
-							updated: transition.transaction.updated.toJSDate(),
-						})
-						.where(
-							and(
-								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
-								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
-								eq(LedgerTransactionsTable.id, transactionId.toString())
-							)
-						);
-					for (const delta of transition.deltas) {
-						const account = accountsById.get(delta.accountId.toString())!;
-						const updated = await tx
-							.update(LedgerAccountsTable)
-							.set({
-								pendingCredits: sql`${LedgerAccountsTable.pendingCredits} + ${delta.pendingCredits}`,
-								pendingDebits: sql`${LedgerAccountsTable.pendingDebits} + ${delta.pendingDebits}`,
-								postedCredits: sql`${LedgerAccountsTable.postedCredits} + ${delta.postedCredits}`,
-								postedDebits: sql`${LedgerAccountsTable.postedDebits} + ${delta.postedDebits}`,
-								lockVersion: sql`${LedgerAccountsTable.lockVersion} + 1`,
-								updated: transition.transaction.updated.toJSDate(),
-							})
-							.where(
-								and(
-									eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-									eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-									eq(LedgerAccountsTable.id, account.id),
-									eq(LedgerAccountsTable.lockVersion, account.lockVersion)
-								)
-							)
-							.returning({ id: LedgerAccountsTable.id });
-						if (updated.length !== 1) {
-							throw new AccountVersionConflict(organizationId.toString(), ledgerId.toString(), account.id);
-						}
-					}
-					return transition.transaction;
-				}),
-			catch: cause => mapTransitionError(cause, organizationId, ledgerId, transactionId),
-		});
-	}
-
-	postTransaction(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID,
-		postedAt: DateTime
-	): Effect.Effect<Transaction, TransactionTransitionRepositoryError> {
-		return this.transitionTransaction(organizationId, ledgerId, transactionId, "post", postedAt);
-	}
-
-	voidTransaction(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID,
-		updated: DateTime
-	): Effect.Effect<Transaction, TransactionTransitionRepositoryError> {
-		return this.transitionTransaction(organizationId, ledgerId, transactionId, "void", updated);
-	}
-
-	private loadTransactions(
-		rows: readonly PublicTransactionRow[],
-		errorContext: ErrorContext
-	): Effect.Effect<Transaction[], TransactionInfrastructureError> {
-		if (rows.length === 0) return Effect.succeed([]);
-		const transactionIds = rows.map(row => row.id);
-		return Effect.tryPromise({
-			try: () =>
-				this.db
-					.select(entryColumns)
-					.from(LedgerTransactionEntriesTable)
-					.innerJoin(
-						LedgerAccountsTable,
-						and(
-							eq(LedgerAccountsTable.id, LedgerTransactionEntriesTable.accountId),
-							eq(LedgerAccountsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
-							eq(LedgerAccountsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
-						)
-					)
-					.where(inArray(LedgerTransactionEntriesTable.transactionId, transactionIds))
-					.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id)),
-			catch: cause => mapInfrastructureError(cause, errorContext),
-		}).pipe(
-			Effect.flatMap(entryRows => {
-				const byTransaction = new Map<string, EntryRow[]>();
-				for (const row of entryRows) {
-					const transactionEntries = byTransaction.get(row.transactionId) ?? [];
-					transactionEntries.push(row);
-					byTransaction.set(row.transactionId, transactionEntries);
-				}
-				return Effect.all(rows.map(row => decodeTransaction(row, byTransaction.get(row.id) ?? [])));
-			})
-		);
-	}
 
 	listTransactions(
 		organizationId: OrgID,
@@ -910,8 +270,6 @@ class TransactionRepoLive implements TransactionRepo {
 		query: TransactionListQuery
 	): Effect.Effect<Transaction[], TransactionInfrastructureError> {
 		const errorContext = context(organizationId, ledgerId);
-		const limit = Math.min(Math.max(Math.trunc(query.limit), 1), 100);
-		const offset = Math.min(Math.max(Math.trunc(query.offset), 0), 10_000);
 		return Effect.tryPromise({
 			try: () =>
 				this.db
@@ -924,10 +282,10 @@ class TransactionRepoLive implements TransactionRepo {
 						)
 					)
 					.orderBy(desc(LedgerTransactionsTable.created), desc(LedgerTransactionsTable.id))
-					.limit(limit)
-					.offset(offset),
+					.limit(query.limit)
+					.offset(query.offset),
 			catch: cause => mapInfrastructureError(cause, errorContext),
-		}).pipe(Effect.flatMap(rows => this.loadTransactions(rows, errorContext)));
+		}).pipe(Effect.flatMap(rows => Effect.all(rows.map(row => Transaction.fromRow(row)))));
 	}
 
 	getTransaction(
@@ -939,8 +297,16 @@ class TransactionRepoLive implements TransactionRepo {
 		return Effect.tryPromise({
 			try: () =>
 				this.db
-					.select(transactionColumns)
+					.select({ transaction: transactionColumns, entry: entryColumns })
 					.from(LedgerTransactionsTable)
+					.leftJoin(
+						LedgerTransactionEntriesTable,
+						and(
+							eq(LedgerTransactionEntriesTable.transactionId, LedgerTransactionsTable.id),
+							eq(LedgerTransactionEntriesTable.organizationId, LedgerTransactionsTable.organizationId),
+							eq(LedgerTransactionEntriesTable.ledgerId, LedgerTransactionsTable.ledgerId)
+						)
+					)
 					.where(
 						and(
 							eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
@@ -948,36 +314,370 @@ class TransactionRepoLive implements TransactionRepo {
 							eq(LedgerTransactionsTable.id, transactionId.toString())
 						)
 					)
-					.limit(1),
+					.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id)),
 			catch: cause => mapInfrastructureError(cause, errorContext),
-		}).pipe(
-			Effect.flatMap(rows => this.loadTransactions(rows, errorContext)),
-			Effect.map(transactions => Option.fromNullishOr(transactions[0]))
-		);
+		}).pipe(Effect.flatMap(rows => Transaction.fromRows(rows)));
 	}
 
-	getTransactionByIdempotencyKey(
+	createTransaction(
 		organizationId: OrgID,
-		idempotencyKey: string
-	): Effect.Effect<Option.Option<Transaction>, TransactionInfrastructureError> {
-		const errorContext = context(organizationId);
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		request: TransactionCreateRequest
+	): Effect.Effect<Transaction, TransactionCreateRepositoryError> {
+		const errorContext = context(organizationId, ledgerId, transactionId);
 		return Effect.tryPromise({
 			try: () =>
-				this.db
-					.select(transactionColumns)
-					.from(LedgerTransactionsTable)
-					.where(
-						and(
-							eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
-							eq(LedgerTransactionsTable.idempotencyKey, idempotencyKey)
+				this.db.transaction(async tx => {
+					const accountIds = [...new Set(request.ledgerEntries.map(entry => entry.accountId))].sort();
+					const accounts = await tx
+						.select(accountColumns)
+						.from(LedgerAccountsTable)
+						.where(
+							and(
+								eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+								eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
+								inArray(LedgerAccountsTable.id, accountIds)
+							)
 						)
-					)
-					.limit(1),
-			catch: cause => mapInfrastructureError(cause, errorContext),
-		}).pipe(
-			Effect.flatMap(rows => this.loadTransactions(rows, errorContext)),
-			Effect.map(transactions => Option.fromNullishOr(transactions[0]))
-		);
+						.orderBy(asc(LedgerAccountsTable.id));
+					const accountsById = new Map(accounts.map(account => [account.id, account]));
+					const missingId = accountIds.find(accountId => !accountsById.has(accountId));
+					if (missingId !== undefined) {
+						throw new AccountNotFound(organizationId.toString(), ledgerId.toString(), missingId);
+					}
+					const currencies = new Map(
+						accounts.map(account => [
+							account.id,
+							makeCurrency(account.currencyCode, account.minorUnitExponent),
+						])
+					);
+					const transaction = await Effect.runPromise(
+						Transaction.fromRequest(transactionId, organizationId, ledgerId, request, currencies)
+					);
+					const mutation = transaction.createMutation();
+					validateCounters(mutation.deltas, accountsById);
+					await tx.insert(LedgerTransactionsTable).values(transaction.toRow());
+					await tx
+						.insert(LedgerTransactionEntriesTable)
+						.values(Option.getOrThrow(transaction.entries).map(entry => entry.toRow(transaction)));
+					await applyDeltas(tx, transaction, mutation.deltas, accountsById);
+					return transaction;
+				}),
+			catch: cause => mapCreateError(cause, errorContext),
+		});
+	}
+
+	updateTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		request: TransactionUpdateRequest
+	): Effect.Effect<Transaction, TransactionUpdateRepositoryError> {
+		const errorContext = context(organizationId, ledgerId, transactionId);
+		return Effect.tryPromise({
+			try: () =>
+				this.db.transaction(async tx => {
+					const rows = await tx
+						.select({ transaction: transactionColumns, entry: entryColumns })
+						.from(LedgerTransactionsTable)
+						.leftJoin(
+							LedgerTransactionEntriesTable,
+							and(
+								eq(LedgerTransactionEntriesTable.transactionId, LedgerTransactionsTable.id),
+								eq(LedgerTransactionEntriesTable.organizationId, LedgerTransactionsTable.organizationId),
+								eq(LedgerTransactionEntriesTable.ledgerId, LedgerTransactionsTable.ledgerId)
+							)
+						)
+						.leftJoin(
+							LedgerAccountsTable,
+							and(
+								eq(LedgerAccountsTable.id, LedgerTransactionEntriesTable.accountId),
+								eq(LedgerAccountsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
+								eq(LedgerAccountsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
+							)
+						)
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, transactionId.toString())
+							)
+						)
+						.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id));
+					const current = requireTransaction(
+						await Effect.runPromise(Transaction.fromRows(rows)),
+						organizationId,
+						ledgerId,
+						transactionId
+					);
+					const currentEntries = Option.getOrThrow(current.entries);
+					const accountIds = [
+						...new Set([
+							...currentEntries.map(entry => entry.accountId.toString()),
+							...request.ledgerEntries.map(entry => entry.accountId),
+						]),
+					].sort();
+					const accounts = await tx
+						.select(accountColumns)
+						.from(LedgerAccountsTable)
+						.where(
+							and(
+								eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+								eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
+								inArray(LedgerAccountsTable.id, accountIds)
+							)
+						)
+						.orderBy(asc(LedgerAccountsTable.id));
+					const accountsById = new Map(accounts.map(account => [account.id, account]));
+					const missingId = accountIds.find(accountId => !accountsById.has(accountId));
+					if (missingId !== undefined) {
+						throw new AccountNotFound(organizationId.toString(), ledgerId.toString(), missingId);
+					}
+					const currencies = new Map(
+						accounts.map(account => [
+							account.id,
+							makeCurrency(account.currencyCode, account.minorUnitExponent),
+						])
+					);
+					const mutation = await Effect.runPromise(current.updateFromRequest(request, currencies));
+					validateCounters(mutation.deltas, accountsById);
+					const transaction = mutation.transaction;
+					const row = transaction.toRow();
+					const updatedRows = await tx
+						.update(LedgerTransactionsTable)
+						.set({
+							description: row.description,
+							metadata: row.metadata,
+							lockVersion: transaction.lockVersion,
+							updated: row.updated,
+						})
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, transactionId.toString()),
+								eq(LedgerTransactionsTable.lockVersion, current.lockVersion)
+							)
+						)
+						.returning({ id: LedgerTransactionsTable.id });
+					if (updatedRows.length !== 1) {
+						throw new TransactionVersionConflict(
+							organizationId.toString(),
+							ledgerId.toString(),
+							transactionId.toString()
+						);
+					}
+					await tx
+						.delete(LedgerTransactionEntriesTable)
+						.where(
+							and(
+								eq(LedgerTransactionEntriesTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionEntriesTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionEntriesTable.transactionId, transactionId.toString())
+							)
+						);
+					await tx
+						.insert(LedgerTransactionEntriesTable)
+						.values(Option.getOrThrow(transaction.entries).map(entry => entry.toRow(transaction)));
+					await applyDeltas(tx, transaction, mutation.deltas, accountsById);
+					return transaction;
+				}),
+			catch: cause => mapMutationError(cause, errorContext),
+		});
+	}
+
+	postTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		postedAt: DateTime
+	): Effect.Effect<Transaction, TransactionTransitionRepositoryError> {
+		const errorContext = context(organizationId, ledgerId, transactionId);
+		return Effect.tryPromise({
+			try: () =>
+				this.db.transaction(async tx => {
+					const rows = await tx
+						.select({ transaction: transactionColumns, entry: entryColumns })
+						.from(LedgerTransactionsTable)
+						.leftJoin(
+							LedgerTransactionEntriesTable,
+							and(
+								eq(LedgerTransactionEntriesTable.transactionId, LedgerTransactionsTable.id),
+								eq(LedgerTransactionEntriesTable.organizationId, LedgerTransactionsTable.organizationId),
+								eq(LedgerTransactionEntriesTable.ledgerId, LedgerTransactionsTable.ledgerId)
+							)
+						)
+						.leftJoin(
+							LedgerAccountsTable,
+							and(
+								eq(LedgerAccountsTable.id, LedgerTransactionEntriesTable.accountId),
+								eq(LedgerAccountsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
+								eq(LedgerAccountsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
+							)
+						)
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, transactionId.toString())
+							)
+						)
+						.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id));
+					const current = requireTransaction(
+						await Effect.runPromise(Transaction.fromRows(rows)),
+						organizationId,
+						ledgerId,
+						transactionId
+					);
+					const mutation = await Effect.runPromise(current.post(postedAt));
+					if (mutation.deltas.length === 0) return current;
+					const entries = Option.getOrThrow(current.entries);
+					const accountIds = [...new Set(entries.map(entry => entry.accountId.toString()))].sort();
+					const accounts = await tx
+						.select(accountColumns)
+						.from(LedgerAccountsTable)
+						.where(
+							and(
+								eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+								eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
+								inArray(LedgerAccountsTable.id, accountIds)
+							)
+						)
+						.orderBy(asc(LedgerAccountsTable.id));
+					const accountsById = new Map(accounts.map(account => [account.id, account]));
+					const missingId = accountIds.find(accountId => !accountsById.has(accountId));
+					if (missingId !== undefined) {
+						throw new AccountNotFound(organizationId.toString(), ledgerId.toString(), missingId);
+					}
+					validateCounters(mutation.deltas, accountsById);
+					const transaction = mutation.transaction;
+					const row = transaction.toRow();
+					const updatedRows = await tx
+						.update(LedgerTransactionsTable)
+						.set({
+							status: transaction.status,
+							postedAt: row.postedAt,
+							lockVersion: transaction.lockVersion,
+							updated: row.updated,
+						})
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, transactionId.toString()),
+								eq(LedgerTransactionsTable.lockVersion, current.lockVersion)
+							)
+						)
+						.returning({ id: LedgerTransactionsTable.id });
+					if (updatedRows.length !== 1) {
+						throw new TransactionVersionConflict(
+							organizationId.toString(),
+							ledgerId.toString(),
+							transactionId.toString()
+						);
+					}
+					await applyDeltas(tx, transaction, mutation.deltas, accountsById);
+					return transaction;
+				}),
+			catch: cause => mapMutationError(cause, errorContext),
+		});
+	}
+
+	voidTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		updated: DateTime
+	): Effect.Effect<Transaction, TransactionTransitionRepositoryError> {
+		const errorContext = context(organizationId, ledgerId, transactionId);
+		return Effect.tryPromise({
+			try: () =>
+				this.db.transaction(async tx => {
+					const rows = await tx
+						.select({ transaction: transactionColumns, entry: entryColumns })
+						.from(LedgerTransactionsTable)
+						.leftJoin(
+							LedgerTransactionEntriesTable,
+							and(
+								eq(LedgerTransactionEntriesTable.transactionId, LedgerTransactionsTable.id),
+								eq(LedgerTransactionEntriesTable.organizationId, LedgerTransactionsTable.organizationId),
+								eq(LedgerTransactionEntriesTable.ledgerId, LedgerTransactionsTable.ledgerId)
+							)
+						)
+						.leftJoin(
+							LedgerAccountsTable,
+							and(
+								eq(LedgerAccountsTable.id, LedgerTransactionEntriesTable.accountId),
+								eq(LedgerAccountsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
+								eq(LedgerAccountsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
+							)
+						)
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, transactionId.toString())
+							)
+						)
+						.orderBy(asc(LedgerTransactionEntriesTable.created), asc(LedgerTransactionEntriesTable.id));
+					const current = requireTransaction(
+						await Effect.runPromise(Transaction.fromRows(rows)),
+						organizationId,
+						ledgerId,
+						transactionId
+					);
+					const mutation = await Effect.runPromise(current.void(updated));
+					if (mutation.deltas.length === 0) return current;
+					const entries = Option.getOrThrow(current.entries);
+					const accountIds = [...new Set(entries.map(entry => entry.accountId.toString()))].sort();
+					const accounts = await tx
+						.select(accountColumns)
+						.from(LedgerAccountsTable)
+						.where(
+							and(
+								eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+								eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
+								inArray(LedgerAccountsTable.id, accountIds)
+							)
+						)
+						.orderBy(asc(LedgerAccountsTable.id));
+					const accountsById = new Map(accounts.map(account => [account.id, account]));
+					const missingId = accountIds.find(accountId => !accountsById.has(accountId));
+					if (missingId !== undefined) {
+						throw new AccountNotFound(organizationId.toString(), ledgerId.toString(), missingId);
+					}
+					validateCounters(mutation.deltas, accountsById);
+					const transaction = mutation.transaction;
+					const row = transaction.toRow();
+					const updatedRows = await tx
+						.update(LedgerTransactionsTable)
+						.set({
+							status: transaction.status,
+							lockVersion: transaction.lockVersion,
+							updated: row.updated,
+						})
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString()),
+								eq(LedgerTransactionsTable.id, transactionId.toString()),
+								eq(LedgerTransactionsTable.lockVersion, current.lockVersion)
+							)
+						)
+						.returning({ id: LedgerTransactionsTable.id });
+					if (updatedRows.length !== 1) {
+						throw new TransactionVersionConflict(
+							organizationId.toString(),
+							ledgerId.toString(),
+							transactionId.toString()
+						);
+					}
+					await applyDeltas(tx, transaction, mutation.deltas, accountsById);
+					return transaction;
+				}),
+			catch: cause => mapMutationError(cause, errorContext),
+		});
 	}
 }
 
@@ -987,13 +687,10 @@ const transactionRepoLayer = Layer.effect(
 );
 
 export type {
-	TransactionCreateRepositoryInput,
 	TransactionCreateRepositoryError,
 	TransactionListQuery,
-	TransactionReplaceRepositoryInput,
-	TransactionReplaceRepositoryError,
-	TransactionRepositoryEntryInput,
-	TransactionTransitionRepositoryError,
 	TransactionRepo,
+	TransactionTransitionRepositoryError,
+	TransactionUpdateRepositoryError,
 };
 export { TransactionRepoLive, TransactionRepoTag, transactionRepoLayer };
