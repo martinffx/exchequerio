@@ -1,7 +1,7 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { Option } from "effect";
 import type { DateTime } from "luxon";
-import type { Transaction } from "./domain/Transaction";
+import type { LedgerTransaction } from "./domain/LedgerTransaction";
 
 const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const TransactionIdSchema = Type.String({ pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
@@ -59,7 +59,6 @@ const TransactionUpdateRequest = Type.Object(
 	{ additionalProperties: false }
 );
 
-const MinorUnitExponentSchema = Type.Integer({ minimum: 0, maximum: 2_147_483_647 });
 const TransactionResponseEntry = Type.Object(
 	{
 		id: EntryIdSchema,
@@ -67,7 +66,6 @@ const TransactionResponseEntry = Type.Object(
 		direction: EntryDirectionSchema,
 		amount: AmountSchema,
 		currencyCode: CurrencyCodeSchema,
-		minorUnitExponent: MinorUnitExponentSchema,
 		metadata: Type.Optional(TransactionMetadataSchema),
 	},
 	{ additionalProperties: false }
@@ -109,7 +107,9 @@ const toIso = (value: DateTime): string => {
 	return encoded;
 };
 
-const toTransactionListItemResponse = (transaction: Transaction): TransactionListItemResponse => ({
+const toTransactionListItemResponse = (
+	transaction: LedgerTransaction
+): TransactionListItemResponse => ({
 	id: transaction.id.toString(),
 	ledgerId: transaction.ledgerId.toString(),
 	...(transaction.description === undefined ? {} : { description: transaction.description }),
@@ -120,15 +120,14 @@ const toTransactionListItemResponse = (transaction: Transaction): TransactionLis
 	updated: toIso(transaction.updated),
 });
 
-const toTransactionResponse = (transaction: Transaction): TransactionResponse => ({
+const toTransactionResponse = (transaction: LedgerTransaction): TransactionResponse => ({
 	...toTransactionListItemResponse(transaction),
 	ledgerEntries: Option.getOrThrow(transaction.entries).map(entry => ({
 		id: entry.id.toString(),
 		accountId: entry.accountId.toString(),
 		direction: entry.direction,
 		amount: entry.amount,
-		currencyCode: entry.currency.code,
-		minorUnitExponent: entry.currency.minorUnitExponent,
+		currencyCode: entry.currency,
 		...(entry.metadata === undefined ? {} : { metadata: entry.metadata }),
 	})),
 });

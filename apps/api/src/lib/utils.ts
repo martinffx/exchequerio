@@ -47,5 +47,8 @@ const parseMetadata = (value: string | null): Effect.Effect<Metadata | undefined
 				catch: cause => new Error("Invalid persisted metadata", { cause }),
 			});
 
+const encodeMetadata = (metadata: Metadata | undefined): string | undefined =>
+	metadata === undefined ? undefined : JSON.stringify(metadata);
+
 export type { Metadata };
-export { parseId, parseDate, parseMetadata };
+export { encodeMetadata, parseId, parseDate, parseMetadata };
