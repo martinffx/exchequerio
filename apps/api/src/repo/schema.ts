@@ -82,12 +82,16 @@ const LedgerAccountsTable = pgTable(
 		description: text("description"),
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
 		currencyCode: text("currency_code").notNull(),
-		minorUnitExponent: integer("minor_unit_exponent").notNull(),
-		// Authoritative balance counters as BIGINT (integer minor units)
+		// Balance values as BIGINT (integer minor units)
+		pendingAmount: bigint("pending_amount", { mode: "number" }).notNull().default(0),
+		postedAmount: bigint("posted_amount", { mode: "number" }).notNull().default(0),
+		availableAmount: bigint("available_amount", { mode: "number" }).notNull().default(0),
 		pendingCredits: bigint("pending_credits", { mode: "number" }).notNull().default(0),
 		pendingDebits: bigint("pending_debits", { mode: "number" }).notNull().default(0),
 		postedCredits: bigint("posted_credits", { mode: "number" }).notNull().default(0),
 		postedDebits: bigint("posted_debits", { mode: "number" }).notNull().default(0),
+		availableCredits: bigint("available_credits", { mode: "number" }).notNull().default(0),
+		availableDebits: bigint("available_debits", { mode: "number" }).notNull().default(0),
 		lockVersion: integer("lock_version").notNull().default(1),
 		metadata: text("metadata"), // TEXT for DSQL compatibility (JSON string)
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
@@ -105,16 +109,25 @@ const LedgerAccountsTable = pgTable(
 			"ledger_accounts_currency_code_not_blank",
 			sql`btrim(${table.currencyCode}) <> ''`
 		),
-		minorUnitExponentNonnegative: check(
-			"ledger_accounts_minor_unit_exponent_nonnegative",
-			sql`${table.minorUnitExponent} >= 0`
-		),
 		balancesSafeIntegers: check(
 			"ledger_accounts_balances_safe_integers",
-			sql`${table.pendingCredits} BETWEEN -9007199254740991 AND 9007199254740991
+			sql`${table.pendingAmount} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.postedAmount} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.availableAmount} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.pendingCredits} BETWEEN -9007199254740991 AND 9007199254740991
 				AND ${table.pendingDebits} BETWEEN -9007199254740991 AND 9007199254740991
 				AND ${table.postedCredits} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.postedDebits} BETWEEN -9007199254740991 AND 9007199254740991`
+				AND ${table.postedDebits} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.availableCredits} BETWEEN -9007199254740991 AND 9007199254740991
+				AND ${table.availableDebits} BETWEEN -9007199254740991 AND 9007199254740991`
+		),
+		postedBalanceIdx: index("idx_ledger_accounts_posted_balance").on(
+			table.ledgerId,
+			table.postedAmount
+		),
+		availableBalanceIdx: index("idx_ledger_accounts_available_balance").on(
+			table.ledgerId,
+			table.availableAmount
 		),
 		organizationLedgerIdUnique: unique("unique_ledger_accounts_organization_ledger_id").on(
 			table.organizationId,
@@ -123,12 +136,8 @@ const LedgerAccountsTable = pgTable(
 		),
 	})
 );
-type AccountRow = typeof LedgerAccountsTable.$inferSelect;
-type AccountInsertRow = Required<typeof LedgerAccountsTable.$inferInsert>;
-type AccountUpdateRow = Pick<
-	AccountRow,
-	"name" | "description" | "metadata" | "lockVersion" | "updated"
->;
+type LedgerAccountRow = typeof LedgerAccountsTable.$inferSelect;
+type LedgerAccountInsertRow = typeof LedgerAccountsTable.$inferInsert;
 
 // Ledger Transactions: Double-entry transaction containers
 const LedgerTransactionsTable = pgTable(
@@ -500,9 +509,8 @@ export {
 	ledgerSettlementStatus,
 };
 export type {
-	AccountInsertRow,
-	AccountRow,
-	AccountUpdateRow,
+	LedgerAccountInsertRow,
+	LedgerAccountRow,
 	LedgerAccountBalanceMonitorInsertRow,
 	LedgerAccountBalanceMonitorRow,
 	LedgerAccountCategoryAccountInsertRow,
