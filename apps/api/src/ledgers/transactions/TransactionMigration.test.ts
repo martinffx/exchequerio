@@ -5,16 +5,16 @@ import { Config } from "@/config";
 
 const migrationsDirectory = join(import.meta.dirname, "../../../migrations");
 const migrationNames = [
-	"0000_normal_retro_girl.sql",
-	"0001_narrow_tigra.sql",
-	"0002_damp_deathbird.sql",
-	"0003_blue_kid_colt.sql",
-	"0004_worthless_chimera.sql",
-	"0005_transactions_effect.sql",
+	"20251206175734_normal_retro_girl",
+	"20251207122110_narrow_tigra",
+	"20251210214057_damp_deathbird",
+	"20260806203446_blue_kid_colt",
+	"20260809203355_worthless_chimera",
+	"20260826065303_transactions_effect",
 ];
 
 const executeMigration = async (client: PoolClient, name: string) => {
-	const migration = await readFile(join(migrationsDirectory, name), "utf8");
+	const migration = await readFile(join(migrationsDirectory, name, "migration.sql"), "utf8");
 	for (const statement of migration.split("--> statement-breakpoint")) {
 		if (statement.trim()) await client.query(statement);
 	}
@@ -27,12 +27,14 @@ const seedLegacyTransactions = async (client: PoolClient) => {
 			('ledger-1', 'org-1', 'One'), ('ledger-2', 'org-2', 'Two');
 		INSERT INTO ledger_accounts (
 			id, organization_id, ledger_id, name, normal_balance, currency_code,
-			minor_unit_exponent, pending_credits, pending_debits, posted_credits, posted_debits
+			minor_unit_exponent, pending_amount, posted_amount, available_amount,
+			pending_credits, pending_debits, posted_credits, posted_debits,
+			available_credits, available_debits
 		) VALUES
-			('account-1', 'org-1', 'ledger-1', 'Debit', 'debit', 'USD', 2, 999, 999, 999, 999),
-			('account-2', 'org-1', 'ledger-1', 'Credit', 'credit', 'USD', 2, 999, 999, 999, 999),
-			('account-3', 'org-2', 'ledger-2', 'Debit', 'debit', 'EUR', 2, 999, 999, 999, 999),
-			('account-4', 'org-2', 'ledger-2', 'Credit', 'credit', 'EUR', 2, 999, 999, 999, 999);
+			('account-1', 'org-1', 'ledger-1', 'Debit', 'debit', 'USD', 2, 991, 992, 993, 994, 995, 996, 997, 998, 999),
+			('account-2', 'org-1', 'ledger-1', 'Credit', 'credit', 'USD', 2, 991, 992, 993, 994, 995, 996, 997, 998, 999),
+			('account-3', 'org-2', 'ledger-2', 'Debit', 'debit', 'EUR', 2, 991, 992, 993, 994, 995, 996, 997, 998, 999),
+			('account-4', 'org-2', 'ledger-2', 'Credit', 'credit', 'EUR', 2, 991, 992, 993, 994, 995, 996, 997, 998, 999);
 		INSERT INTO ledger_transactions (
 			id, ledger_id, organization_id, idempotency_key, status, effective_at, created, updated
 		) VALUES
@@ -101,7 +103,7 @@ const applyTransactionMigration = async (client: PoolClient) => {
 };
 
 describe("transaction Effect migration", () => {
-	it("migrates a clean database through 0005", async () => {
+	it("migrates a clean database through the transaction Effect migration", async () => {
 		await withLegacyDatabase(async client => {
 			await applyTransactionMigration(client);
 			expect(
@@ -131,46 +133,26 @@ describe("transaction Effect migration", () => {
 				{ id: "posted", status: "posted", posted_at: "2024-02-02T00:00:00.000Z" },
 			]);
 
-			const counters = await client.query(
-				`SELECT id, pending_credits, pending_debits, posted_credits, posted_debits
+			const balances = await client.query(
+				`SELECT id, pending_amount, posted_amount, available_amount,
+					pending_credits, pending_debits, posted_credits, posted_debits,
+					available_credits, available_debits
 					 FROM ledger_accounts ORDER BY id`
 			);
-			expect(counters.rows).toEqual([
-				{
-					id: "account-1",
-					pending_credits: "0",
-					pending_debits: "30",
-					posted_credits: "0",
-					posted_debits: "20",
-				},
-				{
-					id: "account-2",
-					pending_credits: "30",
-					pending_debits: "0",
-					posted_credits: "20",
-					posted_debits: "0",
-				},
-				{
-					id: "account-3",
-					pending_credits: "0",
-					pending_debits: "7",
-					posted_credits: "0",
-					posted_debits: "7",
-				},
-				{
-					id: "account-4",
-					pending_credits: "7",
-					pending_debits: "0",
-					posted_credits: "7",
-					posted_debits: "0",
-				},
-			]);
-
-			await expect(
-				client.query(
-					"INSERT INTO ledger_transactions (id, ledger_id, organization_id, idempotency_key) VALUES ('same-key-other-org', 'ledger-2', 'org-2', 'shared-key')"
-				)
-			).resolves.toBeDefined();
+			expect(balances.rows).toEqual(
+				["account-1", "account-2", "account-3", "account-4"].map(id => ({
+					id,
+					pending_amount: "991",
+					posted_amount: "992",
+					available_amount: "993",
+					pending_credits: "994",
+					pending_debits: "995",
+					posted_credits: "996",
+					posted_debits: "997",
+					available_credits: "998",
+					available_debits: "999",
+				}))
+			);
 			expect(
 				(await client.query("SELECT count(*)::int AS count FROM ledger_transaction_entries")).rows[0]
 			).toEqual({ count: 8 });
@@ -202,16 +184,20 @@ describe("transaction Effect migration", () => {
 						"name",
 						"description",
 						"normal_balance",
+						"pending_amount",
+						"posted_amount",
+						"available_amount",
 						"pending_credits",
 						"pending_debits",
 						"posted_credits",
 						"posted_debits",
+						"available_credits",
+						"available_debits",
 						"lock_version",
 						"metadata",
 						"created",
 						"updated",
 						"currency_code",
-						"minor_unit_exponent",
 					],
 				},
 				{
@@ -223,6 +209,8 @@ describe("transaction Effect migration", () => {
 						"organization_id",
 						"direction",
 						"amount",
+						"currency",
+						"status",
 						"metadata",
 						"created",
 						"ledger_id",
@@ -234,13 +222,13 @@ describe("transaction Effect migration", () => {
 						"id",
 						"ledger_id",
 						"organization_id",
-						"idempotency_key",
 						"description",
 						"status",
 						"metadata",
 						"created",
 						"updated",
 						"posted_at",
+						"lock_version",
 					],
 				},
 			]);
@@ -265,7 +253,6 @@ describe("transaction Effect migration", () => {
 					constraints: [
 						"ledger_accounts_balances_safe_integers",
 						"ledger_accounts_currency_code_not_blank",
-						"ledger_accounts_minor_unit_exponent_nonnegative",
 						"ledger_accounts_organization_id_organizations_table_id_fk",
 						"ledger_accounts_organization_ledger_fk",
 						"ledger_accounts_pkey",
@@ -304,7 +291,9 @@ describe("transaction Effect migration", () => {
 				{
 					table_name: "ledger_accounts",
 					indexes: [
+						"idx_ledger_accounts_available_balance",
 						"idx_ledger_accounts_organization",
+						"idx_ledger_accounts_posted_balance",
 						"ledger_accounts_pkey",
 						"unique_account_name_per_ledger",
 						"unique_ledger_accounts_organization_ledger_id",
@@ -326,7 +315,6 @@ describe("transaction Effect migration", () => {
 						"idx_ledger_transactions_organization",
 						"idx_ledger_transactions_status",
 						"ledger_transactions_pkey",
-						"unique_ledger_transactions_organization_idempotency_key",
 						"unique_ledger_transactions_organization_ledger_id",
 					],
 				},
@@ -338,11 +326,15 @@ describe("transaction Effect migration", () => {
 				 WHERE table_schema = 'public'
 				 AND (table_name, column_name) IN (
 					('ledger_transactions', 'posted_at'),
+					('ledger_transactions', 'lock_version'),
+					('ledger_accounts', 'lock_version'),
 					('ledger_transaction_entries', 'ledger_id')
-				 ) ORDER BY table_name`
+				 ) ORDER BY table_name, column_name`
 			);
 			expect(finalColumns.rows).toEqual([
+				{ table_name: "ledger_accounts", column_name: "lock_version", is_nullable: "NO" },
 				{ table_name: "ledger_transaction_entries", column_name: "ledger_id", is_nullable: "NO" },
+				{ table_name: "ledger_transactions", column_name: "lock_version", is_nullable: "NO" },
 				{ table_name: "ledger_transactions", column_name: "posted_at", is_nullable: "YES" },
 			]);
 
@@ -375,11 +367,6 @@ describe("transaction Effect migration", () => {
 			 ALTER TABLE ledger_transactions ALTER COLUMN status TYPE text USING status::text;
 			 UPDATE ledger_transactions SET status = 'invalid' WHERE id = 'pending'`,
 		],
-		[
-			"unsafe aggregate",
-			`UPDATE ledger_transactions SET status = 'pending' WHERE id = 'archived';
-			 UPDATE ledger_transaction_entries SET amount = 9007199254740991 WHERE id IN ('e1', 'e5')`,
-		],
 	])(
 		"rejects invalid %s data and rolls the complete migration back",
 		async (_case, corruption) => {
@@ -396,19 +383,26 @@ describe("transaction Effect migration", () => {
 				expect(names).not.toContain("posted_at");
 				expect(
 					(await client.query("SELECT status FROM ledger_transactions WHERE id = 'archived'")).rows[0]
-				).toEqual({ status: corruption.includes("status = 'pending'") ? "pending" : "archived" });
+				).toEqual({ status: "archived" });
 				expect(
 					(
 						await client.query(
-							`SELECT pending_credits, pending_debits, posted_credits, posted_debits
+							`SELECT pending_amount, posted_amount, available_amount,
+								pending_credits, pending_debits, posted_credits, posted_debits,
+								available_credits, available_debits
 							 FROM ledger_accounts WHERE id = 'account-1'`
 						)
 					).rows[0]
 				).toEqual({
-					pending_credits: "999",
-					pending_debits: "999",
-					posted_credits: "999",
-					posted_debits: "999",
+					pending_amount: "991",
+					posted_amount: "992",
+					available_amount: "993",
+					pending_credits: "994",
+					pending_debits: "995",
+					posted_credits: "996",
+					posted_debits: "997",
+					available_credits: "998",
+					available_debits: "999",
 				});
 
 				const entryColumns = await client.query<{ column_name: string }>(

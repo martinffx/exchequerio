@@ -1,16 +1,15 @@
 import { Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
 import { describe, expect, it, vi } from "vitest";
-import { BadRequestError } from "@/lib/errors";
 import { newLedgerAccountID, newLedgerID, newOrgID } from "@/repo/entities/types";
 import { Ledger } from "../domain/Ledger";
 import type { LedgerService } from "../LedgerService";
 import { LedgerServiceTag } from "../LedgerService";
-import { Account } from "./domain/Account";
 import { AccountNotFound } from "./AccountErrors";
-import type { AccountRepo } from "./AccountRepo";
-import { AccountRepoTag } from "./AccountRepo";
+import type { LedgerAccountRepo } from "./LedgerAccountRepo";
+import { LedgerAccountRepoTag } from "./LedgerAccountRepo";
 import { AccountService, AccountServiceTag, accountServiceLayer } from "./AccountService";
+import { LedgerAccount } from "./domain/LedgerAccount";
 
 const organizationId = newOrgID();
 const ledgerId = newLedgerID();
@@ -22,26 +21,25 @@ const ledger = new Ledger({
 	created: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
 	updated: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
 });
-const account = new Account({
-	id: accountId,
+const created = DateTime.fromISO("2026-08-09T10:00:00.000Z", {
+	zone: "utc",
+}) as DateTime<true>;
+const account = LedgerAccount.fromCreateRequest(
+	accountId,
 	organizationId,
 	ledgerId,
-	name: "Cash",
-	normalBalance: "debit",
-	currency: { code: "USD", minorUnitExponent: 2 },
-	pendingCredits: 0,
-	pendingDebits: 0,
-	postedCredits: 0,
-	postedDebits: 0,
-	lockVersion: 1,
-	created: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
-	updated: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
-});
+	{
+		name: "Cash",
+		normalBalance: "debit",
+		currencyCode: "USD",
+	},
+	created
+);
 // oxlint-disable-next-line unicorn/no-array-callback-reference -- Effect Option constructor, not an iterator.
 const someAccount = Option.some(account);
 
-const repository = (overrides: Partial<AccountRepo> = {}): AccountRepo =>
-	vi.mocked<AccountRepo>({
+const repository = (overrides: Partial<LedgerAccountRepo> = {}): LedgerAccountRepo =>
+	vi.mocked<LedgerAccountRepo>({
 		listAccounts: vi.fn(() => Effect.succeed([account])),
 		getAccount: vi.fn(() => Effect.succeed(someAccount)),
 		createAccount: vi.fn(() => Effect.succeed(account)),
@@ -60,7 +58,7 @@ const ledgerService = (): LedgerService =>
 	} as unknown as LedgerService);
 
 const runService = <A, E>(
-	repositoryImplementation: AccountRepo,
+	repositoryImplementation: LedgerAccountRepo,
 	ledgerImplementation: LedgerService,
 	use: (service: AccountService) => Effect.Effect<A, E>
 ) =>
@@ -70,7 +68,7 @@ const runService = <A, E>(
 				accountServiceLayer.pipe(
 					Layer.provide(
 						Layer.merge(
-							Layer.succeed(AccountRepoTag, repositoryImplementation),
+							Layer.succeed(LedgerAccountRepoTag, repositoryImplementation),
 							Layer.succeed(LedgerServiceTag, ledgerImplementation)
 						)
 					)
@@ -103,7 +101,6 @@ describe("AccountService", () => {
 				description: "Custody",
 				normalBalance: "credit" as const,
 				currencyCode: "US0378331005",
-				minorUnitExponent: 4,
 				metadata: { externalId: "position-42" },
 			},
 		},
@@ -114,7 +111,6 @@ describe("AccountService", () => {
 				description: undefined,
 				normalBalance: "debit" as const,
 				currencyCode: "USD",
-				minorUnitExponent: 2,
 				metadata: undefined,
 			},
 		},
@@ -125,13 +121,12 @@ describe("AccountService", () => {
 				description: undefined,
 				normalBalance: "debit" as const,
 				currencyCode: "usd",
-				minorUnitExponent: 2,
 				metadata: undefined,
 			},
 		},
 	])("creates Account domain state from $name", async ({ request }) => {
 		const repo = repository({
-			createAccount: vi.fn((record: Account) => Effect.succeed(record)),
+			createAccount: vi.fn((record: LedgerAccount) => Effect.succeed(record)),
 		});
 		const parent = ledgerService();
 
@@ -145,10 +140,7 @@ describe("AccountService", () => {
 			name: request.name,
 			description: request.description,
 			normalBalance: request.normalBalance,
-			currency: {
-				code: request.currencyCode,
-				minorUnitExponent: request.minorUnitExponent,
-			},
+			currency: request.currencyCode,
 			metadata: request.metadata,
 			lockVersion: 1,
 		});
@@ -163,7 +155,7 @@ describe("AccountService", () => {
 		]);
 		expect(parent.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
 		expect(repo.createAccount).toHaveBeenCalledWith(created);
-		expect(vi.mocked(repo.createAccount).mock.calls[0]?.[0]).toBeInstanceOf(Account);
+		expect(vi.mocked(repo.createAccount).mock.calls[0]?.[0]).toBeInstanceOf(LedgerAccount);
 	});
 
 	it("passes the current lock version into update without changing immutable fields", async () => {
@@ -189,36 +181,9 @@ describe("AccountService", () => {
 			})
 		);
 		const update = vi.mocked(repo.updateAccount).mock.calls[0]?.[0];
-		expect(update).toBeInstanceOf(Account);
+		expect(update).toBeInstanceOf(LedgerAccount);
 		expect(update?.balances).toEqual(account.balances);
 	});
-
-	it.each([
-		{ currencyCode: "", minorUnitExponent: 2 },
-		{ currencyCode: "   ", minorUnitExponent: 2 },
-		{ currencyCode: "USD", minorUnitExponent: -1 },
-		{ currencyCode: "USD", minorUnitExponent: 1.5 },
-		{ currencyCode: "USD", minorUnitExponent: Number.POSITIVE_INFINITY },
-		{ currencyCode: "USD", minorUnitExponent: Number.MAX_SAFE_INTEGER + 1 },
-	])(
-		"maps invalid Account Currency $currencyCode/$minorUnitExponent to BadRequestError",
-		async ({ currencyCode, minorUnitExponent }) => {
-			const repo = repository();
-			const error = await runService(repo, ledgerService(), service =>
-				Effect.flip(
-					service.createAccount(organizationId, ledgerId, {
-						name: "Invalid",
-						normalBalance: "debit",
-						currencyCode,
-						minorUnitExponent,
-					})
-				)
-			);
-
-			expect(error).toBeInstanceOf(BadRequestError);
-			expect(repo.createAccount).not.toHaveBeenCalled();
-		}
-	);
 
 	it.each(["get", "update", "delete"] as const)(
 		"maps an absent %s Account to AccountNotFound",

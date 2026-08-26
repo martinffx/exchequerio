@@ -1,11 +1,15 @@
 import { Layer } from "effect";
-import { accountRepoLayer } from "./AccountRepo";
+import { ledgerAccountRepoLayer } from "./LedgerAccountRepo";
 import { accountServiceLayer } from "./AccountService";
 
-const accountLayer = accountServiceLayer.pipe(Layer.provide(accountRepoLayer));
+const accountLayer = accountServiceLayer.pipe(Layer.provide(ledgerAccountRepoLayer));
 
-export { Account } from "./domain/Account";
-export type { AccountBalance, AccountMetadata, AccountOptions, CurrencyCode } from "./domain/Account";
+export { LedgerAccount, LedgerAccountCurrencyMismatch } from "./domain/LedgerAccount";
+export type {
+	LedgerAccountBalance,
+	LedgerAccountMetadata,
+	LedgerAccountOptions,
+} from "./domain/LedgerAccount";
 export {
 	AccountHasDependents,
 	AccountNameConflict,

@@ -1,6 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
 import type { DateTime } from "luxon";
-import type { Account } from "./domain/Account";
+import type { LedgerAccount } from "./domain/LedgerAccount";
 
 const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const AccountIdSchema = Type.String({ pattern: "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
@@ -13,14 +13,12 @@ const AccountListQuery = Type.Object({
 const AccountMetadataSchema = Type.Record(Type.String(), Type.String());
 const NormalBalanceSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });
-const MinorUnitExponentSchema = Type.Integer({ minimum: 0, maximum: 2_147_483_647 });
 const AccountCreateRequest = Type.Object(
 	{
 		name: Type.String(),
 		description: Type.Optional(Type.String()),
 		normalBalance: NormalBalanceSchema,
 		currencyCode: CurrencyCodeSchema,
-		minorUnitExponent: MinorUnitExponentSchema,
 		metadata: Type.Optional(AccountMetadataSchema),
 	},
 	{ additionalProperties: false }
@@ -50,7 +48,6 @@ const AccountResponse = Type.Object({
 	description: Type.Optional(Type.String()),
 	normalBalance: NormalBalanceSchema,
 	currencyCode: CurrencyCodeSchema,
-	minorUnitExponent: MinorUnitExponentSchema,
 	balances: Type.Array(AccountBalanceResponse),
 	metadata: Type.Optional(AccountMetadataSchema),
 	lockVersion: Type.Integer({ minimum: 0 }),
@@ -71,14 +68,13 @@ const toIso = (value: DateTime): string => {
 	return encoded;
 };
 
-const toAccountResponse = (account: Account): AccountResponse => ({
+const toAccountResponse = (account: LedgerAccount): AccountResponse => ({
 	id: account.id.toString(),
 	ledgerId: account.ledgerId.toString(),
 	name: account.name,
 	...(account.description === undefined ? {} : { description: account.description }),
 	normalBalance: account.normalBalance,
-	currencyCode: account.currency.code,
-	minorUnitExponent: account.currency.minorUnitExponent,
+	currencyCode: account.currency,
 	balances: account.balances.map(balance => ({ ...balance })),
 	...(account.metadata === undefined ? {} : { metadata: account.metadata }),
 	lockVersion: account.lockVersion,

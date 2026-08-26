@@ -1,47 +1,62 @@
 import fastifySwagger from "@fastify/swagger";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import fastify, { type FastifyInstance } from "fastify";
-import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { globalErrorHandler } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import { ServerRuntime } from "@/runtime";
-import { Account } from "./domain/Account";
+import type { LedgerAccountRow } from "@/repo/schema";
 import { AccountHasDependents, AccountNotFound } from "./AccountErrors";
 import { AccountRoutes } from "./AccountRoutes";
 import type { AccountService } from "./AccountService";
 import { AccountServiceTag } from "./AccountService";
+import { LedgerAccount } from "./domain/LedgerAccount";
 
 const organizationId = new TypeID("org") as OrgID;
 const ledgerId = new TypeID("lgr") as LedgerID;
 const accountId = new TypeID("lat") as LedgerAccountID;
-const account = new Account({
-	id: accountId,
-	organizationId,
-	ledgerId,
+const accountRow: LedgerAccountRow = {
+	id: accountId.toString(),
+	organizationId: organizationId.toString(),
+	ledgerId: ledgerId.toString(),
 	name: "Cash",
 	description: "Operating cash",
 	normalBalance: "debit",
-	currency: { code: "USD", minorUnitExponent: 2 },
+	currencyCode: "USD",
+	pendingAmount: -5,
+	postedAmount: 20,
+	availableAmount: 15,
 	pendingCredits: 10,
 	pendingDebits: 5,
 	postedCredits: 5,
 	postedDebits: 25,
+	availableCredits: 10,
+	availableDebits: 25,
 	lockVersion: 1,
-	metadata: { externalId: "cash-42" },
-	created: DateTime.fromISO("2026-08-09T10:00:00.000Z", { zone: "utc" }),
-	updated: DateTime.fromISO("2026-08-09T11:00:00.000Z", { zone: "utc" }),
-});
+	metadata: JSON.stringify({ externalId: "cash-42" }),
+	created: new Date("2026-08-09T10:00:00.000Z"),
+	updated: new Date("2026-08-09T11:00:00.000Z"),
+};
+const account = Option.getOrThrow(Effect.runSync(LedgerAccount.fromRow(accountRow)));
 
-const creditNormalAccount = new Account({
-	...account,
-	normalBalance: "credit",
-	pendingCredits: 5,
-	pendingDebits: 20,
-	postedCredits: 10,
-	postedDebits: 30,
-});
+const creditNormalAccount = Option.getOrThrow(
+	Effect.runSync(
+		LedgerAccount.fromRow({
+			...accountRow,
+			normalBalance: "credit",
+			pendingAmount: -15,
+			postedAmount: -20,
+			availableAmount: -10,
+			pendingCredits: 5,
+			pendingDebits: 20,
+			postedCredits: 10,
+			postedDebits: 30,
+			availableCredits: 10,
+			availableDebits: 20,
+		})
+	)
+);
 
 const service = (result = account): AccountService =>
 	vi.mocked<AccountService>({
@@ -109,7 +124,6 @@ describe("AccountRoutes", () => {
 				id: accountId.toString(),
 				ledgerId: ledgerId.toString(),
 				currencyCode: "USD",
-				minorUnitExponent: 2,
 				balances: [
 					{ balanceType: "pending", amount: -5, credits: 10, debits: 5 },
 					{ balanceType: "posted", amount: 20, credits: 5, debits: 25 },
@@ -126,7 +140,7 @@ describe("AccountRoutes", () => {
 		});
 	});
 
-	it("serializes credit-normal derived balances from authoritative counters", async () => {
+	it("serializes stored credit-normal Balances", async () => {
 		const { server } = await buildRouteServer(service(creditNormalAccount));
 		const response = await server.inject({
 			method: "GET",
@@ -154,7 +168,6 @@ describe("AccountRoutes", () => {
 				name: "Cash",
 				normalBalance: "debit",
 				currencyCode: "US0378331005",
-				minorUnitExponent: 4,
 				ignored: true,
 			},
 		});
@@ -165,7 +178,6 @@ describe("AccountRoutes", () => {
 			name: "Cash",
 			normalBalance: "debit",
 			currencyCode: "US0378331005",
-			minorUnitExponent: 4,
 		});
 
 		const invalid = await server.inject({ method: "POST", url, payload: { name: "Cash" } });
@@ -182,7 +194,6 @@ describe("AccountRoutes", () => {
 				name: "Operating Cash",
 				normalBalance: "credit",
 				currencyCode: "EUR",
-				minorUnitExponent: 2,
 			},
 		});
 

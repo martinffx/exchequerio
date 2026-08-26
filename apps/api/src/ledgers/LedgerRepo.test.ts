@@ -19,8 +19,12 @@ import {
 	organizationRepoLayer,
 } from "@/organizations/OrganizationRepo";
 import { Organization } from "@/organizations/domain/Organization";
-import { type AccountRepo, AccountRepoTag, accountRepoLayer } from "./accounts/AccountRepo";
-import { Account } from "./accounts/domain/Account";
+import {
+	type LedgerAccountRepo,
+	LedgerAccountRepoTag,
+	ledgerAccountRepoLayer,
+} from "./accounts/LedgerAccountRepo";
+import { LedgerAccount } from "./accounts/domain/LedgerAccount";
 import { Ledger } from "./domain/Ledger";
 import {
 	LedgerHasDependents,
@@ -41,17 +45,19 @@ const ledgerWrite = (
 
 describe("LedgerRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
-	const reposLayer = Layer.mergeAll(accountRepoLayer, ledgerRepoLayer, organizationRepoLayer).pipe(
-		Layer.provideMerge(databaseLayer)
-	);
-	type TestRepos = AccountRepo | Database | LedgerRepo | OrganizationRepo;
+	const reposLayer = Layer.mergeAll(
+		ledgerAccountRepoLayer,
+		ledgerRepoLayer,
+		organizationRepoLayer
+	).pipe(Layer.provideMerge(databaseLayer));
+	type TestRepos = LedgerAccountRepo | Database | LedgerRepo | OrganizationRepo;
 	const runtime: ManagedRuntime.ManagedRuntime<TestRepos, never> = ManagedRuntime.make(reposLayer);
 	const organizationIds = new Set<OrgID>();
 
 	const runRepo = <A, E>(use: (repository: LedgerRepo) => Effect.Effect<A, E>) =>
 		runtime.runPromise(LedgerRepoTag.pipe(Effect.flatMap(use)));
-	const runAccountRepo = <A, E>(use: (repository: AccountRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(AccountRepoTag.pipe(Effect.flatMap(use)));
+	const runLedgerAccountRepo = <A, E>(use: (repository: LedgerAccountRepo) => Effect.Effect<A, E>) =>
+		runtime.runPromise(LedgerAccountRepoTag.pipe(Effect.flatMap(use)));
 	const runOrganizationRepo = <A, E>(use: (repository: OrganizationRepo) => Effect.Effect<A, E>) =>
 		runtime.runPromise(OrganizationRepoTag.pipe(Effect.flatMap(use)));
 	const database = () => runtime.runPromise(DatabaseTag);
@@ -74,11 +80,11 @@ describe("LedgerRepoLive", () => {
 					repository.listLedgers(organizationId, { offset: 0, limit: 100 })
 				);
 				for (const ledger of ledgers) {
-					const accounts = await runAccountRepo(repository =>
+					const accounts = await runLedgerAccountRepo(repository =>
 						repository.listAccounts(organizationId, ledger.id, { offset: 0, limit: 100 })
 					);
 					for (const account of accounts) {
-						await runAccountRepo(repository =>
+						await runLedgerAccountRepo(repository =>
 							repository.deleteAccount(organizationId, ledger.id, account.id)
 						);
 					}
@@ -292,13 +298,12 @@ describe("LedgerRepoLive", () => {
 	it("maps a real dependent Ledger Account to LedgerHasDependents", async () => {
 		const organizationId = await createOrganization();
 		const created = await runRepo(repository => repository.createLedger(ledgerWrite(organizationId)));
-		await runAccountRepo(repository =>
+		await runLedgerAccountRepo(repository =>
 			repository.createAccount(
-				Account.fromRequest(newLedgerAccountID(), organizationId, created.id, {
+				LedgerAccount.fromCreateRequest(newLedgerAccountID(), organizationId, created.id, {
 					name: "Dependent account",
 					normalBalance: "debit",
 					currencyCode: "USD",
-					minorUnitExponent: 2,
 				})
 			)
 		);

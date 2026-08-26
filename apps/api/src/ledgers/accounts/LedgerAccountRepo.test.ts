@@ -13,7 +13,7 @@ import {
 	newOrgID,
 	type OrgID,
 } from "@/repo/entities/types";
-import { LedgerAccountsTable } from "@/repo/schema";
+import { type LedgerAccountRow, LedgerAccountsTable } from "@/repo/schema";
 import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "../LedgerRepo";
 import { Ledger } from "../domain/Ledger";
 import {
@@ -28,38 +28,48 @@ import {
 	AccountPersistenceFailure,
 	AccountVersionConflict,
 } from "./AccountErrors";
-import { type AccountRepo, AccountRepoTag, accountRepoLayer } from "./AccountRepo";
-import { Account } from "./domain/Account";
+import {
+	type LedgerAccountRepo,
+	LedgerAccountRepoTag,
+	ledgerAccountRepoLayer,
+} from "./LedgerAccountRepo";
+import { LedgerAccount } from "./domain/LedgerAccount";
 
-const accountCreate = (
+const ledgerAccountCreate = (
 	organizationId: OrgID,
 	ledgerId: LedgerID,
 	overrides: Partial<
-		Pick<Account, "id" | "name" | "description" | "normalBalance" | "currency" | "metadata">
+		Pick<LedgerAccount, "id" | "name" | "description" | "normalBalance" | "currency" | "metadata">
 	> = {}
-): Account => {
-	const currency = overrides.currency ?? { code: "USD", minorUnitExponent: 2 };
-	return Account.fromRequest(overrides.id ?? newLedgerAccountID(), organizationId, ledgerId, {
-		name: overrides.name ?? "Cash",
-		description: overrides.description,
-		normalBalance: overrides.normalBalance ?? "debit",
-		currencyCode: currency.code,
-		minorUnitExponent: currency.minorUnitExponent,
-		metadata: overrides.metadata,
-	});
+): LedgerAccount => {
+	const currency = overrides.currency ?? "USD";
+	return LedgerAccount.fromCreateRequest(
+		overrides.id ?? newLedgerAccountID(),
+		organizationId,
+		ledgerId,
+		{
+			name: overrides.name ?? "Cash",
+			description: overrides.description,
+			normalBalance: overrides.normalBalance ?? "debit",
+			currencyCode: currency,
+			metadata: overrides.metadata,
+		}
+	);
 };
 
-describe("AccountRepoLive", () => {
+describe("LedgerAccountRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
-	const reposLayer = Layer.mergeAll(accountRepoLayer, ledgerRepoLayer, organizationRepoLayer).pipe(
-		Layer.provideMerge(databaseLayer)
-	);
-	type TestRepos = AccountRepo | Database | LedgerRepo | OrganizationRepo;
+	const reposLayer = Layer.mergeAll(
+		ledgerAccountRepoLayer,
+		ledgerRepoLayer,
+		organizationRepoLayer
+	).pipe(Layer.provideMerge(databaseLayer));
+	type TestRepos = LedgerAccountRepo | Database | LedgerRepo | OrganizationRepo;
 	const runtime: ManagedRuntime.ManagedRuntime<TestRepos, never> = ManagedRuntime.make(reposLayer);
 	const resources: Array<{ organizationId: OrgID; ledgerId: LedgerID }> = [];
 
-	const runAccountRepo = <A, E>(use: (repository: AccountRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(AccountRepoTag.pipe(Effect.flatMap(use)));
+	const runLedgerAccountRepo = <A, E>(use: (repository: LedgerAccountRepo) => Effect.Effect<A, E>) =>
+		runtime.runPromise(LedgerAccountRepoTag.pipe(Effect.flatMap(use)));
 	const runLedgerRepo = <A, E>(use: (repository: LedgerRepo) => Effect.Effect<A, E>) =>
 		runtime.runPromise(LedgerRepoTag.pipe(Effect.flatMap(use)));
 	const runOrganizationRepo = <A, E>(use: (repository: OrganizationRepo) => Effect.Effect<A, E>) =>
@@ -75,7 +85,7 @@ describe("AccountRepoLive", () => {
 		await runOrganizationRepo(repository =>
 			repository.createOrganization(
 				Organization.fromRequest(organizationId, {
-					name: `Account test ${organizationId.toString()}`,
+					name: `LedgerAccount test ${organizationId.toString()}`,
 				})
 			)
 		);
@@ -89,11 +99,11 @@ describe("AccountRepoLive", () => {
 	afterAll(async () => {
 		try {
 			for (const { organizationId, ledgerId } of resources) {
-				const accounts = await runAccountRepo(repository =>
+				const accounts = await runLedgerAccountRepo(repository =>
 					repository.listAccounts(organizationId, ledgerId, { offset: 0, limit: 100 })
 				);
 				for (const account of accounts) {
-					await runAccountRepo(repository =>
+					await runLedgerAccountRepo(repository =>
 						repository.deleteAccount(organizationId, ledgerId, account.id)
 					);
 				}
@@ -105,17 +115,17 @@ describe("AccountRepoLive", () => {
 		}
 	});
 
-	it("orders by creation descending with Account ID as a stable tie-breaker", async () => {
+	it("orders by creation descending with LedgerAccount ID as a stable tie-breaker", async () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const created = await runAccountRepo(repository =>
+		const created = await runLedgerAccountRepo(repository =>
 			Effect.all(
 				["A", "B", "C"].map(name =>
-					repository.createAccount(accountCreate(organizationId, ledgerId, { name }))
+					repository.createAccount(ledgerAccountCreate(organizationId, ledgerId, { name }))
 				)
 			)
 		);
 
-		const accounts = await runAccountRepo(repository =>
+		const accounts = await runLedgerAccountRepo(repository =>
 			repository.listAccounts(organizationId, ledgerId, { offset: 0, limit: 100 })
 		);
 		const expected = [...created].sort(
@@ -129,22 +139,22 @@ describe("AccountRepoLive", () => {
 	it("enforces Organization and Ledger scope", async () => {
 		const owner = await createOrganizationAndLedger();
 		const other = await createOrganizationAndLedger();
-		const created = await runAccountRepo(repository =>
-			repository.createAccount(accountCreate(owner.organizationId, owner.ledgerId))
+		const created = await runLedgerAccountRepo(repository =>
+			repository.createAccount(ledgerAccountCreate(owner.organizationId, owner.ledgerId))
 		);
 
 		expect(
-			await runAccountRepo(repository =>
+			await runLedgerAccountRepo(repository =>
 				repository.getAccount(owner.organizationId, owner.ledgerId, created.id)
 			)
 		).toSatisfy(Option.isSome);
 		expect(
-			await runAccountRepo(repository =>
+			await runLedgerAccountRepo(repository =>
 				repository.getAccount(other.organizationId, owner.ledgerId, created.id)
 			)
 		).toEqual(Option.none());
 		expect(
-			await runAccountRepo(repository =>
+			await runLedgerAccountRepo(repository =>
 				repository.getAccount(owner.organizationId, other.ledgerId, created.id)
 			)
 		).toEqual(Option.none());
@@ -159,80 +169,96 @@ describe("AccountRepoLive", () => {
 		{ label: "omitted optional values", description: undefined, metadata: undefined },
 	])("creates and decodes $label", async ({ description, metadata }) => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const record = accountCreate(organizationId, ledgerId, {
+		const record = ledgerAccountCreate(organizationId, ledgerId, {
 			description,
-			currency: { code: "US0378331005", minorUnitExponent: 4 },
+			currency: "US0378331005",
 			metadata,
 		});
-		const created = await runAccountRepo(repository => repository.createAccount(record));
+		const created = await runLedgerAccountRepo(repository => repository.createAccount(record));
 
 		expect(created.lockVersion).toBe(1);
-		expect(record.toCreateRow().created).toBeInstanceOf(Date);
-		expect(record.toCreateRow().updated).toBeInstanceOf(Date);
+		expect(record.toRow().created).toBeInstanceOf(Date);
+		expect(record.toRow().updated).toBeInstanceOf(Date);
 		expect(DateTime.isDateTime(created.created)).toBe(true);
 		expect(DateTime.isDateTime(created.updated)).toBe(true);
 		expect(created.created).toEqual(record.created);
 		expect(created.updated).toEqual(record.updated);
 		expect(created.description).toBe(description);
-		expect(created.currency).toEqual({ code: "US0378331005", minorUnitExponent: 4 });
+		expect(created.currency).toBe("US0378331005");
 		expect(created.metadata).toEqual(metadata);
 		expect(created.balances.every(balance => balance.amount === 0)).toBe(true);
 	});
 
-	it("encodes only the four authoritative counters on creation", () => {
-		const row = accountCreate(newOrgID(), newLedgerID()).toCreateRow();
+	it("encodes all stored Balances on creation", () => {
+		const row = ledgerAccountCreate(newOrgID(), newLedgerID()).toRow() as LedgerAccountRow;
 
 		expect(row).toMatchObject({
+			pendingAmount: 0,
+			postedAmount: 0,
+			availableAmount: 0,
 			pendingCredits: 0,
 			pendingDebits: 0,
 			postedCredits: 0,
 			postedDebits: 0,
+			availableCredits: 0,
+			availableDebits: 0,
 		});
-		for (const column of [
-			"pendingAmount",
-			"postedAmount",
-			"availableAmount",
-			"availableCredits",
-			"availableDebits",
-		]) {
-			expect(row).not.toHaveProperty(column);
-		}
 	});
 
 	it.each([
 		{
 			label: "debit-normal balances",
 			normalBalance: "debit" as const,
-			counters: { pendingCredits: 20, pendingDebits: 5, postedCredits: 30, postedDebits: 10 },
+			stored: {
+				pendingAmount: 11,
+				postedAmount: 12,
+				availableAmount: 13,
+				pendingCredits: 20,
+				pendingDebits: 5,
+				postedCredits: 30,
+				postedDebits: 10,
+				availableCredits: 40,
+				availableDebits: 15,
+			},
 			expected: [
-				{ balanceType: "pending", amount: -15, credits: 20, debits: 5 },
-				{ balanceType: "posted", amount: -20, credits: 30, debits: 10 },
-				{ balanceType: "availableBalance", amount: -10, credits: 20, debits: 10 },
+				{ balanceType: "pending", amount: 11, credits: 20, debits: 5 },
+				{ balanceType: "posted", amount: 12, credits: 30, debits: 10 },
+				{ balanceType: "availableBalance", amount: 13, credits: 40, debits: 15 },
 			],
 		},
 		{
 			label: "credit-normal balances",
 			normalBalance: "credit" as const,
-			counters: { pendingCredits: 5, pendingDebits: 20, postedCredits: 10, postedDebits: 30 },
+			stored: {
+				pendingAmount: -11,
+				postedAmount: -12,
+				availableAmount: -13,
+				pendingCredits: 5,
+				pendingDebits: 20,
+				postedCredits: 10,
+				postedDebits: 30,
+				availableCredits: 15,
+				availableDebits: 40,
+			},
 			expected: [
-				{ balanceType: "pending", amount: -15, credits: 5, debits: 20 },
-				{ balanceType: "posted", amount: -20, credits: 10, debits: 30 },
-				{ balanceType: "availableBalance", amount: -10, credits: 10, debits: 20 },
+				{ balanceType: "pending", amount: -11, credits: 5, debits: 20 },
+				{ balanceType: "posted", amount: -12, credits: 10, debits: 30 },
+				{ balanceType: "availableBalance", amount: -13, credits: 15, debits: 40 },
 			],
 		},
-	])("derives $label from authoritative counters when decoding rows", async testCase => {
+	])("preserves stored $label when decoding rows", async testCase => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const record = accountCreate(organizationId, ledgerId, {
+		const record = ledgerAccountCreate(organizationId, ledgerId, {
 			name: testCase.label,
 			normalBalance: testCase.normalBalance,
 		});
 		const db = (await database()).db;
 		await db.insert(LedgerAccountsTable).values({
-			...record.toCreateRow(),
-			...testCase.counters,
+			...record.toRow(),
+			...testCase.stored,
 		});
 
-		const decoded = await runAccountRepo(repository =>
+		const decoded = await runLedgerAccountRepo(repository =>
 			repository.getAccount(organizationId, ledgerId, record.id)
 		);
 
@@ -240,9 +266,9 @@ describe("AccountRepoLive", () => {
 	});
 
 	it("returns a typed decoding failure for an invalid timestamp", async () => {
-		const row = accountCreate(newOrgID(), newLedgerID()).toCreateRow();
+		const row = ledgerAccountCreate(newOrgID(), newLedgerID()).toRow() as LedgerAccountRow;
 		const error = await Effect.runPromise(
-			Effect.flip(Account.fromRow({ ...row, created: new Date(Number.NaN) }))
+			Effect.flip(LedgerAccount.fromRow({ ...row, created: new Date(Number.NaN) }))
 		);
 
 		expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
@@ -250,18 +276,18 @@ describe("AccountRepoLive", () => {
 
 	it("maps duplicate names but not ID collisions to their public Conflict", async () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const first = accountCreate(organizationId, ledgerId);
-		await runAccountRepo(repository => repository.createAccount(first));
+		const first = ledgerAccountCreate(organizationId, ledgerId);
+		await runLedgerAccountRepo(repository => repository.createAccount(first));
 
-		const duplicateName = await runAccountRepo(repository =>
-			Effect.flip(repository.createAccount(accountCreate(organizationId, ledgerId)))
+		const duplicateName = await runLedgerAccountRepo(repository =>
+			Effect.flip(repository.createAccount(ledgerAccountCreate(organizationId, ledgerId)))
 		);
 		expect(duplicateName).toBeInstanceOf(AccountNameConflict);
 
-		const idCollision = await runAccountRepo(repository =>
+		const idCollision = await runLedgerAccountRepo(repository =>
 			Effect.flip(
 				repository.createAccount(
-					accountCreate(organizationId, ledgerId, { id: first.id, name: "Other" })
+					ledgerAccountCreate(organizationId, ledgerId, { id: first.id, name: "Other" })
 				)
 			)
 		);
@@ -271,8 +297,8 @@ describe("AccountRepoLive", () => {
 	it("maps a missing or cross-Organization Ledger to LedgerNotFound", async () => {
 		const owner = await createOrganizationAndLedger();
 		const other = await createOrganizationAndLedger();
-		const error = await runAccountRepo(repository =>
-			Effect.flip(repository.createAccount(accountCreate(other.organizationId, owner.ledgerId)))
+		const error = await runLedgerAccountRepo(repository =>
+			Effect.flip(repository.createAccount(ledgerAccountCreate(other.organizationId, owner.ledgerId)))
 		);
 
 		expect(error).toBeInstanceOf(LedgerNotFound);
@@ -282,7 +308,7 @@ describe("AccountRepoLive", () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const accountId = newLedgerAccountID();
 
-		const result = await runAccountRepo(repository =>
+		const result = await runLedgerAccountRepo(repository =>
 			operation === "get"
 				? repository.getAccount(organizationId, ledgerId, accountId)
 				: repository.deleteAccount(organizationId, ledgerId, accountId)
@@ -293,9 +319,11 @@ describe("AccountRepoLive", () => {
 
 	it("returns a version conflict when the update row is missing", async () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const missing = accountCreate(organizationId, ledgerId);
+		const missing = ledgerAccountCreate(organizationId, ledgerId);
 
-		const error = await runAccountRepo(repository => Effect.flip(repository.updateAccount(missing)));
+		const error = await runLedgerAccountRepo(repository =>
+			Effect.flip(repository.updateAccount(missing))
+		);
 
 		expect(error).toBeInstanceOf(AccountVersionConflict);
 	});
@@ -309,20 +337,20 @@ describe("AccountRepoLive", () => {
 		{ label: "clears optional values", description: undefined, metadata: undefined },
 	])("$label on the first update and rejects a stale version", async testCase => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const created = await runAccountRepo(repository =>
+		const created = await runLedgerAccountRepo(repository =>
 			repository.createAccount(
-				accountCreate(organizationId, ledgerId, {
+				ledgerAccountCreate(organizationId, ledgerId, {
 					description: "Before",
 					metadata: { source: "before" },
 				})
 			)
 		);
-		const replacement = created.updateFromRequest({
+		const replacement = created.fromUpdateRequest({
 			name: "Operating Cash",
 			description: testCase.description,
 			metadata: testCase.metadata,
 		});
-		const updated = await runAccountRepo(repository => repository.updateAccount(replacement));
+		const updated = await runLedgerAccountRepo(repository => repository.updateAccount(replacement));
 
 		expect(updated.name).toBe("Operating Cash");
 		expect(updated.description).toBe(testCase.description);
@@ -334,10 +362,10 @@ describe("AccountRepoLive", () => {
 		expect(updated.created).toEqual(created.created);
 		expect(updated.lockVersion).toBe(2);
 		expect(updated.updated).toEqual(replacement.updated);
-		const error = await runAccountRepo(repository =>
+		const error = await runLedgerAccountRepo(repository =>
 			Effect.flip(
 				repository.updateAccount(
-					created.updateFromRequest({
+					created.fromUpdateRequest({
 						name: "Stale",
 					})
 				)
@@ -346,13 +374,15 @@ describe("AccountRepoLive", () => {
 		expect(error).toBeInstanceOf(AccountVersionConflict);
 	});
 
-	it("deletes an unused Account", async () => {
+	it("deletes an unused LedgerAccount", async () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const unused = await runAccountRepo(repository =>
-			repository.createAccount(accountCreate(organizationId, ledgerId, { name: "Unused" }))
+		const unused = await runLedgerAccountRepo(repository =>
+			repository.createAccount(ledgerAccountCreate(organizationId, ledgerId, { name: "Unused" }))
 		);
 		expect(
-			await runAccountRepo(repository => repository.deleteAccount(organizationId, ledgerId, unused.id))
+			await runLedgerAccountRepo(repository =>
+				repository.deleteAccount(organizationId, ledgerId, unused.id)
+			)
 		).toSatisfy(Option.isSome);
 	});
 
@@ -370,9 +400,9 @@ describe("AccountRepoLive", () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const id = testCase.id ?? newLedgerAccountID().toString();
 		const db = (await database()).db;
-		const row = accountCreate(organizationId, ledgerId, {
+		const row = ledgerAccountCreate(organizationId, ledgerId, {
 			name: `Malformed ${testCase.label}`,
-		}).toCreateRow();
+		}).toRow();
 		await db.insert(LedgerAccountsTable).values({
 			...row,
 			id,
@@ -381,7 +411,7 @@ describe("AccountRepoLive", () => {
 		});
 
 		try {
-			const error = await runAccountRepo(repository =>
+			const error = await runLedgerAccountRepo(repository =>
 				Effect.flip(repository.getAccount(organizationId, ledgerId, id as unknown as LedgerAccountID))
 			);
 			expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);

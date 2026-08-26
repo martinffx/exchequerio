@@ -1,39 +1,37 @@
 import { Context, Effect, Layer, Option } from "effect";
 import { TypeID } from "typeid-js";
-import { BadRequestError, ServiceUnavailableError } from "@/lib/errors";
+import { ServiceUnavailableError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import { type LedgerGetError, LedgerServiceTag, type LedgerService } from "../LedgerService";
-import { Account } from "./domain/Account";
+import { LedgerAccount } from "./domain/LedgerAccount";
 import {
 	type AccountInfrastructureError,
 	AccountNotFound,
 	AccountRepositoryUnavailable,
 } from "./AccountErrors";
 import {
-	type AccountCreateRepositoryError,
-	type AccountDeleteRepositoryError,
-	type AccountListQuery,
-	type AccountRepo,
-	AccountRepoTag,
-	type AccountUpdateRepositoryError,
-} from "./AccountRepo";
-import type { AccountCreateRequest, AccountUpdateRequest } from "./AccountSchema";
+	type LedgerAccountCreateRepositoryError,
+	type LedgerAccountDeleteRepositoryError,
+	type LedgerAccountRepo,
+	LedgerAccountRepoTag,
+	type LedgerAccountUpdateRepositoryError,
+} from "./LedgerAccountRepo";
+import type { AccountCreateRequest, AccountListQuery, AccountUpdateRequest } from "./AccountSchema";
 
 type AccountListError = AccountInfrastructureError | LedgerGetError;
 type AccountGetError = AccountNotFound | AccountInfrastructureError;
 type AccountCreateError =
-	| BadRequestError
-	| Exclude<AccountCreateRepositoryError, AccountRepositoryUnavailable>
+	| Exclude<LedgerAccountCreateRepositoryError, AccountRepositoryUnavailable>
 	| LedgerGetError
 	| ServiceUnavailableError;
-type AccountUpdateError = AccountNotFound | AccountUpdateRepositoryError;
-type AccountDeleteError = AccountNotFound | AccountDeleteRepositoryError;
+type AccountUpdateError = AccountNotFound | LedgerAccountUpdateRepositoryError;
+type AccountDeleteError = AccountNotFound | LedgerAccountDeleteRepositoryError;
 
 const requireFound = (
 	organizationId: OrgID,
 	ledgerId: LedgerID,
 	accountId: LedgerAccountID
-): ((account: Option.Option<Account>) => Effect.Effect<Account, AccountNotFound>) =>
+): ((account: Option.Option<LedgerAccount>) => Effect.Effect<LedgerAccount, AccountNotFound>) =>
 	Option.match({
 		onNone: () =>
 			Effect.fail(
@@ -44,7 +42,7 @@ const requireFound = (
 
 class AccountService {
 	constructor(
-		private readonly repo: AccountRepo,
+		private readonly repo: LedgerAccountRepo,
 		private readonly ledgerService: LedgerService
 	) {}
 
@@ -52,7 +50,7 @@ class AccountService {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		query: AccountListQuery
-	): Effect.Effect<Account[], AccountListError> {
+	): Effect.Effect<LedgerAccount[], AccountListError> {
 		return this.ledgerService
 			.getLedger(organizationId, ledgerId)
 			.pipe(Effect.andThen(this.repo.listAccounts(organizationId, ledgerId, query)));
@@ -62,7 +60,7 @@ class AccountService {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
-	): Effect.Effect<Account, AccountGetError> {
+	): Effect.Effect<LedgerAccount, AccountGetError> {
 		return this.repo
 			.getAccount(organizationId, ledgerId, accountId)
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId, accountId)));
@@ -72,16 +70,12 @@ class AccountService {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		request: AccountCreateRequest
-	): Effect.Effect<Account, AccountCreateError> {
-		return Effect.gen(
-			function* (this: AccountService) {
-				yield* this.ledgerService.getLedger(organizationId, ledgerId);
-				const id = yield* Effect.sync(() => new TypeID("lat") as LedgerAccountID);
-				const account = yield* Effect.try({
-					try: () => Account.fromRequest(id, organizationId, ledgerId, request),
-					catch: cause => new BadRequestError("Invalid Account Currency", { cause }),
-				});
-				return yield* this.repo.createAccount(account).pipe(
+	): Effect.Effect<LedgerAccount, AccountCreateError> {
+		return this.ledgerService.getLedger(organizationId, ledgerId).pipe(
+			Effect.andThen(Effect.sync(() => new TypeID("lat") as LedgerAccountID)),
+			Effect.map(id => LedgerAccount.fromCreateRequest(id, organizationId, ledgerId, request)),
+			Effect.flatMap(account =>
+				this.repo.createAccount(account).pipe(
 					Effect.mapError(error =>
 						error instanceof AccountRepositoryUnavailable
 							? new ServiceUnavailableError(error.message, {
@@ -91,8 +85,8 @@ class AccountService {
 								})
 							: error
 					)
-				);
-			}.bind(this)
+				)
+			)
 		);
 	}
 
@@ -101,12 +95,9 @@ class AccountService {
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID,
 		request: AccountUpdateRequest
-	): Effect.Effect<Account, AccountUpdateError> {
+	): Effect.Effect<LedgerAccount, AccountUpdateError> {
 		return this.getAccount(organizationId, ledgerId, accountId).pipe(
-			Effect.flatMap(current => {
-				const account = current.updateFromRequest(request);
-				return this.repo.updateAccount(account);
-			})
+			Effect.flatMap(current => this.repo.updateAccount(current.fromUpdateRequest(request)))
 		);
 	}
 
@@ -114,7 +105,7 @@ class AccountService {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
-	): Effect.Effect<Account, AccountDeleteError> {
+	): Effect.Effect<LedgerAccount, AccountDeleteError> {
 		return this.repo
 			.deleteAccount(organizationId, ledgerId, accountId)
 			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId, accountId)));
@@ -126,7 +117,7 @@ const AccountServiceTag = Context.Service<AccountService>("AccountService");
 const accountServiceLayer = Layer.effect(
 	AccountServiceTag,
 	Effect.gen(function* () {
-		const repository = yield* AccountRepoTag;
+		const repository = yield* LedgerAccountRepoTag;
 		const ledgerService = yield* LedgerServiceTag;
 		return new AccountService(repository, ledgerService);
 	})
