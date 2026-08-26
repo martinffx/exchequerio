@@ -42,7 +42,7 @@ function getRepos(): TestRepos {
 
 	const config = new Config();
 	const pool = new Pool({ connectionString: config.databaseUrl, max: 1 });
-	const db = drizzle(pool, { schema });
+	const db = drizzle({ client: pool, relations: schema.schemaRelations });
 
 	const organizationRepo: OrganizationFixtureRepo = {
 		createOrganization: async record => {

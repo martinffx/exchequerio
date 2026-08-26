@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
-import type { LedgerCreateRow, LedgerRow, LedgerUpdateRow } from "@/repo/schema";
+import type { LedgerInsertRow, LedgerRow, LedgerUpdateRow } from "@/repo/schema";
 import { parseId } from "@/lib/utils";
 import type { LedgerCreateRequest, LedgerUpdateRequest } from "../LedgerSchema";
 import { LedgerPersistenceDecodingFailure } from "../LedgerErrors";
@@ -94,7 +94,7 @@ class Ledger {
 		}).pipe(Effect.mapError(cause => new LedgerPersistenceDecodingFailure(cause)));
 	}
 
-	toCreateRow(): LedgerCreateRow {
+	toCreateRow(): LedgerInsertRow {
 		return {
 			id: this.id.toString(),
 			organizationId: this.organizationId.toString(),

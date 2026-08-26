@@ -87,7 +87,7 @@
 			},
 			{
 				"type": "transaction-repo",
-				"pattern": "src/ledgers/transactions/TransactionRepo.ts",
+				"pattern": "src/ledgers/transactions/LedgerTransactionRepo.ts",
 				"mode": "full"
 			},
 			{
@@ -391,7 +391,9 @@
 						"allow": [
 							"transaction-repo",
 							"transaction-domain",
+							"transaction-transport",
 							"account-composition",
+							"account-domain",
 							"database",
 							"http",
 							"legacy-entities",
@@ -410,6 +412,7 @@
 							"transaction-capability",
 							"transaction-transport",
 							"account-composition",
+							"account-domain",
 							"ledger-service",
 							"database",
 							"http",

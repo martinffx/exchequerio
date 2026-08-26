@@ -21,6 +21,7 @@
 		"db:migrate": "dotenvx run -- drizzle-kit migrate"
 	},
 	"dependencies": {
+		"@effect/sql-pg": "4.0.0-rc.112",
 		"@fastify/auth": "^5.0.3",
 		"@fastify/jwt": "^10.0.0",
 		"@fastify/rate-limit": "^11.2.0",
@@ -29,8 +30,8 @@
 		"@fastify/type-provider-typebox": "^6.1.0",
 		"@fastify/under-pressure": "^9.0.3",
 		"@sinclair/typebox": "^0.34.41",
-		"drizzle-orm": "^0.44.7",
-		"effect": "beta",
+		"drizzle-orm": "1.0.0-rc.5-ab785fc",
+		"effect": "4.0.0-rc.112",
 		"fast-jwt": "^6.0.2",
 		"fastify": "^5.6.2",
 		"fastify-plugin": "^5.1.0",
@@ -54,7 +55,7 @@
 		"@types/pg": "^8.15.6",
 		"@vitest/coverage-v8": "^4.0.14",
 		"autocannon": "^8.0.0",
-		"drizzle-kit": "^0.31.7",
+		"drizzle-kit": "1.0.0-rc.4",
 		"tsdown": "^0.22.14",
 		"tsx": "4.20.6",
 		"typescript": "npm:@typescript/typescript6@6.0.2",

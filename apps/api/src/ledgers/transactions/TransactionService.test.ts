@@ -3,7 +3,7 @@ import { Settings } from "luxon";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AccountVersionConflict, makeCurrency } from "@/ledgers/accounts";
+import { AccountVersionConflict } from "@/ledgers/accounts/AccountErrors";
 import {
 	newLedgerAccountID,
 	newLedgerTransactionID,
@@ -12,10 +12,10 @@ import {
 	type OrgID,
 } from "@/repo/entities/types";
 
-import { Transaction } from "./domain/Transaction";
+import { LedgerTransaction } from "./domain/LedgerTransaction";
 import { TransactionValidationFailure, TransactionVersionConflict } from "./TransactionErrors";
 import { type TransactionIdemService, TransactionIdemServiceTag } from "./TransactionIdemService";
-import { type TransactionRepo, TransactionRepoTag } from "./TransactionRepo";
+import { type LedgerTransactionRepo, LedgerTransactionRepoTag } from "./LedgerTransactionRepo";
 import type { TransactionCreateRequest, TransactionUpdateRequest } from "./TransactionSchema";
 import {
 	type TransactionService,
@@ -49,16 +49,7 @@ const transaction = (() => {
 	Settings.now = () => Date.parse("2026-08-15T08:00:00.000Z");
 	try {
 		return Effect.runSync(
-			Transaction.fromRequest(
-				transactionId,
-				organizationId,
-				ledgerId,
-				createRequest,
-				new Map([
-					[debitAccountId.toString(), makeCurrency("EUR", 2)],
-					[creditAccountId.toString(), makeCurrency("EUR", 2)],
-				])
-			)
+			LedgerTransaction.fromCreateRequest(transactionId, organizationId, ledgerId, createRequest)
 		);
 	} finally {
 		Settings.now = previousNow;
@@ -71,13 +62,25 @@ afterEach(() => vi.restoreAllMocks());
 
 const harness = () => {
 	const repository = {
-		listTransactions: vi.fn<TransactionRepo["listTransactions"]>(() => Effect.succeed([transaction])),
-		getTransaction: vi.fn<TransactionRepo["getTransaction"]>(() => Effect.succeed(foundTransaction)),
-		createTransaction: vi.fn<TransactionRepo["createTransaction"]>(() => Effect.succeed(transaction)),
-		updateTransaction: vi.fn<TransactionRepo["updateTransaction"]>(() => Effect.succeed(transaction)),
-		postTransaction: vi.fn<TransactionRepo["postTransaction"]>(() => Effect.succeed(transaction)),
-		voidTransaction: vi.fn<TransactionRepo["voidTransaction"]>(() => Effect.succeed(transaction)),
-	} satisfies TransactionRepo;
+		listTransactions: vi.fn<LedgerTransactionRepo["listTransactions"]>(() =>
+			Effect.succeed([transaction])
+		),
+		getTransaction: vi.fn<LedgerTransactionRepo["getTransaction"]>(() =>
+			Effect.succeed(foundTransaction)
+		),
+		createTransaction: vi.fn<LedgerTransactionRepo["createTransaction"]>(() =>
+			Effect.succeed(transaction)
+		),
+		updateTransaction: vi.fn<LedgerTransactionRepo["updateTransaction"]>(() =>
+			Effect.succeed(transaction)
+		),
+		postTransaction: vi.fn<LedgerTransactionRepo["postTransaction"]>(() =>
+			Effect.succeed(transaction)
+		),
+		voidTransaction: vi.fn<LedgerTransactionRepo["voidTransaction"]>(() =>
+			Effect.succeed(transaction)
+		),
+	} satisfies LedgerTransactionRepo;
 	const idempotency = {
 		claimTransactionId: vi.fn<TransactionIdemService["claimTransactionId"]>(() =>
 			Effect.succeed(Result.succeed(transactionId))
@@ -85,7 +88,7 @@ const harness = () => {
 		releaseTransactionId: vi.fn<TransactionIdemService["releaseTransactionId"]>(() => Effect.void),
 	} satisfies TransactionIdemService;
 	const dependencies = Layer.merge(
-		Layer.succeed(TransactionRepoTag, repository),
+		Layer.succeed(LedgerTransactionRepoTag, repository),
 		Layer.succeed(TransactionIdemServiceTag, idempotency)
 	);
 	const layer = transactionServiceLayer.pipe(Layer.provide(dependencies));

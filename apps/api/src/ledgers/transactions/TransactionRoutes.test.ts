@@ -1,17 +1,15 @@
 import fastifySwagger from "@fastify/swagger";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import fastify, { type FastifyInstance } from "fastify";
 import { Settings } from "luxon";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LedgerNotFound } from "@/ledgers/LedgerErrors";
-import { makeCurrency } from "@/ledgers/accounts";
 import { globalErrorHandler } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
-import { ServerRuntime } from "@/runtime";
 
-import { Transaction } from "./domain/Transaction";
+import { LedgerTransaction } from "./domain/LedgerTransaction";
 import {
 	TransactionConcurrencyFailure,
 	TransactionIdempotencyUnavailable,
@@ -55,16 +53,7 @@ const transaction = (() => {
 	Settings.now = () => Date.parse("2026-08-15T08:00:00.000Z");
 	try {
 		return Effect.runSync(
-			Transaction.fromRequest(
-				transactionId,
-				organizationId,
-				ledgerId,
-				createBody,
-				new Map([
-					[debitAccountId.toString(), makeCurrency("EUR", 2)],
-					[creditAccountId.toString(), makeCurrency("EUR", 2)],
-				])
-			)
+			LedgerTransaction.fromCreateRequest(transactionId, organizationId, ledgerId, createBody)
 		);
 	} finally {
 		Settings.now = previousNow;
@@ -92,7 +81,7 @@ const buildRouteServer = async (implementation: TransactionService) => {
 	const server = fastify();
 	const hasPermissions = vi.fn(() => async () => undefined);
 	server.setErrorHandler(globalErrorHandler);
-	const runtime = new ServerRuntime(Layer.succeed(TransactionServiceTag, implementation));
+	const runtime = ManagedRuntime.make(Layer.succeed(TransactionServiceTag, implementation));
 	server.decorate("runtime", runtime as never);
 	server.decorateRequest("token");
 	server.addHook("preHandler", async request => {
@@ -113,7 +102,7 @@ const buildRouteServer = async (implementation: TransactionService) => {
 	await server.register(TransactionRoutes, { prefix: "/api/ledgers/:ledgerId/transactions" });
 	await server.ready();
 	servers.push(server);
-	return { server, runtime, hasPermissions };
+	return { server, hasPermissions };
 };
 
 afterEach(async () => {

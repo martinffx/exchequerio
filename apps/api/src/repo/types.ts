@@ -3,7 +3,7 @@ import type { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMoni
 import type { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import type { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
 import type { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
-import type * as schema from "./schema";
+import { schemaRelations } from "./schema";
 
 type Repos = {
 	ledgerAccountCategoryRepo: LedgerAccountCategoryRepo;
@@ -17,6 +17,6 @@ type RepoPluginOptions = {
 	repos?: Partial<Repos>;
 };
 
-type DrizzleDB = NodePgDatabase<typeof schema>;
+type DrizzleDB = NodePgDatabase<typeof schemaRelations>;
 
 export type { Repos, RepoPluginOptions, DrizzleDB };

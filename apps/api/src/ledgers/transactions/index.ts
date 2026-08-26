@@ -1,9 +1,9 @@
 import { Layer } from "effect";
 
-import { transactionRepoLayer } from "./TransactionRepo";
+import { ledgerTransactionRepoLayer } from "./LedgerTransactionRepo";
 import { transactionServiceLayer } from "./TransactionService";
 
-const transactionLayer = transactionServiceLayer.pipe(Layer.provide(transactionRepoLayer));
+const transactionLayer = transactionServiceLayer.pipe(Layer.provide(ledgerTransactionRepoLayer));
 
 export { TransactionRoutes } from "./TransactionRoutes";
 export type {

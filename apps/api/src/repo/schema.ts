@@ -410,6 +410,7 @@ const schemaRelations = defineRelations(
 	r => ({
 		OrganizationsTable: {
 			ledgers: r.many.LedgersTable(),
+			settlements: r.many.LedgerAccountSettlementsTable(),
 		},
 		LedgersTable: {
 			organization: r.one.OrganizationsTable({
@@ -419,6 +420,7 @@ const schemaRelations = defineRelations(
 			accounts: r.many.LedgerAccountsTable(),
 			transactions: r.many.LedgerTransactionsTable(),
 			categories: r.many.LedgerAccountCategoriesTable(),
+			statements: r.many.LedgerAccountStatementsTable(),
 		},
 		LedgerAccountsTable: {
 			ledger: r.one.LedgersTable({
@@ -428,6 +430,7 @@ const schemaRelations = defineRelations(
 			entries: r.many.LedgerTransactionEntriesTable(),
 			monitors: r.many.LedgerAccountBalanceMonitorsTable(),
 			statements: r.many.LedgerAccountStatementsTable(),
+			categoryLinks: r.many.LedgerAccountCategoryAccountsTable(),
 			settlementsAsSettled: r.many.LedgerAccountSettlementsTable({ alias: "settledAccount" }),
 			settlementsAsContra: r.many.LedgerAccountSettlementsTable({ alias: "contraAccount" }),
 		},
@@ -437,6 +440,7 @@ const schemaRelations = defineRelations(
 				to: r.LedgersTable.id,
 			}),
 			entries: r.many.LedgerTransactionEntriesTable(),
+			settlements: r.many.LedgerAccountSettlementsTable(),
 		},
 		LedgerTransactionEntriesTable: {
 			transaction: r.one.LedgerTransactionsTable({
@@ -447,6 +451,7 @@ const schemaRelations = defineRelations(
 				from: r.LedgerTransactionEntriesTable.accountId,
 				to: r.LedgerAccountsTable.id,
 			}),
+			settlementLinks: r.many.LedgerAccountSettlementEntriesTable(),
 		},
 		LedgerAccountCategoriesTable: {
 			ledger: r.one.LedgersTable({
@@ -456,6 +461,44 @@ const schemaRelations = defineRelations(
 			parentLinks: r.many.LedgerAccountCategoryParentsTable({ alias: "childCategory" }),
 			childLinks: r.many.LedgerAccountCategoryParentsTable({ alias: "parentCategory" }),
 			accountLinks: r.many.LedgerAccountCategoryAccountsTable(),
+		},
+		LedgerAccountCategoryParentsTable: {
+			childCategory: r.one.LedgerAccountCategoriesTable({
+				from: r.LedgerAccountCategoryParentsTable.categoryId,
+				to: r.LedgerAccountCategoriesTable.id,
+				alias: "childCategory",
+			}),
+			parentCategory: r.one.LedgerAccountCategoriesTable({
+				from: r.LedgerAccountCategoryParentsTable.parentCategoryId,
+				to: r.LedgerAccountCategoriesTable.id,
+				alias: "parentCategory",
+			}),
+		},
+		LedgerAccountCategoryAccountsTable: {
+			category: r.one.LedgerAccountCategoriesTable({
+				from: r.LedgerAccountCategoryAccountsTable.categoryId,
+				to: r.LedgerAccountCategoriesTable.id,
+			}),
+			account: r.one.LedgerAccountsTable({
+				from: r.LedgerAccountCategoryAccountsTable.accountId,
+				to: r.LedgerAccountsTable.id,
+			}),
+		},
+		LedgerAccountBalanceMonitorsTable: {
+			account: r.one.LedgerAccountsTable({
+				from: r.LedgerAccountBalanceMonitorsTable.accountId,
+				to: r.LedgerAccountsTable.id,
+			}),
+		},
+		LedgerAccountStatementsTable: {
+			ledger: r.one.LedgersTable({
+				from: r.LedgerAccountStatementsTable.ledgerId,
+				to: r.LedgersTable.id,
+			}),
+			account: r.one.LedgerAccountsTable({
+				from: r.LedgerAccountStatementsTable.accountId,
+				to: r.LedgerAccountsTable.id,
+			}),
 		},
 		LedgerAccountSettlementsTable: {
 			organization: r.one.OrganizationsTable({
@@ -477,6 +520,16 @@ const schemaRelations = defineRelations(
 				to: r.LedgerTransactionsTable.id,
 			}),
 			settlementEntries: r.many.LedgerAccountSettlementEntriesTable(),
+		},
+		LedgerAccountSettlementEntriesTable: {
+			settlement: r.one.LedgerAccountSettlementsTable({
+				from: r.LedgerAccountSettlementEntriesTable.settlementId,
+				to: r.LedgerAccountSettlementsTable.id,
+			}),
+			entry: r.one.LedgerTransactionEntriesTable({
+				from: r.LedgerAccountSettlementEntriesTable.entryId,
+				to: r.LedgerTransactionEntriesTable.id,
+			}),
 		},
 	})
 );

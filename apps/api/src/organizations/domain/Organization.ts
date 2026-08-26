@@ -2,7 +2,7 @@ import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 import type { OrgID } from "../../repo/entities/types";
 import type {
-	OrganizationCreateRow,
+	OrganizationInsertRow,
 	OrganizationRow,
 	OrganizationUpdateRow,
 } from "../../repo/schema";
@@ -74,7 +74,7 @@ class Organization {
 		}).pipe(Effect.mapError(cause => new OrganizationPersistenceDecodingFailure(cause)));
 	}
 
-	toCreateRow(): OrganizationCreateRow {
+	toCreateRow(): OrganizationInsertRow {
 		return {
 			id: this.id.toString(),
 			name: this.name,

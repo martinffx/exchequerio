@@ -31,7 +31,7 @@ type JsonObject = Record<string, unknown>;
 
 const config = new Config();
 const pool = new Pool({ connectionString: config.databaseUrl, max: 2 });
-const db = drizzle(pool);
+const db = drizzle({ client: pool });
 const organizationIds = new Set<string>();
 const idempotencyValues = new Map<string, LedgerTransactionID>();
 

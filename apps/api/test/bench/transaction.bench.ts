@@ -388,7 +388,7 @@ describe("Transaction Creation Benchmarks", () => {
 	beforeAll(async () => {
 		const config = new Config();
 		pool = new Pool({ connectionString: config.databaseUrl, max: 20 });
-		db = drizzle(pool, { schema });
+		db = drizzle({ client: pool, relations: schema.schemaRelations });
 
 		ledgerRepo = new LedgerRepo(db);
 		accountRepo = new LedgerAccountRepo(db);
