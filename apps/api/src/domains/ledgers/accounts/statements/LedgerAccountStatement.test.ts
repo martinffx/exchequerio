@@ -2,8 +2,18 @@ import { TypeID } from "typeid-js";
 import { describe, expect, it } from "vitest";
 
 import type { LedgerAccountStatementRow } from "@/repo/schema";
+import {
+	LedgerAccountStatementIdParams as LegacyLedgerAccountStatementIdParameters,
+	LedgerAccountStatementRequest as LegacyLedgerAccountStatementRequest,
+	LedgerAccountStatementResponse as LegacyLedgerAccountStatementResponse,
+} from "@/routes/ledgers/schema";
 
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
+import {
+	LedgerAccountStatementIdParameters,
+	LedgerAccountStatementRequest,
+	LedgerAccountStatementResponse,
+} from "./LedgerAccountStatementSchema";
 
 const ledgerId = "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4";
 const accountId = "lat_01h2x3y4z5a6b7c8d9e0f1g2h8";
@@ -27,6 +37,16 @@ const row = (metadata: string | null = JSON.stringify({ period: "monthly" })) =>
 		created,
 		updated,
 	}) satisfies LedgerAccountStatementRow;
+
+describe("LedgerAccountStatement schemas", () => {
+	it.each([
+		["parameters", LedgerAccountStatementIdParameters, LegacyLedgerAccountStatementIdParameters],
+		["request", LedgerAccountStatementRequest, LegacyLedgerAccountStatementRequest],
+		["response", LedgerAccountStatementResponse, LegacyLedgerAccountStatementResponse],
+	])("preserves the legacy %s schema", (_name, schema, legacySchema) => {
+		expect(schema).toEqual(legacySchema);
+	});
+});
 
 describe("LedgerAccountStatement", () => {
 	it("builds the existing placeholder state from the validated request", () => {

@@ -65,7 +65,7 @@ const LedgerId = Type.String({
 	pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 const LedgerAccountId = Type.String({
-	description: "The ledger account ID",
+	description: "The ledger account's ID",
 	pattern: "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
 });
 const LedgerAccountStatementId = Type.String({
