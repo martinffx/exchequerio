@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { OrganizationRoutes } from "@/organizations";
+import { OrganizationRoutes } from "@/domains/organizations";
 import { LedgerRouterPlugin } from "./ledgers";
 
 const RouterPlugin: FastifyPluginAsync = async server => {

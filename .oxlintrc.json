@@ -30,109 +30,144 @@
 		"boundaries/elements": [
 			{ "type": "tests", "pattern": "src/**/*.test.ts", "mode": "full" },
 			{ "type": "http", "pattern": "src/http/**/*", "mode": "full" },
-			{ "type": "ledger-composition", "pattern": "src/ledgers/index.ts", "mode": "full" },
-			{ "type": "ledger-routes", "pattern": "src/ledgers/LedgerRoutes.ts", "mode": "full" },
-			{ "type": "ledger-service", "pattern": "src/ledgers/LedgerService.ts", "mode": "full" },
-			{ "type": "ledger-repo", "pattern": "src/ledgers/LedgerRepo.ts", "mode": "full" },
 			{
-				"type": "ledger-domain",
-				"pattern": ["src/ledgers/domain/**/*", "src/ledgers/LedgerErrors.ts"],
+				"type": "ledger-composition",
+				"pattern": "src/domains/ledgers/index.ts",
 				"mode": "full"
 			},
-			{ "type": "ledger-transport", "pattern": "src/ledgers/LedgerSchema.ts", "mode": "full" },
+			{
+				"type": "ledger-routes",
+				"pattern": "src/domains/ledgers/LedgerRoutes.ts",
+				"mode": "full"
+			},
+			{
+				"type": "ledger-service",
+				"pattern": "src/domains/ledgers/LedgerService.ts",
+				"mode": "full"
+			},
+			{
+				"type": "ledger-repo",
+				"pattern": "src/domains/ledgers/LedgerRepo.ts",
+				"mode": "full"
+			},
+			{
+				"type": "ledger-domain",
+				"pattern": ["src/domains/ledgers/Ledger.ts", "src/domains/ledgers/LedgerErrors.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "ledger-transport",
+				"pattern": "src/domains/ledgers/LedgerSchema.ts",
+				"mode": "full"
+			},
 			{
 				"type": "account-composition",
-				"pattern": "src/ledgers/accounts/index.ts",
+				"pattern": "src/domains/ledgers/accounts/index.ts",
 				"mode": "full"
 			},
 			{
 				"type": "account-routes",
-				"pattern": "src/ledgers/accounts/AccountRoutes.ts",
+				"pattern": "src/domains/ledgers/accounts/AccountRoutes.ts",
 				"mode": "full"
 			},
 			{
 				"type": "account-service",
-				"pattern": "src/ledgers/accounts/AccountService.ts",
+				"pattern": "src/domains/ledgers/accounts/AccountService.ts",
 				"mode": "full"
 			},
 			{
 				"type": "account-repo",
-				"pattern": "src/ledgers/accounts/AccountRepo.ts",
+				"pattern": "src/domains/ledgers/accounts/LedgerAccountRepo.ts",
 				"mode": "full"
 			},
 			{
 				"type": "account-domain",
-				"pattern": ["src/ledgers/accounts/domain/**/*", "src/ledgers/accounts/AccountErrors.ts"],
+				"pattern": [
+					"src/domains/ledgers/accounts/LedgerAccount.ts",
+					"src/domains/ledgers/accounts/AccountErrors.ts"
+				],
 				"mode": "full"
 			},
 			{
 				"type": "account-transport",
-				"pattern": "src/ledgers/accounts/AccountSchema.ts",
+				"pattern": "src/domains/ledgers/accounts/AccountSchema.ts",
 				"mode": "full"
 			},
 			{
 				"type": "transaction-composition",
-				"pattern": "src/ledgers/transactions/index.ts",
+				"pattern": "src/domains/ledgers/transactions/index.ts",
 				"mode": "full"
 			},
 			{
 				"type": "transaction-routes",
-				"pattern": "src/ledgers/transactions/TransactionRoutes.ts",
+				"pattern": "src/domains/ledgers/transactions/LedgerTransactionRoutes.ts",
 				"mode": "full"
 			},
 			{
 				"type": "transaction-service",
-				"pattern": "src/ledgers/transactions/TransactionService.ts",
+				"pattern": "src/domains/ledgers/transactions/LedgerTransactionService.ts",
 				"mode": "full"
 			},
 			{
 				"type": "transaction-repo",
-				"pattern": "src/ledgers/transactions/LedgerTransactionRepo.ts",
+				"pattern": "src/domains/ledgers/transactions/LedgerTransactionRepo.ts",
 				"mode": "full"
 			},
 			{
 				"type": "transaction-capability",
-				"pattern": "src/ledgers/transactions/TransactionIdemService.ts",
+				"pattern": "src/domains/ledgers/transactions/LedgerTransactionIdemService.ts",
 				"mode": "full"
 			},
 			{
 				"type": "transaction-domain",
 				"pattern": [
-					"src/ledgers/transactions/domain/**/*",
-					"src/ledgers/transactions/TransactionErrors.ts"
+					"src/domains/ledgers/transactions/LedgerTransaction.ts",
+					"src/domains/ledgers/transactions/LedgerTransactionEntry.ts",
+					"src/domains/ledgers/transactions/LedgerTransactionErrors.ts"
 				],
 				"mode": "full"
 			},
 			{
 				"type": "transaction-transport",
-				"pattern": "src/ledgers/transactions/TransactionSchema.ts",
+				"pattern": "src/domains/ledgers/transactions/LedgerTransactionSchema.ts",
 				"mode": "full"
 			},
-			{ "type": "organization-composition", "pattern": "src/organizations/index.ts", "mode": "full" },
+			{
+				"type": "organization-composition",
+				"pattern": "src/domains/organizations/index.ts",
+				"mode": "full"
+			},
 			{
 				"type": "organization-routes",
-				"pattern": "src/organizations/OrganizationRoutes.ts",
+				"pattern": "src/domains/organizations/OrganizationRoutes.ts",
 				"mode": "full"
 			},
 			{
 				"type": "organization-service",
-				"pattern": "src/organizations/OrganizationService.ts",
+				"pattern": "src/domains/organizations/OrganizationService.ts",
 				"mode": "full"
 			},
 			{
 				"type": "organization-repo",
-				"pattern": "src/organizations/OrganizationRepo.ts",
+				"pattern": "src/domains/organizations/OrganizationRepo.ts",
 				"mode": "full"
 			},
-			{ "type": "organization-domain", "pattern": "src/organizations/domain/**/*", "mode": "full" },
+			{
+				"type": "organization-domain",
+				"pattern": [
+					"src/domains/organizations/Organization.ts",
+					"src/domains/organizations/OrganizationErrors.ts"
+				],
+				"mode": "full"
+			},
 			{
 				"type": "organization-capability",
-				"pattern": "src/organizations/OrganizationIdGenerator.ts",
+				"pattern": "src/domains/organizations/OrganizationIdGenerator.ts",
 				"mode": "full"
 			},
 			{
 				"type": "organization-transport",
-				"pattern": "src/organizations/OrganizationSchema.ts",
+				"pattern": "src/domains/organizations/OrganizationSchema.ts",
 				"mode": "full"
 			},
 			{ "type": "database", "pattern": "src/db/**/*", "mode": "full" },

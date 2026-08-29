@@ -2,8 +2,8 @@ import { Type } from "@sinclair/typebox";
 import { Effect } from "effect";
 import type { FastifyPluginAsync } from "fastify";
 import { TypeID } from "typeid-js";
-import { LedgerServiceTag } from "@/ledgers";
-import { AccountServiceTag } from "@/ledgers/accounts";
+import { LedgerServiceTag } from "@/domains/ledgers";
+import { AccountServiceTag } from "@/domains/ledgers/accounts";
 import {
 	BadRequestErrorResponse,
 	ConflictError,

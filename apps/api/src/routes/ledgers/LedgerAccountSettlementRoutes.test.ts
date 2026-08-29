@@ -7,10 +7,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { signJWT } from "@/auth";
 import { Config } from "@/config";
 import { makeDatabaseLive } from "@/db";
-import { Ledger, LedgerServiceTag } from "@/ledgers";
-import type { LedgerService } from "@/ledgers";
-import { AccountServiceTag, LedgerAccount } from "@/ledgers/accounts";
-import type { AccountService } from "@/ledgers/accounts";
+import { Ledger, LedgerServiceTag } from "@/domains/ledgers";
+import type { LedgerService } from "@/domains/ledgers";
+import { AccountServiceTag, LedgerAccount } from "@/domains/ledgers/accounts";
+import type { AccountService } from "@/domains/ledgers/accounts";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import type {
 	LedgerAccountID,

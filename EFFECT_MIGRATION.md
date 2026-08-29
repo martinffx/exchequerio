@@ -288,7 +288,8 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
-- Place the migrated slice under `apps/api/src/organizations/` using the shared flat slice layout.
+- Place the migrated slice under `apps/api/src/domains/organizations/` using the shared flat slice
+  layout.
 - Add Effect and establish the managed runtime, service Tags, Layers, and tagged error mapping.
 - Add `.worktrees/` to `.gitignore`.
 - Establish the standard directory and module boundaries followed by later steps.
@@ -315,7 +316,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
-- Place the migrated slice at `apps/api/src/ledgers/`.
+- Place the migrated slice at `apps/api/src/domains/ledgers/`.
 - Migrate all five Ledger endpoints using step 01 as the reference implementation.
 - Correct create versus update semantics; updating a missing Ledger must not create it.
 - Enforce Organization tenancy consistently without revealing cross-Organization existence.
@@ -344,7 +345,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
-- Place the migrated slice at `apps/api/src/ledgers/accounts/`.
+- Place the migrated slice at `apps/api/src/domains/ledgers/accounts/`.
 - Migrate all five Account endpoints to Effect.
 - Introduce the shared Currency, exponent, Minor Units, Normal Balance, and Account ID value types.
 - Add immutable `currencyCode` and `minorUnitExponent` fields to Ledger Accounts.
@@ -371,7 +372,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
-- Place the migrated slice at `apps/api/src/ledgers/transactions/`.
+- Place the migrated slice at `apps/api/src/domains/ledgers/transactions/`.
 - Migrate all six Transaction endpoints to Effect.
 - Model Pending, Posted, and Voided as an exhaustive functional state machine.
 - Permit several Entries for one Account.
@@ -404,7 +405,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
-- Place the migrated slice at `apps/api/src/ledgers/categories/`.
+- Place the migrated slice at `apps/api/src/domains/ledgers/categories/`.
 - Migrate all nine Category endpoints to Effect.
 - Enforce Organization and Ledger scope for Category records, Account membership, and parent links.
 - Prevent self-links, two-node cycles, longer cycles, and concurrent cycle creation.
@@ -430,7 +431,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
-- Place the migrated slice at `apps/api/src/ledgers/accounts/settlements/`.
+- Place the migrated slice at `apps/api/src/domains/ledgers/accounts/settlements/`.
 - Migrate all eight Settlement endpoints to Effect.
 - Enforce Organization, Ledger, and nested Settlement path scope.
 - Require the settled and contra Accounts to use the same Currency and exponent.
@@ -459,7 +460,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
-- Place the migrated slice at `apps/api/src/ledgers/accounts/statements/`.
+- Place the migrated slice at `apps/api/src/domains/ledgers/accounts/statements/`.
 - Migrate both Statement endpoints to Effect.
 - Enforce Organization, Ledger, Account, and nested path scope.
 - Validate non-empty periods with an inclusive lower bound and exclusive upper bound.
@@ -486,7 +487,7 @@ Every step must satisfy all applicable checks before integration:
 
 ### Outcomes
 
-- Place the migrated slice at `apps/api/src/ledgers/accounts/balance-monitors/`.
+- Place the migrated slice at `apps/api/src/domains/ledgers/accounts/balance-monitors/`.
 - Migrate all five Balance Monitor endpoints to Effect.
 - Enforce Organization, Ledger, Account, and nested path scope.
 - Persist the complete typed condition set in Account Minor Units.

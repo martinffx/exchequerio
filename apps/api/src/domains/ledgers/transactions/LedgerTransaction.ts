@@ -1,0 +1,299 @@
+import { Effect, Option } from "effect";
+import { DateTime } from "luxon";
+
+import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
+import type {
+	LedgerTransactionInsertRow,
+	LedgerTransactionRow,
+	LedgerTransactionWithEntriesRow,
+} from "@/repo/schema";
+
+import {
+	TransactionLifecycleConflict,
+	TransactionPersistenceDecodingFailure,
+	TransactionValidationFailure,
+} from "./LedgerTransactionErrors";
+import type {
+	TransactionCreateRequest as LedgerTransactionCreateRequest,
+	TransactionUpdateRequest as LedgerTransactionUpdateRequest,
+} from "./LedgerTransactionSchema";
+import { LedgerTransactionEntry } from "./LedgerTransactionEntry";
+
+type LedgerTransactionStatus = "pending" | "posted" | "voided";
+type LedgerTransactionMetadata = Readonly<Record<string, string>>;
+
+type LedgerTransactionOptions = Readonly<{
+	id: LedgerTransactionID;
+	organizationId: OrgID;
+	ledgerId: LedgerID;
+	status: LedgerTransactionStatus;
+	description?: string;
+	metadata?: LedgerTransactionMetadata;
+	entries: Option.Option<readonly LedgerTransactionEntry[]>;
+	postedAt?: DateTime;
+	lockVersion: number;
+	created: DateTime;
+	updated: DateTime;
+}>;
+
+/**
+ * A balanced collection of Ledger Entries that share one lifecycle.
+ *
+ * The entity owns transformations and invariants but performs no I/O.
+ */
+class LedgerTransaction {
+	readonly id: LedgerTransactionID;
+	readonly organizationId: OrgID;
+	readonly ledgerId: LedgerID;
+	readonly status: LedgerTransactionStatus;
+	readonly description?: string;
+	readonly metadata?: LedgerTransactionMetadata;
+	readonly entries: Option.Option<readonly LedgerTransactionEntry[]>;
+	readonly postedAt?: DateTime;
+	readonly lockVersion: number;
+	readonly created: DateTime;
+	readonly updated: DateTime;
+
+	private constructor(options: LedgerTransactionOptions) {
+		this.id = options.id;
+		this.organizationId = options.organizationId;
+		this.ledgerId = options.ledgerId;
+		this.status = options.status;
+		this.description = options.description;
+		this.metadata = options.metadata;
+		this.entries = options.entries;
+		this.postedAt = options.postedAt;
+		this.lockVersion = options.lockVersion;
+		this.created = options.created;
+		this.updated = options.updated;
+	}
+
+	/**
+	 * Creates a new Transaction and its Entries from a validated API request.
+	 *
+	 * @param id - Generated Transaction identifier.
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param request - TypeBox-validated creation request.
+	 * @param created - Creation time; defaults to the current UTC time and may be supplied by tests.
+	 * @returns An Effect containing the balanced Transaction or a validation failure.
+	 */
+	static fromCreateRequest(
+		id: LedgerTransactionID,
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		request: LedgerTransactionCreateRequest,
+		created = DateTime.utc()
+	): Effect.Effect<LedgerTransaction, TransactionValidationFailure> {
+		return Effect.all(
+			request.ledgerEntries.map(entry =>
+				LedgerTransactionEntry.fromRequest(entry, request.status, created)
+			)
+		).pipe(
+			Effect.flatMap(entries => LedgerTransaction.validateBalanced(entries)),
+			Effect.map(
+				entries =>
+					new LedgerTransaction({
+						id,
+						organizationId,
+						ledgerId,
+						status: request.status,
+						description: request.description,
+						metadata: request.metadata,
+						// oxlint-disable-next-line unicorn/no-array-callback-reference
+						entries: Option.some(entries),
+						postedAt: request.status === "posted" ? created : undefined,
+						lockVersion: 1,
+						created,
+						updated: created,
+					})
+			)
+		);
+	}
+
+	/**
+	 * Replaces the mutable fields and Entries of a pending Transaction.
+	 *
+	 * @param request - TypeBox-validated update request.
+	 * @param updated - Update time; defaults to the current UTC time and may be supplied by tests.
+	 * @returns An Effect containing the replacement or a lifecycle or balance failure.
+	 */
+	fromUpdateRequest(
+		request: LedgerTransactionUpdateRequest,
+		updated = DateTime.utc()
+	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict | TransactionValidationFailure> {
+		if (this.status !== "pending") {
+			return Effect.fail(new TransactionLifecycleConflict(this.status, "pending"));
+		}
+
+		return Effect.all(
+			request.ledgerEntries.map(entry => LedgerTransactionEntry.fromRequest(entry, "pending", updated))
+		).pipe(
+			Effect.flatMap(entries => LedgerTransaction.validateBalanced(entries)),
+			Effect.map(
+				entries =>
+					new LedgerTransaction({
+						...this,
+						description: request.description,
+						metadata: request.metadata,
+						// oxlint-disable-next-line unicorn/no-array-callback-reference
+						entries: Option.some(entries),
+						lockVersion: this.lockVersion + 1,
+						updated,
+					})
+			)
+		);
+	}
+
+	/**
+	 * Hydrates a Transaction without loading its Entries.
+	 *
+	 * @param row - Transaction row inferred from the Drizzle schema.
+	 * @returns An Effect containing the Transaction or a persistence decoding failure.
+	 */
+	static fromRow(
+		row: LedgerTransactionRow
+	): Effect.Effect<LedgerTransaction, TransactionPersistenceDecodingFailure> {
+		return LedgerTransaction.decode(row, Option.none()).pipe(
+			Effect.map(options => new LedgerTransaction(options)),
+			Effect.mapError(cause => new TransactionPersistenceDecodingFailure(cause))
+		);
+	}
+
+	/**
+	 * Hydrates a Transaction and its Entries from a Drizzle relational result.
+	 *
+	 * @param rows - Schema-inferred Transaction rows with their Entry relation.
+	 * @returns An Effect containing no Transaction, or the first hydrated Transaction.
+	 */
+	static fromRows(
+		rows: readonly LedgerTransactionWithEntriesRow[]
+	): Effect.Effect<Option.Option<LedgerTransaction>, TransactionPersistenceDecodingFailure> {
+		const first = rows[0];
+		if (first === undefined) return Effect.succeed(Option.none());
+
+		return Effect.all(first.entries.map(entry => LedgerTransactionEntry.fromRow(entry))).pipe(
+			Effect.flatMap(entries =>
+				// oxlint-disable-next-line unicorn/no-array-callback-reference
+				LedgerTransaction.decode(first, Option.some(entries))
+			),
+			// oxlint-disable-next-line unicorn/no-array-callback-reference
+			Effect.map(options => Option.some(new LedgerTransaction(options))),
+			Effect.mapError(cause => new TransactionPersistenceDecodingFailure(cause))
+		);
+	}
+
+	/** @returns The Transaction's Drizzle persistence representation. */
+	toRow(): LedgerTransactionInsertRow {
+		return {
+			id: this.id.toString(),
+			organizationId: this.organizationId.toString(),
+			ledgerId: this.ledgerId.toString(),
+			status: this.status,
+			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			description: this.description ?? null,
+			metadata: encodeMetadata(this.metadata),
+			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			postedAt: this.postedAt?.toJSDate() ?? null,
+			lockVersion: this.lockVersion,
+			created: this.created.toJSDate(),
+			updated: this.updated.toJSDate(),
+		};
+	}
+
+	/**
+	 * Transitions a pending Transaction and all its Entries to posted.
+	 *
+	 * @param postedAt - Posting time; defaults to the current UTC time and may be supplied by tests.
+	 * @returns An Effect containing the posted Transaction or a lifecycle conflict.
+	 */
+	toPosted(
+		postedAt = DateTime.utc()
+	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
+		if (this.status === "posted") return Effect.succeed(this);
+		if (this.status !== "pending") {
+			return Effect.fail(new TransactionLifecycleConflict(this.status, "posted"));
+		}
+
+		return Effect.succeed(
+			new LedgerTransaction({
+				...this,
+				status: "posted",
+				// oxlint-disable-next-line unicorn/no-array-callback-reference
+				entries: Option.map(this.entries, entries => entries.map(entry => entry.toPosted())),
+				postedAt,
+				lockVersion: this.lockVersion + 1,
+				updated: postedAt,
+			})
+		);
+	}
+
+	/**
+	 * Transitions a pending Transaction and all its Entries to voided.
+	 *
+	 * @param updated - Void time; defaults to the current UTC time and may be supplied by tests.
+	 * @returns An Effect containing the voided Transaction or a lifecycle conflict.
+	 */
+	toVoided(
+		updated = DateTime.utc()
+	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
+		if (this.status === "voided") return Effect.succeed(this);
+		if (this.status !== "pending") {
+			return Effect.fail(new TransactionLifecycleConflict(this.status, "voided"));
+		}
+
+		return Effect.succeed(
+			new LedgerTransaction({
+				...this,
+				status: "voided",
+				// oxlint-disable-next-line unicorn/no-array-callback-reference
+				entries: Option.map(this.entries, entries => entries.map(entry => entry.toVoided())),
+				lockVersion: this.lockVersion + 1,
+				updated,
+			})
+		);
+	}
+
+	private static decode(
+		row: LedgerTransactionRow,
+		entries: Option.Option<readonly LedgerTransactionEntry[]>
+	): Effect.Effect<LedgerTransactionOptions, Error> {
+		return Effect.all({
+			id: parseId<"ltr", LedgerTransactionID>("ltr", row.id),
+			organizationId: parseId<"org", OrgID>("org", row.organizationId),
+			ledgerId: parseId<"lgr", LedgerID>("lgr", row.ledgerId),
+			metadata: parseMetadata(row.metadata),
+			postedAt: row.postedAt === null ? Effect.succeed(undefined) : parseDate(row.postedAt),
+			created: parseDate(row.created),
+			updated: parseDate(row.updated),
+		}).pipe(
+			Effect.map(decoded => ({
+				...decoded,
+				status: row.status,
+				description: row.description ?? undefined,
+				entries,
+				lockVersion: row.lockVersion,
+			}))
+		);
+	}
+
+	private static validateBalanced(
+		entries: readonly LedgerTransactionEntry[]
+	): Effect.Effect<readonly LedgerTransactionEntry[], TransactionValidationFailure> {
+		const totals = new Map<string, bigint>();
+
+		for (const entry of entries) {
+			const amount = BigInt(entry.amount);
+			const total = totals.get(entry.currency) ?? 0n;
+			totals.set(entry.currency, total + (entry.direction === "debit" ? amount : -amount));
+		}
+
+		return [...totals.values()].some(total => total !== 0n)
+			? Effect.fail(new TransactionValidationFailure("Transaction Entries must balance by Currency"))
+			: Effect.succeed(entries);
+	}
+}
+
+export type { LedgerTransactionMetadata, LedgerTransactionOptions, LedgerTransactionStatus };
+export { LedgerTransaction };

@@ -1,14 +1,14 @@
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
-import { ledgerLayer, type LedgerService } from "@/ledgers";
-import { accountLayer, type AccountService } from "@/ledgers/accounts";
-import { transactionLayer, type TransactionService } from "@/ledgers/transactions";
+import { ledgerLayer, type LedgerService } from "@/domains/ledgers";
+import { accountLayer, type AccountService } from "@/domains/ledgers/accounts";
+import { transactionLayer, type TransactionService } from "@/domains/ledgers/transactions";
 import {
 	makeTransactionIdemService,
 	type TransactionIdemService,
-} from "@/ledgers/transactions/TransactionIdemService";
-import { organizationLayer, type OrganizationService } from "@/organizations";
+} from "@/domains/ledgers/transactions/LedgerTransactionIdemService";
+import { organizationLayer, type OrganizationService } from "@/domains/organizations";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
 

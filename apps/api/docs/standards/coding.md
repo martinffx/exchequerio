@@ -79,7 +79,8 @@ export { LedgerService };
 export type { CreateLedgerRequest };
 ```
 
-- Every migrated domain slice exposes its public contract from a root `index.ts`.
+- Every migrated slice lives under `src/domains/` and exposes its public contract from a root
+  `index.ts`.
 - Cross-slice imports use that entrypoint; concrete Live implementations, persistence row types,
   and codec wiring are not public exports.
 - Add each migrated slice and its explicit dependency edges to the boundary configuration. Child

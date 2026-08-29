@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import { TransactionServiceTag } from "@/ledgers/transactions";
+import { TransactionServiceTag } from "@/domains/ledgers/transactions";
 import { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonitorService";
 import { LedgerAccountCategoryService } from "./LedgerAccountCategoryService";
 import { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";

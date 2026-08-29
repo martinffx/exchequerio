@@ -23,9 +23,9 @@ JWT Auth → Routes → Services → Repositories → PostgreSQL Database
 ```
 
 The API is migrating by resource. Effect-based slices and remaining plugin-based resources coexist.
-Transactions live under `src/ledgers/transactions/` and run through the shared managed Effect
-runtime. Legacy resources retain their `src/routes/`, `src/services/`, and `src/repo/` layout until
-they migrate.
+Migrated slices live under `src/domains/`; Transactions live under
+`src/domains/ledgers/transactions/` and run through the shared managed Effect runtime. Legacy
+resources retain their `src/routes/`, `src/services/`, and `src/repo/` layout until they migrate.
 
 ### Layer Responsibilities
 
