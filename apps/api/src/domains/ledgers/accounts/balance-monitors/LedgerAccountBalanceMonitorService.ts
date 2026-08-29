@@ -34,13 +34,13 @@ const serverTime = Clock.currentTimeMillis.pipe(
 	Effect.map(milliseconds => DateTime.fromMillis(milliseconds, { zone: "utc" }))
 );
 
-const requireFound = <A>(
-	value: Option.Option<A>
-): Effect.Effect<A, LedgerAccountBalanceMonitorNotFound> =>
-	Option.match(value, {
-		onNone: () => Effect.fail(new LedgerAccountBalanceMonitorNotFound()),
-		onSome: Effect.succeed,
-	});
+const requireFound =
+	<A>(id: LedgerAccountBalanceMonitorID) =>
+	(value: Option.Option<A>): Effect.Effect<A, LedgerAccountBalanceMonitorNotFound> =>
+		Option.match(value, {
+			onNone: () => Effect.fail(new LedgerAccountBalanceMonitorNotFound(id)),
+			onSome: Effect.succeed,
+		});
 
 const parseAccountId = (
 	value: string
@@ -49,27 +49,7 @@ const parseAccountId = (
 		Effect.mapError(cause => new LedgerAccountBalanceMonitorPersistenceFailure(cause))
 	);
 
-interface LedgerAccountBalanceMonitorService {
-	listLedgerAccountBalanceMonitors(
-		offset: number,
-		limit: number
-	): Effect.Effect<LedgerAccountBalanceMonitor[], LedgerAccountBalanceMonitorListError>;
-	getLedgerAccountBalanceMonitor(
-		id: string
-	): Effect.Effect<LedgerAccountBalanceMonitor, LedgerAccountBalanceMonitorGetError>;
-	createLedgerAccountBalanceMonitor(
-		request: LedgerAccountBalanceMonitorRequest
-	): Effect.Effect<LedgerAccountBalanceMonitor, LedgerAccountBalanceMonitorCreateError>;
-	updateLedgerAccountBalanceMonitor(
-		id: string,
-		request: LedgerAccountBalanceMonitorRequest
-	): Effect.Effect<LedgerAccountBalanceMonitor, LedgerAccountBalanceMonitorUpdateError>;
-	deleteLedgerAccountBalanceMonitor(
-		id: string
-	): Effect.Effect<void, LedgerAccountBalanceMonitorDeleteError>;
-}
-
-class LedgerAccountBalanceMonitorServiceLive implements LedgerAccountBalanceMonitorService {
+class LedgerAccountBalanceMonitorService {
 	constructor(private readonly repository: LedgerAccountBalanceMonitorRepo) {}
 
 	listLedgerAccountBalanceMonitors(
@@ -83,8 +63,9 @@ class LedgerAccountBalanceMonitorServiceLive implements LedgerAccountBalanceMoni
 		id: string
 	): Effect.Effect<LedgerAccountBalanceMonitor, LedgerAccountBalanceMonitorGetError> {
 		return parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", id).pipe(
-			Effect.flatMap(monitorId => this.repository.getMonitor(monitorId)),
-			Effect.flatMap(requireFound)
+			Effect.flatMap(monitorId =>
+				this.repository.getMonitor(monitorId).pipe(Effect.flatMap(requireFound(monitorId)))
+			)
 		);
 	}
 
@@ -116,8 +97,9 @@ class LedgerAccountBalanceMonitorServiceLive implements LedgerAccountBalanceMoni
 				monitorId,
 				record: LedgerAccountBalanceMonitor.fromRequest(monitorId, accountId, request, applicationTime),
 			})),
-			Effect.flatMap(({ monitorId, record }) => this.repository.updateMonitor(monitorId, record)),
-			Effect.flatMap(requireFound)
+			Effect.flatMap(({ monitorId, record }) =>
+				this.repository.updateMonitor(monitorId, record).pipe(Effect.flatMap(requireFound(monitorId)))
+			)
 		);
 	}
 
@@ -125,8 +107,9 @@ class LedgerAccountBalanceMonitorServiceLive implements LedgerAccountBalanceMoni
 		id: string
 	): Effect.Effect<void, LedgerAccountBalanceMonitorDeleteError> {
 		return parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", id).pipe(
-			Effect.flatMap(monitorId => this.repository.deleteMonitor(monitorId)),
-			Effect.flatMap(requireFound)
+			Effect.flatMap(monitorId =>
+				this.repository.deleteMonitor(monitorId).pipe(Effect.flatMap(requireFound(monitorId)))
+			)
 		);
 	}
 }
@@ -138,7 +121,7 @@ const LedgerAccountBalanceMonitorServiceTag = Context.Service<LedgerAccountBalan
 const ledgerAccountBalanceMonitorServiceLayer = Layer.effect(
 	LedgerAccountBalanceMonitorServiceTag,
 	LedgerAccountBalanceMonitorRepoTag.pipe(
-		Effect.map(repository => new LedgerAccountBalanceMonitorServiceLive(repository))
+		Effect.map(repository => new LedgerAccountBalanceMonitorService(repository))
 	)
 );
 
@@ -147,11 +130,10 @@ export type {
 	LedgerAccountBalanceMonitorDeleteError,
 	LedgerAccountBalanceMonitorGetError,
 	LedgerAccountBalanceMonitorListError,
-	LedgerAccountBalanceMonitorService,
 	LedgerAccountBalanceMonitorUpdateError,
 };
 export {
-	LedgerAccountBalanceMonitorServiceLive,
+	LedgerAccountBalanceMonitorService,
 	LedgerAccountBalanceMonitorServiceTag,
 	ledgerAccountBalanceMonitorServiceLayer,
 };

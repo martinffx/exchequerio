@@ -23,7 +23,7 @@ import {
 	type LedgerAccountBalanceMonitorDeleteError,
 	type LedgerAccountBalanceMonitorGetError,
 	type LedgerAccountBalanceMonitorListError,
-	type LedgerAccountBalanceMonitorService,
+	LedgerAccountBalanceMonitorService,
 	LedgerAccountBalanceMonitorServiceTag,
 	type LedgerAccountBalanceMonitorUpdateError,
 	ledgerAccountBalanceMonitorServiceLayer,
@@ -158,7 +158,8 @@ describe("LedgerAccountBalanceMonitorService", () => {
 
 			const error = await runService(repo, service => Effect.flip(invoke(service, operation)));
 
-			expect(error).toEqual(new LedgerAccountBalanceMonitorNotFound());
+			expect(error).toBeInstanceOf(LedgerAccountBalanceMonitorNotFound);
+			expect(error.message).toBe(`Balance monitor not found: ${monitorId.toString()}`);
 		}
 	);
 

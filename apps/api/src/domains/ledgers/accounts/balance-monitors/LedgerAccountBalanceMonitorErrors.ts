@@ -1,8 +1,9 @@
 import { InternalServerError, NotFoundError } from "@/lib/errors";
+import type { LedgerAccountBalanceMonitorID } from "@/repo/entities/types";
 
 class LedgerAccountBalanceMonitorNotFound extends NotFoundError {
-	constructor() {
-		super("Balance monitor not found");
+	constructor(id: LedgerAccountBalanceMonitorID) {
+		super(`Balance monitor not found: ${id.toString()}`);
 	}
 }
 
