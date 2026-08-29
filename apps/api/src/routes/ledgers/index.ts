@@ -2,10 +2,10 @@ import type { FastifyPluginAsync } from "fastify";
 import { LedgerRoutes } from "@/domains/ledgers";
 import { AccountRoutes } from "@/domains/ledgers/accounts";
 import { LedgerAccountBalanceMonitorRoutes } from "@/domains/ledgers/accounts/balance-monitors";
+import { LedgerAccountStatementRoutes } from "@/domains/ledgers/accounts/statements";
 import { LedgerAccountSettlementRoutes } from "@/domains/ledgers/settlements";
 import { TransactionRoutes } from "@/domains/ledgers/transactions";
 import { LedgerAccountCategoryRoutes } from "./LedgerAccountCategoryRoutes";
-import { LedgerAccountStatementRoutes } from "./LedgerAccountStatementRoutes";
 
 const LedgerRouterPlugin: FastifyPluginAsync = async server => {
 	await server.register(LedgerAccountCategoryRoutes, {

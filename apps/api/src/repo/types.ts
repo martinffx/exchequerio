@@ -1,10 +1,7 @@
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import { schemaRelations } from "./schema";
 
-type Repos = {
-	ledgerAccountStatementRepo: LedgerAccountStatementRepo;
-};
+type Repos = Record<string, never>;
 
 type RepoPluginOptions = {
 	db: DrizzleDB;

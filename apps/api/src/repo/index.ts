@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import type { RepoPluginOptions, Repos } from "./types";
 
 declare module "fastify" {
@@ -10,15 +9,8 @@ declare module "fastify" {
 }
 
 const RepoPlugin: FastifyPluginAsync<RepoPluginOptions> = fp(
-	async (server: FastifyInstance, opts: RepoPluginOptions): Promise<void> => {
-		const { db } = opts;
-
-		const ledgerAccountStatementRepo =
-			opts.repos?.ledgerAccountStatementRepo ?? new LedgerAccountStatementRepo(db);
-		const repos: Repos = {
-			ledgerAccountStatementRepo,
-		};
-		server.decorate("repo", repos);
+	async (server: FastifyInstance): Promise<void> => {
+		server.decorate("repo", {});
 	}
 );
 
