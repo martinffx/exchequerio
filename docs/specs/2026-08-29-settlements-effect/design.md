@@ -7,9 +7,11 @@ though Organizations, Ledgers, Accounts, and Transactions run through the shared
 The split leaves Settlement routes with two execution models and requires a legacy bridge to the
 Effect Transaction service.
 
-This migration moves the complete Settlement slice to Effect. It preserves the behavior recorded
-at baseline commit `47779c4`, including defects and race conditions. Any behavioral correction
-requires a separate design, plan, and change set.
+This migration moves the complete Settlement slice to Effect. It preserves observed implementation
+behavior at baseline commit `47779c4`, including defects and race conditions. `CONTEXT.md` remains
+authoritative for the domain contract. When the baseline conflicts with that contract, this
+migration records and temporarily retains the implementation defect. Any correction requires a
+separate design, plan, and change set.
 
 ## Scope
 
@@ -21,8 +23,8 @@ In scope:
   service dependencies.
 - Remove only the legacy Settlement repository and service registrations and the Settlement to
   Transaction promise bridge.
-- Preserve HTTP, domain, error, persistence, transaction, concurrency, identifier, timestamp, and
-  operational behavior.
+- Preserve the observed HTTP, error, persistence, transaction, concurrency, identifier, timestamp,
+  and operational behavior.
 - Add characterization tests where the current suite does not pin important baseline behavior.
 
 Out of scope:
@@ -44,8 +46,6 @@ Out of scope:
   creation ordering, timestamps, identifiers, and partial-failure behavior.
 - US-4, must: As a maintainer, I can compose and test Settlement through Effect services and the
   shared runtime without Fastify service or repository decorations.
-- US-5, must: As a reviewer, I can distinguish behavior-preserving migration work from proposed
-  corrections because every correction remains outside this design and change set.
 
 ## Constraints
 
@@ -57,10 +57,14 @@ Out of scope:
   `1.0.0-rc.5-ab785fc`. Implementation must use APIs supported by those versions.
 - Organizations provide the service and route integration reference. Transactions provide the
   nearest integrated Ledger slice and the Effect Drizzle reference.
+- `CONTEXT.md` remains authoritative for domain terminology and invariants. Known baseline
+  conflicts are compatibility defects, not alternate domain rules.
 - Routes retain transport validation and permissions. Services retain orchestration. Repositories
   retain persistence. Entities retain transformations and invariants.
 - The migration introduces no dependency, generic executor, runtime resource, Settlement-specific
   error hierarchy, transaction boundary, retry policy, or concurrency policy.
+- Every correction to a baseline defect remains outside this design and requires a separate design,
+  plan, and change set.
 
 ## Context and baseline
 
@@ -92,9 +96,9 @@ TypeBox validation, operation IDs, response schemas, and error schemas remain un
 | Effect composition | Organization and Transaction service tags and layers | reuse | Join the shared runtime |
 | SQL access | Transaction's Effect Drizzle client through `DatabaseTag.effectDb` | reuse | Remove promise repository wiring |
 | Settlement entity | `LedgerAccountSettlementEntity` transformations | modify | Relocate without changing output |
-| Settlement schemas | TypeBox definitions in the Ledger route schema | modify | Give the slice local ownership |
+| Settlement schemas | TypeBox definitions in the Ledger route schema | modify | Move exact contracts into the slice |
 | IDs | Existing TypeID parsers and `newLedgerAccountSettlementID` | reuse | Preserve identifiers |
-| Time | Server-created `Date` values at mutation points | modify | Read the Effect clock at the same points |
+| Time | Entity-owned `Date` creation at mutation points | reuse | Preserve timestamp behavior |
 | Errors | Existing `ConflictError`, `NotFoundError`, and generic 500 handling | reuse | Preserve problem responses |
 | Transaction posting | Existing Transaction service and idempotency key | reuse | Preserve posting behavior |
 | Legacy plugin wiring | Fastify repository and service decorations | delete | Use one managed runtime |
@@ -133,9 +137,10 @@ The repository is one Effect `Context.Service` capability with a live Layer back
 row mapping. It adds no transaction wrapper or parallel SQL execution.
 
 The service is one Effect `Context.Service` capability with a live Layer. It owns Settlement
-orchestration, status validation, ID creation, clock reads, Account validation, amount calculation,
-and Transaction creation. It depends directly on Ledger, Account, Transaction, and Settlement
-repository services.
+orchestration, status validation, Account validation, amount calculation, and Transaction creation.
+It invokes the existing entity transformations lazily with `Effect.sync`, so ID and timestamp
+creation remain entity behavior. The service depends directly on Ledger, Account, Transaction, and
+Settlement repository services.
 
 Routes remain explicit Fastify handlers. Each handler builds one Effect program and executes it
 once through the request server's managed runtime. Routes convert successful entities with
@@ -172,17 +177,18 @@ Balance, and the contra Account uses the reverse direction. The description fall
 `Settlement <settlementId>`. Settlement metadata is copied first, then the Settlement ID overwrites
 any caller-provided `settlementId` metadata value.
 
-The Effect clock replaces direct clock access without changing observable mutation points. Update
+Entity transformations continue to call the system clock at their current mutation points. Update
 continues to replace Created Time and Updated Time during request-to-entity conversion, and the
 repository continues to write a later Updated Time. Entity helper methods keep their current
-timestamp behavior.
+timestamp behavior. The migration adds no clock service or timestamp abstraction.
 
 ## API design
 
-The migration makes no public HTTP change. It relocates the Settlement TypeBox schemas without
-changing their JSON shape, required fields, optional fields, IDs, status values, validation, or
-OpenAPI metadata. Shared Metadata, Normal Balance, pagination, and Ledger ID schemas remain shared
-instead of being copied.
+The migration makes no public HTTP change. `LedgerAccountSettlementSchema.ts` owns local TypeBox
+definitions that exactly match the current Settlement JSON shape, required fields, optional fields,
+IDs, status values, validation, pagination, and OpenAPI metadata. The slice does not import the
+legacy Ledger route schema or create shared schema infrastructure. Small TypeBox definitions remain
+local, as they do in the integrated Account and Transaction slices.
 
 Responses retain the current omissions and defaults. In particular, `externalReference` remains
 stored but omitted by `toResponse`, `effectiveAtUpperBound` remains absent from the response, and a
@@ -203,7 +209,8 @@ unique constraint, lock, or new isolation behavior.
 
 ## Preserved limitations
 
-These baseline behaviors are deliberate compatibility constraints for this migration:
+These observed baseline behaviors are compatibility constraints for this migration. They do not
+replace conflicting domain rules in `CONTEXT.md`:
 
 - The full repository update accepts only a stored `drafting` Settlement. As a result, the
   `processing -> pending` amount write and `pending -> posted` Transaction link write fail against
@@ -222,14 +229,15 @@ migration as incidental cleanup.
 
 ## Verification
 
-- Move existing entity, service, repository, route, and authenticated integration coverage while
-  retaining assertions and snapshots.
-- Add characterization tests for intermediate transition failure, Transaction-before-link
-  failure, ignored Ledger path parameters, stored-only Effective At Upper Bound, response omissions,
-  retained Entry links on Pending rollback, and Created Time replacement on update.
-- Prove each route performs one managed runtime execution and returns or rethrows the baseline
-  result.
-- Test repository behavior through the managed database Layer against PostgreSQL.
+- Retain existing assertions that prove observable Settlement behavior. Delete tests that cover
+  retired plugin wiring or other removed implementation structure.
+- Add the smallest characterization coverage needed for intermediate transition failure,
+  Transaction-before-link failure, ignored Ledger path parameters, stored-only Effective At Upper
+  Bound, response omissions, retained Entry links on Pending rollback, and Created Time replacement
+  on update. Extend an existing test when it already owns that contract.
+- Test route inputs, dependency calls, outputs, and typed failures without asserting runtime call
+  counts or introducing a reusable route harness.
+- Test repository SQL behavior through the existing managed PostgreSQL test Layer.
 - Run focused Settlement tests, the full API test suite, repository checks, and the full local CI
   pipeline. The migration is complete only when the baseline tests and new characterization tests
   pass without schema snapshots or public contract changes.
