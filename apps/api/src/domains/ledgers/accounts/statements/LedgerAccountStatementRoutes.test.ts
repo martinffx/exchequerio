@@ -191,9 +191,15 @@ describe("LedgerAccountStatementRoutes", () => {
 
 	it("preserves the existing OpenAPI operations and response sets", async () => {
 		const { server } = await buildRouteServer(service());
-		const paths = server.swagger().paths;
+		const specification = server.swagger();
+		const paths = specification.paths;
 		const path = paths?.["/api/ledgers/{ledgerId}/accounts/{accountId}/statements/{statementId}"];
 		const collection = paths?.["/api/ledgers/{ledgerId}/accounts/{accountId}/statements/"];
+
+		expect({
+			get: path?.get,
+			post: collection?.post,
+		}).toMatchSnapshot();
 
 		expect(path?.get).toMatchObject({
 			operationId: "getLedgerAccountStatement",
