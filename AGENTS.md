@@ -23,6 +23,8 @@ Read only the documents relevant to the work:
 
 - Use `atelier-orchestrator` at the start of development work. It selects an Inline Plan for bounded changes or a Spec-backed Plan when durable design and coordination artifacts are warranted.
 - Use `ponytail` at full intensity for development work. Prefer the smallest behavior-preserving change, reuse existing code and platform behavior, and defer shared abstractions until a second current consumer exists.
+- Treat framework and architecture migrations as behavior-preserving. Before implementation, list every intended change to API behavior, domain rules, persistence, errors, identifiers, time, or operational behavior; the default is none. Stop and split the work if implementation discovers an unlisted change.
+- For Effect migrations, follow [EFFECT_MIGRATION.md](./EFFECT_MIGRATION.md). Product documents and existing contracts define behavior, the API standard defines ownership, and the migration guide defines only migration sequence and method.
 - Keep migrations separate from product and infrastructure changes unless the broader scope is explicitly requested.
 - Treat skills as decision guidance, not implementation checklists; the task and existing source determine which patterns apply.
 - Read [domain documentation guidance](./docs/agents/domain.md) before domain-modelling work. Maintain `CONTEXT.md` as a glossary, not an implementation specification.
@@ -46,7 +48,7 @@ Skills provide task guidance; they do not prove that a dependency is installed. 
 ## Architecture boundaries
 
 - API dependencies flow from Routes to Services to Repositories and Entities to PostgreSQL. Keep transport validation in Routes, business orchestration in Services, persistence in Repositories, and transformations or invariants in Entities.
-- Treat domain purity as a behavioral boundary, not an import ban. Following the Organization model, entities may own `fromRequest`, `fromRow`, and `toRow` with Effect-based decoding and type-only transport or row contracts; they must not perform I/O. Repositories own SQL, transactions, and database error translation.
+- Treat domain purity as a behavioral boundary, not an import ban. Following the Organization model, entities may own the `fromRequest`, `fromRow`, and `toRow` conversions they need, using synchronous or Effect-based decoding as defined by the API standard and type-only transport or row contracts. They must not perform I/O. Repositories own SQL, transactions, and database error translation.
 - Web work follows React Router framework conventions. Keep route composition in `apps/web/app/routes`, reusable UI in `apps/web/app/components`, and shared helpers in `apps/web/app/lib`.
 - Public documentation uses Docusaurus under `apps/docs`; follow the [documentation addendum](./docs/standards/documentation.md) rather than duplicating writing conventions here.
 - Use stub-driven TDD for changed behavior and keep tests at the narrowest useful layer. Avoid repeating the same contract across layers. API integration tests use PostgreSQL.
