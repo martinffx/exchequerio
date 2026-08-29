@@ -36,12 +36,25 @@ const requireFound = (): ((
 		onSome: Effect.succeed,
 	});
 
+/** Orchestrates Organization use cases and converts repository absence into typed failures. */
 class OrganizationService {
+	/**
+	 * Creates an Organization service.
+	 *
+	 * @param repository - Repository used for Organization persistence.
+	 * @param idGenerator - Generator used for new Organization identifiers.
+	 */
 	constructor(
 		private readonly repository: OrganizationRepo,
 		private readonly idGenerator: OrganizationIdGenerator
 	) {}
 
+	/**
+	 * Lists Organizations with pagination.
+	 *
+	 * @param options - Offset and limit for the result page.
+	 * @returns An Effect containing the requested page of Organizations.
+	 */
 	listOrganizations({
 		offset,
 		limit,
@@ -52,10 +65,22 @@ class OrganizationService {
 		});
 	}
 
+	/**
+	 * Gets an Organization and converts repository absence into `OrganizationNotFound`.
+	 *
+	 * @param orgId - Organization to get.
+	 * @returns An Effect containing the Organization.
+	 */
 	getOrganization(orgId: OrgID): Effect.Effect<Organization, OrganizationGetError> {
 		return this.repository.getOrganization(orgId).pipe(Effect.flatMap(requireFound()));
 	}
 
+	/**
+	 * Generates an identifier, builds an Organization, and persists it.
+	 *
+	 * @param rq - Validated Organization creation request.
+	 * @returns An Effect containing the created Organization.
+	 */
 	createOrganization(
 		rq: OrganizationCreateRequest
 	): Effect.Effect<Organization, OrganizationCreateError> {
@@ -67,6 +92,13 @@ class OrganizationService {
 		);
 	}
 
+	/**
+	 * Replaces an Organization's mutable fields and requires the Organization to exist.
+	 *
+	 * @param orgId - Organization to update.
+	 * @param rq - Validated Organization update request.
+	 * @returns An Effect containing the updated Organization.
+	 */
 	updateOrganization(
 		orgId: OrgID,
 		rq: OrganizationUpdateRequest
@@ -75,6 +107,12 @@ class OrganizationService {
 		return this.repository.updateOrganization(organization).pipe(Effect.flatMap(requireFound()));
 	}
 
+	/**
+	 * Deletes an Organization and requires the Organization to exist.
+	 *
+	 * @param orgId - Organization to delete.
+	 * @returns An Effect containing the deleted Organization.
+	 */
 	deleteOrganization(orgId: OrgID): Effect.Effect<Organization, OrganizationDeleteError> {
 		return this.repository.deleteOrganization(orgId).pipe(Effect.flatMap(requireFound()));
 	}

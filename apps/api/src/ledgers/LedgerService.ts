@@ -27,9 +27,22 @@ const requireFound = <A>(): ((value: Option.Option<A>) => Effect.Effect<A, Ledge
 		onSome: Effect.succeed,
 	});
 
+/** Orchestrates Ledger use cases within an Organization. */
 class LedgerService {
+	/**
+	 * Creates a Ledger service.
+	 *
+	 * @param repository - Repository used for Ledger persistence.
+	 */
 	constructor(private readonly repository: LedgerRepo) {}
 
+	/**
+	 * Lists Ledgers owned by one Organization.
+	 *
+	 * @param organizationId - Organization that owns the Ledgers.
+	 * @param query - Pagination parameters for the result set.
+	 * @returns An Effect containing the requested page of Ledgers.
+	 */
 	listLedgers(
 		organizationId: OrgID,
 		query: LedgerListQuery
@@ -37,10 +50,26 @@ class LedgerService {
 		return this.repository.listLedgers(organizationId, query);
 	}
 
+	/**
+	 * Gets a tenant-scoped Ledger and converts repository absence into `LedgerNotFound`.
+	 *
+	 * @param organizationId - Organization that owns the Ledger.
+	 * @param ledgerId - Ledger to get.
+	 * @returns An Effect containing the Ledger.
+	 */
 	getLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerGetError> {
 		return this.repository.getLedger(organizationId, ledgerId).pipe(Effect.flatMap(requireFound()));
 	}
 
+	/**
+	 * Generates an identifier, builds a Ledger, and persists it for an Organization.
+	 *
+	 * Repository unavailability is exposed as a non-retryable service-unavailable failure.
+	 *
+	 * @param organizationId - Organization that will own the Ledger.
+	 * @param request - Validated Ledger creation request.
+	 * @returns An Effect containing the created Ledger.
+	 */
 	createLedger(
 		organizationId: OrgID,
 		request: LedgerCreateRequest
@@ -57,6 +86,14 @@ class LedgerService {
 		);
 	}
 
+	/**
+	 * Replaces a tenant-scoped Ledger's mutable fields and requires the Ledger to exist.
+	 *
+	 * @param organizationId - Organization that owns the Ledger.
+	 * @param ledgerId - Ledger to update.
+	 * @param request - Validated Ledger update request.
+	 * @returns An Effect containing the updated Ledger.
+	 */
 	updateLedger(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -67,6 +104,13 @@ class LedgerService {
 			.pipe(Effect.flatMap(requireFound()));
 	}
 
+	/**
+	 * Deletes a tenant-scoped Ledger and requires the Ledger to exist.
+	 *
+	 * @param organizationId - Organization that owns the Ledger.
+	 * @param ledgerId - Ledger to delete.
+	 * @returns An Effect containing the deleted Ledger.
+	 */
 	deleteLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerDeleteError> {
 		return this.repository
 			.deleteLedger(organizationId, ledgerId)
