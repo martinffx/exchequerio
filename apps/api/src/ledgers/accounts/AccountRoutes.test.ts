@@ -230,20 +230,8 @@ describe("AccountRoutes", () => {
 
 	it("maps typed not-found and dependency failures", async () => {
 		const implementation = service();
-		vi
-			.mocked(implementation.getAccount)
-			.mockReturnValue(
-				Effect.fail(
-					new AccountNotFound()
-				)
-			);
-		vi
-			.mocked(implementation.deleteAccount)
-			.mockReturnValue(
-				Effect.fail(
-					new AccountHasDependents()
-				)
-			);
+		vi.mocked(implementation.getAccount).mockReturnValue(Effect.fail(new AccountNotFound()));
+		vi.mocked(implementation.deleteAccount).mockReturnValue(Effect.fail(new AccountHasDependents()));
 		const { server } = await buildRouteServer(implementation);
 
 		const get = await server.inject({

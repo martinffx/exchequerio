@@ -72,12 +72,7 @@ class LedgerAccountSettlementService {
 		request: LedgerAccountSettlementRequest
 	): Promise<LedgerAccountSettlementEntity> {
 		// Note: Validation that both accounts belong to the same ledger is done in the route layer
-		const entity = LedgerAccountSettlementEntity.fromRequest(
-			request,
-			orgId,
-			currency,
-			normalBalance
-		);
+		const entity = LedgerAccountSettlementEntity.fromRequest(request, orgId, currency, normalBalance);
 		return this.ledgerAccountSettlementRepo.createSettlement(entity);
 	}
 

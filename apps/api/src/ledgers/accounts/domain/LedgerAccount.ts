@@ -156,10 +156,7 @@ class LedgerAccount {
 	 * @param updated - Account update time, defaulting to the current UTC time.
 	 * @returns The updated Account with its Balance and lock version unchanged.
 	 */
-	fromUpdateRequest(
-		request: LedgerAccountUpdateRequest,
-		updated = DateTime.utc()
-	): LedgerAccount {
+	fromUpdateRequest(request: LedgerAccountUpdateRequest, updated = DateTime.utc()): LedgerAccount {
 		return new LedgerAccount({
 			...this,
 			name: request.name,
@@ -188,28 +185,27 @@ class LedgerAccount {
 			created: parseDate(row.created),
 			updated: parseDate(row.updated),
 		}).pipe(
-			Effect.map(
-				decoded =>
-					Option.some(
-						// oxlint-disable-next-line unicorn/no-array-callback-reference -- Constructor receives decoded values.
-						new LedgerAccount({
-							...decoded,
-							name: row.name,
-							description: row.description ?? undefined,
-							normalBalance: row.normalBalance,
-							currency: row.currencyCode,
-							pendingAmount: row.pendingAmount,
-							postedAmount: row.postedAmount,
-							availableAmount: row.availableAmount,
-							pendingCredits: row.pendingCredits,
-							pendingDebits: row.pendingDebits,
-							postedCredits: row.postedCredits,
-							postedDebits: row.postedDebits,
-							availableCredits: row.availableCredits,
-							availableDebits: row.availableDebits,
-							lockVersion: row.lockVersion,
-						})
-					)
+			Effect.map(decoded =>
+				Option.some(
+					// oxlint-disable-next-line unicorn/no-array-callback-reference -- Constructor receives decoded values.
+					new LedgerAccount({
+						...decoded,
+						name: row.name,
+						description: row.description ?? undefined,
+						normalBalance: row.normalBalance,
+						currency: row.currencyCode,
+						pendingAmount: row.pendingAmount,
+						postedAmount: row.postedAmount,
+						availableAmount: row.availableAmount,
+						pendingCredits: row.pendingCredits,
+						pendingDebits: row.pendingDebits,
+						postedCredits: row.postedCredits,
+						postedDebits: row.postedDebits,
+						availableCredits: row.availableCredits,
+						availableDebits: row.availableDebits,
+						lockVersion: row.lockVersion,
+					})
+				)
 			),
 			Effect.mapError(cause => new AccountPersistenceDecodingFailure(cause))
 		);
@@ -257,9 +253,7 @@ class LedgerAccount {
 		updated = DateTime.utc()
 	): Effect.Effect<LedgerAccount, LedgerAccountCurrencyMismatch> {
 		if (entry.currency !== this.currency) {
-			return Effect.fail(
-				new LedgerAccountCurrencyMismatch(this.currency, entry.currency)
-			);
+			return Effect.fail(new LedgerAccountCurrencyMismatch(this.currency, entry.currency));
 		}
 
 		return Effect.succeed(this.applyEntry(entry, "record", updated));
@@ -319,14 +313,11 @@ class LedgerAccount {
 			availableAmount: this.availableAmount + (available ? balanceAmount : 0),
 			pendingCredits: this.pendingCredits + (entry.direction === "credit" ? amount : 0),
 			pendingDebits: this.pendingDebits + (entry.direction === "debit" ? amount : 0),
-			postedCredits:
-				this.postedCredits + (posted && entry.direction === "credit" ? amount : 0),
-			postedDebits:
-				this.postedDebits + (posted && entry.direction === "debit" ? amount : 0),
+			postedCredits: this.postedCredits + (posted && entry.direction === "credit" ? amount : 0),
+			postedDebits: this.postedDebits + (posted && entry.direction === "debit" ? amount : 0),
 			availableCredits:
 				this.availableCredits + (available && entry.direction === "credit" ? amount : 0),
-			availableDebits:
-				this.availableDebits + (available && entry.direction === "debit" ? amount : 0),
+			availableDebits: this.availableDebits + (available && entry.direction === "debit" ? amount : 0),
 			updated,
 		});
 	}

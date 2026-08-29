@@ -38,9 +38,7 @@ class LedgerService {
 	}
 
 	getLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerGetError> {
-		return this.repository
-			.getLedger(organizationId, ledgerId)
-			.pipe(Effect.flatMap(requireFound()));
+		return this.repository.getLedger(organizationId, ledgerId).pipe(Effect.flatMap(requireFound()));
 	}
 
 	createLedger(

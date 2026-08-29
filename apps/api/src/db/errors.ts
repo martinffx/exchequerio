@@ -34,11 +34,7 @@ const nestedErrors = (error: Record<PropertyKey, unknown>): readonly unknown[] =
 	return [
 		...errors,
 		...error.reasons.flatMap(reason =>
-			Cause.isFailReason(reason)
-				? [reason.error]
-				: Cause.isDieReason(reason)
-					? [reason.defect]
-					: []
+			Cause.isFailReason(reason) ? [reason.error] : Cause.isDieReason(reason) ? [reason.defect] : []
 		),
 	];
 };

@@ -294,16 +294,7 @@ describe("TransactionRoutes", () => {
 	});
 
 	it.each([
-		[
-			"list",
-			"listTransactions",
-			"GET",
-			"",
-			undefined,
-			undefined,
-			new LedgerNotFound(),
-			404,
-		],
+		["list", "listTransactions", "GET", "", undefined, undefined, new LedgerNotFound(), 404],
 		[
 			"get",
 			"getTransaction",

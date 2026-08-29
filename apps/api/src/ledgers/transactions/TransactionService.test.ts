@@ -150,11 +150,7 @@ describe("TransactionService", () => {
 		let attempts = 0;
 		h.repository.createTransaction.mockImplementation(() => {
 			attempts += 1;
-			return attempts < 5
-				? Effect.fail(
-						new AccountVersionConflict()
-					)
-				: Effect.succeed(transaction);
+			return attempts < 5 ? Effect.fail(new AccountVersionConflict()) : Effect.succeed(transaction);
 		});
 
 		await expect(
@@ -211,11 +207,7 @@ describe("TransactionService", () => {
 	it("retries Transaction OCC conflicts", async () => {
 		const h = harness();
 		h.repository.updateTransaction
-			.mockReturnValueOnce(
-				Effect.fail(
-					new TransactionVersionConflict()
-				)
-			)
+			.mockReturnValueOnce(Effect.fail(new TransactionVersionConflict()))
 			.mockReturnValueOnce(Effect.succeed(transaction));
 
 		await expect(

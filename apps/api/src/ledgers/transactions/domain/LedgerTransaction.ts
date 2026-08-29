@@ -122,20 +122,13 @@ class LedgerTransaction {
 	fromUpdateRequest(
 		request: LedgerTransactionUpdateRequest,
 		updated = DateTime.utc()
-	): Effect.Effect<
-		LedgerTransaction,
-		TransactionLifecycleConflict | TransactionValidationFailure
-	> {
+	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict | TransactionValidationFailure> {
 		if (this.status !== "pending") {
-			return Effect.fail(
-				new TransactionLifecycleConflict(this.status, "pending")
-			);
+			return Effect.fail(new TransactionLifecycleConflict(this.status, "pending"));
 		}
 
 		return Effect.all(
-			request.ledgerEntries.map(entry =>
-				LedgerTransactionEntry.fromRequest(entry, "pending", updated)
-			)
+			request.ledgerEntries.map(entry => LedgerTransactionEntry.fromRequest(entry, "pending", updated))
 		).pipe(
 			Effect.flatMap(entries => LedgerTransaction.validateBalanced(entries)),
 			Effect.map(
@@ -215,12 +208,12 @@ class LedgerTransaction {
 	 * @param postedAt - Posting time; defaults to the current UTC time and may be supplied by tests.
 	 * @returns An Effect containing the posted Transaction or a lifecycle conflict.
 	 */
-	toPosted(postedAt = DateTime.utc()): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
+	toPosted(
+		postedAt = DateTime.utc()
+	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
 		if (this.status === "posted") return Effect.succeed(this);
 		if (this.status !== "pending") {
-			return Effect.fail(
-				new TransactionLifecycleConflict(this.status, "posted")
-			);
+			return Effect.fail(new TransactionLifecycleConflict(this.status, "posted"));
 		}
 
 		return Effect.succeed(
@@ -242,12 +235,12 @@ class LedgerTransaction {
 	 * @param updated - Void time; defaults to the current UTC time and may be supplied by tests.
 	 * @returns An Effect containing the voided Transaction or a lifecycle conflict.
 	 */
-	toVoided(updated = DateTime.utc()): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
+	toVoided(
+		updated = DateTime.utc()
+	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
 		if (this.status === "voided") return Effect.succeed(this);
 		if (this.status !== "pending") {
-			return Effect.fail(
-				new TransactionLifecycleConflict(this.status, "voided")
-			);
+			return Effect.fail(new TransactionLifecycleConflict(this.status, "voided"));
 		}
 
 		return Effect.succeed(
@@ -300,12 +293,7 @@ class LedgerTransaction {
 			? Effect.fail(new TransactionValidationFailure("Transaction Entries must balance by Currency"))
 			: Effect.succeed(entries);
 	}
-
 }
 
-export type {
-	LedgerTransactionMetadata,
-	LedgerTransactionOptions,
-	LedgerTransactionStatus,
-};
+export type { LedgerTransactionMetadata, LedgerTransactionOptions, LedgerTransactionStatus };
 export { LedgerTransaction };

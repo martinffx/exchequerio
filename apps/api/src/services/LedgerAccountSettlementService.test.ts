@@ -202,13 +202,7 @@ describe("LedgerAccountSettlementService", () => {
 			mockSettlementRepo.getSettlement.mockRejectedValue(error);
 
 			await expect(
-				service.updateLedgerAccountSettlement(
-					orgId,
-					settlementId.toString(),
-					"USD",
-					"debit",
-					request
-				)
+				service.updateLedgerAccountSettlement(orgId, settlementId.toString(), "USD", "debit", request)
 			).rejects.toThrow(NotFoundError);
 			expect(mockSettlementRepo.updateSettlement).not.toHaveBeenCalled();
 		});

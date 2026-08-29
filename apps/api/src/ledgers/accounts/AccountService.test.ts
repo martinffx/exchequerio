@@ -202,9 +202,7 @@ describe("AccountService", () => {
 				)
 			);
 
-			expect(error).toEqual(
-				new AccountNotFound()
-			);
+			expect(error).toEqual(new AccountNotFound());
 		}
 	);
 });

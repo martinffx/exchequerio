@@ -302,9 +302,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
 			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).toHaveBeenCalledWith(
-					expect.objectContaining({ prefix: "org" }),
-					"USD",
-					"debit",
+				expect.objectContaining({ prefix: "org" }),
+				"USD",
+				"debit",
 				expect.objectContaining({
 					settledAccountId: settledAccountId.toString(),
 					contraAccountId: contraAccountId.toString(),

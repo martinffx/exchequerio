@@ -10,10 +10,7 @@ import {
 	type LedgerTransactionID,
 	type OrgID,
 } from "@/repo/entities/types";
-import type {
-	LedgerTransactionEntryInsertRow,
-	LedgerTransactionEntryRow,
-} from "@/repo/schema";
+import type { LedgerTransactionEntryInsertRow, LedgerTransactionEntryRow } from "@/repo/schema";
 
 import { TransactionValidationFailure } from "../TransactionErrors";
 import type { TransactionRequestEntry as LedgerTransactionEntryRequest } from "../TransactionSchema";

@@ -199,5 +199,4 @@ describe("handleDBError", () => {
 		expect(result).toBeInstanceOf(InternalServerError);
 		expect(result.message).toBe("no code error");
 	});
-
 });

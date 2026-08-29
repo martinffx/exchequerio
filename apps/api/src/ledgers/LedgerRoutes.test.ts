@@ -230,16 +230,8 @@ describe("LedgerRoutes", () => {
 
 	it("maps typed not-found and dependency failures", async () => {
 		const implementation = service();
-		vi
-			.mocked(implementation.getLedger)
-			.mockReturnValue(
-				Effect.fail(new LedgerNotFound())
-			);
-		vi
-			.mocked(implementation.deleteLedger)
-			.mockReturnValue(
-				Effect.fail(new LedgerHasDependents())
-			);
+		vi.mocked(implementation.getLedger).mockReturnValue(Effect.fail(new LedgerNotFound()));
+		vi.mocked(implementation.deleteLedger).mockReturnValue(Effect.fail(new LedgerHasDependents()));
 		const { server } = await buildRouteServer(implementation);
 
 		const notFound = await server.inject({

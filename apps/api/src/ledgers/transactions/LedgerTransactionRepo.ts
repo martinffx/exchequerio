@@ -393,9 +393,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				)
 			)
 			.returning({ id: LedgerTransactionsTable.id })
-			.pipe(
-				Effect.flatMap(rows => requireTransactionWrite(rows.length === 1))
-			);
+			.pipe(Effect.flatMap(rows => requireTransactionWrite(rows.length === 1)));
 	}
 
 	private replaceEntries(
@@ -467,14 +465,11 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 						)
 					)
 					.returning({ id: LedgerAccountsTable.id })
-					.pipe(
-						Effect.flatMap(rows => requireAccountWrite(rows.length === 1))
-					);
+					.pipe(Effect.flatMap(rows => requireAccountWrite(rows.length === 1)));
 			},
 			{ concurrency: 1, discard: true }
 		);
 	}
-
 }
 
 const ledgerTransactionRepoLayer = Layer.effect(
