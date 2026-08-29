@@ -57,9 +57,12 @@ class TransactionIdempotencyUnavailable extends ServiceUnavailableError {
 	}
 }
 
-class TransactionCreationPending extends ServiceUnavailableError {
+class TransactionCreationPending extends ConflictError {
 	constructor() {
-		super("Transaction creation is still in progress");
+		super("Transaction creation is still in progress", {
+			retryable: true,
+			retryAfterSeconds: 1,
+		});
 	}
 }
 

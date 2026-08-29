@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, describe, expect, it } from "vitest";
@@ -27,7 +27,10 @@ import {
 	LedgerTransactionRepoTag,
 	ledgerTransactionRepoLayer,
 } from "./LedgerTransactionRepo";
-import { TransactionLifecycleConflict } from "./LedgerTransactionErrors";
+import {
+	TransactionLifecycleConflict,
+	TransactionPersistenceFailure,
+} from "./LedgerTransactionErrors";
 import type { TransactionCreateRequest } from "./LedgerTransactionSchema";
 
 type AccountId = ReturnType<typeof newLedgerAccountID>;
@@ -245,7 +248,7 @@ describe("LedgerTransactionRepoLive", () => {
 		).toEqual({ source: "test" });
 	});
 
-	it("rolls back when an Account is missing", async () => {
+	it("rejects a missing Account before opening the write transaction", async () => {
 		const { organizationId, ledgerId } = await createLedger();
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const missing = newLedgerAccountID();
@@ -273,6 +276,95 @@ describe("LedgerTransactionRepoLive", () => {
 				repository.listTransactions(organizationId, ledgerId, { offset: 0, limit: 20 })
 			)
 		).toHaveLength(0);
+	});
+
+	it("rolls back Transaction, Entry, and Account writes when persistence fails mid-transaction", async () => {
+		const { organizationId, ledgerId } = await createLedger();
+		const debit = await createAccount(organizationId, ledgerId, "debit");
+		const credit = await createAccount(organizationId, ledgerId, "credit");
+		const transactionId = newLedgerTransactionID();
+		const db = await database();
+		const suffix = crypto.randomUUID().replaceAll("-", "");
+		const functionName = `fail_account_update_${suffix}`;
+		const triggerName = `fail_account_update_${suffix}`;
+
+		await db.execute(
+			sql.raw(`
+			CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
+			BEGIN
+				IF NEW.id = '${credit.toString()}' THEN
+					RAISE EXCEPTION 'forced Account update failure';
+				END IF;
+				RETURN NEW;
+			END;
+			$$ LANGUAGE plpgsql;
+			CREATE TRIGGER ${triggerName}
+			BEFORE UPDATE ON ledger_accounts
+			FOR EACH ROW EXECUTE FUNCTION ${functionName}();
+		`)
+		);
+
+		try {
+			const error = await runRepo(repository =>
+				Effect.flip(
+					repository.createTransaction(
+						organizationId,
+						ledgerId,
+						transactionId,
+						request("pending", [
+							{ accountId: debit, direction: "debit", amount: 10 },
+							{ accountId: credit, direction: "credit", amount: 10 },
+						])
+					)
+				)
+			);
+			expect(error).toBeInstanceOf(TransactionPersistenceFailure);
+		} finally {
+			await db.execute(sql.raw(`DROP TRIGGER ${triggerName} ON ledger_accounts`));
+			await db.execute(sql.raw(`DROP FUNCTION ${functionName}()`));
+		}
+
+		expect(
+			await db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.id, transactionId.toString()))
+		).toHaveLength(0);
+		expect(
+			await db
+				.select()
+				.from(LedgerTransactionEntriesTable)
+				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toString()))
+		).toHaveLength(0);
+		for (const account of (await accounts(organizationId, ledgerId, [debit, credit])).values()) {
+			expect(account).toMatchObject({ pendingAmount: 0, lockVersion: 1 });
+		}
+	});
+
+	it("supports balanced multi-Currency Transactions and negative balances", async () => {
+		const { organizationId, ledgerId } = await createLedger();
+		const eurDebit = await createAccount(organizationId, ledgerId, "debit", "EUR");
+		const eurCredit = await createAccount(organizationId, ledgerId, "debit", "EUR");
+		const usdDebit = await createAccount(organizationId, ledgerId, "debit", "USD");
+		const usdCredit = await createAccount(organizationId, ledgerId, "debit", "USD");
+
+		await runRepo(repository =>
+			repository.createTransaction(organizationId, ledgerId, newLedgerTransactionID(), {
+				status: "posted",
+				ledgerEntries: [
+					{ accountId: eurDebit.toString(), direction: "debit", amount: 10, currencyCode: "EUR" },
+					{ accountId: eurCredit.toString(), direction: "credit", amount: 10, currencyCode: "EUR" },
+					{ accountId: usdDebit.toString(), direction: "debit", amount: 20, currencyCode: "USD" },
+					{ accountId: usdCredit.toString(), direction: "credit", amount: 20, currencyCode: "USD" },
+				],
+			})
+		);
+
+		const byId = await accounts(organizationId, ledgerId, [eurDebit, eurCredit, usdDebit, usdCredit]);
+		expect(byId.get(eurDebit.toString())?.postedAmount).toBe(10);
+		expect(byId.get(eurCredit.toString())?.postedAmount).toBe(-10);
+		expect(byId.get(usdDebit.toString())?.postedAmount).toBe(20);
+		expect(byId.get(usdCredit.toString())?.postedAmount).toBe(-20);
 	});
 
 	it("replaces a pending Transaction and records each affected Account once", async () => {

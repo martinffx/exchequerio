@@ -7,10 +7,12 @@ The Transaction slice follows Routes → Service → Repository → PostgreSQL.
 - `TransactionRoutes` owns Fastify validation, permissions, status codes, and response mapping.
 - `TransactionService` owns idempotency orchestration, server time, request limits, and retry selection.
 - `LedgerTransactionRepo` owns tenant-scoped SQL, PostgreSQL transactions, optimistic writes, Account
-  counter updates, and database error translation.
+  counter updates, and application of database error translations defined by the Transaction error
+  module.
 - `LedgerTransaction` and `LedgerTransactionEntry` own lifecycle transitions, balancing, metadata,
   Amount validation, and counter effects without performing I/O.
-- `TransactionIdemService` owns Valkey claim and compare-and-delete release operations.
+- `TransactionIdemService` owns Valkey claim, completion, lookup, and compare-and-delete release
+  operations.
 
 Fastify composes these services once into its managed Effect runtime. Routes run Transaction effects
 through that runtime. The legacy Promise Transaction service and repository no longer exist.
@@ -58,8 +60,10 @@ Account updates run sequentially in Account ID order. Update considers the union
 Account IDs. Repeated post of a Posted Transaction and repeated void of a Voided Transaction return
 the current resource without changing counters.
 
-The service retries Account and Transaction version conflicts, PostgreSQL deadlocks (`40P01`), and
-serialization failures (`40001`) with exponential jitter for up to two seconds.
+The Transaction error module translates PostgreSQL deadlocks (`40P01`) and serialization failures
+(`40001`) into a typed concurrency failure. The repository applies that translation at the database
+boundary. The service retries the typed failure, plus Account and Transaction version conflicts,
+with exponential jitter for up to two seconds.
 
 ## Create idempotency
 
@@ -69,13 +73,16 @@ Valkey is the sole idempotency store. The Organization-scoped key is:
 exchequer:transactions:idempotency:<organizationId>:<idempotencyKey>
 ```
 
-Create atomically claims a generated Transaction ID before querying PostgreSQL. The winner creates
-the Transaction with that ID. A loser polls for the winner's Transaction for up to two seconds. It
-returns the winner when found and a retryable `503 Service Unavailable` while the claim remains
-unresolved.
+Create atomically locks the key with a `pending` marker. The winner generates the Transaction ID,
+commits the Transaction in PostgreSQL, then replaces the marker with that ID. A loser checks Valkey
+once and retries at most three times within 500 milliseconds. It returns the committed Transaction
+when the ID appears. If the marker remains pending, it returns `409 Conflict` with `retryable: true`
+and `Retry-After: 1`, meaning one second.
 
-Failed winners release only claims that still contain their Transaction ID. Claims expire after 15
-minutes. PostgreSQL stores no idempotency key and performs no idempotency recovery after expiry.
+Failures known to occur before commit release only a matching pending marker. Infrastructure
+failures retain the marker because commit status may be uncertain. A failure after PostgreSQL commits
+but before Valkey stores the ID leaves the marker pending until its 15-minute expiry. PostgreSQL
+stores no idempotency key and performs no recovery after expiry.
 
 Valkey failures return a typed `503`. The client connects lazily, so Valkey readiness affects create
 only. The managed runtime owns and closes its client.

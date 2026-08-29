@@ -46,9 +46,13 @@ const makeServerRuntimeLayer = (
 		transactionIdempotency
 	);
 	const accountWithLedger = accountLayer.pipe(Layer.provide(ledgerLayer));
-	return Layer.mergeAll(ledgerLayer, accountWithLedger, transactionLayer, organizationLayer).pipe(
-		Layer.provideMerge(infrastructure)
-	);
+	const transactionWithLedger = transactionLayer.pipe(Layer.provide(ledgerLayer));
+	return Layer.mergeAll(
+		ledgerLayer,
+		accountWithLedger,
+		transactionWithLedger,
+		organizationLayer
+	).pipe(Layer.provideMerge(infrastructure));
 };
 
 class ServerRuntime<R, ER> {

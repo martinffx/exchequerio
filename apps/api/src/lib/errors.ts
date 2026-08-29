@@ -4,6 +4,7 @@ import { v7 as uuid } from "uuid";
 
 type HttpErrorOptions = ErrorOptions & {
 	readonly retryable?: boolean;
+	readonly retryAfterSeconds?: number;
 };
 
 const ProblemDetailSchema = Type.Object({
@@ -36,11 +37,13 @@ abstract class HttpError extends Error {
 	abstract readonly statusCode: number;
 	abstract readonly title: string;
 	readonly retryable?: boolean;
+	readonly retryAfterSeconds?: number;
 
 	constructor(message: string, options: HttpErrorOptions = {}) {
 		super(message, options);
 		this.name = this.constructor.name;
 		this.retryable = options.retryable;
+		this.retryAfterSeconds = options.retryAfterSeconds;
 	}
 
 	toProblemDetail(): ProblemDetail {
@@ -137,6 +140,9 @@ class InvalidId extends BadRequestError {
 const sendHttpError = (error: HttpError, request: FastifyRequest, reply: FastifyReply): void => {
 	if (error.statusCode >= 500) {
 		request.server.log.error(error.cause ?? error, error.message);
+	}
+	if (error.retryAfterSeconds !== undefined) {
+		reply.header("Retry-After", error.retryAfterSeconds.toString());
 	}
 	reply.status(error.statusCode).send(error.toProblemDetail());
 };

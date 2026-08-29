@@ -27,7 +27,8 @@ deferred to the Asset model. List responses omit Entries.
 ## Validation
 
 - Create accepts status `pending` or `posted`; clients cannot create a Voided Transaction.
-- Every Transaction has at least two Entries and at most 200 distinct Accounts.
+- Every Transaction has at least two and at most 200 Entries.
+- Every Transaction references at most 200 distinct Accounts.
 - Every Account belongs to the path Ledger and authenticated Organization.
 - Every Amount is a positive integer Minor Unit no greater than `Number.MAX_SAFE_INTEGER`.
 - Debit and Credit totals match exactly for each Currency Code.
@@ -69,20 +70,21 @@ Negative balances are valid.
 
 `Idempotency-Key` is required and scoped by Organization. The create flow is:
 
-1. Generate a candidate Transaction ID and atomically claim the Organization-scoped Valkey key for
-	 15 minutes.
-2. If the claim already exists, wait briefly for the winner's commit and load its Transaction ID.
-3. If this request wins, validate the request and distinct-Account cap.
+1. Atomically lock the Organization-scoped Valkey key with a pending marker for 15 minutes.
+2. If the key contains a Transaction ID, load and return that Transaction. If it remains pending
+   after one check and three retries within 500 milliseconds, return a retryable conflict.
+3. If this request wins, validate the request, generate the Transaction ID, and enforce the limits.
 4. In PostgreSQL, read the Accounts and their lock versions, verify the supplied Currency, construct and
    validate the Transaction domain entity, and save the Transaction, Entries, and Account effects
    atomically using optimistic concurrency control.
-5. If the save fails, compare and delete the Valkey key only when it still contains that candidate
-   ID.
+5. After PostgreSQL commits, replace the pending marker with the committed Transaction ID.
+6. If creation fails before commit, compare and delete the pending marker. Retain it when commit
+   status is uncertain.
 
 A caller that loses the claim returns the winning Transaction. Valkey is the sole idempotency store;
 the key is never persisted in PostgreSQL. A process crash may leave a stale claim until its
-15-minute expiry. If the winner does not commit within the two-second wait, the loser returns a
-retryable `503 Service Unavailable`.
+15-minute expiry. If the winner does not complete within the bounded wait, the loser returns `409
+Conflict` with `retryable: true` and `Retry-After: 1`, meaning one second.
 
 ## HTTP behavior
 
@@ -90,9 +92,9 @@ retryable `503 Service Unavailable`.
 - `400 Bad Request` reports malformed IDs, invalid input, unbalanced Entries, or unsafe Amounts.
 - `404 Not Found` hides missing and cross-tenant Ledgers, Transactions, and Accounts behind the same
   resource response.
-- `409 Conflict` reports invalid lifecycle changes or exhausted concurrency retries.
-- `503 Service Unavailable` reports PostgreSQL or Valkey availability failures and unresolved
-  idempotent creates.
+- `409 Conflict` reports invalid lifecycle changes, exhausted concurrency retries, or an idempotent
+  create that is still pending. Pending creates include `Retry-After: 1`.
+- `503 Service Unavailable` reports PostgreSQL or Valkey availability failures.
 
 Read operations require `ledger:transaction:read`. Create, update, and post require
 `ledger:transaction:write`; void requires `ledger:transaction:delete`.

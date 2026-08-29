@@ -46,7 +46,7 @@ const TransactionCreateRequest = Type.Object(
 		status: Type.Union([Type.Literal("pending"), Type.Literal("posted")]),
 		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(TransactionMetadataSchema),
-		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2 }),
+		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2, maxItems: 200 }),
 	},
 	{ additionalProperties: false }
 );
@@ -54,7 +54,7 @@ const TransactionUpdateRequest = Type.Object(
 	{
 		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(TransactionMetadataSchema),
-		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2 }),
+		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2, maxItems: 200 }),
 	},
 	{ additionalProperties: false }
 );

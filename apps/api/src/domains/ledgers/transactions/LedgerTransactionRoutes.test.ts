@@ -295,6 +295,35 @@ describe("TransactionRoutes", () => {
 	});
 
 	it.each([
+		["create", "POST", "", { "idempotency-key": "create-42" }],
+		["update", "PUT", `/${transactionId.toString()}`, undefined],
+	] as const)("limits %s requests to 200 Entries", async (_name, method, suffix, headers) => {
+		const implementation = service();
+		const { server } = await buildRouteServer(implementation);
+		const ledgerEntries = Array.from({ length: 201 }, (_, index) => ({
+			...createBody.ledgerEntries[index % 2],
+		}));
+		const accepted = await server.inject({
+			method,
+			url: `/api/ledgers/${ledgerId.toString()}/transactions${suffix}`,
+			payload: { ...createBody, ledgerEntries: ledgerEntries.slice(0, 200) },
+			...(headers === undefined ? {} : { headers }),
+		});
+		const response = await server.inject({
+			method,
+			url: `/api/ledgers/${ledgerId.toString()}/transactions${suffix}`,
+			payload: { ...createBody, ledgerEntries },
+			...(headers === undefined ? {} : { headers }),
+		});
+
+		expect(accepted.statusCode).toBe(method === "POST" ? 201 : 200);
+		expect(response.statusCode).toBe(400);
+		expect(
+			method === "POST" ? implementation.createTransaction : implementation.updateTransaction
+		).toHaveBeenCalledOnce();
+	});
+
+	it.each([
 		["list", "listTransactions", "GET", "", undefined, undefined, new LedgerNotFound(), 404],
 		[
 			"get",
@@ -334,7 +363,7 @@ describe("TransactionRoutes", () => {
 			createBody,
 			{ "idempotency-key": "create-42" },
 			new TransactionCreationPending(),
-			503,
+			409,
 		],
 		[
 			"update concurrency",
@@ -392,6 +421,24 @@ describe("TransactionRoutes", () => {
 			expect(response.statusCode).toBe(status);
 		}
 	);
+
+	it("marks a pending Transaction response as retryable after one second", async () => {
+		const implementation = service();
+		vi
+			.mocked(implementation.createTransaction)
+			.mockReturnValue(Effect.fail(new TransactionCreationPending()));
+		const { server } = await buildRouteServer(implementation);
+		const response = await server.inject({
+			method: "POST",
+			url: `/api/ledgers/${ledgerId.toString()}/transactions`,
+			headers: { "idempotency-key": "create-42" },
+			payload: createBody,
+		});
+
+		expect(response.statusCode).toBe(409);
+		expect(response.headers["retry-after"]).toBe("1");
+		expect(response.json()).toMatchObject({ type: "CONFLICT", retryable: true });
+	});
 
 	it("advertises only operation-specific failures", async () => {
 		const { server } = await buildRouteServer(service());

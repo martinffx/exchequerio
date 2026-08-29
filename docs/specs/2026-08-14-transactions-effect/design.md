@@ -15,7 +15,7 @@ choices that materially shaped the branch without duplicating the full resource 
 
 ## Selected architecture
 
-Transactions use a resource slice under `apps/api/src/ledgers/transactions`:
+Transactions use a resource slice under `apps/api/src/domains/ledgers/transactions`:
 
 ```text
 Fastify routes
@@ -27,8 +27,9 @@ Fastify routes
 ```
 
 Routes own transport validation and permissions. The service owns orchestration, server time,
-idempotency, limits, and retries. The repository owns SQL, transaction boundaries, optimistic
-version predicates, and database error translation. Domain objects own transformations and
+idempotency, limits, and retries. The Transaction error module owns pure database error
+translations, and the repository applies them at its SQL boundary. The repository also owns
+transaction boundaries and optimistic version predicates. Domain objects own transformations and
 invariants without performing I/O.
 
 The migrated Transaction slice coexists with legacy Settlement code until Settlement receives its
@@ -62,17 +63,18 @@ failures for up to two seconds.
 
 ## Create idempotency
 
-Valkey is the sole idempotency store. Each required `Idempotency-Key` maps to one generated
-Transaction ID under its Organization:
+Valkey is the sole idempotency store. Each required `Idempotency-Key` locks creation under its
+Organization:
 
 ```text
 exchequer:transactions:idempotency:<organizationId>:<idempotencyKey>
 ```
 
-Atomic `SET NX` elects the winner. A losing caller polls PostgreSQL for the claimed Transaction for
-up to two seconds. It returns the winner when visible and a retryable `503` while creation remains
-unresolved. A failed winner uses compare-and-delete cleanup so it cannot remove another caller's
-claim.
+Atomic `SET NX` stores a pending marker and elects the winner. The winner commits PostgreSQL, then
+replaces the marker with the Transaction ID. A losing caller checks Valkey once and retries at most
+three times within 500 milliseconds. It returns the committed Transaction when the ID appears, or a
+retryable `409` with `Retry-After: 1` while creation remains pending. A failed winner uses
+compare-and-delete cleanup only when failure is known to precede commit.
 
 Claims expire after 15 minutes. PostgreSQL stores no idempotency key, does not recover expired
 claims, and remains independent of Valkey for every non-create operation.

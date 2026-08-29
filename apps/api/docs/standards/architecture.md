@@ -65,7 +65,7 @@ resources retain their `src/routes/`, `src/services/`, and `src/repo/` layout un
 - Use Drizzle ORM for type-safe database access
 - Implement atomic operations with proper locking
 - Abstract database implementation details
-- Handle database-specific error scenarios
+- Apply pure database-to-domain error translations owned by each resource's error module
 - Keep migrated repositories with their resource slice; keep remaining repositories under
   `src/repo/`
 
@@ -263,9 +263,11 @@ COMMIT;
 
 ### Idempotency support
 
-Transaction creation uses one Organization-scoped Valkey claim with a 15-minute expiry. PostgreSQL
-stores no idempotency key. A losing caller waits up to two seconds for the claimed Transaction ID to
-appear, then returns a retryable `503` if the winner remains unresolved.
+Transaction creation uses one Organization-scoped Valkey lock with a 15-minute expiry. The winner
+stores a pending marker, commits PostgreSQL, then replaces the marker with the Transaction ID.
+PostgreSQL stores no idempotency key. A losing caller checks Valkey once and retries at most three
+times within 500 milliseconds. It returns a retryable `409` with `Retry-After: 1` while the marker
+remains pending.
 
 ### Security Standards
 ```sql

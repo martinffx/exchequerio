@@ -2,7 +2,12 @@ import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 
 import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
-import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
+import type {
+	LedgerID,
+	LedgerTransactionEntryID,
+	LedgerTransactionID,
+	OrgID,
+} from "@/repo/entities/types";
 import type {
 	LedgerTransactionInsertRow,
 	LedgerTransactionRow,
@@ -84,11 +89,12 @@ class LedgerTransaction {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		request: LedgerTransactionCreateRequest,
-		created = DateTime.utc()
+		created = DateTime.utc(),
+		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, TransactionValidationFailure> {
 		return Effect.all(
-			request.ledgerEntries.map(entry =>
-				LedgerTransactionEntry.fromRequest(entry, request.status, created)
+			request.ledgerEntries.map((entry, index) =>
+				LedgerTransactionEntry.fromRequest(entry, request.status, created, entryIds?.[index])
 			)
 		).pipe(
 			Effect.flatMap(entries => LedgerTransaction.validateBalanced(entries)),
@@ -121,14 +127,17 @@ class LedgerTransaction {
 	 */
 	fromUpdateRequest(
 		request: LedgerTransactionUpdateRequest,
-		updated = DateTime.utc()
+		updated = DateTime.utc(),
+		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict | TransactionValidationFailure> {
 		if (this.status !== "pending") {
 			return Effect.fail(new TransactionLifecycleConflict(this.status, "pending"));
 		}
 
 		return Effect.all(
-			request.ledgerEntries.map(entry => LedgerTransactionEntry.fromRequest(entry, "pending", updated))
+			request.ledgerEntries.map((entry, index) =>
+				LedgerTransactionEntry.fromRequest(entry, "pending", updated, entryIds?.[index])
+			)
 		).pipe(
 			Effect.flatMap(entries => LedgerTransaction.validateBalanced(entries)),
 			Effect.map(

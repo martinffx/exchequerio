@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
-import type { DateTime } from "luxon";
+import { DateTime } from "luxon";
 
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import {
@@ -11,7 +11,12 @@ import {
 	requireAccount,
 	requireAccountWrite,
 } from "@/domains/ledgers/accounts";
-import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
+import type {
+	LedgerID,
+	LedgerTransactionEntryID,
+	LedgerTransactionID,
+	OrgID,
+} from "@/repo/entities/types";
 import {
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
@@ -105,7 +110,9 @@ interface LedgerTransactionRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
-		request: TransactionCreateRequest
+		request: TransactionCreateRequest,
+		created?: DateTime,
+		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, LedgerTransactionCreateRepositoryError>;
 	/**
 	 * Replaces a pending Transaction's mutable fields and Entries atomically.
@@ -120,7 +127,9 @@ interface LedgerTransactionRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
-		request: TransactionUpdateRequest
+		request: TransactionUpdateRequest,
+		updated?: DateTime,
+		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
 	/**
 	 * Posts a pending Transaction and moves its Entry effects into posted Account projections.
@@ -245,7 +254,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
-		request: TransactionCreateRequest
+		request: TransactionCreateRequest,
+		created = DateTime.utc(),
+		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, LedgerTransactionCreateRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const accountIds = [...new Set(request.ledgerEntries.map(entry => entry.accountId))].sort();
@@ -254,7 +265,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				transactionId,
 				organizationId,
 				ledgerId,
-				request
+				request,
+				created as DateTime<true>,
+				entryIds
 			);
 			const entries = Option.getOrThrow(transaction.entries);
 			const updatedAccounts = yield* this.applyEntriesToAccounts(
@@ -294,7 +307,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
-		request: TransactionUpdateRequest
+		request: TransactionUpdateRequest,
+		updated = DateTime.utc(),
+		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
@@ -306,7 +321,11 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				]),
 			].sort();
 			const accounts = yield* this.readAccounts(organizationId, ledgerId, accountIds);
-			const transaction = yield* current.fromUpdateRequest(request);
+			const transaction = yield* current.fromUpdateRequest(
+				request,
+				updated as DateTime<true>,
+				entryIds
+			);
 			const entries = Option.getOrThrow(transaction.entries);
 			const withoutCurrentEntries = this.removeEntriesFromAccounts(
 				accounts,

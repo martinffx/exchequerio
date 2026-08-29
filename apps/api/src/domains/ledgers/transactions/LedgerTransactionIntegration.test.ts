@@ -36,7 +36,8 @@ const config = new Config();
 const pool = new Pool({ connectionString: config.databaseUrl, max: 2 });
 const db = drizzle({ client: pool });
 const organizationIds = new Set<string>();
-const idempotencyValues = new Map<string, LedgerTransactionID>();
+const PENDING = Symbol("pending");
+const idempotencyValues = new Map<string, LedgerTransactionID | typeof PENDING>();
 
 const cacheKey = (organizationId: OrgID, key: string) => `${organizationId.toString()}:${key}`;
 
@@ -44,18 +45,29 @@ const idempotencyService = {
 	claimTransactionId: (organizationId, key) =>
 		Effect.sync(() => {
 			const scopedKey = cacheKey(organizationId, key);
-			const existing = idempotencyValues.get(scopedKey);
-			if (existing !== undefined) return Result.fail(existing);
-			const transactionId = newLedgerTransactionID();
-			idempotencyValues.set(scopedKey, transactionId);
-			return Result.succeed(transactionId);
+			if (idempotencyValues.has(scopedKey)) {
+				const existing = idempotencyValues.get(scopedKey);
+				return Result.fail(existing === PENDING ? undefined : existing);
+			}
+			idempotencyValues.set(scopedKey, PENDING);
+			return Result.succeed(undefined);
 		}),
-	releaseTransactionId: (organizationId, key, claimedId) =>
+	getTransactionId: (organizationId, key) =>
+		Effect.sync(() => {
+			const existing = idempotencyValues.get(cacheKey(organizationId, key));
+			return existing === PENDING ? undefined : existing;
+		}),
+	completeTransactionId: (organizationId, key, transactionId) =>
 		Effect.sync(() => {
 			const scopedKey = cacheKey(organizationId, key);
-			if (idempotencyValues.get(scopedKey)?.toString() === claimedId.toString()) {
-				idempotencyValues.delete(scopedKey);
+			if (idempotencyValues.get(scopedKey) === PENDING) {
+				idempotencyValues.set(scopedKey, transactionId);
 			}
+		}),
+	releaseTransactionId: (organizationId, key) =>
+		Effect.sync(() => {
+			const scopedKey = cacheKey(organizationId, key);
+			if (idempotencyValues.get(scopedKey) === PENDING) idempotencyValues.delete(scopedKey);
 		}),
 } satisfies TransactionIdemService;
 
@@ -488,6 +500,8 @@ describe("Transaction assembled journeys", () => {
 		const cases = [
 			`/api/ledgers/${missingLedgerId}`,
 			`/api/ledgers/${ownerLedgerId}`,
+			`/api/ledgers/${missingLedgerId}/transactions`,
+			`/api/ledgers/${ownerLedgerId}/transactions`,
 			`/api/ledgers/${requesterLedgerId}/transactions/${missingTransactionId}`,
 			`/api/ledgers/${ownerLedgerId}/transactions/${ownerTransaction.id as string}`,
 			`/api/ledgers/${requesterLedgerId}/accounts/${missingAccountId}`,
@@ -507,6 +521,7 @@ describe("Transaction assembled journeys", () => {
 			[responses[0], responses[1]],
 			[responses[2], responses[3]],
 			[responses[4], responses[5]],
+			[responses[6], responses[7]],
 		] as const) {
 			expect(Object.keys(missing.json()).sort()).toEqual(Object.keys(crossTenant.json()).sort());
 		}

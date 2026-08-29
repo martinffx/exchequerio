@@ -37,7 +37,7 @@ describe("TransactionIdemService", () => {
 		effect: Effect.Effect<A, TransactionIdempotencyUnavailable, TransactionIdemService>
 	) => Effect.runPromise(effect.pipe(Effect.provide(layer)));
 
-	it("atomically returns one winner and one Transaction ID", async () => {
+	it("atomically returns one winner and leaves the other claims pending", async () => {
 		const value = fixture();
 		const claims = await Promise.all(
 			Array.from({ length: 8 }, () =>
@@ -49,39 +49,53 @@ describe("TransactionIdemService", () => {
 			)
 		);
 
-		expect(
-			new Set(
-				claims.map(claim =>
-					Result.match(claim, {
-						onFailure: transactionId => transactionId.toString(),
-						onSuccess: transactionId => transactionId.toString(),
-					})
-				)
-			)
-		).toHaveLength(1);
 		expect(claims.filter(claim => Result.isSuccess(claim))).toHaveLength(1);
+		expect(claims.filter(claim => Result.isFailure(claim))).toHaveLength(7);
+		expect(await client.get(value.redisKey)).toBe("pending");
 		expect(await client.ttl(value.redisKey)).toBeGreaterThanOrEqual(TTL_SECONDS - 2);
 	});
 
-	it("only releases the matching claim", async () => {
+	it("stores the Transaction ID only after creation completes", async () => {
 		const value = fixture();
-		const first = await run(
+		await run(
 			TransactionIdemServiceTag.use(service =>
 				service.claimTransactionId(value.organizationId, value.key)
 			)
 		);
+		const transactionId = newLedgerTransactionID();
 
 		await run(
 			TransactionIdemServiceTag.use(service =>
-				service.releaseTransactionId(value.organizationId, value.key, newLedgerTransactionID())
+				service.completeTransactionId(value.organizationId, value.key, transactionId)
 			)
 		);
-		const transactionId = Result.getOrThrow(first);
 		expect(await client.get(value.redisKey)).toBe(transactionId.toString());
+		expect(
+			await run(
+				TransactionIdemServiceTag.use(service =>
+					service.getTransactionId(value.organizationId, value.key)
+				)
+			)
+		).toStrictEqual(transactionId);
 
 		await run(
 			TransactionIdemServiceTag.use(service =>
-				service.releaseTransactionId(value.organizationId, value.key, transactionId)
+				service.releaseTransactionId(value.organizationId, value.key)
+			)
+		);
+		expect(await client.get(value.redisKey)).toBe(transactionId.toString());
+	});
+
+	it("releases only a pending claim", async () => {
+		const value = fixture();
+		await run(
+			TransactionIdemServiceTag.use(service =>
+				service.claimTransactionId(value.organizationId, value.key)
+			)
+		);
+		await run(
+			TransactionIdemServiceTag.use(service =>
+				service.releaseTransactionId(value.organizationId, value.key)
 			)
 		);
 		expect(await client.get(value.redisKey)).toBeNull();

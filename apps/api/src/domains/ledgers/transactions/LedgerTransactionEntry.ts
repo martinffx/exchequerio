@@ -73,7 +73,8 @@ class LedgerTransactionEntry {
 	static fromRequest(
 		request: LedgerTransactionEntryRequest,
 		status: LedgerTransactionEntryStatus,
-		created = DateTime.utc()
+		created = DateTime.utc(),
+		id = newLedgerTransactionEntryID()
 	): Effect.Effect<LedgerTransactionEntry, TransactionValidationFailure> {
 		return parseId<"lat", LedgerAccountID>("lat", request.accountId).pipe(
 			Effect.mapError(
@@ -82,7 +83,7 @@ class LedgerTransactionEntry {
 			Effect.map(
 				accountId =>
 					new LedgerTransactionEntry({
-						id: newLedgerTransactionEntryID(),
+						id,
 						accountId,
 						direction: request.direction,
 						amount: request.amount,

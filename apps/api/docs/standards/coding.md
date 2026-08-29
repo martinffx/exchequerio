@@ -147,8 +147,9 @@ describe("LedgerService", () => {
 
 Entities own transformations that construct or validate the entity, including request and
 persistence-row codecs. This is still a domain boundary: these methods may use Effect for lazy,
-typed decoding and type-only transport or Drizzle contracts, but they do not perform I/O. The
-repository owns SQL, transactions, and database error translation.
+typed decoding and type-only transport or Drizzle contracts, but they do not perform I/O. Resource
+error modules own pure database-to-domain translation functions. Repositories own SQL and
+transactions and apply those translations at the database boundary. Services consume typed errors.
 
 ```typescript
 export class LedgerTransactionEntity {
