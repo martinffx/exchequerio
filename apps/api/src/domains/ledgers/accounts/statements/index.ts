@@ -10,11 +10,6 @@ const ledgerAccountStatementLayer = ledgerAccountStatementServiceLayer.pipe(
 export { LedgerAccountStatement } from "./LedgerAccountStatement";
 export type { LedgerAccountStatementOptions } from "./LedgerAccountStatement";
 export {
-	type LedgerAccountStatementRepo,
-	LedgerAccountStatementRepoLive,
-	LedgerAccountStatementRepoTag,
-} from "./LedgerAccountStatementRepo";
-export {
 	LedgerAccountStatementIdParameters,
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,

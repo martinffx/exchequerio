@@ -2,7 +2,7 @@ import type { InferInsertModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/repo/entities/types";
-import { LedgerAccountStatementsTable, type LedgerAccountStatementRow } from "@/repo/schema";
+import type { LedgerAccountStatementRow, LedgerAccountStatementsTable } from "@/repo/schema";
 
 import type {
 	LedgerAccountStatementRequest,
