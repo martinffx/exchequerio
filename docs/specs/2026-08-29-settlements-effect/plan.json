@@ -1,0 +1,269 @@
+{
+	"feature": "settlements-effect",
+	"spec": "docs/specs/2026-08-29-settlements-effect/design.md",
+	"goal": "Migrate the Ledger Account Settlement slice to the shared Effect runtime without changing its observable behavior.",
+	"phases": [
+		{
+			"id": "P1",
+			"name": "Domain contracts",
+			"tasks": [
+				{
+					"id": "T1",
+					"name": "Add the local Settlement schema and entity",
+					"depends_on": [],
+					"inputs": [
+						"Approved design in docs/specs/2026-08-29-settlements-effect/design.md",
+						"Settlement TypeBox definitions in apps/api/src/routes/ledgers/schema.ts",
+						"Existing LedgerAccountSettlementEntity behavior",
+						"Settlement row types in apps/api/src/repo/schema.ts",
+						"Existing TypeID helpers in apps/api/src/repo/entities/types.ts"
+					],
+					"description": "Create exact local TypeBox contracts and a relocated Settlement entity without changing validation or transformations. Keep ID and timestamp creation lazy at mutation time. Preserve metadata parsing, the empty Transaction ID response fallback, response omissions, full-record writes, Created Time replacement, and each immutable helper's timestamp behavior. Add narrow entity characterization tests before completing the relocation.",
+					"files": {
+						"create": [
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementSchema.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementEntity.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementEntity.test.ts",
+							"apps/api/src/domains/ledgers/settlements/index.ts"
+						],
+						"modify": []
+					},
+					"validation": {
+						"tests": [
+							"Local request and response schemas retain the current fields, required properties, patterns, defaults, descriptions, and OpenAPI IDs",
+							"toResponse omits externalReference and effectiveAtUpperBound and returns an empty string when no Transaction is linked",
+							"Request conversion creates a fresh ID and timestamps or reuses the supplied Settlement ID while replacing Created and Updated Time",
+							"Row conversion and serialization preserve metadata, null handling, TypeIDs, and dates",
+							"withAmount, withStatus, and withTransactionId preserve all other fields and create a new Updated Time"
+						],
+						"acceptance": [
+							"The Settlement schema imports no legacy Ledger route schema",
+							"The entity performs no I/O and preserves every baseline conversion behavior",
+							"Focused entity tests pass"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P2",
+			"name": "Effect persistence",
+			"tasks": [
+				{
+					"id": "T2",
+					"name": "Add the Effect Drizzle repository",
+					"depends_on": ["T1"],
+					"inputs": [
+						"Current promise Settlement repository and tests",
+						"LedgerTransactionRepo and LedgerAccountRepo Effect patterns",
+						"DatabaseTag.effectDb",
+						"Existing PostgreSQL error-code helpers",
+						"Unchanged Settlement and Settlement Entry tables"
+					],
+					"description": "Add an Effect repository interface, Context.Service tag, live implementation, and Layer alongside the legacy repository. Translate only the current foreign-key and no-self-settlement failures into the existing errors. Preserve sequential Entry validation, check-then-insert exclusivity, onConflictDoNothing, Organization and Ledger predicates, descending Created Time ordering without a tie-breaker, drafting-only full updates and deletes, Updated Time writes, and the absence of transaction wrappers.",
+					"files": {
+						"create": [
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRepo.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRepo.test.ts"
+						],
+						"modify": [
+							"apps/api/src/domains/ledgers/settlements/index.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"Port every existing repository assertion to a managed PostgreSQL Layer",
+							"Cover list pagination and ordering, Organization isolation, ignored Ledger scope on item methods, constraint errors, drafting-only writes, Entry eligibility and exclusivity, amount calculation, and status updates",
+							"effectiveAtUpperBound round-trips through storage without gathering Entries",
+							"A Pending-to-Drafting status update retains linked Entries"
+						],
+						"acceptance": [
+							"Repository methods return Effects and use DatabaseTag.effectDb",
+							"No schema, migration, transaction, lock, retry, index, or uniqueness change appears",
+							"Focused repository tests pass against PostgreSQL"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P3",
+			"name": "Effect orchestration",
+			"tasks": [
+				{
+					"id": "T3",
+					"name": "Add the Effect Settlement service",
+					"depends_on": ["T1", "T2"],
+					"inputs": [
+						"Current promise Settlement service and tests",
+						"LedgerServiceTag and AccountServiceTag",
+						"TransactionServiceTag",
+						"LedgerAccountSettlementRepoTag",
+						"Approved Settlement lifecycle and posting behavior"
+					],
+					"description": "Add the Effect Settlement service, Context.Service tag, and Layer. Move existing Ledger and Account orchestration from routes into the service. List verifies the Ledger before querying. Create and update load both Accounts concurrently and compare currencies. Update completes Account validation before checking whether the Settlement exists. Preserve the lifecycle table, amount calculation, Transaction request, metadata precedence, idempotency key, Entry directions, and all current partial-failure ordering.",
+					"files": {
+						"create": [
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementService.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementService.test.ts"
+						],
+						"modify": [
+							"apps/api/src/domains/ledgers/settlements/index.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"Port existing service coverage to complete repository, Ledger, Account, and Transaction mock Layers",
+							"List performs the Ledger check before the repository query",
+							"Create and update use the settled Account's currency and Normal Balance and reject mismatched currencies with the existing conflict",
+							"Update validates Accounts before loading the Settlement and persists an entity with replaced Created Time",
+							"Every lifecycle edge and invalid transition remains unchanged",
+							"processing to pending attempts the drafting-only full update and skips the status update when that write fails",
+							"pending to posted creates the Posted Transaction before linking it and skips the final status write when linking fails",
+							"Posting preserves the idempotency key, Entry directions, description fallback, and Settlement metadata precedence",
+							"pending to drafting performs only the existing status update and does not release Entries",
+							"Transaction creation failure or a non-Posted result prevents linking and status mutation"
+						],
+						"acceptance": [
+							"All service methods return Effects",
+							"The service depends directly on existing Effect services without a promise bridge",
+							"No retry, transaction, clock, concurrency, or new error policy is introduced",
+							"Focused service tests pass"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P4",
+			"name": "Runtime and transport",
+			"tasks": [
+				{
+					"id": "T4",
+					"name": "Compose Settlement into the managed runtime",
+					"depends_on": ["T3"],
+					"inputs": [
+						"Settlement repository and service Layers",
+						"makeServerRuntimeLayer",
+						"Existing Ledger, Account, Transaction, database, and runtime services"
+					],
+					"description": "Export one Settlement Layer and add it to the server runtime. Supply it with the existing database and Ledger service Layers. Do not create another runtime, database client, executor, lifecycle hook, or Settlement-specific override.",
+					"files": {
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/ledgers/settlements/index.ts",
+							"apps/api/src/runtime.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"Resolve the Settlement service from the default server runtime",
+							"Build the API package with the production runtime composition"
+						],
+						"acceptance": [
+							"ServerRuntimeServices includes the Settlement service",
+							"The runtime supplies the Settlement service's Ledger, Account, Transaction, repository, and database dependencies",
+							"Layer composition reuses the existing database, service Layers, and runtime disposal",
+							"The API package typecheck and build pass without production composition casts"
+						]
+					}
+				},
+				{
+					"id": "T5",
+					"name": "Move routes and route tests to the Effect service",
+					"depends_on": ["T3", "T4"],
+					"inputs": [
+						"Current Settlement routes, tests, and response snapshots",
+						"Local Settlement schema",
+						"LedgerAccountSettlementServiceTag",
+						"Organization and Transaction route execution patterns"
+					],
+					"description": "Relocate all eight handlers and switch the Ledger router to the new slice. Preserve route paths, metadata, permissions, schemas, status codes, response serialization, and existing error advertisements. Each handler executes one Settlement program through the managed runtime. Keep item and Entry operations independent of the path Ledger where the baseline ignores it. Adapt the existing route suite to a mock Settlement service Layer without adding a reusable route harness or asserting runtime call counts.",
+					"files": {
+						"create": [
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRoutes.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRoutes.test.ts",
+							"apps/api/src/domains/ledgers/settlements/__snapshots__/LedgerAccountSettlementRoutes.test.ts.snap"
+						],
+						"modify": [
+							"apps/api/src/domains/ledgers/settlements/index.ts",
+							"apps/api/src/routes/ledgers/index.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"Retain route coverage for all eight operations, pagination, validation, permissions, success bodies, and typed failures",
+							"Create, delete, Entry mutation, and transitions still return HTTP 200",
+							"Get, delete, Entry mutation, and applicable transitions accept a different valid Ledger path without passing that Ledger to the service",
+							"List passes the Ledger and pagination values",
+							"Responses retain the current omissions and empty Transaction ID fallback",
+							"Unexpected service failures become the current generic HTTP 500 response",
+							"Existing response snapshots remain unchanged after relocation"
+						],
+						"acceptance": [
+							"Every handler runs one Effect program through request.server.runtime",
+							"Successful entities are converted with toResponse and typed failures are rethrown unchanged",
+							"The public HTTP and OpenAPI contracts are unchanged",
+							"Focused route tests pass"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P5",
+			"name": "Legacy removal and verification",
+			"tasks": [
+				{
+					"id": "T6",
+					"name": "Remove legacy wiring and run regression validation",
+					"depends_on": ["T5"],
+					"inputs": [
+						"Working Effect Settlement slice",
+						"All legacy Settlement imports and Fastify decorations",
+						"Shared repository and route fixtures",
+						"Repository validation commands from AGENTS.md and the approved design"
+					],
+					"description": "Delete the promise Settlement implementation and Transaction bridge. Remove only Settlement ownership from the legacy repository and service plugins, shared route schema, shared fixtures, and entity exports. Keep those plugins and fixtures intact for Categories, Statements, and Balance Monitors. Review the final diff for any behavior, schema, dependency, or infrastructure change outside the approved migration.",
+					"files": {
+						"create": [],
+						"modify": [
+							"apps/api/src/repo/entities/LedgerAccountSettlementEntity.ts",
+							"apps/api/src/repo/LedgerAccountSettlementRepo.ts",
+							"apps/api/src/repo/LedgerAccountSettlementRepo.test.ts",
+							"apps/api/src/services/LedgerAccountSettlementService.ts",
+							"apps/api/src/services/LedgerAccountSettlementService.test.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountSettlementRoutes.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountSettlementRoutes.test.ts",
+							"apps/api/src/routes/ledgers/__snapshots__/LedgerAccountSettlementRoutes.test.ts.snap",
+							"apps/api/src/repo/entities/index.ts",
+							"apps/api/src/repo/index.ts",
+							"apps/api/src/repo/types.ts",
+							"apps/api/src/repo/fixtures.ts",
+							"apps/api/src/services/index.ts",
+							"apps/api/src/routes/ledgers/schema.ts",
+							"apps/api/src/routes/ledgers/fixtures.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"Search the repository for legacy Settlement repository, service decoration, promise Transaction caller, and old schema imports",
+							"Run pnpm --filter=@exchequerio/api test -- src/domains/ledgers/settlements",
+							"Run pnpm --filter=@exchequerio/api test",
+							"Run pnpm --filter=@exchequerio/api build",
+							"Run pnpm --filter=@exchequerio/api types",
+							"Run pnpm run check",
+							"Run pnpm run ci"
+						],
+						"acceptance": [
+							"No legacy Settlement repository, service decoration, promise bridge, or old Settlement schema import remains",
+							"Categories, Statements, and Balance Monitors retain their existing plugin and fixture wiring",
+							"The final diff contains no database migration, schema snapshot change, dependency update, new error hierarchy, retry, transaction wrapper, concurrency policy, shared abstraction, or unrelated cleanup",
+							"Focused tests, the full API suite, build, types, repository checks, and full local CI pass"
+						]
+					}
+				}
+			]
+		}
+	]
+}
