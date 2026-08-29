@@ -1,0 +1,334 @@
+import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { Context, Effect, Layer } from "effect";
+
+import { DatabaseTag, type EffectDrizzleDatabase, postgresErrorCode } from "@/db";
+import { ConflictError, NotFoundError } from "@/lib/errors";
+import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
+import {
+	LedgerAccountSettlementEntriesTable,
+	LedgerAccountSettlementsTable,
+	LedgerAccountsTable,
+	LedgerTransactionEntriesTable,
+	LedgerTransactionsTable,
+} from "@/repo/schema";
+
+import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
+import type { SettlementStatus } from "./LedgerAccountSettlementSchema";
+
+interface LedgerAccountSettlementRepo {
+	listSettlements(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		offset: number,
+		limit: number
+	): Effect.Effect<LedgerAccountSettlementEntity[], unknown>;
+	getSettlement(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID
+	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	createSettlement(
+		entity: LedgerAccountSettlementEntity
+	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	updateSettlement(
+		entity: LedgerAccountSettlementEntity
+	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	deleteSettlement(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID
+	): Effect.Effect<void, unknown>;
+	addEntriesToSettlement(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		entryIds: string[]
+	): Effect.Effect<void, unknown>;
+	removeEntriesFromSettlement(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		entryIds: string[]
+	): Effect.Effect<void, unknown>;
+	getEntryIds(settlementId: LedgerAccountSettlementID): Effect.Effect<string[], unknown>;
+	calculateAmount(settlementId: LedgerAccountSettlementID): Effect.Effect<number, unknown>;
+	updateStatus(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		status: SettlementStatus
+	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+}
+
+const LedgerAccountSettlementRepoTag = Context.Service<LedgerAccountSettlementRepo>(
+	"LedgerAccountSettlementRepo"
+);
+
+class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
+	constructor(private readonly db: EffectDrizzleDatabase) {}
+
+	listSettlements(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		offset: number,
+		limit: number
+	): Effect.Effect<LedgerAccountSettlementEntity[], unknown> {
+		return this.db
+			.select(getTableColumns(LedgerAccountSettlementsTable))
+			.from(LedgerAccountSettlementsTable)
+			.innerJoin(
+				LedgerAccountsTable,
+				eq(LedgerAccountSettlementsTable.settledAccountId, LedgerAccountsTable.id)
+			)
+			.where(
+				and(
+					eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString()),
+					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+				)
+			)
+			.orderBy(desc(LedgerAccountSettlementsTable.created))
+			.limit(limit)
+			.offset(offset)
+			.pipe(Effect.map(rows => rows.map(row => LedgerAccountSettlementEntity.fromRow(row))));
+	}
+
+	getSettlement(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID
+	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+		return this.db
+			.select(getTableColumns(LedgerAccountSettlementsTable))
+			.from(LedgerAccountSettlementsTable)
+			.where(
+				and(
+					eq(LedgerAccountSettlementsTable.id, settlementId.toString()),
+					eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString())
+				)
+			)
+			.limit(1)
+			.pipe(
+				Effect.flatMap(rows =>
+					rows[0] === undefined
+						? Effect.fail(new NotFoundError(`Settlement not found: ${settlementId.toString()}`))
+						: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+				)
+			);
+	}
+
+	createSettlement(
+		entity: LedgerAccountSettlementEntity
+	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+		return this.db
+			.insert(LedgerAccountSettlementsTable)
+			.values(entity.toRow())
+			.returning()
+			.pipe(
+				Effect.map(rows => LedgerAccountSettlementEntity.fromRow(rows[0])),
+				Effect.mapError(error => {
+					const code = postgresErrorCode(error);
+					if (code === "23503") {
+						return new NotFoundError("Referenced account or organization not found");
+					}
+					return code === "23514" ? new ConflictError("Cannot settle an account to itself") : error;
+				})
+			);
+	}
+
+	updateSettlement(
+		entity: LedgerAccountSettlementEntity
+	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+		return this.db
+			.update(LedgerAccountSettlementsTable)
+			.set({ ...entity.toRow(), updated: new Date() })
+			.where(
+				and(
+					eq(LedgerAccountSettlementsTable.id, entity.id.toString()),
+					eq(LedgerAccountSettlementsTable.organizationId, entity.organizationId.toString()),
+					eq(LedgerAccountSettlementsTable.status, "drafting")
+				)
+			)
+			.returning()
+			.pipe(
+				Effect.flatMap(rows =>
+					rows[0] === undefined
+						? Effect.fail(new ConflictError("Settlement not found or not in drafting status"))
+						: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+				)
+			);
+	}
+
+	deleteSettlement(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID
+	): Effect.Effect<void, unknown> {
+		return this.db
+			.delete(LedgerAccountSettlementsTable)
+			.where(
+				and(
+					eq(LedgerAccountSettlementsTable.id, settlementId.toString()),
+					eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString()),
+					eq(LedgerAccountSettlementsTable.status, "drafting")
+				)
+			)
+			.returning({ id: LedgerAccountSettlementsTable.id })
+			.pipe(
+				Effect.flatMap(rows =>
+					rows.length === 0
+						? Effect.fail(new ConflictError("Settlement not found or not in drafting status"))
+						: Effect.void
+				)
+			);
+	}
+
+	addEntriesToSettlement(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		entryIds: string[]
+	): Effect.Effect<void, unknown> {
+		return Effect.gen({ self: this }, function* () {
+			const settlement = yield* this.getSettlement(organizationId, settlementId);
+			if (settlement.status !== "drafting") {
+				return yield* Effect.fail(
+					new ConflictError("Can only add entries to settlements in drafting status")
+				);
+			}
+
+			yield* Effect.forEach(
+				entryIds,
+				entryId =>
+					Effect.gen({ self: this }, function* () {
+						const entry = yield* this.db
+							.select({
+								id: LedgerTransactionEntriesTable.id,
+								accountId: LedgerTransactionEntriesTable.accountId,
+								status: LedgerTransactionsTable.status,
+							})
+							.from(LedgerTransactionEntriesTable)
+							.innerJoin(
+								LedgerTransactionsTable,
+								and(
+									eq(LedgerTransactionsTable.id, LedgerTransactionEntriesTable.transactionId),
+									eq(LedgerTransactionsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
+									eq(LedgerTransactionsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
+								)
+							)
+							.where(
+								and(
+									eq(LedgerTransactionEntriesTable.id, entryId),
+									eq(LedgerTransactionEntriesTable.organizationId, organizationId.toString())
+								)
+							)
+							.limit(1)
+							.pipe(Effect.map(rows => rows[0]));
+						if (entry === undefined) {
+							return yield* Effect.fail(new NotFoundError(`Entry not found: ${entryId}`));
+						}
+						if (entry.accountId !== settlement.settledAccountId.toString()) {
+							return yield* Effect.fail(
+								new ConflictError(`Entry ${entryId} does not belong to the settled account`)
+							);
+						}
+						if (entry.status !== "posted") {
+							return yield* Effect.fail(
+								new ConflictError(
+									`Transaction for entry ${entryId} is not posted (status: ${entry.status})`
+								)
+							);
+						}
+						const attached = yield* this.db
+							.select({ settlementId: LedgerAccountSettlementEntriesTable.settlementId })
+							.from(LedgerAccountSettlementEntriesTable)
+							.where(eq(LedgerAccountSettlementEntriesTable.entryId, entryId))
+							.limit(1);
+						if (attached[0] !== undefined) {
+							return yield* Effect.fail(
+								new ConflictError(
+									`Entry ${entryId} is already attached to settlement ${attached[0].settlementId}`
+								)
+							);
+						}
+					}),
+				{ concurrency: 1, discard: true }
+			);
+
+			yield* this.db
+				.insert(LedgerAccountSettlementEntriesTable)
+				.values(entryIds.map(entryId => ({ settlementId: settlementId.toString(), entryId })))
+				.onConflictDoNothing();
+		});
+	}
+
+	removeEntriesFromSettlement(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		entryIds: string[]
+	): Effect.Effect<void, unknown> {
+		return Effect.gen({ self: this }, function* () {
+			const settlement = yield* this.getSettlement(organizationId, settlementId);
+			if (settlement.status !== "drafting") {
+				return yield* Effect.fail(
+					new ConflictError("Can only remove entries from settlements in drafting status")
+				);
+			}
+			yield* this.db
+				.delete(LedgerAccountSettlementEntriesTable)
+				.where(
+					and(
+						eq(LedgerAccountSettlementEntriesTable.settlementId, settlementId.toString()),
+						inArray(LedgerAccountSettlementEntriesTable.entryId, entryIds)
+					)
+				);
+		});
+	}
+
+	getEntryIds(settlementId: LedgerAccountSettlementID): Effect.Effect<string[], unknown> {
+		return this.db
+			.select({ entryId: LedgerAccountSettlementEntriesTable.entryId })
+			.from(LedgerAccountSettlementEntriesTable)
+			.where(eq(LedgerAccountSettlementEntriesTable.settlementId, settlementId.toString()))
+			.pipe(Effect.map(rows => rows.map(row => row.entryId)));
+	}
+
+	calculateAmount(settlementId: LedgerAccountSettlementID): Effect.Effect<number, unknown> {
+		return this.db
+			.select({ total: sql<string>`COALESCE(SUM(${LedgerTransactionEntriesTable.amount}), 0)` })
+			.from(LedgerAccountSettlementEntriesTable)
+			.innerJoin(
+				LedgerTransactionEntriesTable,
+				eq(LedgerAccountSettlementEntriesTable.entryId, LedgerTransactionEntriesTable.id)
+			)
+			.where(eq(LedgerAccountSettlementEntriesTable.settlementId, settlementId.toString()))
+			.pipe(Effect.map(rows => Number.parseInt(rows[0]?.total ?? "0", 10)));
+	}
+
+	updateStatus(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		status: SettlementStatus
+	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+		return this.db
+			.update(LedgerAccountSettlementsTable)
+			.set({ status, updated: new Date() })
+			.where(
+				and(
+					eq(LedgerAccountSettlementsTable.id, settlementId.toString()),
+					eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString())
+				)
+			)
+			.returning()
+			.pipe(
+				Effect.flatMap(rows =>
+					rows[0] === undefined
+						? Effect.fail(new NotFoundError(`Settlement not found: ${settlementId.toString()}`))
+						: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+				)
+			);
+	}
+}
+
+const ledgerAccountSettlementRepoLayer = Layer.effect(
+	LedgerAccountSettlementRepoTag,
+	DatabaseTag.pipe(Effect.map(database => new LedgerAccountSettlementRepoLive(database.effectDb)))
+);
+
+export type { LedgerAccountSettlementRepo };
+export {
+	LedgerAccountSettlementRepoLive,
+	LedgerAccountSettlementRepoTag,
+	ledgerAccountSettlementRepoLayer,
+};
