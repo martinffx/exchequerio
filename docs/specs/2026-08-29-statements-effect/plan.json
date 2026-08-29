@@ -53,10 +53,10 @@
           "depends_on": ["T1"],
           "inputs": [
             "Statement model and Drizzle-derived row conversions from T1",
-            "Legacy repository SELECT, INSERT, and cleanup DELETE behavior",
-            "DatabaseTag.effectDb and the current PostgreSQL test Layer patterns"
+            "Legacy repository SELECT and INSERT behavior",
+            "DatabaseTag.effectDb and the PostgreSQL cleanup pattern in LedgerTransactionRepo.test.ts"
           ],
-          "description": "Add a Statement repository capability backed by the installed Effect-Drizzle client. Keep ID-only get with LIMIT 1, one-row insert with RETURNING, and cleanup delete by Statement ID with RETURNING. Represent missing get and delete rows with the existing Not Found failure and keep every other database or decoding failure on the generic server-error path. Add no tenant predicates, joins, error translations, transactions, locks, retries, conflict handling, or idempotency.",
+          "description": "Add a Statement repository capability backed by the installed Effect-Drizzle client. Expose only ID-only get with LIMIT 1 and one-row insert with RETURNING. Represent a missing get with the existing Not Found failure and keep every other database or decoding failure on the generic server-error path. Repository tests remove their rows through the database test Layer rather than a production cleanup method. Add no tenant predicates, joins, error translations, transactions, locks, retries, conflict handling, or idempotency.",
           "files": {
             "create": [
               "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.ts",
@@ -67,9 +67,8 @@
           "validation": {
             "tests": [
               "PostgreSQL get filters only by Statement ID and returns a decoded Statement",
-              "missing get and missing cleanup delete produce the existing Not Found failure",
+              "missing get produces the existing Not Found failure",
               "create performs one insert, returns database-generated timestamps, and round-trips valid metadata and all stored aggregate fields",
-              "cleanup delete removes only the supplied Statement ID",
               "duplicate-key and foreign-key failures remain unexpected generic failures"
             ],
             "acceptance": [
@@ -123,19 +122,17 @@
           "depends_on": ["T3"],
           "inputs": [
             "Composed Statement Layer from T3",
-            "Existing server runtime composition and idempotent disposal path",
+            "Existing server runtime composition",
             "Existing runtime Layer overrides used by API integration tests"
           ],
-          "description": "Add the Statement service to the server runtime service union and compose the Statement Layer with the existing Database Layer. Keep one managed runtime per Fastify server and the current shared, idempotent disposal path. Do not change pool ownership, shutdown timing, server startup, or test override semantics.",
+          "description": "Add the Statement service to the server runtime service union and compose the Statement Layer with the existing Database Layer. Keep the existing managed runtime, resource ownership, shutdown path, server startup, and test override semantics unchanged. Do not add tests for unchanged runtime reuse or disposal behavior.",
           "files": {
-            "create": ["apps/api/src/runtime.test.ts"],
+            "create": [],
             "modify": ["apps/api/src/runtime.ts"]
           },
           "validation": {
             "tests": [
-              "a runtime assembled with the existing database test override can resolve the Statement service",
-              "multiple Statement Effects use the same server-owned runtime and database service",
-              "repeated runtime disposal executes the existing resource finalizer once"
+              "the T5 route tests resolve the Statement service through the existing server runtime override"
             ],
             "acceptance": [
               "Runtime construction remains outside request handlers",
@@ -169,6 +166,7 @@
               "GET and POST retain their exact paths, permissions, operation IDs, tags, descriptions, response schemas, and advertised statuses",
               "GET success returns the existing payload and uses only statementId when Ledger and Account path IDs differ or do not exist",
               "POST success remains 200, persists body Ledger and Account IDs, uses startDatetime, and ignores path IDs, description, and endDatetime",
+              "a response backed by valid stored metadata preserves the current empty-object wire representation",
               "invalid transport values return 400, missing Statements return 404, and unexpected service failures return the current sanitized 500 problem",
               "authentication and read/write authorization remain 401 and 403 Fastify pre-handler concerns"
             ],
@@ -236,7 +234,7 @@
             "Repository pnpm, Vitest, Oxc, TypeScript, and Turborepo commands",
             "Migration lock and out-of-scope list in design.md"
           ],
-          "description": "Run the focused Statement tests first, then the complete API and repository quality gates. Review the final diff and generated OpenAPI evidence against the migration lock. Any failure that requires a contract, schema, migration, dependency, or architecture change returns to planning instead of being folded into this migration.",
+          "description": "Run focused Statement tests while implementing, then run the repository CI gate once. Review the final diff and generated OpenAPI evidence against the migration lock. Any failure that requires a contract, schema, migration, dependency, or architecture change returns to planning instead of being folded into this migration.",
           "files": {
             "create": [],
             "modify": []
@@ -244,12 +242,8 @@
           "validation": {
             "tests": [
               "start PostgreSQL with pnpm run docker:up when it is not already running",
-              "run all focused tests under apps/api/src/domains/ledgers/accounts/statements through the API package test script",
-              "run pnpm --filter=@exchequerio/api test",
-              "run pnpm --filter=@exchequerio/api types",
-              "run pnpm --filter=@exchequerio/api lint and pnpm --filter=@exchequerio/api format:check",
-              "run pnpm --filter=@exchequerio/api build",
-              "run pnpm run check and pnpm run ci before integration"
+              "run focused tests under apps/api/src/domains/ledgers/accounts/statements while implementing",
+              "run pnpm run ci once before integration"
             ],
             "acceptance": [
               "The final diff contains no SQL migration, schema change, dependency change, unrelated cleanup, or weakened assertion",

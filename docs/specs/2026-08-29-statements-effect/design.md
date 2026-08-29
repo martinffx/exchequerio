@@ -143,14 +143,13 @@ behavior, and `delete` applies only after the replacement is active.
 | Description | Accepted on create, never persisted, and omitted from responses | reuse | Preserve request and response behavior |
 | Stored aggregates | Create writes zero opening, closing, credit, and debit totals and zero transaction count | reuse | Preserve placeholder persistence |
 | Response projection | Start and end equal `statementDate`; version is `0`; Normal Balance is Debit; Currency is `USD`; Minor Unit Exponent is `2`; all three starting and ending Balances are zero | reuse | Preserve the exact wire representation |
-| Metadata | Create stores no metadata; valid stored JSON is decoded and returned; malformed JSON is silently treated as absent | reuse | Preserve decoding behavior, including the malformed-data edge case |
+| Metadata | Create stores no metadata; valid stored JSON is decoded in the domain model, but the current response serializer emits an empty object; malformed JSON is silently treated as absent | reuse | Preserve both domain decoding and the existing wire representation |
 | Timestamps | Request construction captures one `Date`; insert omits Created Time for the database default and writes a fresh Updated Time; returned timestamps come from `INSERT ... RETURNING` or SELECT | reuse | Preserve timestamp sources and ordering |
 | Read SQL | Select by Statement ID with `LIMIT 1` | reuse | Preserve access pattern and absence behavior |
 | Create SQL | One `INSERT ... RETURNING` into `ledger_account_statements` | reuse | Preserve atomicity and returned persisted values |
-| Cleanup SQL | Delete by Statement ID with `RETURNING`; absence is an error | reuse | Preserve repository test cleanup behavior without adding an HTTP endpoint |
 | Transactions | Each repository call is a single autocommit statement | reuse | Add no explicit transaction |
 | Concurrency | No lock, optimistic predicate, retry, uniqueness policy, or idempotency mechanism | reuse | Preserve concurrency and duplicate-request behavior |
-| Not found | Missing SELECT or cleanup DELETE produces the existing Not Found problem/error | modify | Express absence in Effect while retaining `404` at HTTP |
+| Not found | A missing SELECT produces the existing Not Found problem/error | modify | Express absence in Effect while retaining `404` at HTTP |
 | Other failures | Duplicate keys, foreign-key failures, database unavailability, unexpected decode failures, and defects reach the global handler as generic `500` failures | reuse | Do not introduce new `409` or `503` translations during migration |
 | OpenAPI | GET advertises `200/400/401/403/404/429/500/503`; POST advertises `200/400/401/403/409/429/500/503` | reuse | Preserve documentation even where no Statement code currently generates a status |
 | Legacy wiring | `RepoPlugin` and `ServicePlugin` construct and decorate Statement dependencies | delete | Remove Statement-only registrations once routes use the runtime |
@@ -196,11 +195,12 @@ native `Date` and TypeID creation preserve the existing behavior.
 ### Repository
 
 `LedgerAccountStatementRepo` is a Context service backed by `DatabaseTag.effectDb`. Its interface
-contains get, create, and cleanup delete Effects. It preserves the current SQL predicates and
-single-statement boundaries. Read and delete absence are represented explicitly and converted to
-the existing Not Found failure. All other failures retain their generic server-error behavior; the
-repository must not adopt Account or Organization database-error translations merely for
-consistency.
+contains only the get and create Effects used by the service. It preserves the current SQL
+predicates and single-statement boundaries. Read absence is represented explicitly and converted
+to the existing Not Found failure. All other failures retain their generic server-error behavior;
+the repository must not adopt Account or Organization database-error translations merely for
+consistency. Repository tests remove their rows through the database test Layer, following the
+Transaction repository tests, instead of adding a production cleanup capability.
 
 ### Service
 
@@ -269,7 +269,8 @@ The existing response schema and field names remain unchanged. Every response co
 - return Pending, Posted, and Available starting and ending Balances with zero Amount, Credits, and
   Debits;
 - set `currency` to `USD` and `currencyExponent` to `2` at both Statement and Balance levels;
-- return valid decoded metadata when present; and
+- return an empty metadata object when stored metadata decodes successfully, matching the current
+  response serializer; and
 - serialize persisted Created and Updated Times as ISO strings.
 
 The current RFC 7807-style problem format remains shared with the rest of the API. Validation and
@@ -302,13 +303,15 @@ Verification follows stub-driven TDD and assigns one contract to each active bou
 - Service tests use a tagged stub repository to prove GET parsing/delegation, create construction,
   and failure propagation without adding parent lookups.
 - Repository tests use PostgreSQL and the existing test database support to prove ID-only SELECT,
-  one-row INSERT/RETURNING, valid metadata round trips, missing-row behavior, cleanup delete, and
-  unchanged generic handling of duplicate-key and foreign-key failures.
+  one-row INSERT/RETURNING, valid metadata round trips, missing-row behavior, and unchanged generic
+  handling of duplicate-key and foreign-key failures. Tests clean up through the database test
+  Layer rather than the production repository contract.
 - Route tests use a runtime Layer override rather than legacy service decoration. They lock paths,
-  permissions, validation, advertised status schemas, success payloads, `200` create status, ignored
-  path scope, body-ID precedence, Not Found, and generic internal failures.
-- Runtime/server tests prove the Statement Layer is available from the shared runtime and that the
-  existing idempotent server close path disposes resources once.
+  permissions, validation, advertised status schemas, success payloads including current metadata
+  serialization, `200` create status, ignored path scope, body-ID precedence, Not Found, and generic
+  internal failures.
+- Runtime composition and type checking prove the Statement Layer is available from the shared
+  runtime. The migration does not retest unchanged runtime reuse or disposal behavior.
 - Focused type checking, linting, formatting checks, Statement tests, and the API test suite must
   pass before the migration is considered complete.
 
