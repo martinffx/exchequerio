@@ -1,262 +1,158 @@
 {
-  "feature": "categories-effect",
-  "spec": "docs/specs/2026-08-29-categories-effect/design.md",
-  "goal": "Migrate Ledger Account Categories to the managed Effect runtime without changing HTTP, domain, error, persistence, transaction, concurrency, identifier, timestamp, tenancy, or operational behavior.",
-  "phases": [
-    {
-      "id": "P1",
-      "name": "Effect repository",
-      "tasks": [
-        {
-          "id": "T1",
-          "name": "Migrate Category CRUD persistence",
-          "depends_on": [],
-          "inputs": [
-            "Approved persistence and error baseline in design.md",
-            "Existing LedgerAccountCategoryEntity conversions",
-            "DatabaseTag.effectDb and Transaction repository conventions",
-            "Shared NotFoundError, ConflictError, and PostgreSQL cause inspection"
-          ],
-          "description": "Define the Effect repository contract, tag, live implementation, and Layer. Convert list, get, upsert, and delete to native Effect Drizzle while preserving Ledger-only predicates, created-descending ordering, pagination, conflict clauses, returned rows, cascade behavior, error details, and timestamp ownership. Adapt the PostgreSQL repository harness to run repository Effects. Add no Organization predicate, transaction, retry, lock, or error hierarchy.",
-          "files": {
-            "create": [],
-            "modify": [
-              "apps/api/src/repo/LedgerAccountCategoryRepo.ts",
-              "apps/api/src/repo/LedgerAccountCategoryRepo.test.ts"
-            ]
-          },
-          "validation": {
-            "tests": [
-              "Empty, paginated, and descending-order lists behave unchanged.",
-              "Get hides missing and cross-Ledger Categories with the existing Not Found details.",
-              "Upsert preserves insert, replacement, immutable Ledger mismatch, nullable fields, metadata, and timestamps.",
-              "Delete preserves Ledger isolation, missing-row behavior, and junction-table cascades."
-            ],
-            "acceptance": [
-              "The live repository uses DatabaseTag.effectDb.",
-              "Missing Ledger foreign keys and zero-row upserts retain their existing public errors.",
-              "Unexpected SQL and row-decoding failures remain generic internal server failures.",
-              "No Organization scoping, transaction, retry, lock, or schema change is introduced."
-            ]
-          }
-        },
-        {
-          "id": "T2",
-          "name": "Migrate Category relationship persistence",
-          "depends_on": [
-            "T1"
-          ],
-          "inputs": [
-            "Effect repository foundation from T1",
-            "Existing Account and parent junction-table behavior",
-            "Existing sequential existence checks and PostgreSQL constraints"
-          ],
-          "description": "Convert the four Account and parent relationship operations to Effects. Preserve the exact sequence of existence reads and writes, duplicate-link idempotency, missing-link details, multiple parents, direct self-link rejection, and cascade behavior. Keep each statement independent and nontransactional. Do not add full cycle detection or verify that linked Accounts belong to the Category's Ledger.",
-          "files": {
-            "create": [],
-            "modify": [
-              "apps/api/src/repo/LedgerAccountCategoryRepo.ts",
-              "apps/api/src/repo/LedgerAccountCategoryRepo.test.ts"
-            ]
-          },
-          "validation": {
-            "tests": [
-              "Duplicate Account and parent links remain successful and idempotent.",
-              "Missing Accounts, Categories, and relationships retain their current Not Found details.",
-              "Parent links continue to allow multiple parents and reject only direct self-links.",
-              "Cross-Ledger Category access remains hidden while cross-Ledger Account links retain current behavior."
-            ],
-            "acceptance": [
-              "Existence checks and writes execute in their existing order.",
-              "Relationship operations add no transaction, lock, retry, cycle detection, or tenancy hardening."
-            ]
-          }
-        },
-        {
-          "id": "T3",
-          "name": "Remove Category from legacy repository wiring",
-          "depends_on": [
-            "T2"
-          ],
-          "inputs": [
-            "Completed Effect repository Layer",
-            "Current legacy repository plugin and shared test fixtures"
-          ],
-          "description": "Remove only Category construction, plugin typing, and fixture exposure from the Node Drizzle repository wiring. Keep Settlement, Statement, and Balance Monitor repository wiring unchanged.",
-          "files": {
-            "create": [],
-            "modify": [
-              "apps/api/src/repo/index.ts",
-              "apps/api/src/repo/types.ts",
-              "apps/api/src/repo/fixtures.ts"
-            ]
-          },
-          "validation": {
-            "tests": [
-              "Category repository tests obtain the repository through the Effect Layer.",
-              "Remaining legacy repository tests continue to use their existing fixtures."
-            ],
-            "acceptance": [
-              "No production or test code constructs the old Category repository with DrizzleDB.",
-              "Remaining legacy repositories and their injection options are unchanged."
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "P2",
-      "name": "Effect service and runtime",
-      "tasks": [
-        {
-          "id": "T4",
-          "name": "Migrate Category service orchestration",
-          "depends_on": [
-            "T2"
-          ],
-          "inputs": [
-            "Effect repository contract",
-            "Existing service method names and argument conventions",
-            "TypeBox-derived LedgerAccountCategoryRequest",
-            "Current ID parsing and entity construction behavior"
-          ],
-          "description": "Convert all nine service methods to Effects and add the service tag and Layer. Preserve direct delegation for reads, deletion, and relationships. Create continues to construct one entity and upsert it. Update continues to parse IDs, perform a separate existence read, construct replacement state, and perform the existing ID-based upsert. Keep that sequence nontransactional and last-writer-wins. Replace the handwritten request mirror with the existing TypeBox-derived type and adapt tests to provide an Effect repository stub.",
-          "files": {
-            "create": [],
-            "modify": [
-              "apps/api/src/services/LedgerAccountCategoryService.ts",
-              "apps/api/src/services/LedgerAccountCategoryService.test.ts"
-            ]
-          },
-          "validation": {
-            "tests": [
-              "Every method calls the same repository operation with the same arguments.",
-              "Create preserves TypeID generation and entity conversion.",
-              "Update proves the existence read completes before upsert.",
-              "A failed existence read prevents the update upsert.",
-              "Repository errors propagate unchanged through the Effect error channel."
-            ],
-            "acceptance": [
-              "The service Layer composes with a repository test Layer.",
-              "PUT remains a separate read followed by ID-based upsert with no transaction, lock, retry, or idempotency key.",
-              "No handwritten mirror request type remains."
-            ]
-          }
-        },
-        {
-          "id": "T5",
-          "name": "Compose Categories into the server runtime",
-          "depends_on": [
-            "T3",
-            "T4"
-          ],
-          "inputs": [
-            "Category repository and service Layers",
-            "Existing server runtime composition",
-            "Remaining legacy service plugin consumers"
-          ],
-          "description": "Add the Category service to ServerRuntimeServices, provide its repository Layer, and merge it into the existing server Layer. Remove only Category types, construction, decoration, and injection from the legacy service plugin. Keep all other runtime services and legacy service wiring unchanged. Add no Category-specific runtime, override API, resource lifetime, or generic executor.",
-          "files": {
-            "create": [],
-            "modify": [
-              "apps/api/src/runtime.ts",
-              "apps/api/src/services/index.ts"
-            ]
-          },
-          "validation": {
-            "tests": [
-              "The Category service resolves from the managed server runtime.",
-              "The Category service Layer composes with its repository Layer."
-            ],
-            "acceptance": [
-              "The default runtime supplies DatabaseTag.effectDb to the Category repository.",
-              "Server shutdown retains the existing managed database finalizer.",
-              "Settlement, Statement, and Balance Monitor services remain available through the legacy plugin."
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "P3",
-      "name": "HTTP boundary",
-      "tasks": [
-        {
-          "id": "T6",
-          "name": "Run all Category routes through Effect",
-          "depends_on": [
-            "T5"
-          ],
-          "inputs": [
-            "Category service tag",
-            "Organization, Account, and Transaction route execution patterns",
-            "Existing Category schemas, permissions, route tests, and global error handler"
-          ],
-          "description": "Update all nine handlers to obtain the Category service from its tag, execute one Effect through request.server.runtime, and rethrow failures to the existing global error handler. Preserve paths, methods, operation IDs, permissions, request parsing, response conversion, advertised schemas, success codes, headers, pagination defaults, and empty mutation responses. Adapt route tests to install a complete Category service with Layer.succeed and return successful or failed Effects.",
-          "files": {
-            "create": [],
-            "modify": [
-              "apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.ts",
-              "apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
-            ]
-          },
-          "validation": {
-            "tests": [
-              "All nine handlers execute through the supplied runtime.",
-              "List and get return the same response representations.",
-              "Create and PUT remain 200 and create emits no Location header.",
-              "Delete, link, and unlink remain 200 with empty responses.",
-              "Validation, authentication, permissions, Not Found, Conflict, and generic internal server behavior remain unchanged."
-            ],
-            "acceptance": [
-              "Route paths, methods, schemas, permissions, operation IDs, statuses, and headers are unchanged.",
-              "Existing 429 and 503 schemas remain advertised without new Category producers.",
-              "Routes use the existing server runtime and global error handler without a new adapter."
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "P4",
-      "name": "Verification",
-      "tasks": [
-        {
-          "id": "T7",
-          "name": "Validate the migration and audit deviations",
-          "depends_on": [
-            "T6"
-          ],
-          "inputs": [
-            "Completed Category Effect slice",
-            "Baseline commit 47779c46418da3558f8f20f61e1edee20de6b72a",
-            "Baseline result of 32 API test files and 490 tests"
-          ],
-          "description": "Run focused tests followed by the full API and repository checks. Compare the final diff with the recorded baseline. Stop and split out any HTTP, domain, error, SQL, transaction, concurrency, identifier, timestamp, tenancy, or operational deviation.",
-          "files": {
-            "create": [],
-            "modify": []
-          },
-          "validation": {
-            "tests": [
-              "pnpm --filter=@exchequerio/api test -- src/repo/LedgerAccountCategoryRepo.test.ts",
-              "pnpm --filter=@exchequerio/api test -- src/services/LedgerAccountCategoryService.test.ts",
-              "pnpm --filter=@exchequerio/api test -- src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts",
-              "pnpm --filter=@exchequerio/api test",
-              "pnpm --filter=@exchequerio/api types",
-              "pnpm --filter=@exchequerio/api build",
-              "pnpm run check",
-              "pnpm run ci"
-            ],
-            "acceptance": [
-              "git diff --check passes.",
-              "The diff contains no entity, TypeBox schema, database schema, migration, dependency, or unrelated cleanup changes.",
-              "Organization scoping, OCC, lock_version, transactions, retries, idempotency keys, real balances, cycle detection, and relationship hardening are absent.",
-              "Any discovered deviation is moved to a separately approved plan and change set before implementation continues."
-            ]
-          }
-        }
-      ]
-    }
-  ]
+	"feature": "categories-effect",
+	"spec": "docs/specs/2026-08-29-categories-effect/design.md",
+	"goal": "Migrate Ledger Account Categories to the managed Effect runtime without changing HTTP, domain, error, persistence, transaction, concurrency, identifier, timestamp, tenancy, or operational behavior.",
+	"phases": [
+		{
+			"id": "P1",
+			"name": "Prerequisite and baseline",
+			"tasks": [
+				{
+					"id": "T1",
+					"name": "Verify the Organization-scoping prerequisite",
+					"depends_on": [],
+					"inputs": [
+						"docs/specs/2026-08-29-categories-organization-scoping/design.md",
+						"docs/specs/2026-08-29-categories-organization-scoping/plan.json",
+						"Recorded Category baseline commit 47779c46418da3558f8f20f61e1edee20de6b72a"
+					],
+					"description": "Block implementation until the separate Organization-scoping design and plan exist and are approved. Confirm that the Effect migration lands first against the recorded Ledger-only baseline and that Organization-scoping code follows in its own change set. If the approved ordering or Category method signatures differ, stop and rebaseline this migration before changing production code.",
+					"files": {
+						"create": [],
+						"modify": []
+					},
+					"validation": {
+						"tests": [
+							"Both named Organization-scoping artifacts exist and form an approved, decision-complete plan.",
+							"The approved ordering keeps Organization-scoping implementation outside this migration change set."
+						],
+						"acceptance": [
+							"T2 cannot start while either prerequisite artifact is missing or unapproved.",
+							"The Category baseline and internal signatures remain valid for a migration-first ordering.",
+							"No Organization-scoping code is added by this plan."
+						]
+					}
+				},
+				{
+					"id": "T2",
+					"name": "Characterize uncovered legacy behavior",
+					"depends_on": ["T1"],
+					"inputs": [
+						"Approved behavior baseline in design.md",
+						"Current Promise repository, service, routes, and PostgreSQL test fixtures",
+						"Current test inventory of 38 repository, 13 service, and 39 route cases"
+					],
+					"description": "Add test-only characterization before changing production code. Lock the behaviors most exposed by the adapter and execution-model change: malformed stored metadata, PostgreSQL-owned creation time, application-owned update time, preservation of created time on upsert, read-before-upsert order, last-writer-wins replacement, delete-between-read-and-upsert recreation, relationship failure precedence, unexpected row-decoding failure, and database unavailability remaining a generic internal server response. Preserve the existing test inventory and assertions.",
+					"files": {
+						"create": [],
+						"modify": [
+							"apps/api/src/repo/LedgerAccountCategoryRepo.test.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.test.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"pnpm --filter=@exchequerio/api test -- src/repo/LedgerAccountCategoryRepo.test.ts",
+							"pnpm --filter=@exchequerio/api test -- src/services/LedgerAccountCategoryService.test.ts",
+							"pnpm --filter=@exchequerio/api test -- src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
+						],
+						"acceptance": [
+							"All new characterization tests pass against the legacy Promise implementation.",
+							"No production file changes in T2.",
+							"Existing JWT 401, readonly-token 403, CRUD, relationship, and error assertions remain present."
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P2",
+			"name": "Atomic Effect cutover",
+			"tasks": [
+				{
+					"id": "T3",
+					"name": "Cut the complete Category slice over to Effect",
+					"depends_on": ["T2"],
+					"inputs": [
+						"Green legacy characterization suite from T2",
+						"Organizations ownership pattern",
+						"Transaction native Effect Drizzle pattern",
+						"DatabaseTag.effectDb and Effect 4.0.0-rc.112",
+						"Existing Category entity and TypeBox-derived request type"
+					],
+					"description": "Perform one compile-green production cutover because splitting repository, service, plugin, runtime, and route removal creates known invalid intermediate states. Replace the Promise repository with an Effect contract, tag, live implementation, and Layer backed by DatabaseTag.effectDb. Convert all eight repository operations while preserving exact SQL and sequential statement order. Convert all nine service operations and preserve the separate update existence read followed by ID-based upsert. Compose the service into the existing runtime, remove only Category from legacy repository and service plugins and fixtures, and run every route through server.runtime. Adapt the focused tests without removing baseline assertions. Repository and service Effects use unknown failures: expected shared NotFoundError and ConflictError values, native adapter failures, and synchronous TypeID, entity, or response-conversion throws enter the failure channel unchanged and never become defects or ServiceUnavailableError values.",
+					"files": {
+						"create": [],
+						"modify": [
+							"apps/api/src/repo/LedgerAccountCategoryRepo.ts",
+							"apps/api/src/repo/LedgerAccountCategoryRepo.test.ts",
+							"apps/api/src/repo/index.ts",
+							"apps/api/src/repo/types.ts",
+							"apps/api/src/repo/fixtures.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.test.ts",
+							"apps/api/src/services/index.ts",
+							"apps/api/src/runtime.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"Repository tests run through the Category Layer and preserve CRUD, Ledger isolation, upsert, cascade, relationship, sequencing, timestamp, metadata, and failure cases.",
+							"Service tests use an Effect repository Layer and preserve delegation, entity construction, update ordering, races, and original failure objects.",
+							"Route success and service-failure cases use an isolated Fastify server with Layer.succeed.",
+							"Existing invalid-JWT 401 and readonly-token 403 cases continue through buildServer and its real authentication and permission hooks.",
+							"A failing native adapter and a synchronous conversion throw are failures rather than defects and reach the existing handler as generic 500 responses.",
+							"pnpm --filter=@exchequerio/api types",
+							"pnpm --filter=@exchequerio/api test -- src/repo/LedgerAccountCategoryRepo.test.ts src/services/LedgerAccountCategoryService.test.ts src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
+						],
+						"acceptance": [
+							"The package typechecks at the end of the cutover; no completed task leaves broken consumers or temporary compatibility code.",
+							"All nine routes preserve their methods, paths, permissions, schemas, operation IDs, statuses, headers, response bodies, and error details.",
+							"Create remains 200 without Location; every other mutation remains 200 with its existing body.",
+							"List remains Ledger-scoped, created-descending, and offset/limit paginated.",
+							"Update remains a nontransactional existence read followed by ID-based upsert with last-writer-wins and delete/recreate behavior.",
+							"Link Account reads the Category then inserts without pre-reading the Account; unlink Account reads the Category then deletes.",
+							"Link parent reads child then parent, checks direct equality, then inserts; unlink parent reads only the child then deletes.",
+							"No Organization predicate, transaction, concurrency combinator, lock, retry, idempotency key, schema change, new runtime, generic executor, or reusable test harness is introduced.",
+							"Settlement, Statement, and Balance Monitor legacy wiring remains unchanged."
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P3",
+			"name": "Verification",
+			"tasks": [
+				{
+					"id": "T4",
+					"name": "Run CI and audit behavior deviations",
+					"depends_on": ["T3"],
+					"inputs": [
+						"Compile-green Category Effect cutover",
+						"Baseline commit 47779c46418da3558f8f20f61e1edee20de6b72a",
+						"Approved migration and Organization-scoping ordering"
+					],
+					"description": "Run the full repository CI once after the focused suites have passed. Compare the final diff with the recorded baseline and stop if it contains any unplanned HTTP, domain, error, SQL, transaction, concurrency, identifier, timestamp, tenancy, or operational change.",
+					"files": {
+						"create": [],
+						"modify": []
+					},
+					"validation": {
+						"tests": ["pnpm run ci", "git diff --check"],
+						"acceptance": [
+							"The final diff contains only the files owned by T2 and T3.",
+							"Entity code, TypeBox schemas, database schema, migrations, dependencies, and unrelated slices are unchanged.",
+							"The final route, service, and repository assertion inventory is at least the characterized baseline.",
+							"Organization scoping, OCC, lock_version, transactions, retries, idempotency keys, real balances, cycle detection, and relationship hardening remain outside this change set.",
+							"Any discovered deviation returns to design or planning before implementation continues."
+						]
+					}
+				}
+			]
+		}
+	]
 }

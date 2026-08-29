@@ -33,9 +33,11 @@ requests and database state.
   infrastructure.
 - Moving or renaming the existing Category files.
 
-Organization-scoped queries are a requested behavior change. They require their own approved spec
-and plan before this migration enters implementation, and their code must remain in a separate
-change set.
+Organization-scoped queries are a requested behavior change. Before this migration starts,
+`docs/specs/2026-08-29-categories-organization-scoping/design.md` and its `plan.json` must exist and
+be approved. This migration then lands first against the recorded Ledger-only baseline. The
+Organization-scoping implementation follows in a separate change set. If that ordering changes,
+this migration must be rebaselined and replanned before implementation.
 
 ## User stories
 
@@ -80,7 +82,7 @@ use the server's managed Effect runtime.
 As an API maintainer, I want the migration diff to contain no product, tenancy, schema,
 concurrency, or operational-policy changes.
 
-- Organization scoping receives a separate spec, plan, and change set.
+- Organization scoping receives the named prerequisite spec, plan, and subsequent change set.
 - OCC, real balances, cycle detection, stricter relationship validation, status-code modernization,
   and availability remapping do not enter this migration.
 - Any newly discovered deviation stops implementation until it is split out.
@@ -99,6 +101,8 @@ concurrency, or operational-policy changes.
 - The work uses branch `feat/categories-effect` and worktree
   `/Users/martinrichards/code/exchequerio/.worktrees/categories-effect`.
 - The recorded baseline commit is `47779c46418da3558f8f20f61e1edee20de6b72a`.
+- Implementation is blocked until the Organization-scoping design and plan named above are
+  approved.
 
 ## Context
 
@@ -211,13 +215,28 @@ adds no domain validation, decoder abstraction, clock, ID generator, or error cl
 - `ledgerAccountCategoryRepoLayer` for live construction.
 
 Every operation keeps its tables, predicates, ordering, limits, offsets, conflict clauses,
-returning clauses, and sequential call order. Multi-step update and relationship operations remain
-separate Effects rather than database transactions.
+returning clauses, and sequential call order. The relationship sequences are exact:
+
+- Link Account reads the Category, then inserts the junction row; it does not pre-read the Account.
+- Unlink Account reads the Category, then deletes the junction row.
+- Link parent reads the child, reads the parent, checks direct equality, then inserts the junction
+  row.
+- Unlink parent reads only the child, then deletes the junction row.
+
+Multi-step update and relationship operations remain separate sequential Effects rather than
+concurrent programs or database transactions.
 
 The repository continues to create the existing shared `NotFoundError` and `ConflictError` values.
 It inspects Effect-wrapped PostgreSQL causes for the existing foreign-key and self-reference cases.
 All other SQL and row-decoding failures retain the generic public `500` response. Database
 unavailability does not become `503`.
+
+Repository and service capabilities use `unknown` as the Effect failure type because preserving the
+existing raw failure objects is part of the migration. Expected `NotFoundError` and `ConflictError`
+values enter the failure channel unchanged. Native adapter failures and synchronous TypeID, request,
+row, and response conversion throws also enter the failure channel unchanged rather than becoming
+defects. Routes rethrow those failures to the existing global handler. No failure is remapped to a
+new Category error or `ServiceUnavailableError`.
 
 ### Service boundary
 
@@ -266,23 +285,31 @@ There are no schema or migration changes.
 
 ## Test design
 
-- Route tests provide a complete Effect service through `Layer.succeed`, run the current Fastify
-  schemas and error handler, and preserve the existing HTTP assertions.
+- Before production changes, test-only characterization locks the uncovered adapter, timestamp,
+  sequencing, and concurrency behavior against the legacy implementation.
+- Route success and service-failure tests use an isolated Fastify server with a complete Effect
+  service provided through `Layer.succeed`.
+- Existing invalid-JWT `401` and readonly-token `403` cases continue to use `buildServer` with its
+  real authentication and permission hooks. They use the default runtime because their prehandlers
+  reject the request before Category persistence runs.
+- The route suite retains its current 39 cases or an equivalent named assertion matrix. The
+  repository suite retains 38 cases and the service suite retains 13 cases, plus the new baseline
+  characterizations. Harness rewrites may consolidate setup but must not remove behavior assertions.
 - Service tests provide an Effect repository stub and verify delegation, creation, and
   read-before-upsert sequencing.
 - Repository tests use the existing PostgreSQL Layer and preserve assertions for ordering,
   pagination, Ledger isolation, foreign-key errors, immutable Ledger ownership, cascades,
   idempotent links, multiple parents, direct self-link rejection, and missing unlinks.
+- Baseline characterizations cover malformed stored metadata, PostgreSQL-owned creation time,
+  application-owned update time, created-time preservation on upsert, read-before-upsert order,
+  last-writer-wins replacement, the delete-between-read-and-upsert recreation window, relationship
+  failure precedence, row-decoding failure, and database unavailability remaining a generic `500`.
 - Narrow tests prove that handlers use the runtime and that the Category Layers compose. The
-  migration adds no duplicate end-to-end harness.
+  migration adds no reusable or duplicate end-to-end harness.
 
 Validation runs from the repository root:
 
 ```bash
-pnpm --filter=@exchequerio/api test
-pnpm --filter=@exchequerio/api types
-pnpm --filter=@exchequerio/api build
-pnpm run check
 pnpm run ci
 ```
 
@@ -297,6 +324,11 @@ code and keep Categories on a different path from Accounts and Transactions.
 
 Converting in place avoids an unrelated relocation. The older file layout remains until a current
 requirement justifies changing it.
+
+The production conversion is one atomic, compile-green cutover. Splitting repository, legacy
+plugin, service, runtime, and route removal into separately completed tasks would leave known broken
+intermediate states. Test-only characterization remains a separate earlier task because it leaves
+production unchanged.
 
 Shared errors already express every caller-visible distinction. Category-specific errors would add
 types without changing handling.
@@ -313,6 +345,7 @@ The migration retains generic database `500` responses, last-writer-wins PUTs, t
 race, longer Category cycles, cross-Ledger Account links, Ledger-only Category scoping,
 unconstrained pagination values, and placeholder balances.
 
-## Open questions
+## Execution prerequisite
 
-None within the behavior-preserving Effect migration.
+The migration is blocked until the named Organization-scoping design and plan are approved. No
+other design question remains within the behavior-preserving Effect migration.
