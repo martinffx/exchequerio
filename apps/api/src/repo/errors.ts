@@ -1,6 +1,5 @@
 import {
 	ConflictError,
-	type ErrorContext,
 	InternalServerError,
 	NotFoundError,
 	ServiceUnavailableError,
@@ -62,39 +61,35 @@ function getDBErrorCode(error: DBError): string {
  * | OC001  | catalog_stale (DSQL)    | ServiceUnavailableError |
  *
  * @param error - Database error with code
- * @param context - Optional context with resource IDs for debugging
  * @returns HttpError based on error code
  */
-function handleDBError(error: DBError, context: ErrorContext = {}): Error {
+function handleDBError(error: DBError): Error {
 	const code = getDBErrorCode(error);
 
 	switch (code) {
 		// Unique constraint violation
 		case "23505":
-			return new ConflictError("Resource already exists", { ...context, retryable: false });
+			return new ConflictError("Resource already exists", { retryable: false });
 
 		// Foreign key violation (PG only - DSQL doesn't support FKs)
 		case "23503":
-			return new NotFoundError("Referenced resource not found", context);
+			return new NotFoundError("Referenced resource not found");
 
 		// Serialization failure (PG + DSQL)
 		case "40001":
 		case "OC000":
-			return new ServiceUnavailableError("Transaction conflict - please retry", context);
+			return new ServiceUnavailableError("Transaction conflict - please retry");
 
 		// Deadlock (PG only)
 		case "40P01":
-			return new ServiceUnavailableError("Transaction deadlock - please retry", context);
+			return new ServiceUnavailableError("Transaction deadlock - please retry");
 
 		// Catalog cache stale (DSQL)
 		case "OC001":
-			return new ServiceUnavailableError("Schema conflict - please retry", context);
+			return new ServiceUnavailableError("Schema conflict - please retry");
 
 		default:
-			return new InternalServerError(error.message || "Database error", {
-				...context,
-				cause: error,
-			});
+			return new InternalServerError(error.message || "Database error", { cause: error });
 	}
 }
 

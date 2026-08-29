@@ -9,6 +9,7 @@ import {
 	LedgerAccountSettlementsTable,
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
+	LedgerTransactionsTable,
 } from "./schema";
 import type { DrizzleDB } from "./types";
 
@@ -176,9 +177,17 @@ class LedgerAccountSettlementRepo {
 				.select({
 					id: LedgerTransactionEntriesTable.id,
 					accountId: LedgerTransactionEntriesTable.accountId,
-					status: LedgerTransactionEntriesTable.status,
+					status: LedgerTransactionsTable.status,
 				})
 				.from(LedgerTransactionEntriesTable)
+				.innerJoin(
+					LedgerTransactionsTable,
+					and(
+						eq(LedgerTransactionsTable.id, LedgerTransactionEntriesTable.transactionId),
+						eq(LedgerTransactionsTable.organizationId, LedgerTransactionEntriesTable.organizationId),
+						eq(LedgerTransactionsTable.ledgerId, LedgerTransactionEntriesTable.ledgerId)
+					)
+				)
 				.where(
 					and(
 						eq(LedgerTransactionEntriesTable.id, entryId),
@@ -196,9 +205,11 @@ class LedgerAccountSettlementRepo {
 				throw new ConflictError(`Entry ${entryId} does not belong to the settled account`);
 			}
 
-			// Verify entry is posted
+			// Entry lifecycle belongs to its Transaction.
 			if (entryCheck[0].status !== "posted") {
-				throw new ConflictError(`Entry ${entryId} is not posted (status: ${entryCheck[0].status})`);
+				throw new ConflictError(
+					`Transaction for entry ${entryId} is not posted (status: ${entryCheck[0].status})`
+				);
 			}
 
 			// Check if already attached to another settlement

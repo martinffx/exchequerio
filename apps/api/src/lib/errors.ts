@@ -2,18 +2,10 @@ import { type Static, Type } from "@sinclair/typebox";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { v7 as uuid } from "uuid";
 
-type ErrorContext = {
-	readonly organizationId?: string;
-	readonly ledgerId?: string;
-	readonly accountId?: string;
-	readonly transactionId?: string;
-	readonly idempotencyKey?: string;
+type HttpErrorOptions = ErrorOptions & {
+	readonly retryable?: boolean;
+	readonly retryAfterSeconds?: number;
 };
-
-type HttpErrorOptions = ErrorOptions &
-	ErrorContext & {
-		readonly retryable?: boolean;
-	};
 
 const ProblemDetailSchema = Type.Object({
 	type: Type.String(),
@@ -22,11 +14,6 @@ const ProblemDetailSchema = Type.Object({
 	detail: Type.String(),
 	instance: Type.String(),
 	traceId: Type.String(),
-	organizationId: Type.Optional(Type.String()),
-	ledgerId: Type.Optional(Type.String()),
-	accountId: Type.Optional(Type.String()),
-	transactionId: Type.Optional(Type.String()),
-	idempotencyKey: Type.Optional(Type.String()),
 	retryable: Type.Optional(Type.Boolean()),
 });
 type ProblemDetail = Static<typeof ProblemDetailSchema>;
@@ -42,11 +29,6 @@ const problemDetailSchema = <TypeName extends string, Status extends number>(
 		detail: Type.String(),
 		instance: Type.String(),
 		traceId: Type.String(),
-		organizationId: Type.Optional(Type.String()),
-		ledgerId: Type.Optional(Type.String()),
-		accountId: Type.Optional(Type.String()),
-		transactionId: Type.Optional(Type.String()),
-		idempotencyKey: Type.Optional(Type.String()),
 		retryable: Type.Optional(Type.Boolean()),
 	});
 
@@ -54,30 +36,14 @@ abstract class HttpError extends Error {
 	abstract readonly type: string;
 	abstract readonly statusCode: number;
 	abstract readonly title: string;
-	readonly organizationId?: string;
-	readonly ledgerId?: string;
-	readonly accountId?: string;
-	readonly transactionId?: string;
-	readonly idempotencyKey?: string;
 	readonly retryable?: boolean;
-	readonly context: ErrorContext;
+	readonly retryAfterSeconds?: number;
 
 	constructor(message: string, options: HttpErrorOptions = {}) {
 		super(message, options);
 		this.name = this.constructor.name;
-		this.organizationId = options.organizationId;
-		this.ledgerId = options.ledgerId;
-		this.accountId = options.accountId;
-		this.transactionId = options.transactionId;
-		this.idempotencyKey = options.idempotencyKey;
 		this.retryable = options.retryable;
-		this.context = {
-			organizationId: options.organizationId,
-			ledgerId: options.ledgerId,
-			accountId: options.accountId,
-			transactionId: options.transactionId,
-			idempotencyKey: options.idempotencyKey,
-		};
+		this.retryAfterSeconds = options.retryAfterSeconds;
 	}
 
 	toProblemDetail(): ProblemDetail {
@@ -88,11 +54,6 @@ abstract class HttpError extends Error {
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
 			traceId: uuid(),
-			organizationId: this.organizationId,
-			ledgerId: this.ledgerId,
-			accountId: this.accountId,
-			transactionId: this.transactionId,
-			idempotencyKey: this.idempotencyKey,
 			retryable: this.retryable,
 		};
 	}
@@ -180,6 +141,9 @@ const sendHttpError = (error: HttpError, request: FastifyRequest, reply: Fastify
 	if (error.statusCode >= 500) {
 		request.server.log.error(error.cause ?? error, error.message);
 	}
+	if (error.retryAfterSeconds !== undefined) {
+		reply.header("Retry-After", error.retryAfterSeconds.toString());
+	}
 	reply.status(error.statusCode).send(error.toProblemDetail());
 };
 
@@ -220,7 +184,7 @@ type InternalServerErrorResponse = InternalServerProblem;
 const ServiceUnavailableErrorResponse = ServiceUnavailableProblem;
 type ServiceUnavailableErrorResponse = ServiceUnavailableProblem;
 
-export type { ErrorContext, HttpErrorOptions, ProblemDetail };
+export type { HttpErrorOptions, ProblemDetail };
 export {
 	BadRequestError,
 	BadRequestErrorResponse,

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import autocannon from "autocannon";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -252,26 +254,16 @@ function createTransactionPayload(accountPair: { debitId: string; creditId: stri
 		status: "pending",
 		ledgerEntries: [
 			{
-				id: new TypeID("lte").toString(),
 				accountId: accountPair.debitId,
 				direction: "debit",
 				amount: 10000,
-				currency: "USD",
-				currencyExponent: 2,
-				status: "pending",
 			},
 			{
-				id: new TypeID("lte").toString(),
 				accountId: accountPair.creditId,
 				direction: "credit",
 				amount: 10000,
-				currency: "USD",
-				currencyExponent: 2,
-				status: "pending",
 			},
 		],
-		created: new Date().toISOString(),
-		updated: new Date().toISOString(),
 	};
 }
 
@@ -300,6 +292,7 @@ async function runBenchmark(
 		headers: {
 			Authorization: `Bearer ${token}`,
 			"Content-Type": "application/json",
+			"Idempotency-Key": randomUUID(),
 		},
 		body: requestBodies[0], // Use first body as template
 		requests: requestBodies.map(body => ({
@@ -310,6 +303,10 @@ async function runBenchmark(
 				"Content-Type": "application/json",
 			},
 			body,
+			setupRequest: request => {
+				request.headers = { ...request.headers, "Idempotency-Key": randomUUID() };
+				return request;
+			},
 		})),
 	});
 
@@ -391,7 +388,7 @@ describe("Transaction Creation Benchmarks", () => {
 	beforeAll(async () => {
 		const config = new Config();
 		pool = new Pool({ connectionString: config.databaseUrl, max: 20 });
-		db = drizzle(pool, { schema });
+		db = drizzle({ client: pool, relations: schema.schemaRelations });
 
 		ledgerRepo = new LedgerRepo(db);
 		accountRepo = new LedgerAccountRepo(db);

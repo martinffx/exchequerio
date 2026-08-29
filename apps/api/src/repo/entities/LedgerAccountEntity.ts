@@ -24,17 +24,10 @@ interface LedgerAccountEntityOptions {
 	description?: string;
 	normalBalance: NormalBalance;
 	currencyCode?: string;
-	minorUnitExponent?: number;
-	// Individual balance fields (integers in minor units)
-	pendingAmount: number;
-	postedAmount: number;
-	availableAmount: number;
 	pendingCredits: number;
 	pendingDebits: number;
 	postedCredits: number;
 	postedDebits: number;
-	availableCredits: number;
-	availableDebits: number;
 	lockVersion: number;
 	metadata?: Record<string, unknown>;
 	created: Date;
@@ -49,17 +42,10 @@ class LedgerAccountEntity {
 	public readonly description?: string;
 	public readonly normalBalance: NormalBalance;
 	public readonly currencyCode: string;
-	public readonly minorUnitExponent: number;
-	// Individual balance fields (integers in minor units)
-	public readonly pendingAmount: number;
-	public readonly postedAmount: number;
-	public readonly availableAmount: number;
 	public readonly pendingCredits: number;
 	public readonly pendingDebits: number;
 	public readonly postedCredits: number;
 	public readonly postedDebits: number;
-	public readonly availableCredits: number;
-	public readonly availableDebits: number;
 	public readonly lockVersion: number;
 	public readonly metadata?: Record<string, unknown>;
 	public readonly created: Date;
@@ -73,16 +59,10 @@ class LedgerAccountEntity {
 		this.description = options.description;
 		this.normalBalance = options.normalBalance;
 		this.currencyCode = options.currencyCode ?? "USD";
-		this.minorUnitExponent = options.minorUnitExponent ?? 2;
-		this.pendingAmount = options.pendingAmount;
-		this.postedAmount = options.postedAmount;
-		this.availableAmount = options.availableAmount;
 		this.pendingCredits = options.pendingCredits;
 		this.pendingDebits = options.pendingDebits;
 		this.postedCredits = options.postedCredits;
 		this.postedDebits = options.postedDebits;
-		this.availableCredits = options.availableCredits;
-		this.availableDebits = options.availableDebits;
 		this.lockVersion = options.lockVersion;
 		this.metadata = options.metadata;
 		this.created = options.created;
@@ -104,16 +84,10 @@ class LedgerAccountEntity {
 			name: rq.name,
 			description: rq.description,
 			normalBalance,
-			// Initialize all balances to zero (integer minor units)
-			pendingAmount: 0,
-			postedAmount: 0,
-			availableAmount: 0,
 			pendingCredits: 0,
 			pendingDebits: 0,
 			postedCredits: 0,
 			postedDebits: 0,
-			availableCredits: 0,
-			availableDebits: 0,
 			lockVersion: 0,
 			metadata: rq.metadata,
 			created: now,
@@ -140,17 +114,10 @@ class LedgerAccountEntity {
 			description: record.description ?? undefined,
 			normalBalance: record.normalBalance as NormalBalance,
 			currencyCode: record.currencyCode,
-			minorUnitExponent: record.minorUnitExponent,
-			// Individual balance fields (already integers from DB)
-			pendingAmount: record.pendingAmount,
-			postedAmount: record.postedAmount,
-			availableAmount: record.availableAmount,
 			pendingCredits: record.pendingCredits,
 			pendingDebits: record.pendingDebits,
 			postedCredits: record.postedCredits,
 			postedDebits: record.postedDebits,
-			availableCredits: record.availableCredits,
-			availableDebits: record.availableDebits,
 			lockVersion: record.lockVersion,
 			metadata,
 			created: record.created,
@@ -167,17 +134,10 @@ class LedgerAccountEntity {
 			description: this.description ?? undefined,
 			normalBalance: this.normalBalance,
 			currencyCode: this.currencyCode,
-			minorUnitExponent: this.minorUnitExponent,
-			// Individual balance fields (integers)
-			pendingAmount: this.pendingAmount,
-			postedAmount: this.postedAmount,
-			availableAmount: this.availableAmount,
 			pendingCredits: this.pendingCredits,
 			pendingDebits: this.pendingDebits,
 			postedCredits: this.postedCredits,
 			postedDebits: this.postedDebits,
-			availableCredits: this.availableCredits,
-			availableDebits: this.availableDebits,
 			lockVersion: this.lockVersion + 1,
 			// Stringify metadata to TEXT (JSON string)
 			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
@@ -186,12 +146,24 @@ class LedgerAccountEntity {
 	}
 
 	public toResponse(currency: string, currencyExponent: number): LedgerAccountResponse {
+		const debitNormal = this.normalBalance === "debit";
+		const pendingAmount = debitNormal
+			? this.pendingDebits - this.pendingCredits
+			: this.pendingCredits - this.pendingDebits;
+		const postedAmount = debitNormal
+			? this.postedDebits - this.postedCredits
+			: this.postedCredits - this.postedDebits;
+		const availableCredits = debitNormal ? this.pendingCredits : this.postedCredits;
+		const availableDebits = debitNormal ? this.postedDebits : this.pendingDebits;
+		const availableAmount = debitNormal
+			? this.postedDebits - this.pendingCredits
+			: this.postedCredits - this.pendingDebits;
 		const balances: Balances = [
 			{
 				balanceType: "pending" as const,
 				credits: this.pendingCredits,
 				debits: this.pendingDebits,
-				amount: this.pendingAmount,
+				amount: pendingAmount,
 				currency,
 				currencyExponent,
 			} satisfies PendingBalance,
@@ -199,15 +171,15 @@ class LedgerAccountEntity {
 				balanceType: "posted" as const,
 				credits: this.postedCredits,
 				debits: this.postedDebits,
-				amount: this.postedAmount,
+				amount: postedAmount,
 				currency,
 				currencyExponent,
 			} satisfies PostedBalance,
 			{
 				balanceType: "availableBalance" as const,
-				credits: this.availableCredits,
-				debits: this.availableDebits,
-				amount: this.availableAmount,
+				credits: availableCredits,
+				debits: availableDebits,
+				amount: availableAmount,
 				currency,
 				currencyExponent,
 			} satisfies AvailableBalance,
@@ -225,67 +197,6 @@ class LedgerAccountEntity {
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),
 		};
-	}
-
-	// Helper method to update balance fields (for optimistic locking)
-	public withUpdatedBalance(
-		postedAmount: number,
-		availableAmount: number,
-		newLockVersion: number
-	): LedgerAccountEntity {
-		return new LedgerAccountEntity({
-			...this,
-			postedAmount,
-			availableAmount,
-			lockVersion: newLockVersion,
-			updated: new Date(),
-		});
-	}
-
-	/**
-	 * Apply a transaction entry to this account and return a new account with updated balances.
-	 * Uses double-entry accounting rules based on the account's normal balance.
-	 * Returns a new immutable LedgerAccountEntity instance.
-	 */
-	public applyEntry(entry: { direction: "debit" | "credit"; amount: number }): LedgerAccountEntity {
-		let newPostedAmount = this.postedAmount;
-		let newPostedCredits = this.postedCredits;
-		let newPostedDebits = this.postedDebits;
-
-		// Apply double-entry accounting rules based on account's normal balance
-		if (this.normalBalance === "debit") {
-			if (entry.direction === "debit") {
-				// Debit increases debit accounts
-				newPostedAmount += entry.amount;
-				newPostedDebits += entry.amount;
-			} else {
-				// Credit decreases debit accounts
-				newPostedAmount -= entry.amount;
-				newPostedCredits += entry.amount;
-			}
-		} else {
-			// credit normal balance
-			if (entry.direction === "credit") {
-				// Credit increases credit accounts
-				newPostedAmount += entry.amount;
-				newPostedCredits += entry.amount;
-			} else {
-				// Debit decreases credit accounts
-				newPostedAmount -= entry.amount;
-				newPostedDebits += entry.amount;
-			}
-		}
-
-		return new LedgerAccountEntity({
-			...this,
-			postedAmount: newPostedAmount,
-			postedCredits: newPostedCredits,
-			postedDebits: newPostedDebits,
-			availableAmount: newPostedAmount,
-			availableCredits: newPostedCredits,
-			availableDebits: newPostedDebits,
-			updated: new Date(),
-		});
 	}
 }
 

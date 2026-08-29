@@ -1,15 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { Effect, Layer } from "effect";
+import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/auth";
 import { Config } from "@/config";
 import { makeDatabaseLive } from "@/db";
-import { Ledger, LedgerServiceTag } from "@/ledgers";
-import type { LedgerService } from "@/ledgers";
-import { Account, AccountServiceTag } from "@/ledgers/accounts";
-import type { AccountService } from "@/ledgers/accounts";
+import { Ledger, LedgerServiceTag } from "@/domains/ledgers";
+import type { LedgerService } from "@/domains/ledgers";
+import { AccountServiceTag, LedgerAccount } from "@/domains/ledgers/accounts";
+import type { AccountService } from "@/domains/ledgers/accounts";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import type {
 	LedgerAccountID,
@@ -61,34 +62,22 @@ describe("LedgerAccountSettlementRoutes", () => {
 	const ledgerIdStr = ledgerId.toString();
 	const settlementIdStr = settlementId.toString();
 	const fixedDate = new Date("2025-01-01T00:00:00.000Z");
+	const fixedDateTime = DateTime.fromJSDate(fixedDate, { zone: "utc" }) as DateTime<true>;
 
 	const effectLedger = new Ledger({
 		id: ledgerId,
 		organizationId: orgId,
 		name: "Ledger",
-		created: fixedDate,
-		updated: fixedDate,
+		created: fixedDateTime,
+		updated: fixedDateTime,
 	});
-	const effectAccount = new Account({
-		id: settledAccountId,
-		organizationId: orgId,
+	const effectAccount = LedgerAccount.fromCreateRequest(
+		settledAccountId,
+		orgId,
 		ledgerId,
-		name: "Settled account",
-		normalBalance: "debit",
-		currency: { code: "USD", minorUnitExponent: 2 },
-		pendingAmount: 0,
-		postedAmount: 0,
-		availableAmount: 0,
-		pendingCredits: 0,
-		pendingDebits: 0,
-		postedCredits: 0,
-		postedDebits: 0,
-		availableCredits: 0,
-		availableDebits: 0,
-		lockVersion: 1,
-		created: fixedDate,
-		updated: fixedDate,
-	});
+		{ name: "Settled account", normalBalance: "debit", currencyCode: "USD" },
+		fixedDateTime
+	);
 	const mockSettlement = createLedgerAccountSettlementFixture({
 		id: settlementId,
 		organizationId: orgId,
@@ -315,7 +304,6 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				"USD",
-				2,
 				"debit",
 				expect.objectContaining({
 					settledAccountId: settledAccountId.toString(),
@@ -324,11 +312,14 @@ describe("LedgerAccountSettlementRoutes", () => {
 			);
 		});
 
-		it.each([
-			{ label: "code", currency: { code: "EUR", minorUnitExponent: 2 } },
-			{ label: "minor unit exponent", currency: { code: "USD", minorUnitExponent: 0 } },
-		])("rejects accounts with a different currency $label", async ({ currency }) => {
-			const incompatibleAccount = new Account({ ...effectAccount, currency });
+		it("rejects accounts with a different currency", async () => {
+			const incompatibleAccount = LedgerAccount.fromCreateRequest(
+				contraAccountId,
+				orgId,
+				ledgerId,
+				{ name: "Contra account", normalBalance: "debit", currencyCode: "EUR" },
+				fixedDateTime
+			);
 			effectAccountService.getAccount
 				.mockReturnValueOnce(Effect.succeed(effectAccount))
 				.mockReturnValueOnce(Effect.succeed(incompatibleAccount));

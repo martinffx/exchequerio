@@ -4,33 +4,23 @@ import { DateTime } from "luxon";
 import { Pool } from "pg";
 import { TypeID } from "typeid-js";
 import { Config } from "@/config";
-import {
-	LedgerAccountEntity,
-	LedgerEntity,
-	LedgerTransactionEntity,
-	LedgerTransactionEntryEntity,
-	OrganizationEntity,
-} from "@/repo/entities";
+import { LedgerAccountEntity, LedgerEntity, OrganizationEntity } from "@/repo/entities";
 import type { LedgerAccountBalanceMonitorEntityOpts } from "@/repo/entities/LedgerAccountBalanceMonitorEntity";
 import { LedgerAccountBalanceMonitorEntity } from "@/repo/entities/LedgerAccountBalanceMonitorEntity";
 import type { LedgerAccountEntityOpts } from "@/repo/entities/LedgerAccountEntity";
 import type { LedgerAccountStatementEntityOpts } from "@/repo/entities/LedgerAccountStatementEntity";
 import { LedgerAccountStatementEntity } from "@/repo/entities/LedgerAccountStatementEntity";
 import type { LedgerEntityOpts } from "@/repo/entities/LedgerEntity";
-import type { LedgerTransactionEntityOpts } from "@/repo/entities/LedgerTransactionEntity";
-import type { LedgerTransactionEntryEntityOpts } from "@/repo/entities/LedgerTransactionEntryEntity";
 import type { OrgEntityOpts } from "@/repo/entities/OrganizationEntity";
 import type { LedgerID } from "@/repo/entities/types";
 import { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
-import { LedgerAccountReader } from "./LedgerAccountReader";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
 import { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
 import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import { LedgerRepo } from "./LedgerRepo";
-import { LedgerTransactionRepo } from "./LedgerTransactionRepo";
 import * as schema from "./schema";
-import type { Repos } from "./types";
+import type { DrizzleDB, Repos } from "./types";
 
 interface OrganizationFixtureRepo {
 	createOrganization(record: OrganizationEntity): Promise<OrganizationEntity>;
@@ -38,6 +28,7 @@ interface OrganizationFixtureRepo {
 }
 
 type TestRepos = Repos & {
+	db: DrizzleDB;
 	organizationRepo: OrganizationFixtureRepo;
 	ledgerRepo: LedgerRepo;
 	ledgerAccountRepo: LedgerAccountRepo;
@@ -51,7 +42,7 @@ function getRepos(): TestRepos {
 
 	const config = new Config();
 	const pool = new Pool({ connectionString: config.databaseUrl, max: 1 });
-	const db = drizzle(pool, { schema });
+	const db = drizzle({ client: pool, relations: schema.schemaRelations });
 
 	const organizationRepo: OrganizationFixtureRepo = {
 		createOrganization: async record => {
@@ -72,23 +63,20 @@ function getRepos(): TestRepos {
 	};
 	const ledgerRepo = new LedgerRepo(db);
 	const ledgerAccountRepo = new LedgerAccountRepo(db);
-	const ledgerAccountReader = new LedgerAccountReader(db);
 	const ledgerAccountCategoryRepo = new LedgerAccountCategoryRepo(db);
 	const ledgerAccountSettlementRepo = new LedgerAccountSettlementRepo(db);
 	const ledgerAccountStatementRepo = new LedgerAccountStatementRepo(db);
 	const ledgerAccountBalanceMonitorRepo = new LedgerAccountBalanceMonitorRepo(db);
-	const ledgerTransactionRepo = new LedgerTransactionRepo(db);
 
 	repos = {
+		db,
 		organizationRepo,
 		ledgerRepo,
 		ledgerAccountRepo,
-		ledgerAccountReader,
 		ledgerAccountCategoryRepo,
 		ledgerAccountSettlementRepo,
 		ledgerAccountStatementRepo,
 		ledgerAccountBalanceMonitorRepo,
-		ledgerTransactionRepo,
 	};
 
 	return repos;
@@ -162,94 +150,11 @@ function createLedgerAccountEntity(
 		name: options.name ?? "Ledger Account",
 		description: options.description,
 		normalBalance: options.normalBalance ?? "credit",
-		// Individual balance fields (integer minor units)
-		pendingAmount: options.pendingAmount ?? 0,
-		postedAmount: options.postedAmount ?? 0,
-		availableAmount: options.availableAmount ?? 0,
 		pendingCredits: options.pendingCredits ?? 0,
 		pendingDebits: options.pendingDebits ?? 0,
 		postedCredits: options.postedCredits ?? 0,
 		postedDebits: options.postedDebits ?? 0,
-		availableCredits: options.availableCredits ?? 0,
-		availableDebits: options.availableDebits ?? 0,
 		lockVersion: options.lockVersion ?? 0,
-		metadata: options.metadata,
-		created: options.created ?? now,
-		updated: options.updated ?? now,
-	});
-}
-
-/**
- * Creates a LedgerTransactionEntryEntity with sensible test defaults.
- *
- * @param options - Partial options to override defaults
- * @returns A new LedgerTransactionEntryEntity instance
- *
- * @example
- * ```typescript
- * const entry = createLedgerTransactionEntryEntity({
- *   transactionId: txId,
- *   accountId: accountId,
- *   direction: "debit",
- *   amount: 10000
- * });
- * ```
- */
-function createLedgerTransactionEntryEntity(
-	options: Partial<LedgerTransactionEntryEntityOpts> & {
-		transactionId: TypeID<"ltr">;
-		accountId: TypeID<"lat">;
-		direction: "debit" | "credit";
-		amount: number;
-	}
-): LedgerTransactionEntryEntity {
-	const now = new Date();
-	return new LedgerTransactionEntryEntity({
-		id: options.id ?? new TypeID("lte"),
-		organizationId: options.organizationId ?? new TypeID("org"),
-		transactionId: options.transactionId,
-		accountId: options.accountId,
-		direction: options.direction,
-		amount: options.amount,
-		currency: options.currency ?? "USD",
-		currencyExponent: options.currencyExponent ?? 2,
-		status: options.status ?? "pending",
-		metadata: options.metadata,
-		created: options.created ?? now,
-		updated: options.updated ?? now,
-	});
-}
-
-/**
- * Creates a LedgerTransactionEntity with sensible test defaults.
- *
- * @param options - Partial options to override defaults
- * @returns A new LedgerTransactionEntity instance
- *
- * @example
- * ```typescript
- * const transaction = createLedgerTransactionEntity({
- *   organizationId: orgId,
- *   ledgerId: ledgerId,
- *   entries: [debitEntry, creditEntry]
- * });
- * ```
- */
-function createLedgerTransactionEntity(
-	options: Partial<LedgerTransactionEntityOpts> & {
-		entries: LedgerTransactionEntityOpts["entries"];
-	}
-): LedgerTransactionEntity {
-	const now = new Date();
-	return new LedgerTransactionEntity({
-		id: options.id ?? new TypeID("ltr"),
-		organizationId: options.organizationId ?? new TypeID("org"),
-		ledgerId: options.ledgerId ?? new TypeID("lgr"),
-		entries: options.entries,
-		idempotencyKey: options.idempotencyKey,
-		description: options.description ?? "Test transaction",
-		status: options.status ?? "pending",
-		effectiveAt: options.effectiveAt ?? now,
 		metadata: options.metadata,
 		created: options.created ?? now,
 		updated: options.updated ?? now,
@@ -328,8 +233,6 @@ export {
 	createOrganizationEntity,
 	createLedgerEntity,
 	createLedgerAccountEntity,
-	createLedgerTransactionEntryEntity,
-	createLedgerTransactionEntity,
 	createLedgerAccountBalanceMonitorEntity,
 	createLedgerAccountStatementEntity,
 };

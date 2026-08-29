@@ -1,6 +1,9 @@
 services:
   db:
     image: postgres:17-alpine
+    profiles:
+      - infra
+      - api
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
@@ -10,5 +13,45 @@ services:
     volumes:
       - pg-data:/var/lib/postgresql/data
       - ./initdb.d:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  valkey:
+    image: valkey/valkey:8-alpine
+    profiles:
+      - infra
+      - api
+    ports:
+      - 6379:6379
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    profiles:
+      - api
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/ledger?schema=public
+      - VALKEY_URL=redis://valkey:6379
+      - JWT_SECRET=change-me-for-local-development
+    ports:
+      - 3000:3000
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 volumes:
   pg-data:

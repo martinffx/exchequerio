@@ -88,29 +88,6 @@ const Balances = Type.Array(Balance, {
 });
 type Balances = Static<typeof Balances>;
 
-const Direction = Type.Union([
-	Type.Literal("credit", {
-		description: "The entry is a credit.",
-	}),
-	Type.Literal("debit", {
-		description: "The entry is a debit.",
-	}),
-]);
-type Direction = Static<typeof Direction>;
-
-const BalanceStatus = Type.Union([
-	Type.Literal("pending", {
-		description: "The transaction is pending and has not been posted.",
-	}),
-	Type.Literal("posted", {
-		description: "The transaction has been posted.",
-	}),
-	Type.Literal("archived", {
-		description: "The transaction has been archived.",
-	}),
-]);
-type BalanceStatus = Static<typeof BalanceStatus>;
-
 const SettlementStatus = Type.Union([
 	Type.Literal("drafting"),
 	Type.Literal("processing"),
@@ -373,225 +350,12 @@ type UnlinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
 }>;
 
 /**
- * Ledger Transaction Entry
- */
-const LedgerTransactionEntryId = Type.String({
-	description: "Unique identifier for the ledger transaction entry.",
-	pattern: "^lte_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-});
-type LedgerTransactionEntryId = Static<typeof LedgerTransactionEntryId>;
-const LedgerTransactionEntryIdParameters = Type.Object({
-	ledgerTransactionEntryId: LedgerTransactionEntryId,
-});
-type LedgerTransactionEntryIdParameters = Static<typeof LedgerTransactionEntryIdParameters>;
-const LedgerTransactionEntry = Type.Object(
-	{
-		id: LedgerTransactionEntryId,
-		accountId: LedgerAccountId,
-		direction: Direction,
-		amount: Type.Number({
-			description:
-				"Value in specified currency's smallest unit. e.g. $10 would be represented as 1000. Can be any integer up to 10³⁶.",
-		}),
-		currency: Type.String({
-			description: "The currency of the ledger account",
-		}),
-		currencyExponent: Type.Number({
-			description: "The currency exponent of the ledger account",
-		}),
-		resultingBalance: Type.Optional(
-			Type.Object(
-				{
-					pendingBalance: PendingBalance,
-					postedBalance: PostedBalance,
-					availableBalance: AvailableBalance,
-				},
-				{
-					description:
-						"The resulting pending, posted, and available balances for this ledger account. The posted balance is the sum of all posted entries on the account. The pending balance is the sum of all pending and posted entries on the account. The available balance is the posted incoming entries minus the sum of the pending and posted outgoing amounts.",
-				}
-			)
-		),
-		status: BalanceStatus,
-		metadata: Type.Optional(Metadata),
-	},
-	{
-		$id: "LedgerEntryResponse",
-		description:
-			"A ledger entry is a record of a transaction that affects one or more ledger accounts. Each ledger entry belongs to a ledger transaction and belongs to a ledger account.",
-	}
-);
-
-const LedgerTransactionEntryResponse = Type.Composite([
-	LedgerTransactionEntry,
-	Type.Object({
-		created: Type.String({
-			description: "Timestamp of when the ledger entry was created.",
-		}),
-		updated: Type.String({
-			description: "Timestamp of when the ledger entry was last updated.",
-		}),
-	}),
-]);
-type LedgerTransactionEntryResponse = Static<typeof LedgerTransactionEntryResponse>;
-const LedgerTransactionEntryRequest = Type.Object(
-	{
-		name: Type.String(),
-		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(Metadata),
-	},
-	{ $id: "LedgerTransactionEntryRequest" }
-);
-type LedgerTransactionEntryRequest = Static<typeof LedgerTransactionEntryRequest>;
-
-type ListLedgerTransactionEntriesRequest = FastifyRequest<{
-	Querystring: PaginationQuery;
-}>;
-type GetLedgerTransactionEntryRequest = FastifyRequest<{
-	Params: LedgerTransactionEntryIdParameters;
-}>;
-type UpdateLedgerTransactionEntryRequest = FastifyRequest<{
-	Params: LedgerTransactionEntryIdParameters;
-	Body: LedgerTransactionEntryRequest;
-}>;
-
-/**
- * Ledger Transactions
- */
-const LedgerTransactionId = Type.String({
-	description: "Unique identifier for the ledger transaction.",
-	pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-});
-type LedgerTransactionId = Static<typeof LedgerTransactionId>;
-const LedgerTransactionIdParameters = Type.Object({
-	transactionId: LedgerTransactionId,
-});
-type LedgerTransactionIdParameters = Static<typeof LedgerTransactionIdParameters>;
-const LedgerIdWithTransactionIdParams = Type.Object({
-	ledgerId: LedgerId,
-	transactionId: LedgerTransactionId,
-});
-type LedgerIdWithTransactionIdParams = Static<typeof LedgerIdWithTransactionIdParams>;
-const LedgerTransactionResponse = Type.Object(
-	{
-		id: LedgerTransactionId,
-		ledgerId: LedgerId,
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
-		),
-		status: BalanceStatus,
-		metadata: Type.Optional(Metadata),
-		ledgerEntries: Type.Array(LedgerTransactionEntry),
-		postedAt: Type.Optional(
-			Type.String({
-				description:
-					"The time on which the ledger transaction posted. This is null if the ledger transaction is pending.",
-			})
-		),
-		effectiveAt: Type.Optional(
-			Type.String({
-				description: "The time at which the ledger transaction happened for reporting purposes.",
-			})
-		),
-		reversedByLedgerTransactionId: Type.Optional(
-			Type.String({
-				description:
-					"If the ledger transaction is reversed by another ledger transaction, the reversed_by_ledger_transaction_id will be populated here, and it is the ID of the reversal ledger transactions.",
-			})
-		),
-		reversesLedgerTransactionId: Type.Optional(
-			Type.String({
-				description:
-					"If the ledger transaction reverses another ledger transaction, the reverses_ledger_transaction_id will be populated here, and it is the ID of the original ledger transaction.",
-			})
-		),
-		created: Type.String({
-			description: "The time the ledger transaction was created.",
-		}),
-		updated: Type.String({
-			description: "The time the ledger transaction was last updated.",
-		}),
-	},
-	{
-		$id: "LedgerTransactionResponse",
-		description:
-			"A ledger transaction is a transaction between two or more ledger accounts. To create a ledger transaction, there must be at least one credit ledger entry and one debit ledger entry. Additionally, the sum of all credit entry amounts must equal the sum of all debit entry amounts. The ledger transaction is immutable once it has posted.",
-	}
-);
-type LedgerTransactionResponse = Static<typeof LedgerTransactionResponse>;
-const LedgerTransactionRequest = Type.Object(
-	{
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
-		),
-		status: BalanceStatus,
-		metadata: Type.Optional(Metadata),
-		effectiveAt: Type.Optional(
-			Type.String({
-				description: "The time at which the ledger transaction happened for reporting purposes.",
-			})
-		),
-		ledgerEntries: Type.Array(LedgerTransactionEntry, {
-			description: "Entries may reference at most 200 distinct Ledger Accounts.",
-		}),
-		created: Type.String({
-			description: "The time the ledger transaction was created.",
-		}),
-		updated: Type.String({
-			description: "The time the ledger transaction was last updated.",
-		}),
-	},
-	{ $id: "LedgerTransactionRequest" }
-);
-type LedgerTransactionRequest = Static<typeof LedgerTransactionRequest>;
-
-const LedgerTransactionUpdateRequest = Type.Object(
-	{
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
-		),
-		metadata: Type.Optional(Metadata),
-		effectiveAt: Type.Optional(
-			Type.String({
-				description: "The time at which the ledger transaction happened for reporting purposes.",
-			})
-		),
-	},
-	{ $id: "LedgerTransactionUpdateRequest" }
-);
-type LedgerTransactionUpdateRequest = Static<typeof LedgerTransactionUpdateRequest>;
-
-type ListLedgerTransactionsRequest = FastifyRequest<{
-	Params: LedgerIdParameters;
-	Querystring: PaginationQuery;
-}>;
-type GetLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerIdWithTransactionIdParams;
-}>;
-type CreateLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerIdParameters;
-	Body: LedgerTransactionRequest;
-}>;
-type UpdateLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerIdWithTransactionIdParams;
-	Body: LedgerTransactionUpdateRequest;
-}>;
-type DeleteLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerIdWithTransactionIdParams;
-}>;
-type PostLedgerTransactionRequest = FastifyRequest<{
-	Params: LedgerIdWithTransactionIdParams;
-}>;
-
-/**
  * Ledger Account Settlement
  */
+const LedgerAccountSettlementTransactionId = Type.String({
+	description: "Transaction created by the Ledger Account Settlement.",
+	pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+});
 const LedgerAccountSettlementId = Type.String({
 	description: "Unique identifier for the ledger account settlement.",
 	pattern: "^las_[0-7][0-9a-hjkmnp-tv-z]{25}$",
@@ -604,7 +368,7 @@ type LedgerAccountSettlementIdParameters = Static<typeof LedgerAccountSettlement
 const LedgerAccountSettlementResponse = Type.Object(
 	{
 		id: LedgerAccountSettlementId,
-		transactionId: LedgerTransactionId,
+		transactionId: LedgerAccountSettlementTransactionId,
 		description: Type.Optional(
 			Type.String({
 				description: "An optional free-form description for internal use.",
@@ -625,9 +389,6 @@ const LedgerAccountSettlementResponse = Type.Object(
 		}),
 		currency: Type.String({
 			description: "The currency of the ledger account settlement.",
-		}),
-		currencyExponent: Type.Number({
-			description: "The currency exponent of the ledger account settlement.",
 		}),
 		externalReference: Type.Optional(
 			Type.String({
@@ -651,7 +412,7 @@ const LedgerAccountSettlementResponse = Type.Object(
 type LedgerAccountSettlementResponse = Static<typeof LedgerAccountSettlementResponse>;
 const LedgerAccountSettlementRequest = Type.Object(
 	{
-		transactionId: LedgerTransactionId,
+		transactionId: LedgerAccountSettlementTransactionId,
 		description: Type.Optional(
 			Type.String({
 				description: "An optional free-form description for internal use.",
@@ -902,14 +663,6 @@ export {
 	LedgerAccountBalanceMonitorIdParameters as LedgerAccountBalanceMonitorIdParams,
 	LedgerAccountBalanceMonitorRequest,
 	LedgerAccountBalanceMonitorResponse,
-	LedgerTransactionIdParameters as LedgerTransactionIdParams,
-	LedgerIdWithTransactionIdParams,
-	LedgerTransactionResponse,
-	LedgerTransactionRequest,
-	LedgerTransactionUpdateRequest,
-	LedgerTransactionEntryIdParameters as LedgerTransactionEntryIdParams,
-	LedgerTransactionEntryResponse,
-	LedgerTransactionEntryRequest,
 	type ListLedgersRequest,
 	type GetLedgerRequest,
 	type CreateLedgerRequest,
@@ -944,18 +697,6 @@ export {
 	type CreateLedgerAccountBalanceMonitorRequest,
 	type UpdateLedgerAccountBalanceMonitorRequest,
 	type DeleteLedgerAccountBalanceMonitorRequest,
-	type ListLedgerTransactionsRequest,
-	type GetLedgerTransactionRequest,
-	type CreateLedgerTransactionRequest,
-	type UpdateLedgerTransactionRequest,
-	type DeleteLedgerTransactionRequest,
-	type PostLedgerTransactionRequest,
-	type ListLedgerTransactionEntriesRequest,
-	type GetLedgerTransactionEntryRequest,
-	type UpdateLedgerTransactionEntryRequest,
-	// Type exports for entities
-	Direction,
-	BalanceStatus,
 	Balances,
 	PendingBalance,
 	PostedBalance,
@@ -970,8 +711,6 @@ export {
 	type AlertCondition,
 	type LedgerAccountId,
 	type LedgerAccountCategoryId,
-	type LedgerTransactionEntryId,
-	type LedgerTransactionId,
 	type LedgerAccountSettlementId,
 	type LedgerAccountStatementId,
 	type LedgerAccountBalanceMonitorId,

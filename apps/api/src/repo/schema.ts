@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+import { type BuildQueryResult, defineRelations, sql } from "drizzle-orm";
 import {
 	bigint,
 	check,
@@ -20,7 +20,7 @@ const ledgerNormalBalance = pgEnum("ledger_normal_balance", ["debit", "credit"])
 const ledgerTransactionStatus = pgEnum("ledger_transaction_status", [
 	"pending",
 	"posted",
-	"archived",
+	"voided",
 ]);
 const ledgerEntryDirection = pgEnum("ledger_entry_direction", ["debit", "credit"]);
 const ledgerSettlementStatus = pgEnum("ledger_settlement_status", [
@@ -39,9 +39,8 @@ const OrganizationsTable = pgTable("organizations_table", {
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
-
 type OrganizationRow = typeof OrganizationsTable.$inferSelect;
-type OrganizationCreateRow = Required<typeof OrganizationsTable.$inferInsert>;
+type OrganizationInsertRow = Required<typeof OrganizationsTable.$inferInsert>;
 type OrganizationUpdateRow = Pick<OrganizationRow, "name" | "description" | "updated">;
 
 // Ledgers: Chart of accounts container
@@ -66,9 +65,8 @@ const LedgersTable = pgTable(
 		),
 	})
 );
-
 type LedgerRow = typeof LedgersTable.$inferSelect;
-type LedgerCreateRow = Required<typeof LedgersTable.$inferInsert>;
+type LedgerInsertRow = Required<typeof LedgersTable.$inferInsert>;
 type LedgerUpdateRow = Pick<LedgerRow, "name" | "description" | "metadata" | "updated">;
 
 // Ledger Accounts: Individual accounts (merchant wallets, fee accounts, etc.)
@@ -84,8 +82,7 @@ const LedgerAccountsTable = pgTable(
 		description: text("description"),
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
 		currencyCode: text("currency_code").notNull(),
-		minorUnitExponent: integer("minor_unit_exponent").notNull(),
-		// Individual balance columns as BIGINT (integer minor units)
+		// Balance values as BIGINT (integer minor units)
 		pendingAmount: bigint("pending_amount", { mode: "number" }).notNull().default(0),
 		postedAmount: bigint("posted_amount", { mode: "number" }).notNull().default(0),
 		availableAmount: bigint("available_amount", { mode: "number" }).notNull().default(0),
@@ -95,7 +92,7 @@ const LedgerAccountsTable = pgTable(
 		postedDebits: bigint("posted_debits", { mode: "number" }).notNull().default(0),
 		availableCredits: bigint("available_credits", { mode: "number" }).notNull().default(0),
 		availableDebits: bigint("available_debits", { mode: "number" }).notNull().default(0),
-		lockVersion: integer("lock_version").notNull().default(0),
+		lockVersion: integer("lock_version").notNull().default(1),
 		metadata: text("metadata"), // TEXT for DSQL compatibility (JSON string)
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
@@ -111,10 +108,6 @@ const LedgerAccountsTable = pgTable(
 		currencyCodeNotBlank: check(
 			"ledger_accounts_currency_code_not_blank",
 			sql`btrim(${table.currencyCode}) <> ''`
-		),
-		minorUnitExponentNonnegative: check(
-			"ledger_accounts_minor_unit_exponent_nonnegative",
-			sql`${table.minorUnitExponent} >= 0`
 		),
 		balancesSafeIntegers: check(
 			"ledger_accounts_balances_safe_integers",
@@ -136,77 +129,105 @@ const LedgerAccountsTable = pgTable(
 			table.ledgerId,
 			table.availableAmount
 		),
+		organizationLedgerIdUnique: unique("unique_ledger_accounts_organization_ledger_id").on(
+			table.organizationId,
+			table.ledgerId,
+			table.id
+		),
 	})
 );
-
-type AccountRow = typeof LedgerAccountsTable.$inferSelect;
-type AccountCreateRow = Required<typeof LedgerAccountsTable.$inferInsert>;
-type AccountUpdateRow = Pick<
-	AccountRow,
-	"name" | "description" | "metadata" | "lockVersion" | "updated"
->;
+type LedgerAccountRow = typeof LedgerAccountsTable.$inferSelect;
+type LedgerAccountInsertRow = typeof LedgerAccountsTable.$inferInsert;
 
 // Ledger Transactions: Double-entry transaction containers
 const LedgerTransactionsTable = pgTable(
 	"ledger_transactions",
 	{
 		id: text("id").primaryKey(),
-		ledgerId: text("ledger_id")
-			.notNull()
-			.references(() => LedgersTable.id),
+		ledgerId: text("ledger_id").notNull(),
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		idempotencyKey: text("idempotency_key").unique(),
 		description: text("description"),
 		status: ledgerTransactionStatus("status").notNull().default("pending"),
-		// When transaction happened for reporting purposes (defaults to created time)
-		effectiveAt: timestamp("effective_at", { withTimezone: true }).defaultNow().notNull(),
+		postedAt: timestamp("posted_at", { withTimezone: true }),
 		metadata: text("metadata"),
+		lockVersion: integer("lock_version").notNull().default(1),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
 		organizationIdx: index("idx_ledger_transactions_organization").on(table.organizationId),
 		statusIdx: index("idx_ledger_transactions_status").on(table.status),
-		createdIdx: index("idx_ledger_transactions_created").on(table.created),
-		effectiveAtIdx: index("idx_ledger_transactions_effective_at").on(table.effectiveAt),
+		organizationLedgerFk: foreignKey({
+			name: "ledger_transactions_organization_ledger_fk",
+			columns: [table.organizationId, table.ledgerId],
+			foreignColumns: [LedgersTable.organizationId, LedgersTable.id],
+		}),
+		organizationLedgerIdUnique: unique("unique_ledger_transactions_organization_ledger_id").on(
+			table.organizationId,
+			table.ledgerId,
+			table.id
+		),
+		ledgerCreatedIdIdx: index("idx_ledger_transactions_ledger_created_id").on(
+			table.ledgerId,
+			table.created.desc(),
+			table.id.desc()
+		),
 	})
 );
+type LedgerTransactionRow = typeof LedgerTransactionsTable.$inferSelect;
+type LedgerTransactionInsertRow = typeof LedgerTransactionsTable.$inferInsert;
 
 // Ledger Transaction Entries: Individual debit/credit entries
 const LedgerTransactionEntriesTable = pgTable(
 	"ledger_transaction_entries",
 	{
 		id: text("id").primaryKey(),
-		transactionId: text("transaction_id")
-			.notNull()
-			.references(() => LedgerTransactionsTable.id),
-		accountId: text("account_id")
-			.notNull()
-			.references(() => LedgerAccountsTable.id),
+		transactionId: text("transaction_id").notNull(),
+		accountId: text("account_id").notNull(),
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
+		ledgerId: text("ledger_id").notNull(),
 		direction: ledgerEntryDirection("direction").notNull(),
 		amount: bigint("amount", { mode: "number" }).notNull(), // Integer minor units
 		currency: text("currency").notNull(),
-		currencyExponent: bigint("currency_exponent", { mode: "number" }).notNull(),
-		status: ledgerTransactionStatus("status").notNull().default("pending"),
+		status: ledgerTransactionStatus("status").notNull(),
 		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
-		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
 		// Indexes for performance
 		organizationIdx: index("idx_ledger_transaction_entries_organization").on(table.organizationId),
 		accountIdx: index("idx_ledger_transaction_entries_account").on(table.accountId),
 		transactionIdx: index("idx_ledger_transaction_entries_transaction").on(table.transactionId),
-		statusIdx: index("idx_ledger_transaction_entries_status").on(table.status),
-		// Constraint: amount must be positive
-		positiveAmount: check("positive_amount", sql`${table.amount} > 0`),
+		transactionOwnershipFk: foreignKey({
+			name: "ledger_transaction_entries_transaction_ownership_fk",
+			columns: [table.organizationId, table.ledgerId, table.transactionId],
+			foreignColumns: [
+				LedgerTransactionsTable.organizationId,
+				LedgerTransactionsTable.ledgerId,
+				LedgerTransactionsTable.id,
+			],
+		}),
+		accountOwnershipFk: foreignKey({
+			name: "ledger_transaction_entries_account_ownership_fk",
+			columns: [table.organizationId, table.ledgerId, table.accountId],
+			foreignColumns: [
+				LedgerAccountsTable.organizationId,
+				LedgerAccountsTable.ledgerId,
+				LedgerAccountsTable.id,
+			],
+		}),
+		amountPositiveAndSafe: check(
+			"ledger_transaction_entries_amount_positive_and_safe",
+			sql`${table.amount} > 0 AND ${table.amount} <= 9007199254740991`
+		),
 	})
 );
+type LedgerTransactionEntryRow = typeof LedgerTransactionEntriesTable.$inferSelect;
+type LedgerTransactionEntryInsertRow = typeof LedgerTransactionEntriesTable.$inferInsert;
 
 // Account Category Definitions: Chart of accounts structure
 const LedgerAccountCategoriesTable = pgTable("ledger_account_categories", {
@@ -222,6 +243,8 @@ const LedgerAccountCategoriesTable = pgTable("ledger_account_categories", {
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
+type LedgerAccountCategoryRow = typeof LedgerAccountCategoriesTable.$inferSelect;
+type LedgerAccountCategoryInsertRow = Required<typeof LedgerAccountCategoriesTable.$inferInsert>;
 
 // Junction: Category parent relationships (many-to-many)
 const LedgerAccountCategoryParentsTable = pgTable(
@@ -241,6 +264,10 @@ const LedgerAccountCategoryParentsTable = pgTable(
 		parentIdx: index("idx_category_parents_parent").on(table.parentCategoryId),
 	})
 );
+type LedgerAccountCategoryParentRow = typeof LedgerAccountCategoryParentsTable.$inferSelect;
+type LedgerAccountCategoryParentInsertRow = Required<
+	typeof LedgerAccountCategoryParentsTable.$inferInsert
+>;
 
 // Junction: Account-to-category membership (many-to-many)
 const LedgerAccountCategoryAccountsTable = pgTable(
@@ -259,6 +286,10 @@ const LedgerAccountCategoryAccountsTable = pgTable(
 		accountIdx: index("idx_category_accounts_account").on(table.accountId),
 	})
 );
+type LedgerAccountCategoryAccountRow = typeof LedgerAccountCategoryAccountsTable.$inferSelect;
+type LedgerAccountCategoryAccountInsertRow = Required<
+	typeof LedgerAccountCategoryAccountsTable.$inferInsert
+>;
 
 // Account Balance Monitors: Real-time balance tracking with alerts
 const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monitors", {
@@ -274,6 +305,10 @@ const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monito
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
+type LedgerAccountBalanceMonitorRow = typeof LedgerAccountBalanceMonitorsTable.$inferSelect;
+type LedgerAccountBalanceMonitorInsertRow = Required<
+	typeof LedgerAccountBalanceMonitorsTable.$inferInsert
+>;
 
 // Account Statements: Periodic balance snapshots and statements
 const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
@@ -294,6 +329,8 @@ const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 });
+type LedgerAccountStatementRow = typeof LedgerAccountStatementsTable.$inferSelect;
+type LedgerAccountStatementInsertRow = Required<typeof LedgerAccountStatementsTable.$inferInsert>;
 
 // Ledger Account Settlements: Modern Treasury-style settlement transactions
 const LedgerAccountSettlementsTable = pgTable(
@@ -313,7 +350,6 @@ const LedgerAccountSettlementsTable = pgTable(
 		amount: bigint("amount", { mode: "number" }).notNull().default(0),
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
 		currency: text("currency").notNull(),
-		currencyExponent: integer("currency_exponent").notNull().default(2),
 		status: ledgerSettlementStatus("status").notNull().default("drafting"),
 		description: text("description"),
 		externalReference: text("external_reference"),
@@ -330,6 +366,8 @@ const LedgerAccountSettlementsTable = pgTable(
 		noSelfSettle: check("no_self_settle", sql`${table.settledAccountId} <> ${table.contraAccountId}`),
 	})
 );
+type LedgerAccountSettlementRow = typeof LedgerAccountSettlementsTable.$inferSelect;
+type LedgerAccountSettlementInsertRow = Required<typeof LedgerAccountSettlementsTable.$inferInsert>;
 
 // Junction table for settlement entries
 const LedgerAccountSettlementEntriesTable = pgTable(
@@ -348,94 +386,158 @@ const LedgerAccountSettlementEntriesTable = pgTable(
 		entryIdx: index("idx_settlement_entries_entry").on(table.entryId),
 	})
 );
+type LedgerAccountSettlementEntryRow = typeof LedgerAccountSettlementEntriesTable.$inferSelect;
+type LedgerAccountSettlementEntryInsertRow = Required<
+	typeof LedgerAccountSettlementEntriesTable.$inferInsert
+>;
 
-// Define relations for Drizzle ORM
-const organizationsRelations = relations(OrganizationsTable, ({ many }) => ({
-	ledgers: many(LedgersTable),
-}));
-
-const ledgersRelations = relations(LedgersTable, ({ one, many }) => ({
-	organization: one(OrganizationsTable, {
-		fields: [LedgersTable.organizationId],
-		references: [OrganizationsTable.id],
-	}),
-	accounts: many(LedgerAccountsTable),
-	transactions: many(LedgerTransactionsTable),
-	categories: many(LedgerAccountCategoriesTable),
-}));
-
-const ledgerAccountsRelations = relations(LedgerAccountsTable, ({ one, many }) => ({
-	ledger: one(LedgersTable, {
-		fields: [LedgerAccountsTable.ledgerId],
-		references: [LedgersTable.id],
-	}),
-	entries: many(LedgerTransactionEntriesTable),
-	monitors: many(LedgerAccountBalanceMonitorsTable),
-	statements: many(LedgerAccountStatementsTable),
-	settlementsAsSettled: many(LedgerAccountSettlementsTable, {
-		relationName: "settledAccount",
-	}),
-	settlementsAsContra: many(LedgerAccountSettlementsTable, {
-		relationName: "contraAccount",
-	}),
-}));
-
-const ledgerTransactionsRelations = relations(LedgerTransactionsTable, ({ one, many }) => ({
-	ledger: one(LedgersTable, {
-		fields: [LedgerTransactionsTable.ledgerId],
-		references: [LedgersTable.id],
-	}),
-	entries: many(LedgerTransactionEntriesTable),
-}));
-
-const ledgerTransactionEntriesRelations = relations(LedgerTransactionEntriesTable, ({ one }) => ({
-	transaction: one(LedgerTransactionsTable, {
-		fields: [LedgerTransactionEntriesTable.transactionId],
-		references: [LedgerTransactionsTable.id],
-	}),
-	account: one(LedgerAccountsTable, {
-		fields: [LedgerTransactionEntriesTable.accountId],
-		references: [LedgerAccountsTable.id],
-	}),
-}));
-
-const ledgerAccountCategoriesRelations = relations(
-	LedgerAccountCategoriesTable,
-	({ one, many }) => ({
-		ledger: one(LedgersTable, {
-			fields: [LedgerAccountCategoriesTable.ledgerId],
-			references: [LedgersTable.id],
-		}),
-		parentLinks: many(LedgerAccountCategoryParentsTable, { relationName: "childCategory" }),
-		childLinks: many(LedgerAccountCategoryParentsTable, { relationName: "parentCategory" }),
-		accountLinks: many(LedgerAccountCategoryAccountsTable),
+const schemaRelations = defineRelations(
+	{
+		OrganizationsTable,
+		LedgersTable,
+		LedgerAccountsTable,
+		LedgerTransactionsTable,
+		LedgerTransactionEntriesTable,
+		LedgerAccountCategoriesTable,
+		LedgerAccountCategoryParentsTable,
+		LedgerAccountCategoryAccountsTable,
+		LedgerAccountBalanceMonitorsTable,
+		LedgerAccountStatementsTable,
+		LedgerAccountSettlementsTable,
+		LedgerAccountSettlementEntriesTable,
+	},
+	r => ({
+		OrganizationsTable: {
+			ledgers: r.many.LedgersTable(),
+			settlements: r.many.LedgerAccountSettlementsTable(),
+		},
+		LedgersTable: {
+			organization: r.one.OrganizationsTable({
+				from: r.LedgersTable.organizationId,
+				to: r.OrganizationsTable.id,
+			}),
+			accounts: r.many.LedgerAccountsTable(),
+			transactions: r.many.LedgerTransactionsTable(),
+			categories: r.many.LedgerAccountCategoriesTable(),
+			statements: r.many.LedgerAccountStatementsTable(),
+		},
+		LedgerAccountsTable: {
+			ledger: r.one.LedgersTable({
+				from: r.LedgerAccountsTable.ledgerId,
+				to: r.LedgersTable.id,
+			}),
+			entries: r.many.LedgerTransactionEntriesTable(),
+			monitors: r.many.LedgerAccountBalanceMonitorsTable(),
+			statements: r.many.LedgerAccountStatementsTable(),
+			categoryLinks: r.many.LedgerAccountCategoryAccountsTable(),
+			settlementsAsSettled: r.many.LedgerAccountSettlementsTable({ alias: "settledAccount" }),
+			settlementsAsContra: r.many.LedgerAccountSettlementsTable({ alias: "contraAccount" }),
+		},
+		LedgerTransactionsTable: {
+			ledger: r.one.LedgersTable({
+				from: r.LedgerTransactionsTable.ledgerId,
+				to: r.LedgersTable.id,
+			}),
+			entries: r.many.LedgerTransactionEntriesTable(),
+			settlements: r.many.LedgerAccountSettlementsTable(),
+		},
+		LedgerTransactionEntriesTable: {
+			transaction: r.one.LedgerTransactionsTable({
+				from: r.LedgerTransactionEntriesTable.transactionId,
+				to: r.LedgerTransactionsTable.id,
+			}),
+			account: r.one.LedgerAccountsTable({
+				from: r.LedgerTransactionEntriesTable.accountId,
+				to: r.LedgerAccountsTable.id,
+			}),
+			settlementLinks: r.many.LedgerAccountSettlementEntriesTable(),
+		},
+		LedgerAccountCategoriesTable: {
+			ledger: r.one.LedgersTable({
+				from: r.LedgerAccountCategoriesTable.ledgerId,
+				to: r.LedgersTable.id,
+			}),
+			parentLinks: r.many.LedgerAccountCategoryParentsTable({ alias: "childCategory" }),
+			childLinks: r.many.LedgerAccountCategoryParentsTable({ alias: "parentCategory" }),
+			accountLinks: r.many.LedgerAccountCategoryAccountsTable(),
+		},
+		LedgerAccountCategoryParentsTable: {
+			childCategory: r.one.LedgerAccountCategoriesTable({
+				from: r.LedgerAccountCategoryParentsTable.categoryId,
+				to: r.LedgerAccountCategoriesTable.id,
+				alias: "childCategory",
+			}),
+			parentCategory: r.one.LedgerAccountCategoriesTable({
+				from: r.LedgerAccountCategoryParentsTable.parentCategoryId,
+				to: r.LedgerAccountCategoriesTable.id,
+				alias: "parentCategory",
+			}),
+		},
+		LedgerAccountCategoryAccountsTable: {
+			category: r.one.LedgerAccountCategoriesTable({
+				from: r.LedgerAccountCategoryAccountsTable.categoryId,
+				to: r.LedgerAccountCategoriesTable.id,
+			}),
+			account: r.one.LedgerAccountsTable({
+				from: r.LedgerAccountCategoryAccountsTable.accountId,
+				to: r.LedgerAccountsTable.id,
+			}),
+		},
+		LedgerAccountBalanceMonitorsTable: {
+			account: r.one.LedgerAccountsTable({
+				from: r.LedgerAccountBalanceMonitorsTable.accountId,
+				to: r.LedgerAccountsTable.id,
+			}),
+		},
+		LedgerAccountStatementsTable: {
+			ledger: r.one.LedgersTable({
+				from: r.LedgerAccountStatementsTable.ledgerId,
+				to: r.LedgersTable.id,
+			}),
+			account: r.one.LedgerAccountsTable({
+				from: r.LedgerAccountStatementsTable.accountId,
+				to: r.LedgerAccountsTable.id,
+			}),
+		},
+		LedgerAccountSettlementsTable: {
+			organization: r.one.OrganizationsTable({
+				from: r.LedgerAccountSettlementsTable.organizationId,
+				to: r.OrganizationsTable.id,
+			}),
+			settledAccount: r.one.LedgerAccountsTable({
+				from: r.LedgerAccountSettlementsTable.settledAccountId,
+				to: r.LedgerAccountsTable.id,
+				alias: "settledAccount",
+			}),
+			contraAccount: r.one.LedgerAccountsTable({
+				from: r.LedgerAccountSettlementsTable.contraAccountId,
+				to: r.LedgerAccountsTable.id,
+				alias: "contraAccount",
+			}),
+			transaction: r.one.LedgerTransactionsTable({
+				from: r.LedgerAccountSettlementsTable.transactionId,
+				to: r.LedgerTransactionsTable.id,
+			}),
+			settlementEntries: r.many.LedgerAccountSettlementEntriesTable(),
+		},
+		LedgerAccountSettlementEntriesTable: {
+			settlement: r.one.LedgerAccountSettlementsTable({
+				from: r.LedgerAccountSettlementEntriesTable.settlementId,
+				to: r.LedgerAccountSettlementsTable.id,
+			}),
+			entry: r.one.LedgerTransactionEntriesTable({
+				from: r.LedgerAccountSettlementEntriesTable.entryId,
+				to: r.LedgerTransactionEntriesTable.id,
+			}),
+		},
 	})
 );
 
-const ledgerAccountSettlementsRelations = relations(
-	LedgerAccountSettlementsTable,
-	({ one, many }) => ({
-		organization: one(OrganizationsTable, {
-			fields: [LedgerAccountSettlementsTable.organizationId],
-			references: [OrganizationsTable.id],
-		}),
-		settledAccount: one(LedgerAccountsTable, {
-			fields: [LedgerAccountSettlementsTable.settledAccountId],
-			references: [LedgerAccountsTable.id],
-			relationName: "settledAccount",
-		}),
-		contraAccount: one(LedgerAccountsTable, {
-			fields: [LedgerAccountSettlementsTable.contraAccountId],
-			references: [LedgerAccountsTable.id],
-			relationName: "contraAccount",
-		}),
-		transaction: one(LedgerTransactionsTable, {
-			fields: [LedgerAccountSettlementsTable.transactionId],
-			references: [LedgerTransactionsTable.id],
-		}),
-		settlementEntries: many(LedgerAccountSettlementEntriesTable),
-	})
-);
+type LedgerTransactionWithEntriesRow = BuildQueryResult<
+	typeof schemaRelations,
+	(typeof schemaRelations)["LedgerTransactionsTable"],
+	{ with: { entries: true } }
+>;
 
 export {
 	// Tables
@@ -451,14 +553,7 @@ export {
 	LedgerAccountStatementsTable,
 	LedgerAccountSettlementsTable,
 	LedgerAccountSettlementEntriesTable,
-	// Relations
-	organizationsRelations,
-	ledgersRelations,
-	ledgerAccountsRelations,
-	ledgerTransactionsRelations,
-	ledgerTransactionEntriesRelations,
-	ledgerAccountCategoriesRelations,
-	ledgerAccountSettlementsRelations,
+	schemaRelations,
 	// Enums
 	ledgerNormalBalance,
 	ledgerTransactionStatus,
@@ -466,13 +561,31 @@ export {
 	ledgerSettlementStatus,
 };
 export type {
-	AccountCreateRow,
-	AccountRow,
-	AccountUpdateRow,
-	LedgerCreateRow,
+	LedgerAccountInsertRow,
+	LedgerAccountRow,
+	LedgerAccountBalanceMonitorInsertRow,
+	LedgerAccountBalanceMonitorRow,
+	LedgerAccountCategoryAccountInsertRow,
+	LedgerAccountCategoryAccountRow,
+	LedgerAccountCategoryInsertRow,
+	LedgerAccountCategoryParentInsertRow,
+	LedgerAccountCategoryParentRow,
+	LedgerAccountCategoryRow,
+	LedgerAccountSettlementEntryInsertRow,
+	LedgerAccountSettlementEntryRow,
+	LedgerAccountSettlementInsertRow,
+	LedgerAccountSettlementRow,
+	LedgerAccountStatementInsertRow,
+	LedgerAccountStatementRow,
+	LedgerInsertRow,
 	LedgerRow,
+	LedgerTransactionEntryInsertRow,
+	LedgerTransactionEntryRow,
+	LedgerTransactionInsertRow,
+	LedgerTransactionRow,
+	LedgerTransactionWithEntriesRow,
 	LedgerUpdateRow,
-	OrganizationCreateRow,
+	OrganizationInsertRow,
 	OrganizationRow,
 	OrganizationUpdateRow,
 };

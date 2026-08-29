@@ -2,8 +2,8 @@ import { Type } from "@sinclair/typebox";
 import { Effect } from "effect";
 import type { FastifyPluginAsync } from "fastify";
 import { TypeID } from "typeid-js";
-import { LedgerServiceTag } from "@/ledgers";
-import { AccountServiceTag, currencyEquals } from "@/ledgers/accounts";
+import { LedgerServiceTag } from "@/domains/ledgers";
+import { AccountServiceTag } from "@/domains/ledgers/accounts";
 import {
 	BadRequestErrorResponse,
 	ConflictError,
@@ -148,15 +148,14 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, contraAccountId)),
 				])
 			);
-			if (!currencyEquals(settledAccount.currency, contraAccount.currency)) {
+			if (settledAccount.currency !== contraAccount.currency) {
 				throw new ConflictError("Settlement accounts must use the same currency");
 			}
 
 			const created =
 				await rq.server.services.ledgerAccountSettlementService.createLedgerAccountSettlement(
 					orgId,
-					settledAccount.currency.code,
-					settledAccount.currency.minorUnitExponent,
+					settledAccount.currency,
 					settledAccount.normalBalance,
 					rq.body
 				);
@@ -203,7 +202,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, contraAccountId)),
 				])
 			);
-			if (!currencyEquals(settledAccount.currency, contraAccount.currency)) {
+			if (settledAccount.currency !== contraAccount.currency) {
 				throw new ConflictError("Settlement accounts must use the same currency");
 			}
 
@@ -211,8 +210,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				await rq.server.services.ledgerAccountSettlementService.updateLedgerAccountSettlement(
 					orgId,
 					rq.params.settlementId,
-					settledAccount.currency.code,
-					settledAccount.currency.minorUnitExponent,
+					settledAccount.currency,
 					settledAccount.normalBalance,
 					rq.body
 				);

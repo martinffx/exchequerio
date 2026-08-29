@@ -1,16 +1,26 @@
-# Exchequer Ledger API - Entity Relationship Diagram
+# Exchequer Ledger API entity relationships
+
+This diagram shows the ownership and accounting columns used by Ledger Transactions. See
+[`schema.ts`](../../src/repo/schema.ts) for the complete database schema.
 
 ```mermaid
 erDiagram
-    %% Core Entities
+    ORGANIZATION {
+        text id PK
+        text name
+        text description
+        timestamptz created
+        timestamptz updated
+    }
+
     LEDGER {
         text id PK
         text organization_id FK
         text name
         text description
-        jsonb metadata
-        timestamp created
-        timestamp updated
+        text metadata
+        timestamptz created
+        timestamptz updated
     }
 
     LEDGER_ACCOUNT {
@@ -21,175 +31,80 @@ erDiagram
         text description
         enum normal_balance
         text currency_code
-        integer minor_unit_exponent
-        integer pending_amount
-        integer posted_amount
-        integer available_amount
-        integer pending_credits
-        integer pending_debits
-        integer posted_credits
-        integer posted_debits
-        integer available_credits
-        integer available_debits
+        bigint pending_amount
+        bigint posted_amount
+        bigint available_amount
+        bigint pending_credits
+        bigint pending_debits
+        bigint posted_credits
+        bigint posted_debits
+        bigint available_credits
+        bigint available_debits
         integer lock_version
-        jsonb metadata
-        timestamp created
-        timestamp updated
+        text metadata
+        timestamptz created
+        timestamptz updated
     }
 
     LEDGER_TRANSACTION {
         text id PK
+        text organization_id FK
         text ledger_id FK
-        text idempotency_key
         text description
         enum status
-        jsonb metadata
-        timestamp created
-        timestamp updated
+        timestamptz posted_at
+        integer lock_version
+        text metadata
+        timestamptz created
+        timestamptz updated
     }
 
     LEDGER_TRANSACTION_ENTRY {
         text id PK
+        text organization_id FK
+        text ledger_id FK
         text transaction_id FK
         text account_id FK
         enum direction
-        numeric amount
+        bigint amount
+        text currency
         enum status
-        jsonb metadata
-        timestamp created
-        timestamp updated
-    }
-
-    %% Supporting Entities
-    LEDGER_ACCOUNT_CATEGORY {
-        text id PK
-        text ledger_id FK
-        text name
-        text description
-        enum normal_balance
-        text parent_category_id
-        jsonb metadata
-        timestamp created
-        timestamp updated
-    }
-
-    LEDGER_ACCOUNT_BALANCE_MONITOR {
-        text id PK
-        text account_id FK
-        text name
-        text description
-        numeric alert_threshold
-        integer is_active
-        jsonb metadata
-        timestamp created
-        timestamp updated
-    }
-
-    LEDGER_ACCOUNT_STATEMENT {
-        text id PK
-        text account_id FK
-        timestamp statement_date
-        numeric opening_balance
-        numeric closing_balance
-        numeric total_credits
-        numeric total_debits
-        integer transaction_count
-        jsonb metadata
-        timestamp created
-        timestamp updated
+        text metadata
+        timestamptz created
     }
 
     LEDGER_ACCOUNT_SETTLEMENT {
         text id PK
-        text account_id FK
-        text batch_id
-        timestamp settlement_date
-        numeric settlement_amount
-        enum status
-        text external_reference
-        jsonb metadata
-        timestamp created
-        timestamp updated
+        text organization_id FK
+        text transaction_id FK
+        text settled_account_id FK
+        text contra_account_id FK
     }
 
-    ORGANIZATION {
-        text id PK
-        text name
-        text description
-        timestamp created
-        timestamp updated
-    }
-
-    %% Relationships
-    ORGANIZATION ||--o{ LEDGER : "contains"
-    LEDGER ||--o{ LEDGER_ACCOUNT : "contains"
-    LEDGER ||--o{ LEDGER_TRANSACTION : "records"
-    LEDGER ||--o{ LEDGER_ACCOUNT_CATEGORY : "categorizes"
-    
-    LEDGER_TRANSACTION ||--o{ LEDGER_TRANSACTION_ENTRY : "contains"
-    LEDGER_ACCOUNT ||--o{ LEDGER_TRANSACTION_ENTRY : "affected_by"
-    
-    LEDGER_ACCOUNT ||--o{ LEDGER_ACCOUNT_BALANCE_MONITOR : "monitored_by"
-    LEDGER_ACCOUNT ||--o{ LEDGER_ACCOUNT_STATEMENT : "generates"
-    LEDGER_ACCOUNT ||--o{ LEDGER_ACCOUNT_SETTLEMENT : "settles"
-    
-    LEDGER_ACCOUNT_CATEGORY }o--|| LEDGER_ACCOUNT_CATEGORY : "parent_child"
-
-    %% Enum Definitions
-    enum normal_balance {
-        debit
-        credit
-    }
-
-    enum status {
-        pending
-        posted
-        archived
-    }
-
-    enum direction {
-        debit
-        credit
-    }
+    ORGANIZATION ||--o{ LEDGER : owns
+    LEDGER ||--o{ LEDGER_ACCOUNT : contains
+    LEDGER ||--o{ LEDGER_TRANSACTION : records
+    LEDGER_TRANSACTION ||--|{ LEDGER_TRANSACTION_ENTRY : contains
+    LEDGER_ACCOUNT ||--o{ LEDGER_TRANSACTION_ENTRY : receives
+    LEDGER_TRANSACTION ||--o{ LEDGER_ACCOUNT_SETTLEMENT : offsets
 ```
 
-## Currency ownership
+## Transaction invariants
 
-Currency belongs to each Ledger Account as the exact pair `currency_code` and
-`minor_unit_exponent`. Transactions and Settlements derive their Currency from their referenced
-Accounts. Ledgers do not store Currency. See the approved
-[Accounts Effect design](../../../../docs/specs/2026-08-09-accounts-effect/design.md).
+- A Transaction belongs to one Organization and Ledger. The composite foreign key
+  `(organization_id, ledger_id)` references its Ledger.
+- An Entry repeats `organization_id` and `ledger_id` so composite foreign keys require its
+  Transaction and Account to share both owners.
+- Transaction status is `pending`, `posted`, or `voided`. `posted_at` exists only for Posted
+  Transactions. Transactions have no Effective Time.
+- Entries store the Transaction status and the request Currency Code alongside the Amount. Currency
+  exponent handling is deferred until the Asset model exists.
+- Entry Amounts are positive integer Minor Units no greater than JavaScript's maximum safe integer.
+- Each Account stores pending, posted, and available Amounts plus credit and debit counters for each
+  state. All nine projections are safe integers.
+- Transaction lists use `(ledger_id, created DESC, id DESC)`. Ownership and lookup indexes cover
+  Organization, status, Transaction, and Account access paths.
 
-## Key Relationships Explained
-
-### Core Double-Entry Structure
-- **Ledger (1) → Ledger Accounts (many)**: Each ledger contains multiple accounts
-- **Ledger (1) → Ledger Transactions (many)**: Each ledger records multiple transactions  
-- **Ledger Transaction (1) → Ledger Transaction Entries (2+)**: Each transaction must have at least 2 entries (debit + credit)
-- **Ledger Account (1) → Ledger Transaction Entries (many)**: Each account can have many transaction entries
-
-### Business Rules Enforced
-1. **Double-Entry Accounting**: Every transaction must balance (total debits = total credits)
-2. **Account Isolation**: Accounts only transact within the same ledger
-3. **Transaction Atomicity**: All entries in a transaction succeed or fail together
-4. **Status Inheritance**: Transaction status changes affect all entries
-
-### Supporting Features
-- **Account Categories**: Hierarchical chart of accounts structure
-- **Balance Monitors**: Real-time balance tracking with alerts
-- **Account Statements**: Periodic balance snapshots and reporting
-- **Settlement Batches**: Automated settlement processing
-
-## Data Types
-- **text**: String identifiers and names
-- **numeric**: Decimal amounts with precision (20,4)
-- **enum**: Predefined values for status/direction
-- **timestamp**: Date/time with timezone
-- **jsonb**: Flexible metadata storage
-- **integer**: Numeric flags and counters
-
-## Indexes for Performance
-- Account balance queries: `idx_ledger_accounts_balance`
-- Transaction status lookups: `idx_ledger_transactions_status`
-- Entry filtering: `idx_ledger_transaction_entries_account/status`
-- Settlement processing: `idx_ledger_account_settlements_batch/status`
+Create idempotency uses Valkey only. The Organization-scoped key maps to the server-owned
+Transaction ID for 15 minutes. A losing caller waits up to two seconds for that Transaction to
+appear and receives a retryable `503` if the winning request is still unresolved.

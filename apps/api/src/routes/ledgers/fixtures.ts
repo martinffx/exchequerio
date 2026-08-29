@@ -1,6 +1,5 @@
 import { faker } from "@faker-js/faker";
 import { TypeID } from "typeid-js";
-import { LedgerTransactionEntryEntity } from "@/repo/entities/LedgerTransactionEntryEntity";
 import {
 	LedgerAccountBalanceMonitorEntity,
 	LedgerAccountCategoryEntity,
@@ -8,7 +7,6 @@ import {
 	LedgerAccountSettlementEntity,
 	LedgerAccountStatementEntity,
 	LedgerEntity,
-	LedgerTransactionEntity,
 	OrganizationEntity,
 } from "@/services";
 
@@ -40,15 +38,10 @@ function createLedgerAccountFixture(
 		name: string;
 		description?: string;
 		normalBalance: "debit" | "credit";
-		pendingAmount: number;
-		postedAmount: number;
-		availableAmount: number;
 		pendingCredits: number;
 		pendingDebits: number;
 		postedCredits: number;
 		postedDebits: number;
-		availableCredits: number;
-		availableDebits: number;
 		lockVersion: number;
 		metadata?: Record<string, unknown>;
 		created: Date;
@@ -63,15 +56,10 @@ function createLedgerAccountFixture(
 		name: faker.finance.accountName(),
 		description: faker.lorem.sentence(),
 		normalBalance: "debit",
-		pendingAmount: 0,
-		postedAmount: 0,
-		availableAmount: 0,
 		pendingCredits: 0,
 		pendingDebits: 0,
 		postedCredits: 0,
 		postedDebits: 0,
-		availableCredits: 0,
-		availableDebits: 0,
 		lockVersion: 1,
 		metadata: undefined,
 		created: now,
@@ -106,79 +94,6 @@ function createLedgerAccountCategoryFixture(
 	});
 }
 
-function createLedgerTransactionFixture(
-	overrides?: Partial<{
-		id: TypeID<"ltr">;
-		organizationId: TypeID<"org">;
-		ledgerId: TypeID<"lgr">;
-		entries: LedgerTransactionEntryEntity[];
-		idempotencyKey?: string;
-		description?: string;
-		status: "pending" | "posted" | "archived";
-		effectiveAt: Date;
-		metadata?: Record<string, unknown>;
-		created: Date;
-		updated: Date;
-	}>
-): LedgerTransactionEntity {
-	const now = new Date();
-	const transactionId = overrides?.id ?? new TypeID("ltr");
-	const orgId = overrides?.organizationId ?? new TypeID("org");
-	const ledgerId = overrides?.ledgerId ?? new TypeID("lgr");
-	const currency = "USD";
-	const currencyExponent = 2;
-	const amount = 10000; // $100.00
-	const created = overrides?.created ?? now;
-	const updated = overrides?.updated ?? now;
-
-	// Use fixed IDs for stable snapshots when created/updated are provided
-	const useFixedIds = overrides?.created !== undefined || overrides?.updated !== undefined;
-
-	// Create default entries if not provided
-	const defaultEntries = overrides?.entries ?? [
-		new LedgerTransactionEntryEntity({
-			id: useFixedIds ? TypeID.fromString("lte_01h2x3y4z5a6b7c8d9e0f1g2h9") : new TypeID("lte"),
-			organizationId: orgId,
-			transactionId,
-			accountId: useFixedIds ? TypeID.fromString("lat_01h2x3y4z5a6b7c8d9e0f1g2j0") : new TypeID("lat"),
-			direction: "debit",
-			amount,
-			currency,
-			currencyExponent,
-			status: overrides?.status ?? "pending",
-			created,
-			updated,
-		}),
-		new LedgerTransactionEntryEntity({
-			id: useFixedIds ? TypeID.fromString("lte_01h2x3y4z5a6b7c8d9e0f1g2j1") : new TypeID("lte"),
-			organizationId: orgId,
-			transactionId,
-			accountId: useFixedIds ? TypeID.fromString("lat_01h2x3y4z5a6b7c8d9e0f1g2j2") : new TypeID("lat"),
-			direction: "credit",
-			amount,
-			currency,
-			currencyExponent,
-			status: overrides?.status ?? "pending",
-			created,
-			updated,
-		}),
-	];
-
-	return new LedgerTransactionEntity({
-		id: transactionId,
-		organizationId: orgId,
-		ledgerId,
-		entries: defaultEntries,
-		description: faker.lorem.sentence(),
-		status: "pending",
-		effectiveAt: now,
-		metadata: undefined,
-		created: now,
-		updated: now,
-		...overrides,
-	});
-}
-
 function createLedgerAccountSettlementFixture(
 	overrides?: Partial<{
 		id: TypeID<"las">;
@@ -189,7 +104,6 @@ function createLedgerAccountSettlementFixture(
 		amount: number;
 		normalBalance: "debit" | "credit";
 		currency: string;
-		currencyExponent: number;
 		status: "drafting" | "processing" | "pending" | "posted" | "archiving" | "archived";
 		description?: string;
 		externalReference?: string;
@@ -209,7 +123,6 @@ function createLedgerAccountSettlementFixture(
 		amount: 0,
 		normalBalance: "debit",
 		currency: "USD",
-		currencyExponent: 2,
 		status: "drafting",
 		description: faker.lorem.sentence(),
 		externalReference: undefined,
@@ -291,7 +204,6 @@ export {
 	createLedgerFixture,
 	createLedgerAccountFixture,
 	createLedgerAccountCategoryFixture,
-	createLedgerTransactionFixture,
 	createLedgerAccountSettlementFixture,
 	createLedgerAccountStatementFixture,
 	createLedgerAccountBalanceMonitorFixture,

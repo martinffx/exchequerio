@@ -27,7 +27,6 @@ type LedgerAccountSettlementEntityOptions = {
 	amount: number; // Integer minor units
 	normalBalance: NormalBalance;
 	currency: string;
-	currencyExponent: number;
 	status: SettlementStatus;
 	description?: string;
 	externalReference?: string;
@@ -46,7 +45,6 @@ class LedgerAccountSettlementEntity {
 	public readonly amount: number; // Integer minor units
 	public readonly normalBalance: NormalBalance;
 	public readonly currency: string;
-	public readonly currencyExponent: number;
 	public readonly status: SettlementStatus;
 	public readonly description?: string;
 	public readonly externalReference?: string;
@@ -64,7 +62,6 @@ class LedgerAccountSettlementEntity {
 		this.amount = options.amount;
 		this.normalBalance = options.normalBalance;
 		this.currency = options.currency;
-		this.currencyExponent = options.currencyExponent;
 		this.status = options.status;
 		this.description = options.description;
 		this.externalReference = options.externalReference;
@@ -81,7 +78,6 @@ class LedgerAccountSettlementEntity {
 		rq: LedgerAccountSettlementRequest,
 		orgId: OrgID,
 		currency: string,
-		currencyExponent: number,
 		normalBalance: NormalBalance,
 		id?: string
 	): LedgerAccountSettlementEntity {
@@ -95,7 +91,6 @@ class LedgerAccountSettlementEntity {
 			amount: 0, // Calculated from entries
 			normalBalance,
 			currency,
-			currencyExponent,
 			status: rq.status,
 			description: rq.description,
 			externalReference: rq.externalReference,
@@ -129,7 +124,6 @@ class LedgerAccountSettlementEntity {
 			amount: record.amount,
 			normalBalance: record.normalBalance,
 			currency: record.currency,
-			currencyExponent: record.currencyExponent,
 			status: record.status,
 			description: record.description ?? undefined,
 			externalReference: record.externalReference ?? undefined,
@@ -153,7 +147,6 @@ class LedgerAccountSettlementEntity {
 			amount: this.amount,
 			normalBalance: this.normalBalance,
 			currency: this.currency,
-			currencyExponent: this.currencyExponent,
 			status: this.status,
 			description: this.description ?? undefined,
 			externalReference: this.externalReference ?? undefined,
@@ -176,7 +169,6 @@ class LedgerAccountSettlementEntity {
 			amount: this.amount,
 			normalBalance: this.normalBalance,
 			currency: this.currency,
-			currencyExponent: this.currencyExponent,
 			status: this.status,
 			description: this.description,
 			metadata: this.metadata,

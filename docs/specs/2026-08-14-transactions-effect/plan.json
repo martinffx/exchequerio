@@ -1,0 +1,280 @@
+{
+  "feature": "transactions-effect",
+  "spec": "docs/specs/2026-08-14-transactions-effect/design.md",
+  "goal": "Run Ledger Transactions through the shared Effect runtime with atomic PostgreSQL writes and Valkey-only create idempotency.",
+  "phases": [
+    {
+      "id": "P1",
+      "name": "Domain and persistence model",
+      "tasks": [
+        {
+          "id": "T1",
+          "name": "Implement Transaction domain objects and transport schemas",
+          "depends_on": [],
+          "inputs": [
+            "The lifecycle and HTTP contracts in the approved design",
+            "Existing Account Currency and TypeID conventions"
+          ],
+          "description": "Implement LedgerTransaction and LedgerTransactionEntry with typed Effect failures. Support Pending, Posted, and Voided lifecycle behavior, balance by Currency Code, accept repeated Accounts, and validate positive safe-integer Amounts. Define the six Fastify request and response schemas with required Organization-scoped Idempotency-Key input.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/transactions/domain/LedgerTransaction.ts",
+              "apps/api/src/ledgers/transactions/domain/LedgerTransactionEntry.ts",
+              "apps/api/src/ledgers/transactions/TransactionSchema.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "Domain cases cover balancing, lifecycle transitions, repeated Accounts, invalid Amounts, metadata, and persistence decoding."
+            ],
+            "acceptance": [
+              "Domain objects perform no I/O.",
+              "Minor Unit Exponent is absent until Assets provide its canonical owner.",
+              "Transport contracts expose only the implemented Transaction fields."
+            ]
+          }
+        },
+        {
+          "id": "T2",
+          "name": "Apply the empty-schema Transaction migration",
+          "depends_on": [
+            "T1"
+          ],
+          "inputs": [
+            "The Drizzle schema through the previous migration",
+            "The approved clean-cut migration boundary"
+          ],
+          "description": "Update the Drizzle schema for Posted Time, optimistic lock versions, Entry Ledger ownership, composite tenancy constraints, and current indexes. Add one migration that aborts before changing the schema when Transaction or Entry rows exist. Remove PostgreSQL idempotency keys, Effective Time, and Minor Unit Exponent columns without a legacy-data conversion path.",
+          "files": {
+            "create": [
+              "apps/api/migrations/20260826080418_transactions_effect/migration.sql",
+              "apps/api/src/ledgers/transactions/TransactionMigration.test.ts"
+            ],
+            "modify": [
+              "apps/api/src/repo/schema.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "A clean legacy schema migrates successfully.",
+              "Existing Transaction or Entry rows abort the migration before any schema change.",
+              "The resulting schema matches the Drizzle model."
+            ],
+            "acceptance": [
+              "The migration performs no row backfill or legacy Transaction conversion.",
+              "Composite keys enforce Organization and Ledger ownership.",
+              "PostgreSQL stores no Transaction idempotency key."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Managed infrastructure and idempotency",
+      "tasks": [
+        {
+          "id": "T3",
+          "name": "Compose the managed database and Valkey runtime",
+          "depends_on": [],
+          "inputs": [
+            "The shared Effect runtime",
+            "Database and Valkey environment configuration"
+          ],
+          "description": "Create managed Database and Valkey Layers with lazy Valkey connection and runtime-owned finalizers. Compose Transaction dependencies once per Fastify server while allowing test Layer overrides.",
+          "files": {
+            "create": [
+              "apps/api/src/db/valkey.ts"
+            ],
+            "modify": [
+              "apps/api/src/db/database.ts",
+              "apps/api/src/runtime.ts",
+              "apps/api/src/config.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "Managed resources close once and injected test resources retain external ownership."
+            ],
+            "acceptance": [
+              "Valkey readiness affects Transaction create only.",
+              "Non-create endpoints remain available during Valkey failure."
+            ]
+          }
+        },
+        {
+          "id": "T4",
+          "name": "Implement Valkey-only Transaction create claims",
+          "depends_on": [
+            "T3"
+          ],
+          "inputs": [
+            "Organization-scoped key format",
+            "The 15-minute claim policy"
+          ],
+          "description": "Implement TransactionIdemService with atomic SET NX claims and compare-and-delete release. Claims map an Organization and opaque idempotency key to one generated Transaction ID for 15 minutes. Translate malformed values and command failures into typed availability errors.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/transactions/TransactionIdemService.ts",
+              "apps/api/src/ledgers/transactions/TransactionIdemService.test.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "Real Valkey tests cover one winner, shared Transaction ID, 15-minute expiry, safe release, malformed values, and failure translation."
+            ],
+            "acceptance": [
+              "Keys use exchequer:transactions:idempotency:<organizationId>:<key>.",
+              "PostgreSQL is not queried by the idempotency service.",
+              "Cleanup cannot remove another caller's claim."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "Transaction application slice",
+      "tasks": [
+        {
+          "id": "T5",
+          "name": "Implement the Effect Transaction repository",
+          "depends_on": [
+            "T1",
+            "T2"
+          ],
+          "inputs": [
+            "Transaction domain objects",
+            "Effect Drizzle database service",
+            "Account public slice contracts"
+          ],
+          "description": "Implement tenant-scoped list, get, create, update, post, and void operations. Read current snapshots, calculate domain results, then atomically write Transactions, Entries, and Account projections with optimistic lock-version predicates. Persist Entry Currency and status and update affected Accounts once in ID order.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/transactions/LedgerTransactionRepo.ts",
+              "apps/api/src/ledgers/transactions/LedgerTransactionRepo.test.ts"
+            ],
+            "modify": [
+              "apps/api/src/ledgers/accounts/index.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "PostgreSQL cases cover reads, tenant isolation, lifecycle writes, rollback, projection changes, decoding, and optimistic conflicts."
+            ],
+            "acceptance": [
+              "Every mutation commits all Transaction, Entry, and Account changes together.",
+              "Missing and cross-tenant resources remain hidden.",
+              "Cross-slice Account imports use the public Account entrypoint."
+            ]
+          }
+        },
+        {
+          "id": "T6",
+          "name": "Implement Transaction orchestration and retries",
+          "depends_on": [
+            "T4",
+            "T5"
+          ],
+          "inputs": [
+            "Repository and idempotency service contracts",
+            "The two-second retry schedule"
+          ],
+          "description": "Implement the six Transaction use cases. Enforce the 200-Account limit, coordinate Valkey claims, release failed winners, and poll for a claimed winner for up to two seconds. Return a retryable 503 when the winner remains unresolved. Retry only typed optimistic conflicts, deadlocks, and serialization failures.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/transactions/TransactionService.ts",
+              "apps/api/src/ledgers/transactions/TransactionService.test.ts",
+              "apps/api/src/ledgers/transactions/TransactionErrors.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "Service tests cover claim winners, visible losers, unresolved losers, claim cleanup, Account limits, retries, and non-retryable failures."
+            ],
+            "acceptance": [
+              "An unresolved loser returns retryable Service Unavailable instead of Not Found.",
+              "Read, update, post, and void never consult Valkey.",
+              "Failed winners release only their own claims."
+            ]
+          }
+        },
+        {
+          "id": "T7",
+          "name": "Register the six Fastify routes",
+          "depends_on": [
+            "T6"
+          ],
+          "inputs": [
+            "Transaction schemas and service errors",
+            "Existing authentication and problem-response conventions"
+          ],
+          "description": "Register list, get, create, update, post, and void routes through the managed Effect runtime. Preserve permissions, Location headers, status codes, response encoding, and the required Idempotency-Key header.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/transactions/TransactionRoutes.ts",
+              "apps/api/src/ledgers/transactions/TransactionRoutes.test.ts"
+            ],
+            "modify": [
+              "apps/api/src/routes/ledgers/index.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "Route tests cover success, validation, permissions, typed failures, Location, and retryable 503 responses."
+            ],
+            "acceptance": [
+              "All six routes preserve their public paths and permissions.",
+              "Problem responses use the shared HTTP error model."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "name": "Integration and documentation",
+      "tasks": [
+        {
+          "id": "T8",
+          "name": "Verify assembled journeys and document the implementation",
+          "depends_on": [
+            "T2",
+            "T7"
+          ],
+          "inputs": [
+            "The assembled server and PostgreSQL Layer",
+            "Canonical Ledger terminology"
+          ],
+          "description": "Cover authenticated Pending, Posted, replay, concurrency, and tenant-isolation journeys with Fastify and PostgreSQL using an in-memory idempotency Layer. Update domain, API, architecture, migration, environment, and benchmark documentation to describe the implementation rather than discarded alternatives.",
+          "files": {
+            "create": [
+              "apps/api/src/ledgers/transactions/TransactionIntegration.test.ts"
+            ],
+            "modify": [
+              "CONTEXT.md",
+              "apps/api/docs/spec/transactions/design.md",
+              "apps/api/docs/spec/transactions/spec.md",
+              "apps/api/docs/standards/architecture.md"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "The focused Transaction suites pass with PostgreSQL and Valkey running.",
+              "API type-checking, lint, formatting, and the complete API suite pass.",
+              "Repository searches find no 24-hour or PostgreSQL-backed Transaction idempotency claims."
+            ],
+            "acceptance": [
+              "Documentation records the 15-minute Valkey-only claim policy.",
+              "Documentation records the empty-data migration boundary and deferred Asset exponent.",
+              "No documentation claims unsupported cross-instance integration coverage."
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

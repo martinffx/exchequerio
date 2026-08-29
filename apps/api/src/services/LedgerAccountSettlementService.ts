@@ -1,10 +1,36 @@
 import { TypeID } from "typeid-js";
 import { ConflictError } from "@/lib/errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities";
-import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
+import type {
+	LedgerAccountSettlementID,
+	LedgerID,
+	LedgerTransactionID,
+	OrgID,
+} from "@/repo/entities/types";
 import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlementRepo";
 import type { NormalBalance, SettlementStatus } from "@/routes/ledgers/schema";
-import type { LedgerTransactionService } from "./LedgerTransactionService";
+
+type SettlementTransactionRequest = {
+	readonly status: "posted";
+	readonly description?: string;
+	readonly metadata?: Record<string, string>;
+	readonly ledgerEntries: Array<{
+		readonly accountId: string;
+		readonly direction: "debit" | "credit";
+		readonly amount: number;
+		readonly currencyCode: string;
+		readonly metadata?: Record<string, string>;
+	}>;
+};
+
+interface SettlementTransactionCaller {
+	createTransaction(
+		orgId: OrgID,
+		ledgerId: LedgerID,
+		idempotencyKey: string,
+		request: SettlementTransactionRequest
+	): Promise<{ readonly id: LedgerTransactionID; readonly status: "pending" | "posted" | "voided" }>;
+}
 
 interface LedgerAccountSettlementRequest {
 	transactionId: string;
@@ -20,7 +46,7 @@ interface LedgerAccountSettlementRequest {
 class LedgerAccountSettlementService {
 	constructor(
 		private readonly ledgerAccountSettlementRepo: LedgerAccountSettlementRepo,
-		private readonly ledgerTransactionService: LedgerTransactionService
+		private readonly transactionCaller: SettlementTransactionCaller
 	) {}
 
 	public async listLedgerAccountSettlements(
@@ -42,18 +68,11 @@ class LedgerAccountSettlementService {
 	public async createLedgerAccountSettlement(
 		orgId: OrgID,
 		currency: string,
-		currencyExponent: number,
 		normalBalance: NormalBalance,
 		request: LedgerAccountSettlementRequest
 	): Promise<LedgerAccountSettlementEntity> {
 		// Note: Validation that both accounts belong to the same ledger is done in the route layer
-		const entity = LedgerAccountSettlementEntity.fromRequest(
-			request,
-			orgId,
-			currency,
-			currencyExponent,
-			normalBalance
-		);
+		const entity = LedgerAccountSettlementEntity.fromRequest(request, orgId, currency, normalBalance);
 		return this.ledgerAccountSettlementRepo.createSettlement(entity);
 	}
 
@@ -61,7 +80,6 @@ class LedgerAccountSettlementService {
 		orgId: OrgID,
 		id: string,
 		currency: string,
-		currencyExponent: number,
 		normalBalance: NormalBalance,
 		request: LedgerAccountSettlementRequest
 	): Promise<LedgerAccountSettlementEntity> {
@@ -72,7 +90,6 @@ class LedgerAccountSettlementService {
 			request,
 			orgId,
 			currency,
-			currencyExponent,
 			normalBalance,
 			id
 		);
@@ -126,45 +143,40 @@ class LedgerAccountSettlementService {
 			// Create a ledger transaction with two entries:
 			// - Debit/Credit the settled account (reduces its balance)
 			// - Credit/Debit the contra account (receives the funds)
-			const transactionRequest = {
+			const transactionRequest: SettlementTransactionRequest = {
 				description: settlement.description ?? `Settlement ${id.toString()}`,
 				status: "posted" as const,
 				metadata: {
-					settlementId: id.toString(),
 					...settlement.metadata,
+					settlementId: id.toString(),
 				},
-				effectiveAt: settlement.effectiveAtUpperBound?.toISOString(),
 				ledgerEntries: [
 					{
-						id: new TypeID("lte").toString(),
 						accountId: settlement.settledAccountId.toString(),
 						direction: settlement.normalBalance === "debit" ? ("credit" as const) : ("debit" as const),
 						amount: settlement.amount,
-						currency: settlement.currency,
-						currencyExponent: settlement.currencyExponent,
-						status: "posted" as const,
+						currencyCode: settlement.currency,
 						metadata: {},
 					},
 					{
-						id: new TypeID("lte").toString(),
 						accountId: settlement.contraAccountId.toString(),
 						direction: settlement.normalBalance === "debit" ? ("debit" as const) : ("credit" as const),
 						amount: settlement.amount,
-						currency: settlement.currency,
-						currencyExponent: settlement.currencyExponent,
-						status: "posted" as const,
+						currencyCode: settlement.currency,
 						metadata: {},
 					},
 				],
-				created: new Date().toISOString(),
-				updated: new Date().toISOString(),
 			};
 
-			const transaction = await this.ledgerTransactionService.createTransaction(
+			const transaction = await this.transactionCaller.createTransaction(
 				orgId,
 				ledgerId,
+				`settlement:${id.toString()}`,
 				transactionRequest
 			);
+			if (transaction.status !== "posted") {
+				throw new ConflictError("Settlement Transaction must be Posted");
+			}
 
 			// Link the transaction to the settlement
 			const updatedSettlement = settlement.withTransactionId(transaction.id);
@@ -193,4 +205,5 @@ class LedgerAccountSettlementService {
 	}
 }
 
+export type { SettlementTransactionCaller, SettlementTransactionRequest };
 export { LedgerAccountSettlementService };

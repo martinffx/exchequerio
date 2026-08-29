@@ -6,12 +6,15 @@ import type {
 	LedgerAccountID,
 	LedgerAccountSettlementID,
 	LedgerID,
+	LedgerTransactionID,
 	OrgID,
 } from "@/repo/entities/types";
 import type { LedgerAccountSettlementRepo } from "@/repo/LedgerAccountSettlementRepo";
 import type { SettlementStatus } from "@/routes/ledgers/schema";
-import { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
-import type { LedgerTransactionService } from "./LedgerTransactionService";
+import {
+	LedgerAccountSettlementService,
+	type SettlementTransactionCaller,
+} from "./LedgerAccountSettlementService";
 
 describe("LedgerAccountSettlementService", () => {
 	const orgId = new TypeID("org") as OrgID;
@@ -31,9 +34,10 @@ describe("LedgerAccountSettlementService", () => {
 		updateStatus: vi.fn(),
 		calculateAmount: vi.fn(),
 	} as unknown as LedgerAccountSettlementRepo);
-	const mockTransactionService = vi.mocked<LedgerTransactionService>({
+	const transactionId = new TypeID("ltr") as LedgerTransactionID;
+	const mockTransactionService = vi.mocked<SettlementTransactionCaller>({
 		createTransaction: vi.fn(),
-	} as unknown as LedgerTransactionService);
+	});
 	const service = new LedgerAccountSettlementService(mockSettlementRepo, mockTransactionService);
 
 	afterEach(() => {
@@ -51,7 +55,6 @@ describe("LedgerAccountSettlementService", () => {
 					normalBalance: "debit" as const,
 					amount: 10000,
 					currency: "USD",
-					currencyExponent: 2,
 					status: "drafting",
 					created: new Date(),
 					updated: new Date(),
@@ -77,7 +80,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -122,7 +124,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -130,7 +131,7 @@ describe("LedgerAccountSettlementService", () => {
 
 			mockSettlementRepo.createSettlement.mockResolvedValue(settlement);
 
-			const result = await service.createLedgerAccountSettlement(orgId, "USD", 2, "debit", request);
+			const result = await service.createLedgerAccountSettlement(orgId, "USD", "debit", request);
 
 			expect(result).toEqual(settlement);
 			expect(mockSettlementRepo.createSettlement).toHaveBeenCalled();
@@ -158,7 +159,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -177,7 +177,6 @@ describe("LedgerAccountSettlementService", () => {
 				orgId,
 				settlementId.toString(),
 				"USD",
-				2,
 				"debit",
 				request
 			);
@@ -203,14 +202,7 @@ describe("LedgerAccountSettlementService", () => {
 			mockSettlementRepo.getSettlement.mockRejectedValue(error);
 
 			await expect(
-				service.updateLedgerAccountSettlement(
-					orgId,
-					settlementId.toString(),
-					"USD",
-					2,
-					"debit",
-					request
-				)
+				service.updateLedgerAccountSettlement(orgId, settlementId.toString(), "USD", "debit", request)
 			).rejects.toThrow(NotFoundError);
 			expect(mockSettlementRepo.updateSettlement).not.toHaveBeenCalled();
 		});
@@ -257,6 +249,169 @@ describe("LedgerAccountSettlementService", () => {
 	});
 
 	describe("transitionSettlementStatus", () => {
+		it("creates a Posted Transaction with a stable Settlement idempotency key", async () => {
+			const settlement = new LedgerAccountSettlementEntity({
+				id: settlementId,
+				organizationId: orgId,
+				settledAccountId,
+				contraAccountId,
+				normalBalance: "debit",
+				amount: 10_000,
+				currency: "USD",
+				status: "pending",
+				description: "Daily settlement",
+				metadata: { source: "daily" },
+				created: new Date(),
+				updated: new Date(),
+			});
+			const posted = settlement.withTransactionId(transactionId).withStatus("posted");
+			mockSettlementRepo.getSettlement.mockResolvedValue(settlement);
+			mockTransactionService.createTransaction.mockResolvedValue({
+				id: transactionId,
+				status: "posted",
+			});
+			mockSettlementRepo.updateSettlement.mockResolvedValue(settlement);
+			mockSettlementRepo.updateStatus.mockResolvedValue(posted);
+
+			const result = await service.transitionSettlementStatus(orgId, ledgerId, settlementId, "posted");
+
+			expect(result).toBe(posted);
+			expect(mockTransactionService.createTransaction).toHaveBeenCalledWith(
+				orgId,
+				ledgerId,
+				`settlement:${settlementId.toString()}`,
+				{
+					status: "posted",
+					description: "Daily settlement",
+					metadata: { settlementId: settlementId.toString(), source: "daily" },
+					ledgerEntries: [
+						{
+							accountId: settledAccountId.toString(),
+							direction: "credit",
+							amount: 10_000,
+							currencyCode: "USD",
+							metadata: {},
+						},
+						{
+							accountId: contraAccountId.toString(),
+							direction: "debit",
+							amount: 10_000,
+							currencyCode: "USD",
+							metadata: {},
+						},
+					],
+				}
+			);
+			const linked = mockSettlementRepo.updateSettlement.mock.calls[0][0];
+			expect(linked).toMatchObject({
+				id: settlement.id,
+				organizationId: settlement.organizationId,
+				transactionId,
+				settledAccountId: settlement.settledAccountId,
+				contraAccountId: settlement.contraAccountId,
+				amount: settlement.amount,
+				normalBalance: settlement.normalBalance,
+				currency: settlement.currency,
+				status: settlement.status,
+				description: settlement.description,
+				externalReference: settlement.externalReference,
+				effectiveAtUpperBound: settlement.effectiveAtUpperBound,
+				metadata: settlement.metadata,
+				created: settlement.created,
+			});
+			expect(linked.updated).toBeInstanceOf(Date);
+			expect(Number.isNaN(linked.updated.getTime())).toBe(false);
+			expect(linked.updated.getTime()).toBeGreaterThanOrEqual(settlement.updated.getTime());
+			expect(mockSettlementRepo.updateStatus).toHaveBeenCalledWith(orgId, settlementId, "posted");
+		});
+
+		it("uses the same Transaction claim when linking the Settlement is retried", async () => {
+			const settlement = new LedgerAccountSettlementEntity({
+				id: settlementId,
+				organizationId: orgId,
+				settledAccountId,
+				contraAccountId,
+				normalBalance: "credit",
+				amount: 10_000,
+				currency: "USD",
+				status: "pending",
+				created: new Date(),
+				updated: new Date(),
+			});
+			mockSettlementRepo.getSettlement.mockResolvedValue(settlement);
+			mockTransactionService.createTransaction.mockResolvedValue({
+				id: transactionId,
+				status: "posted",
+			});
+			mockSettlementRepo.updateSettlement
+				.mockRejectedValueOnce(new Error("Settlement update failed"))
+				.mockResolvedValueOnce(settlement.withTransactionId(transactionId));
+			mockSettlementRepo.updateStatus.mockResolvedValue(
+				settlement.withTransactionId(transactionId).withStatus("posted")
+			);
+
+			await expect(
+				service.transitionSettlementStatus(orgId, ledgerId, settlementId, "posted")
+			).rejects.toThrow("Settlement update failed");
+			await service.transitionSettlementStatus(orgId, ledgerId, settlementId, "posted");
+
+			expect(mockTransactionService.createTransaction).toHaveBeenCalledTimes(2);
+			expect(mockTransactionService.createTransaction.mock.calls[0]?.[2]).toBe(
+				mockTransactionService.createTransaction.mock.calls[1]?.[2]
+			);
+			expect(mockSettlementRepo.updateStatus).toHaveBeenCalledTimes(1);
+		});
+
+		it("does not update the Settlement when Transaction creation fails", async () => {
+			const settlement = new LedgerAccountSettlementEntity({
+				id: settlementId,
+				organizationId: orgId,
+				settledAccountId,
+				contraAccountId,
+				normalBalance: "debit",
+				amount: 10_000,
+				currency: "USD",
+				status: "pending",
+				created: new Date(),
+				updated: new Date(),
+			});
+			mockSettlementRepo.getSettlement.mockResolvedValue(settlement);
+			mockTransactionService.createTransaction.mockRejectedValue(new Error("Transaction failed"));
+
+			await expect(
+				service.transitionSettlementStatus(orgId, ledgerId, settlementId, "posted")
+			).rejects.toThrow("Transaction failed");
+
+			expect(mockSettlementRepo.updateSettlement).not.toHaveBeenCalled();
+			expect(mockSettlementRepo.updateStatus).not.toHaveBeenCalled();
+		});
+
+		it("does not link a Transaction that was not returned as Posted", async () => {
+			const settlement = new LedgerAccountSettlementEntity({
+				id: settlementId,
+				organizationId: orgId,
+				settledAccountId,
+				contraAccountId,
+				normalBalance: "debit",
+				amount: 10_000,
+				currency: "USD",
+				status: "pending",
+				created: new Date(),
+				updated: new Date(),
+			});
+			mockSettlementRepo.getSettlement.mockResolvedValue(settlement);
+			mockTransactionService.createTransaction.mockResolvedValue({
+				id: transactionId,
+				status: "pending",
+			});
+
+			await expect(
+				service.transitionSettlementStatus(orgId, ledgerId, settlementId, "posted")
+			).rejects.toThrow(ConflictError);
+			expect(mockSettlementRepo.updateSettlement).not.toHaveBeenCalled();
+			expect(mockSettlementRepo.updateStatus).not.toHaveBeenCalled();
+		});
+
 		it("should transition from drafting to processing", async () => {
 			const settlement = new LedgerAccountSettlementEntity({
 				id: settlementId,
@@ -266,7 +421,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -301,7 +455,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 0,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "processing",
 				created: new Date(),
 				updated: new Date(),
@@ -344,7 +497,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -367,7 +519,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "archived",
 				created: new Date(),
 				updated: new Date(),
@@ -395,7 +546,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "processing",
 				created: new Date(),
 				updated: new Date(),

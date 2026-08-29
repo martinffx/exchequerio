@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { LedgerAccountSettlementEntity } from "@/repo/entities/LedgerAccountSettlementEntity";
@@ -10,11 +11,10 @@ import type {
 import {
 	createLedgerAccountEntity,
 	createLedgerEntity,
-	createLedgerTransactionEntity,
-	createLedgerTransactionEntryEntity,
 	createOrganizationEntity,
 	getRepos,
 } from "./fixtures";
+import { LedgerTransactionEntriesTable, LedgerTransactionsTable } from "./schema";
 
 describe("LedgerAccountSettlementRepo", () => {
 	const { organizationRepo, ledgerRepo, ledgerAccountRepo, ledgerAccountSettlementRepo } =
@@ -85,7 +85,6 @@ describe("LedgerAccountSettlementRepo", () => {
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				description: "Test settlement",
 				externalReference: "EXT-001",
@@ -116,7 +115,6 @@ describe("LedgerAccountSettlementRepo", () => {
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -142,7 +140,6 @@ describe("LedgerAccountSettlementRepo", () => {
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -193,7 +190,6 @@ describe("LedgerAccountSettlementRepo", () => {
 					amount: 0,
 					normalBalance: "debit",
 					currency: "USD",
-					currencyExponent: 2,
 					status: "drafting",
 					description: `Settlement ${i}`,
 					created: new Date(),
@@ -246,7 +242,6 @@ describe("LedgerAccountSettlementRepo", () => {
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				description: "Original",
 				created: new Date(),
@@ -306,7 +301,6 @@ describe("LedgerAccountSettlementRepo", () => {
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -330,7 +324,6 @@ describe("LedgerAccountSettlementRepo", () => {
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -364,7 +357,6 @@ describe("LedgerAccountSettlementRepo", () => {
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -404,7 +396,7 @@ describe("LedgerAccountSettlementRepo", () => {
 	});
 
 	describe("Settlement Entry Operations", () => {
-		const { ledgerTransactionRepo } = getRepos();
+		const { db } = getRepos();
 		let settlementId: LedgerAccountSettlementID;
 		let transactionId: string;
 		let postedEntryIds: string[];
@@ -420,7 +412,6 @@ describe("LedgerAccountSettlementRepo", () => {
 				amount: 0,
 				normalBalance: "debit",
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -428,51 +419,48 @@ describe("LedgerAccountSettlementRepo", () => {
 			await ledgerAccountSettlementRepo.createSettlement(settlement);
 
 			// Create a transaction with posted entries on the settled account
-			const transactionEntityId = new TypeID("ltr");
-			const entries = [
-				createLedgerTransactionEntryEntity({
-					organizationId: testOrgId,
-					transactionId: transactionEntityId,
-					accountId: settledAccountId,
+			transactionId = new TypeID("ltr").toString();
+			postedEntryIds = [new TypeID("lte").toString(), new TypeID("lte").toString()];
+			await db.insert(LedgerTransactionsTable).values({
+				id: transactionId,
+				organizationId: testOrgId.toString(),
+				ledgerId: testLedgerId.toString(),
+				description: "Test settlement transaction",
+				status: "posted",
+				postedAt: new Date(),
+			});
+			await db.insert(LedgerTransactionEntriesTable).values([
+				{
+					id: postedEntryIds[0],
+					organizationId: testOrgId.toString(),
+					ledgerId: testLedgerId.toString(),
+					transactionId,
+					accountId: settledAccountId.toString(),
 					direction: "debit",
 					amount: 10000,
 					currency: "USD",
-					currencyExponent: 2,
 					status: "posted",
-				}),
-				createLedgerTransactionEntryEntity({
-					organizationId: testOrgId,
-					transactionId: transactionEntityId,
-					accountId: contraAccountId,
+				},
+				{
+					id: postedEntryIds[1],
+					organizationId: testOrgId.toString(),
+					ledgerId: testLedgerId.toString(),
+					transactionId,
+					accountId: contraAccountId.toString(),
 					direction: "credit",
 					amount: 10000,
 					currency: "USD",
-					currencyExponent: 2,
 					status: "posted",
-				}),
-			];
-
-			const transactionEntity = createLedgerTransactionEntity({
-				id: transactionEntityId,
-				organizationId: testOrgId,
-				ledgerId: testLedgerId,
-				entries,
-				description: "Test settlement transaction",
-				status: "posted",
-			});
-
-			const created = await ledgerTransactionRepo.createTransaction(transactionEntity);
-			transactionId = created.id.toString();
-			postedEntryIds = created.entries.map(e => e.id.toString());
+				},
+			]);
 		});
 
 		afterAll(async () => {
 			// Clean up transaction
-			await ledgerTransactionRepo.deleteTransaction(
-				testOrgId.toString(),
-				testLedgerId.toString(),
-				transactionId
-			);
+			await db
+				.delete(LedgerTransactionEntriesTable)
+				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId));
+			await db.delete(LedgerTransactionsTable).where(eq(LedgerTransactionsTable.id, transactionId));
 
 			// Clean up settlement
 			await ledgerAccountSettlementRepo.deleteSettlement(testOrgId, settlementId);
@@ -540,6 +528,25 @@ describe("LedgerAccountSettlementRepo", () => {
 						contraAccountEntry,
 					])
 				).rejects.toThrow(ConflictError);
+			});
+
+			it("should throw ConflictError when the entry's Transaction is not posted", async () => {
+				await db
+					.update(LedgerTransactionsTable)
+					.set({ status: "pending" })
+					.where(eq(LedgerTransactionsTable.id, transactionId));
+				try {
+					await expect(
+						ledgerAccountSettlementRepo.addEntriesToSettlement(testOrgId, settlementId, [
+							postedEntryIds[0],
+						])
+					).rejects.toThrow(ConflictError);
+				} finally {
+					await db
+						.update(LedgerTransactionsTable)
+						.set({ status: "posted", postedAt: new Date() })
+						.where(eq(LedgerTransactionsTable.id, transactionId));
+				}
 			});
 
 			it("should throw ConflictError when entry is already attached to settlement", async () => {
