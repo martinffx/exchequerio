@@ -60,35 +60,92 @@ type LedgerTransactionUpdateRepositoryError =
 
 type LedgerTransactionTransitionRepositoryError = LedgerTransactionUpdateRepositoryError;
 
+/**
+ * Persists Transactions, their Entries, and the resulting Account projections.
+ *
+ * Expected failures are returned through each operation's Effect error channel.
+ */
 interface LedgerTransactionRepo {
+	/**
+	 * Lists Transactions for one Organization and Ledger in reverse creation order.
+	 *
+	 * @param organizationId - Organization that owns the Transactions.
+	 * @param ledgerId - Ledger that contains the Transactions.
+	 * @param query - Pagination parameters for the result set.
+	 * @returns An Effect containing the requested page of Transactions.
+	 */
 	listTransactions(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		query: TransactionListQuery
 	): Effect.Effect<LedgerTransaction[], TransactionInfrastructureError>;
+	/**
+	 * Finds a Transaction and its ordered Entries within one Organization and Ledger.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param transactionId - Transaction to find.
+	 * @returns An Effect containing the Transaction when found, or `Option.none()` otherwise.
+	 */
 	getTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID
 	): Effect.Effect<Option.Option<LedgerTransaction>, TransactionInfrastructureError>;
+	/**
+	 * Creates a Transaction and updates every affected Account atomically.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that will contain the Transaction.
+	 * @param transactionId - Server-generated identifier for the Transaction.
+	 * @param request - Validated Transaction creation request.
+	 * @returns An Effect containing the created Transaction.
+	 */
 	createTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
 		request: TransactionCreateRequest
 	): Effect.Effect<LedgerTransaction, LedgerTransactionCreateRepositoryError>;
+	/**
+	 * Replaces a pending Transaction's mutable fields and Entries atomically.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param transactionId - Transaction to update.
+	 * @param request - Validated replacement values and Entries.
+	 * @returns An Effect containing the updated Transaction.
+	 */
 	updateTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
 		request: TransactionUpdateRequest
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+	/**
+	 * Posts a pending Transaction and moves its Entry effects into posted Account projections.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param transactionId - Transaction to post.
+	 * @param postedAt - Time at which the Transaction becomes posted.
+	 * @returns An Effect containing the posted Transaction, or the existing posted Transaction.
+	 */
 	postTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
 		postedAt: DateTime
 	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError>;
+	/**
+	 * Voids a pending Transaction and removes its effects from Account projections.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param transactionId - Transaction to void.
+	 * @param updated - Time at which the Transaction becomes voided.
+	 * @returns An Effect containing the voided Transaction, or the existing voided Transaction.
+	 */
 	voidTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -101,9 +158,24 @@ const LedgerTransactionRepoTag = Context.Service<LedgerTransactionRepo>("LedgerT
 
 type DatabaseTransaction = Parameters<Parameters<EffectDrizzleDatabase["transaction"]>[0]>[0];
 type AccountsById = Map<string, LedgerAccount>;
+
+/** PostgreSQL implementation of the Transaction repository contract. */
 class LedgerTransactionRepoLive implements LedgerTransactionRepo {
+	/**
+	 * Creates a Transaction repository backed by an Effect-enabled Drizzle database.
+	 *
+	 * @param db - Database used for all Transaction and Account reads and writes.
+	 */
 	constructor(private readonly db: EffectDrizzleDatabase) {}
 
+	/**
+	 * Lists tenant-scoped Transactions in descending creation and identifier order.
+	 *
+	 * @param organizationId - Organization that owns the Transactions.
+	 * @param ledgerId - Ledger that contains the Transactions.
+	 * @param query - Offset and limit for the result page.
+	 * @returns An Effect containing decoded Transactions without their Entries.
+	 */
 	listTransactions(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -127,6 +199,14 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 	}
 
+	/**
+	 * Reads one tenant-scoped Transaction with Entries ordered by creation time and identifier.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param transactionId - Transaction to read.
+	 * @returns An Effect containing the decoded Transaction, or `Option.none()` when absent.
+	 */
 	getTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -152,6 +232,15 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		);
 	}
 
+	/**
+	 * Creates a Transaction, its Entries, and updated Account projections in one database transaction.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that will contain the Transaction.
+	 * @param transactionId - Server-generated identifier for the Transaction.
+	 * @param request - Validated Transaction creation request.
+	 * @returns An Effect containing the created Transaction.
+	 */
 	createTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -168,7 +257,11 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				request
 			);
 			const entries = Option.getOrThrow(transaction.entries);
-			const updatedAccounts = yield* this.recordEntries(accounts, entries, transaction.updated);
+			const updatedAccounts = yield* this.applyEntriesToAccounts(
+				accounts,
+				entries,
+				transaction.updated
+			);
 
 			yield* this.db.transaction(tx =>
 				tx
@@ -188,6 +281,15 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		}).pipe(Effect.mapError(mapTransactionCreateError));
 	}
 
+	/**
+	 * Replaces a pending Transaction and recalculates affected Account projections atomically.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param transactionId - Transaction to replace.
+	 * @param request - Validated replacement values and Entries.
+	 * @returns An Effect containing the updated Transaction.
+	 */
 	updateTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -206,8 +308,12 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			const accounts = yield* this.readAccounts(organizationId, ledgerId, accountIds);
 			const transaction = yield* current.fromUpdateRequest(request);
 			const entries = Option.getOrThrow(transaction.entries);
-			const withoutCurrentEntries = this.removeEntries(accounts, currentEntries, transaction.updated);
-			const updatedAccounts = yield* this.recordEntries(
+			const withoutCurrentEntries = this.removeEntriesFromAccounts(
+				accounts,
+				currentEntries,
+				transaction.updated
+			);
+			const updatedAccounts = yield* this.applyEntriesToAccounts(
 				withoutCurrentEntries,
 				entries,
 				transaction.updated
@@ -224,6 +330,17 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
+	/**
+	 * Posts a Transaction and recalculates its pending, posted, and available Account projections.
+	 *
+	 * A Transaction that is already posted is returned without issuing writes.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param transactionId - Transaction to post.
+	 * @param postedAt - Time at which the Transaction becomes posted.
+	 * @returns An Effect containing the posted Transaction.
+	 */
 	postTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -239,8 +356,12 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			const accounts = yield* this.readAccounts(organizationId, ledgerId, accountIds);
 			const transaction = yield* current.toPosted(postedAt as DateTime<true>);
 			const entries = Option.getOrThrow(transaction.entries);
-			const withoutCurrentEntries = this.removeEntries(accounts, currentEntries, transaction.updated);
-			const updatedAccounts = yield* this.recordEntries(
+			const withoutCurrentEntries = this.removeEntriesFromAccounts(
+				accounts,
+				currentEntries,
+				transaction.updated
+			);
+			const updatedAccounts = yield* this.applyEntriesToAccounts(
 				withoutCurrentEntries,
 				entries,
 				transaction.updated
@@ -257,6 +378,17 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
+	/**
+	 * Voids a Transaction and removes its Entry effects from Account projections atomically.
+	 *
+	 * A Transaction that is already voided is returned without issuing writes.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param transactionId - Transaction to void.
+	 * @param updated - Time at which the Transaction becomes voided.
+	 * @returns An Effect containing the voided Transaction.
+	 */
 	voidTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -272,8 +404,12 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			const accounts = yield* this.readAccounts(organizationId, ledgerId, accountIds);
 			const transaction = yield* current.toVoided(updated as DateTime<true>);
 			const entries = Option.getOrThrow(transaction.entries);
-			const withoutCurrentEntries = this.removeEntries(accounts, currentEntries, transaction.updated);
-			const updatedAccounts = yield* this.recordEntries(
+			const withoutCurrentEntries = this.removeEntriesFromAccounts(
+				accounts,
+				currentEntries,
+				transaction.updated
+			);
+			const updatedAccounts = yield* this.applyEntriesToAccounts(
 				withoutCurrentEntries,
 				entries,
 				transaction.updated
@@ -290,6 +426,14 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
+	/**
+	 * Reads a Transaction and fails when the tenant-scoped record does not exist.
+	 *
+	 * @param organizationId - Organization that owns the Transaction.
+	 * @param ledgerId - Ledger that contains the Transaction.
+	 * @param transactionId - Transaction to read.
+	 * @returns An Effect containing the required Transaction.
+	 */
 	private readTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -300,6 +444,14 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		);
 	}
 
+	/**
+	 * Reads and decodes every required Account in deterministic identifier order.
+	 *
+	 * @param organizationId - Organization that owns the Accounts.
+	 * @param ledgerId - Ledger that contains the Accounts.
+	 * @param accountIds - Distinct Account identifiers required by the mutation.
+	 * @returns An Effect containing Accounts indexed by identifier, or an Account-not-found failure.
+	 */
 	private readAccounts(organizationId: OrgID, ledgerId: LedgerID, accountIds: readonly string[]) {
 		return this.db
 			.select()
@@ -329,7 +481,17 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 	}
 
-	private recordEntries(
+	/**
+	 * Applies each Entry to its Account and calculates new in-memory Account projections.
+	 *
+	 * This method does not persist the calculated Accounts.
+	 *
+	 * @param accounts - Current Accounts indexed by identifier.
+	 * @param entries - Entries to apply in their supplied order.
+	 * @param updated - Update time assigned to each calculated Account.
+	 * @returns An Effect containing a new Account map, or a Currency mismatch failure.
+	 */
+	private applyEntriesToAccounts(
 		accounts: AccountsById,
 		entries: readonly LedgerTransactionEntry[],
 		updated: DateTime
@@ -350,7 +512,17 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		);
 	}
 
-	private removeEntries(
+	/**
+	 * Removes each Entry's effects and calculates new in-memory Account projections.
+	 *
+	 * This method does not persist the calculated Accounts.
+	 *
+	 * @param accounts - Current Accounts indexed by identifier.
+	 * @param entries - Previously applied Entries to remove.
+	 * @param updated - Update time assigned to each calculated Account.
+	 * @returns A new Account map with the Entry effects removed.
+	 */
+	private removeEntriesFromAccounts(
 		accounts: AccountsById,
 		entries: readonly LedgerTransactionEntry[],
 		updated: DateTime
@@ -366,6 +538,14 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		return updatedAccounts;
 	}
 
+	/**
+	 * Persists mutable Transaction fields using its current lock version.
+	 *
+	 * @param tx - Database transaction that owns the mutation.
+	 * @param current - Stored Transaction whose lock version must still match.
+	 * @param transaction - New Transaction state to persist.
+	 * @returns An Effect that completes after exactly one Transaction is updated.
+	 */
 	private writeTransaction(
 		tx: DatabaseTransaction,
 		current: LedgerTransaction,
@@ -394,6 +574,14 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.pipe(Effect.flatMap(rows => requireTransactionWrite(rows.length === 1)));
 	}
 
+	/**
+	 * Replaces all persisted Entries for a Transaction inside the current database transaction.
+	 *
+	 * @param tx - Database transaction that owns the mutation.
+	 * @param transaction - Transaction that owns the replacement Entries.
+	 * @param entries - Complete replacement Entry set.
+	 * @returns An Effect that deletes the existing Entries and inserts their replacements.
+	 */
 	private replaceEntries(
 		tx: DatabaseTransaction,
 		transaction: LedgerTransaction,
@@ -415,6 +603,13 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 	}
 
+	/**
+	 * Synchronizes every persisted Entry status with its owning Transaction.
+	 *
+	 * @param tx - Database transaction that owns the mutation.
+	 * @param transaction - Transaction whose status is copied to its Entries.
+	 * @returns An Effect that updates all Entries owned by the Transaction.
+	 */
 	private writeEntryStatus(tx: DatabaseTransaction, transaction: LedgerTransaction) {
 		return tx
 			.update(LedgerTransactionEntriesTable)
@@ -428,6 +623,19 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 	}
 
+	/**
+	 * Persists calculated Account projections with optimistic lock checks.
+	 *
+	 * Accounts are written serially in identifier order. Each write increments the stored lock version
+	 * and must match the version read before the database transaction began.
+	 *
+	 * @param tx - Database transaction that owns the mutation.
+	 * @param organizationId - Organization that owns the Accounts.
+	 * @param ledgerId - Ledger that contains the Accounts.
+	 * @param accounts - Original Accounts and lock versions read for the mutation.
+	 * @param updatedAccounts - Calculated Account states to persist.
+	 * @returns An Effect that completes after every Account is updated exactly once.
+	 */
 	private writeAccounts(
 		tx: DatabaseTransaction,
 		organizationId: OrgID,
