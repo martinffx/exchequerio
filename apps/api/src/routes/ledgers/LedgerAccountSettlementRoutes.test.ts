@@ -9,7 +9,7 @@ import { Config } from "@/config";
 import { makeDatabaseLive } from "@/db";
 import { Ledger, LedgerServiceTag } from "@/ledgers";
 import type { LedgerService } from "@/ledgers";
-import { Account, AccountServiceTag } from "@/ledgers/accounts";
+import { AccountServiceTag, LedgerAccount } from "@/ledgers/accounts";
 import type { AccountService } from "@/ledgers/accounts";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import type {
@@ -62,7 +62,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 	const ledgerIdStr = ledgerId.toString();
 	const settlementIdStr = settlementId.toString();
 	const fixedDate = new Date("2025-01-01T00:00:00.000Z");
-	const fixedDateTime = DateTime.fromJSDate(fixedDate, { zone: "utc" });
+	const fixedDateTime = DateTime.fromJSDate(fixedDate, { zone: "utc" }) as DateTime<true>;
 
 	const effectLedger = new Ledger({
 		id: ledgerId,
@@ -71,21 +71,13 @@ describe("LedgerAccountSettlementRoutes", () => {
 		created: fixedDateTime,
 		updated: fixedDateTime,
 	});
-	const effectAccount = new Account({
-		id: settledAccountId,
-		organizationId: orgId,
+	const effectAccount = LedgerAccount.fromCreateRequest(
+		settledAccountId,
+		orgId,
 		ledgerId,
-		name: "Settled account",
-		normalBalance: "debit",
-		currency: { code: "USD", minorUnitExponent: 2 },
-		pendingCredits: 0,
-		pendingDebits: 0,
-		postedCredits: 0,
-		postedDebits: 0,
-		lockVersion: 1,
-		created: fixedDateTime,
-		updated: fixedDateTime,
-	});
+		{ name: "Settled account", normalBalance: "debit", currencyCode: "USD" },
+		fixedDateTime
+	);
 	const mockSettlement = createLedgerAccountSettlementFixture({
 		id: settlementId,
 		organizationId: orgId,
@@ -310,10 +302,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toMatchSnapshot();
 			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).toHaveBeenCalledWith(
-				expect.objectContaining({ prefix: "org" }),
-				"USD",
-				2,
-				"debit",
+					expect.objectContaining({ prefix: "org" }),
+					"USD",
+					"debit",
 				expect.objectContaining({
 					settledAccountId: settledAccountId.toString(),
 					contraAccountId: contraAccountId.toString(),
@@ -321,11 +312,14 @@ describe("LedgerAccountSettlementRoutes", () => {
 			);
 		});
 
-		it.each([
-			{ label: "code", currency: { code: "EUR", minorUnitExponent: 2 } },
-			{ label: "minor unit exponent", currency: { code: "USD", minorUnitExponent: 0 } },
-		])("rejects accounts with a different currency $label", async ({ currency }) => {
-			const incompatibleAccount = new Account({ ...effectAccount, currency });
+		it("rejects accounts with a different currency", async () => {
+			const incompatibleAccount = LedgerAccount.fromCreateRequest(
+				contraAccountId,
+				orgId,
+				ledgerId,
+				{ name: "Contra account", normalBalance: "debit", currencyCode: "EUR" },
+				fixedDateTime
+			);
 			effectAccountService.getAccount
 				.mockReturnValueOnce(Effect.succeed(effectAccount))
 				.mockReturnValueOnce(Effect.succeed(incompatibleAccount));

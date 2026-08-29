@@ -24,7 +24,6 @@ interface LedgerAccountEntityOptions {
 	description?: string;
 	normalBalance: NormalBalance;
 	currencyCode?: string;
-	minorUnitExponent?: number;
 	pendingCredits: number;
 	pendingDebits: number;
 	postedCredits: number;
@@ -43,7 +42,6 @@ class LedgerAccountEntity {
 	public readonly description?: string;
 	public readonly normalBalance: NormalBalance;
 	public readonly currencyCode: string;
-	public readonly minorUnitExponent: number;
 	public readonly pendingCredits: number;
 	public readonly pendingDebits: number;
 	public readonly postedCredits: number;
@@ -61,7 +59,6 @@ class LedgerAccountEntity {
 		this.description = options.description;
 		this.normalBalance = options.normalBalance;
 		this.currencyCode = options.currencyCode ?? "USD";
-		this.minorUnitExponent = options.minorUnitExponent ?? 2;
 		this.pendingCredits = options.pendingCredits;
 		this.pendingDebits = options.pendingDebits;
 		this.postedCredits = options.postedCredits;
@@ -117,7 +114,6 @@ class LedgerAccountEntity {
 			description: record.description ?? undefined,
 			normalBalance: record.normalBalance as NormalBalance,
 			currencyCode: record.currencyCode,
-			minorUnitExponent: record.minorUnitExponent,
 			pendingCredits: record.pendingCredits,
 			pendingDebits: record.pendingDebits,
 			postedCredits: record.postedCredits,
@@ -138,7 +134,6 @@ class LedgerAccountEntity {
 			description: this.description ?? undefined,
 			normalBalance: this.normalBalance,
 			currencyCode: this.currencyCode,
-			minorUnitExponent: this.minorUnitExponent,
 			pendingCredits: this.pendingCredits,
 			pendingDebits: this.pendingDebits,
 			postedCredits: this.postedCredits,

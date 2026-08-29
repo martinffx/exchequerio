@@ -234,14 +234,14 @@ describe("AccountRoutes", () => {
 			.mocked(implementation.getAccount)
 			.mockReturnValue(
 				Effect.fail(
-					new AccountNotFound(organizationId.toString(), ledgerId.toString(), accountId.toString())
+					new AccountNotFound()
 				)
 			);
 		vi
 			.mocked(implementation.deleteAccount)
 			.mockReturnValue(
 				Effect.fail(
-					new AccountHasDependents(organizationId.toString(), ledgerId.toString(), accountId.toString())
+					new AccountHasDependents()
 				)
 			);
 		const { server } = await buildRouteServer(implementation);

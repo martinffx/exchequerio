@@ -128,7 +128,7 @@ class LedgerTransaction {
 	> {
 		if (this.status !== "pending") {
 			return Effect.fail(
-				new TransactionLifecycleConflict(this.id.toString(), this.status, "pending", this.errorContext)
+				new TransactionLifecycleConflict(this.status, "pending")
 			);
 		}
 
@@ -219,7 +219,7 @@ class LedgerTransaction {
 		if (this.status === "posted") return Effect.succeed(this);
 		if (this.status !== "pending") {
 			return Effect.fail(
-				new TransactionLifecycleConflict(this.id.toString(), this.status, "posted", this.errorContext)
+				new TransactionLifecycleConflict(this.status, "posted")
 			);
 		}
 
@@ -246,7 +246,7 @@ class LedgerTransaction {
 		if (this.status === "voided") return Effect.succeed(this);
 		if (this.status !== "pending") {
 			return Effect.fail(
-				new TransactionLifecycleConflict(this.id.toString(), this.status, "voided", this.errorContext)
+				new TransactionLifecycleConflict(this.status, "voided")
 			);
 		}
 
@@ -301,13 +301,6 @@ class LedgerTransaction {
 			: Effect.succeed(entries);
 	}
 
-	private get errorContext() {
-		return {
-			organizationId: this.organizationId.toString(),
-			ledgerId: this.ledgerId.toString(),
-			transactionId: this.id.toString(),
-		};
-	}
 }
 
 export type {

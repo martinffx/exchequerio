@@ -301,7 +301,7 @@ describe("TransactionRoutes", () => {
 			"",
 			undefined,
 			undefined,
-			new LedgerNotFound(organizationId.toString(), ledgerId.toString()),
+			new LedgerNotFound(),
 			404,
 		],
 		[
@@ -311,11 +311,7 @@ describe("TransactionRoutes", () => {
 			`/${transactionId.toString()}`,
 			undefined,
 			undefined,
-			new TransactionNotFound(
-				organizationId.toString(),
-				ledgerId.toString(),
-				transactionId.toString()
-			),
+			new TransactionNotFound(),
 			404,
 		],
 		[
@@ -355,7 +351,7 @@ describe("TransactionRoutes", () => {
 			`/${transactionId.toString()}/post`,
 			undefined,
 			undefined,
-			new TransactionLifecycleConflict(transactionId.toString(), "voided", "posted"),
+			new TransactionLifecycleConflict("voided", "posted"),
 			409,
 		],
 		[

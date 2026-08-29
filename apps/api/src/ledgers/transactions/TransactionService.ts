@@ -1,4 +1,4 @@
-import { Clock, Context, Effect, Layer, Option, Result, Schedule } from "effect";
+import { Clock, Context, Effect, Layer, Result, Schedule } from "effect";
 import { DateTime } from "luxon";
 
 import { postgresErrorCode } from "@/db";
@@ -13,6 +13,7 @@ import {
 	TransactionNotFound,
 	TransactionValidationFailure,
 	TransactionVersionConflict,
+	requireTransaction,
 } from "./TransactionErrors";
 import {
 	type LedgerTransactionCreateRepositoryError,
@@ -48,25 +49,6 @@ type TransactionTransitionError = LedgerTransactionTransitionRepositoryError;
 const serverTime = Clock.currentTimeMillis.pipe(
 	Effect.map(milliseconds => DateTime.fromMillis(milliseconds, { zone: "utc" }))
 );
-
-const transactionNotFound = (
-	organizationId: OrgID,
-	ledgerId: LedgerID,
-	transactionId: LedgerTransactionID
-) =>
-	new TransactionNotFound(organizationId.toString(), ledgerId.toString(), transactionId.toString());
-
-const requireTransaction = (
-	organizationId: OrgID,
-	ledgerId: LedgerID,
-	transactionId: LedgerTransactionID
-): ((
-	transaction: Option.Option<LedgerTransaction>
-) => Effect.Effect<LedgerTransaction, TransactionNotFound>) =>
-	Option.match({
-		onNone: () => Effect.fail(transactionNotFound(organizationId, ledgerId, transactionId)),
-		onSome: transaction => Effect.succeed(transaction),
-	});
 
 const isRetryableError = (error: unknown) =>
 	error instanceof AccountVersionConflict ||
@@ -138,7 +120,7 @@ class TransactionServiceLive implements TransactionService {
 	): Effect.Effect<LedgerTransaction, TransactionGetError> {
 		return this.repository
 			.getTransaction(organizationId, ledgerId, transactionId)
-			.pipe(Effect.flatMap(requireTransaction(organizationId, ledgerId, transactionId)));
+			.pipe(Effect.flatMap(requireTransaction));
 	}
 
 	createTransaction(

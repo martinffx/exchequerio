@@ -134,7 +134,7 @@ describe("OrganizationService", () => {
 
 			const error = await runService(repo, service => Effect.flip(invoke(service, operation)));
 
-			expect(error).toEqual(new OrganizationNotFound(targetId.toString()));
+			expect(error).toEqual(new OrganizationNotFound());
 		}
 	);
 
@@ -201,7 +201,7 @@ describe("OrganizationService", () => {
 	);
 
 	it("preserves OrganizationHasDependents from delete", async () => {
-		const failure = new OrganizationHasDependents(targetId.toString());
+		const failure = new OrganizationHasDependents();
 		const repo = repository({ deleteOrganization: vi.fn(() => Effect.fail(failure)) });
 
 		const error = await runService(repo, service =>

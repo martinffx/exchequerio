@@ -6,14 +6,14 @@ import {
 } from "@/lib/errors";
 
 class OrganizationNotFound extends NotFoundError {
-	constructor(public readonly organizationId: string) {
-		super(`Organization not found: ${organizationId}`);
+	constructor() {
+		super("Organization not found");
 	}
 }
 
 class OrganizationHasDependents extends ConflictError {
-	constructor(public readonly organizationId: string) {
-		super(`Organization has dependents: ${organizationId}`);
+	constructor() {
+		super("Organization has dependents");
 	}
 }
 

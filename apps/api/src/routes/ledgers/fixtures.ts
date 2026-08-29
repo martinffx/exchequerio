@@ -104,7 +104,6 @@ function createLedgerAccountSettlementFixture(
 		amount: number;
 		normalBalance: "debit" | "credit";
 		currency: string;
-		currencyExponent: number;
 		status: "drafting" | "processing" | "pending" | "posted" | "archiving" | "archived";
 		description?: string;
 		externalReference?: string;
@@ -124,7 +123,6 @@ function createLedgerAccountSettlementFixture(
 		amount: 0,
 		normalBalance: "debit",
 		currency: "USD",
-		currencyExponent: 2,
 		status: "drafting",
 		description: faker.lorem.sentence(),
 		externalReference: undefined,

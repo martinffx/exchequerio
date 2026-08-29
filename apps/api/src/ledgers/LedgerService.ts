@@ -21,12 +21,9 @@ type LedgerCreateError =
 type LedgerUpdateError = LedgerNotFound | LedgerInfrastructureError;
 type LedgerDeleteError = LedgerNotFound | LedgerDeleteRepositoryError;
 
-const requireFound = <A>(
-	organizationId: OrgID,
-	ledgerId: LedgerID
-): ((value: Option.Option<A>) => Effect.Effect<A, LedgerNotFound>) =>
+const requireFound = <A>(): ((value: Option.Option<A>) => Effect.Effect<A, LedgerNotFound>) =>
 	Option.match({
-		onNone: () => Effect.fail(new LedgerNotFound(organizationId.toString(), ledgerId.toString())),
+		onNone: () => Effect.fail(new LedgerNotFound()),
 		onSome: Effect.succeed,
 	});
 
@@ -43,7 +40,7 @@ class LedgerService {
 	getLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerGetError> {
 		return this.repository
 			.getLedger(organizationId, ledgerId)
-			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId)));
+			.pipe(Effect.flatMap(requireFound()));
 	}
 
 	createLedger(
@@ -56,11 +53,7 @@ class LedgerService {
 			),
 			Effect.mapError(error =>
 				error instanceof LedgerRepositoryUnavailable
-					? new ServiceUnavailableError(error.message, {
-							...error.context,
-							cause: error,
-							retryable: false,
-						})
+					? new ServiceUnavailableError(error.message, { cause: error, retryable: false })
 					: error
 			)
 		);
@@ -73,13 +66,13 @@ class LedgerService {
 	): Effect.Effect<Ledger, LedgerUpdateError> {
 		return this.repository
 			.updateLedger(Ledger.fromRequest(ledgerId, organizationId, request))
-			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId)));
+			.pipe(Effect.flatMap(requireFound()));
 	}
 
 	deleteLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerDeleteError> {
 		return this.repository
 			.deleteLedger(organizationId, ledgerId)
-			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId)));
+			.pipe(Effect.flatMap(requireFound()));
 	}
 }
 

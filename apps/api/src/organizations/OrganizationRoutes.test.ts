@@ -102,7 +102,7 @@ describe("OrganizationRoutes", () => {
 		const implementation = service();
 		vi
 			.mocked(implementation.getOrganization)
-			.mockReturnValue(Effect.fail(new OrganizationNotFound(organizationId.toString())));
+			.mockReturnValue(Effect.fail(new OrganizationNotFound()));
 		const { server } = await buildRouteServer(implementation);
 
 		const response = await server.inject({
@@ -111,9 +111,6 @@ describe("OrganizationRoutes", () => {
 		});
 
 		expect(response.statusCode).toBe(404);
-		expect(response.json()).toMatchObject({
-			type: "NOT_FOUND",
-			organizationId: organizationId.toString(),
-		});
+		expect(response.json()).toMatchObject({ type: "NOT_FOUND" });
 	});
 });

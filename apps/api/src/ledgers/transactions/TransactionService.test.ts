@@ -152,11 +152,7 @@ describe("TransactionService", () => {
 			attempts += 1;
 			return attempts < 5
 				? Effect.fail(
-						new AccountVersionConflict(
-							organizationId.toString(),
-							ledgerId.toString(),
-							debitAccountId.toString()
-						)
+						new AccountVersionConflict()
 					)
 				: Effect.succeed(transaction);
 		});
@@ -217,11 +213,7 @@ describe("TransactionService", () => {
 		h.repository.updateTransaction
 			.mockReturnValueOnce(
 				Effect.fail(
-					new TransactionVersionConflict(
-						organizationId.toString(),
-						ledgerId.toString(),
-						transactionId.toString()
-					)
+					new TransactionVersionConflict()
 				)
 			)
 			.mockReturnValueOnce(Effect.succeed(transaction));

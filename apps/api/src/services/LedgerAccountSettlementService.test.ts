@@ -55,7 +55,6 @@ describe("LedgerAccountSettlementService", () => {
 					normalBalance: "debit" as const,
 					amount: 10000,
 					currency: "USD",
-					currencyExponent: 2,
 					status: "drafting",
 					created: new Date(),
 					updated: new Date(),
@@ -81,7 +80,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -126,7 +124,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -134,7 +131,7 @@ describe("LedgerAccountSettlementService", () => {
 
 			mockSettlementRepo.createSettlement.mockResolvedValue(settlement);
 
-			const result = await service.createLedgerAccountSettlement(orgId, "USD", 2, "debit", request);
+			const result = await service.createLedgerAccountSettlement(orgId, "USD", "debit", request);
 
 			expect(result).toEqual(settlement);
 			expect(mockSettlementRepo.createSettlement).toHaveBeenCalled();
@@ -162,7 +159,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -181,7 +177,6 @@ describe("LedgerAccountSettlementService", () => {
 				orgId,
 				settlementId.toString(),
 				"USD",
-				2,
 				"debit",
 				request
 			);
@@ -211,7 +206,6 @@ describe("LedgerAccountSettlementService", () => {
 					orgId,
 					settlementId.toString(),
 					"USD",
-					2,
 					"debit",
 					request
 				)
@@ -270,7 +264,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit",
 				amount: 10_000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "pending",
 				description: "Daily settlement",
 				metadata: { source: "daily" },
@@ -325,7 +318,6 @@ describe("LedgerAccountSettlementService", () => {
 				amount: settlement.amount,
 				normalBalance: settlement.normalBalance,
 				currency: settlement.currency,
-				currencyExponent: settlement.currencyExponent,
 				status: settlement.status,
 				description: settlement.description,
 				externalReference: settlement.externalReference,
@@ -348,7 +340,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "credit",
 				amount: 10_000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "pending",
 				created: new Date(),
 				updated: new Date(),
@@ -386,7 +377,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit",
 				amount: 10_000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "pending",
 				created: new Date(),
 				updated: new Date(),
@@ -411,7 +401,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit",
 				amount: 10_000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "pending",
 				created: new Date(),
 				updated: new Date(),
@@ -438,7 +427,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -473,7 +461,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 0,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "processing",
 				created: new Date(),
 				updated: new Date(),
@@ -516,7 +503,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "drafting",
 				created: new Date(),
 				updated: new Date(),
@@ -539,7 +525,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "archived",
 				created: new Date(),
 				updated: new Date(),
@@ -567,7 +552,6 @@ describe("LedgerAccountSettlementService", () => {
 				normalBalance: "debit" as const,
 				amount: 10000,
 				currency: "USD",
-				currencyExponent: 2,
 				status: "processing",
 				created: new Date(),
 				updated: new Date(),

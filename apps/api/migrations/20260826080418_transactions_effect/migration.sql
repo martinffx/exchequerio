@@ -80,6 +80,7 @@ ALTER TABLE "ledger_transaction_entries" DROP COLUMN "currency_exponent";--> sta
 ALTER TABLE "ledger_transaction_entries" DROP COLUMN "updated";--> statement-breakpoint
 ALTER TABLE "ledger_transactions" DROP COLUMN "idempotency_key";--> statement-breakpoint
 ALTER TABLE "ledger_transactions" DROP COLUMN "effective_at";--> statement-breakpoint
+ALTER TABLE "ledger_account_settlements" DROP COLUMN "currency_exponent";--> statement-breakpoint
 ALTER TABLE "ledger_accounts" DROP COLUMN "minor_unit_exponent";--> statement-breakpoint
 ALTER TABLE "ledger_accounts" ALTER COLUMN "lock_version" SET DEFAULT 1;--> statement-breakpoint
 

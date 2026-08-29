@@ -204,7 +204,6 @@ describe("LedgerRepoLive", () => {
 		);
 
 		expect(error).toBeInstanceOf(OrganizationNotFound);
-		expect(error.organizationId).toBe(organizationId.toString());
 	});
 
 	it("maps a generated Ledger ID collision to LedgerPersistenceFailure", async () => {

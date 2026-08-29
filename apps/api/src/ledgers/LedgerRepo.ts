@@ -1,15 +1,17 @@
 import { and, asc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
-import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
+import { DatabaseTag, type DrizzleDatabase } from "@/db";
 import { OrganizationNotFound } from "@/organizations";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
-import { type LedgerRow, LedgersTable } from "@/repo/schema";
+import { LedgersTable } from "@/repo/schema";
 import { Ledger } from "./domain/Ledger";
 import {
 	LedgerHasDependents,
 	type LedgerInfrastructureError as LedgerInfrastructureErrorType,
-	LedgerPersistenceFailure,
-	LedgerRepositoryUnavailable,
+	mapLedgerCreateError,
+	mapLedgerDeleteError,
+	mapLedgerInfrastructureError,
+	requireCreatedLedger,
 } from "./LedgerErrors";
 
 type LedgerInfrastructureError = LedgerInfrastructureErrorType;
@@ -51,54 +53,6 @@ const publicColumns = {
 	updated: LedgersTable.updated,
 };
 
-const mapInfrastructureError = (
-	cause: unknown,
-	context: { readonly organizationId?: string; readonly ledgerId?: string } = {}
-): LedgerInfrastructureError =>
-	isPostgresUnavailable(cause)
-		? new LedgerRepositoryUnavailable(cause, context)
-		: new LedgerPersistenceFailure(cause, context);
-
-const errorContext = (record: Ledger) => ({
-	organizationId: record.organizationId.toString(),
-	ledgerId: record.id.toString(),
-});
-
-const mapCreateError = (cause: unknown, record: Ledger): LedgerCreateRepositoryError => {
-	const code = postgresErrorCode(cause);
-	if (code === "23503") return new OrganizationNotFound(record.organizationId.toString());
-	if (code === "23505") return new LedgerPersistenceFailure(cause, errorContext(record));
-	return mapInfrastructureError(cause, errorContext(record));
-};
-
-const mapDeleteError = (
-	cause: unknown,
-	organizationId: OrgID,
-	ledgerId: LedgerID
-): LedgerDeleteRepositoryError =>
-	postgresErrorCode(cause) === "23503"
-		? new LedgerHasDependents(organizationId.toString(), ledgerId.toString())
-		: mapInfrastructureError(cause, {
-				organizationId: organizationId.toString(),
-				ledgerId: ledgerId.toString(),
-			});
-
-const requireDecoded = (
-	row: LedgerRow | undefined,
-	context: { readonly organizationId?: string; readonly ledgerId?: string }
-): Effect.Effect<Ledger, LedgerInfrastructureError> =>
-	Ledger.fromRow(row).pipe(
-		Effect.flatMap(
-			Option.match({
-				onNone: () =>
-					Effect.fail(
-						new LedgerPersistenceFailure(new Error("Database write returned no row"), context)
-					),
-				onSome: value => Effect.succeed(value),
-			})
-		)
-	);
-
 class LedgerRepoLive implements LedgerRepo {
 	constructor(private readonly db: DrizzleDatabase) {}
 
@@ -115,7 +69,7 @@ class LedgerRepoLive implements LedgerRepo {
 					.orderBy(asc(LedgersTable.id))
 					.limit(limit)
 					.offset(offset),
-			catch: mapInfrastructureError,
+			catch: mapLedgerInfrastructureError,
 		}).pipe(
 			Effect.flatMap(rows => Effect.all(rows.map(row => Ledger.fromRow(row)))),
 			Effect.map(ledgers => ledgers.flatMap(ledger => Option.toArray(ledger)))
@@ -138,15 +92,18 @@ class LedgerRepoLive implements LedgerRepo {
 						)
 					)
 					.limit(1),
-			catch: mapInfrastructureError,
+			catch: mapLedgerInfrastructureError,
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}
 
 	createLedger(record: Ledger): Effect.Effect<Ledger, LedgerCreateRepositoryError> {
 		return Effect.tryPromise({
 			try: () => this.db.insert(LedgersTable).values(record.toCreateRow()).returning(publicColumns),
-			catch: cause => mapCreateError(cause, record),
-		}).pipe(Effect.flatMap(rows => requireDecoded(rows[0], errorContext(record))));
+			catch: mapLedgerCreateError,
+		}).pipe(
+			Effect.flatMap(rows => Ledger.fromRow(rows[0])),
+			Effect.flatMap(requireCreatedLedger)
+		);
 	}
 
 	updateLedger(record: Ledger): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError> {
@@ -162,7 +119,7 @@ class LedgerRepoLive implements LedgerRepo {
 						)
 					)
 					.returning(publicColumns),
-			catch: cause => mapInfrastructureError(cause, errorContext(record)),
+			catch: mapLedgerInfrastructureError,
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}
 
@@ -181,7 +138,7 @@ class LedgerRepoLive implements LedgerRepo {
 						)
 					)
 					.returning(publicColumns),
-			catch: cause => mapDeleteError(cause, organizationId, ledgerId),
+			catch: mapLedgerDeleteError,
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}
 }

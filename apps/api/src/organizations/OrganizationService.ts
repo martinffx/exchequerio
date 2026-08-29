@@ -28,13 +28,11 @@ type OrganizationDeleteError =
 	| OrganizationNotFound
 	| OrganizationServiceInfrastructureError;
 
-const requireFound = (
-	organizationId: OrgID
-): ((
+const requireFound = (): ((
 	organization: Option.Option<Organization>
 ) => Effect.Effect<Organization, OrganizationNotFound>) =>
 	Option.match({
-		onNone: () => Effect.fail(new OrganizationNotFound(organizationId.toString())),
+		onNone: () => Effect.fail(new OrganizationNotFound()),
 		onSome: Effect.succeed,
 	});
 
@@ -55,7 +53,7 @@ class OrganizationService {
 	}
 
 	getOrganization(orgId: OrgID): Effect.Effect<Organization, OrganizationGetError> {
-		return this.repository.getOrganization(orgId).pipe(Effect.flatMap(requireFound(orgId)));
+		return this.repository.getOrganization(orgId).pipe(Effect.flatMap(requireFound()));
 	}
 
 	createOrganization(
@@ -74,11 +72,11 @@ class OrganizationService {
 		rq: OrganizationUpdateRequest
 	): Effect.Effect<Organization, OrganizationUpdateError> {
 		const organization = Organization.fromRequest(orgId, rq);
-		return this.repository.updateOrganization(organization).pipe(Effect.flatMap(requireFound(orgId)));
+		return this.repository.updateOrganization(organization).pipe(Effect.flatMap(requireFound()));
 	}
 
 	deleteOrganization(orgId: OrgID): Effect.Effect<Organization, OrganizationDeleteError> {
-		return this.repository.deleteOrganization(orgId).pipe(Effect.flatMap(requireFound(orgId)));
+		return this.repository.deleteOrganization(orgId).pipe(Effect.flatMap(requireFound()));
 	}
 }
 

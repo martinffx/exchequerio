@@ -203,7 +203,7 @@ describe("AccountService", () => {
 			);
 
 			expect(error).toEqual(
-				new AccountNotFound(organizationId.toString(), ledgerId.toString(), accountId.toString())
+				new AccountNotFound()
 			);
 		}
 	);

@@ -68,7 +68,6 @@ class LedgerAccountSettlementService {
 	public async createLedgerAccountSettlement(
 		orgId: OrgID,
 		currency: string,
-		currencyExponent: number,
 		normalBalance: NormalBalance,
 		request: LedgerAccountSettlementRequest
 	): Promise<LedgerAccountSettlementEntity> {
@@ -77,7 +76,6 @@ class LedgerAccountSettlementService {
 			request,
 			orgId,
 			currency,
-			currencyExponent,
 			normalBalance
 		);
 		return this.ledgerAccountSettlementRepo.createSettlement(entity);
@@ -87,7 +85,6 @@ class LedgerAccountSettlementService {
 		orgId: OrgID,
 		id: string,
 		currency: string,
-		currencyExponent: number,
 		normalBalance: NormalBalance,
 		request: LedgerAccountSettlementRequest
 	): Promise<LedgerAccountSettlementEntity> {
@@ -98,7 +95,6 @@ class LedgerAccountSettlementService {
 			request,
 			orgId,
 			currency,
-			currencyExponent,
 			normalBalance,
 			id
 		);

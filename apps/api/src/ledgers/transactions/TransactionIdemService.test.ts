@@ -99,8 +99,6 @@ describe("TransactionIdemService", () => {
 		expect(Result.isFailure(result)).toBe(true);
 		if (Result.isFailure(result)) {
 			expect(result.failure).toBeInstanceOf(TransactionIdempotencyUnavailable);
-			expect(result.failure.organizationId).toBe(value.organizationId.toString());
-			expect(result.failure.idempotencyKey).toBe(value.key);
 		}
 	});
 });

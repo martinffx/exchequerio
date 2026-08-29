@@ -350,7 +350,6 @@ const LedgerAccountSettlementsTable = pgTable(
 		amount: bigint("amount", { mode: "number" }).notNull().default(0),
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
 		currency: text("currency").notNull(),
-		currencyExponent: integer("currency_exponent").notNull().default(2),
 		status: ledgerSettlementStatus("status").notNull().default("drafting"),
 		description: text("description"),
 		externalReference: text("external_reference"),

@@ -10,7 +10,7 @@ const migrationNames = [
 	"20251210214057_damp_deathbird",
 	"20260806203446_blue_kid_colt",
 	"20260809203355_worthless_chimera",
-	"20260826065303_transactions_effect",
+	"20260826080418_transactions_effect",
 ];
 
 const executeMigration = async (client: PoolClient, name: string) => {
@@ -163,6 +163,16 @@ describe("transaction Effect migration", () => {
 					)
 				).rows[0]
 			).toEqual({ transaction_id: "posted" });
+			expect(
+				(
+					await client.query(
+						`SELECT count(*)::int AS count FROM information_schema.columns
+						 WHERE table_schema = 'public'
+						 AND table_name = 'ledger_account_settlements'
+						 AND column_name = 'currency_exponent'`
+					)
+				).rows[0]
+			).toEqual({ count: 0 });
 			expect(
 				(await client.query("SELECT ledger_id FROM ledger_transaction_entries WHERE id = 'e3'")).rows[0]
 			).toEqual({ ledger_id: "ledger-1" });

@@ -290,8 +290,10 @@
 						"allow": [
 							"ledger-domain",
 							"ledger-transport",
+							"database",
 							"http",
 							"legacy-entities",
+							"organization-composition",
 							"persistence-schema"
 						]
 					},
@@ -327,6 +329,7 @@
 						"allow": [
 							"account-domain",
 							"account-transport",
+							"database",
 							"ledger-domain",
 							"legacy-entities",
 							"persistence-schema"
@@ -381,6 +384,8 @@
 							"transaction-domain",
 							"transaction-transport",
 							"account-composition",
+							"account-domain",
+							"database",
 							"http",
 							"legacy-entities",
 							"persistence-schema"

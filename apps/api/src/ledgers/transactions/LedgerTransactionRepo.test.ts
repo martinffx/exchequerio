@@ -382,6 +382,7 @@ describe("LedgerTransactionRepoLive", () => {
 			{ accountId: credit, direction: "credit", amount: 10 },
 		]);
 		transactionRequest.ledgerEntries[0]!.currencyCode = "USD";
+		transactionRequest.ledgerEntries[1]!.currencyCode = "USD";
 
 		const error = await runRepo(repository =>
 			Effect.flip(

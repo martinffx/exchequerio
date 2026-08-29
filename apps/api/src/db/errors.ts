@@ -1,3 +1,5 @@
+import { Cause } from "effect";
+
 const unavailableCodes = new Set([
 	"57P01",
 	"57P02",
@@ -24,8 +26,22 @@ const unavailableMessages = [
 const isRecord = (value: unknown): value is Record<PropertyKey, unknown> =>
 	typeof value === "object" && value !== null;
 
-const nestedErrors = (error: Record<PropertyKey, unknown>): readonly unknown[] =>
-	Array.isArray(error.errors) ? error.errors : [];
+const nestedErrors = (error: Record<PropertyKey, unknown>): readonly unknown[] => {
+	const errors: readonly unknown[] = Array.isArray(error.errors)
+		? error.errors.map((value: unknown) => value)
+		: [];
+	if (!Cause.isCause(error)) return errors;
+	return [
+		...errors,
+		...error.reasons.flatMap(reason =>
+			Cause.isFailReason(reason)
+				? [reason.error]
+				: Cause.isDieReason(reason)
+					? [reason.defect]
+					: []
+		),
+	];
+};
 
 const isPostgresUnavailable = (cause: unknown, seen = new Set<object>()): boolean => {
 	if (!isRecord(cause) || seen.has(cause)) return false;
@@ -68,8 +84,7 @@ const postgresConstraint = (cause: unknown, seen = new Set<object>()): string | 
 	if (typeof cause.constraint === "string") return cause.constraint;
 	const nested = postgresConstraint(cause.cause, seen);
 	if (nested !== undefined) return nested;
-	if (!Array.isArray(cause.errors)) return undefined;
-	for (const error of cause.errors) {
+	for (const error of nestedErrors(cause)) {
 		const constraint = postgresConstraint(error, seen);
 		if (constraint !== undefined) return constraint;
 	}

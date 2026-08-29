@@ -76,11 +76,7 @@ class TransactionIdemServiceRedis implements TransactionIdemService {
 				);
 				return parseClaim(claim);
 			},
-			catch: cause =>
-				new TransactionIdempotencyUnavailable(cause, {
-					organizationId: organizationId.toString(),
-					idempotencyKey: key,
-				}),
+			catch: cause => new TransactionIdempotencyUnavailable(cause),
 		});
 	}
 
@@ -92,11 +88,7 @@ class TransactionIdemServiceRedis implements TransactionIdemService {
 		return Effect.tryPromise({
 			try: () =>
 				this.client.eval(RELEASE_SCRIPT, 1, redisKey(organizationId, key), transactionId.toString()),
-			catch: cause =>
-				new TransactionIdempotencyUnavailable(cause, {
-					organizationId: organizationId.toString(),
-					idempotencyKey: key,
-				}),
+			catch: cause => new TransactionIdempotencyUnavailable(cause),
 		}).pipe(Effect.asVoid);
 	}
 }

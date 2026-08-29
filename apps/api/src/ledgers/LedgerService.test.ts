@@ -149,7 +149,7 @@ describe("LedgerService", () => {
 				)
 			);
 
-			expect(error).toEqual(new LedgerNotFound(organizationId.toString(), ledgerId.toString()));
+			expect(error).toEqual(new LedgerNotFound());
 		}
 	);
 
@@ -185,7 +185,7 @@ describe("LedgerService", () => {
 
 	it("preserves persistence and dependency failures", async () => {
 		const persistence = new LedgerPersistenceFailure(new Error("query failed"));
-		const dependency = new LedgerHasDependents(organizationId.toString(), ledgerId.toString());
+		const dependency = new LedgerHasDependents();
 
 		const listError = await runService(
 			repository({ listLedgers: vi.fn(() => Effect.fail(persistence)) }),

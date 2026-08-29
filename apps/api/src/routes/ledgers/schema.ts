@@ -390,9 +390,6 @@ const LedgerAccountSettlementResponse = Type.Object(
 		currency: Type.String({
 			description: "The currency of the ledger account settlement.",
 		}),
-		currencyExponent: Type.Number({
-			description: "The currency exponent of the ledger account settlement.",
-		}),
 		externalReference: Type.Optional(
 			Type.String({
 				description: "External reference for reconciliation with external systems.",

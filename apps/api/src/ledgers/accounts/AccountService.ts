@@ -27,16 +27,11 @@ type AccountCreateError =
 type AccountUpdateError = AccountNotFound | LedgerAccountUpdateRepositoryError;
 type AccountDeleteError = AccountNotFound | LedgerAccountDeleteRepositoryError;
 
-const requireFound = (
-	organizationId: OrgID,
-	ledgerId: LedgerID,
-	accountId: LedgerAccountID
-): ((account: Option.Option<LedgerAccount>) => Effect.Effect<LedgerAccount, AccountNotFound>) =>
+const requireFound = (): ((
+	account: Option.Option<LedgerAccount>
+) => Effect.Effect<LedgerAccount, AccountNotFound>) =>
 	Option.match({
-		onNone: () =>
-			Effect.fail(
-				new AccountNotFound(organizationId.toString(), ledgerId.toString(), accountId.toString())
-			),
+		onNone: () => Effect.fail(new AccountNotFound()),
 		onSome: Effect.succeed,
 	});
 
@@ -63,7 +58,7 @@ class AccountService {
 	): Effect.Effect<LedgerAccount, AccountGetError> {
 		return this.repo
 			.getAccount(organizationId, ledgerId, accountId)
-			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId, accountId)));
+			.pipe(Effect.flatMap(requireFound()));
 	}
 
 	createAccount(
@@ -79,7 +74,6 @@ class AccountService {
 					Effect.mapError(error =>
 						error instanceof AccountRepositoryUnavailable
 							? new ServiceUnavailableError(error.message, {
-									...error.context,
 									cause: error,
 									retryable: false,
 								})
@@ -108,7 +102,7 @@ class AccountService {
 	): Effect.Effect<LedgerAccount, AccountDeleteError> {
 		return this.repo
 			.deleteAccount(organizationId, ledgerId, accountId)
-			.pipe(Effect.flatMap(requireFound(organizationId, ledgerId, accountId)));
+			.pipe(Effect.flatMap(requireFound()));
 	}
 }
 

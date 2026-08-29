@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "30d22f1e-d1e9-4f9a-9375-901a857544f2",
+  "id": "d2374a0e-8f71-463a-8936-cd7d132e206d",
   "prevIds": [
     "d6bcdb7f-6656-4d08-9e1d-96f17f028ed8"
   ],
@@ -570,19 +570,6 @@
       "generated": null,
       "identity": null,
       "name": "currency",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ledger_account_settlements"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "2",
-      "generated": null,
-      "identity": null,
-      "name": "currency_exponent",
       "entityType": "columns",
       "schema": "public",
       "table": "ledger_account_settlements"

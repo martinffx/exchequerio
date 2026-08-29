@@ -2,16 +2,12 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import type { DateTime } from "luxon";
 
-import {
-	DatabaseTag,
-	type EffectDrizzleDatabase,
-	isPostgresUnavailable,
-	postgresErrorCode,
-} from "@/db";
+import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import {
 	AccountNotFound,
-	AccountPersistenceDecodingFailure,
 	AccountVersionConflict,
+	requireAccount,
+	requireAccountWrite,
 } from "@/ledgers/accounts/AccountErrors";
 import {
 	LedgerAccount,
@@ -31,11 +27,13 @@ import {
 	type TransactionInfrastructureError,
 	TransactionLifecycleConflict,
 	TransactionNotFound,
-	TransactionPersistenceDecodingFailure,
-	TransactionPersistenceFailure,
-	TransactionRepositoryUnavailable,
 	TransactionValidationFailure,
 	TransactionVersionConflict,
+	mapTransactionCreateError,
+	mapTransactionInfrastructureError,
+	mapTransactionMutationError,
+	requireTransaction,
+	requireTransactionWrite,
 } from "./TransactionErrors";
 import type {
 	TransactionCreateRequest,
@@ -105,12 +103,6 @@ const LedgerTransactionRepoTag = Context.Service<LedgerTransactionRepo>("LedgerT
 
 type DatabaseTransaction = Parameters<Parameters<EffectDrizzleDatabase["transaction"]>[0]>[0];
 type AccountsById = Map<string, LedgerAccount>;
-type ErrorContext = Readonly<{
-	organizationId?: string;
-	ledgerId?: string;
-	transactionId?: string;
-}>;
-
 class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	constructor(private readonly db: EffectDrizzleDatabase) {}
 
@@ -119,7 +111,6 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		ledgerId: LedgerID,
 		query: TransactionListQuery
 	): Effect.Effect<LedgerTransaction[], TransactionInfrastructureError> {
-		const errorContext = this.errorContext(organizationId, ledgerId);
 		return this.db
 			.select()
 			.from(LedgerTransactionsTable)
@@ -134,7 +125,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.offset(query.offset)
 			.pipe(
 				Effect.flatMap(rows => Effect.all(rows.map(row => LedgerTransaction.fromRow(row)))),
-				Effect.mapError(cause => this.mapInfrastructureError(cause, errorContext))
+				Effect.mapError(mapTransactionInfrastructureError)
 			);
 	}
 
@@ -143,7 +134,6 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID
 	): Effect.Effect<Option.Option<LedgerTransaction>, TransactionInfrastructureError> {
-		const errorContext = this.errorContext(organizationId, ledgerId, transactionId);
 		return this.db.query.LedgerTransactionsTable.findMany({
 			where: {
 				organizationId: organizationId.toString(),
@@ -160,7 +150,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			},
 		}).pipe(
 			Effect.flatMap(rows => LedgerTransaction.fromRows(rows)),
-			Effect.mapError(cause => this.mapInfrastructureError(cause, errorContext))
+			Effect.mapError(mapTransactionInfrastructureError)
 		);
 	}
 
@@ -170,7 +160,6 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		transactionId: LedgerTransactionID,
 		request: TransactionCreateRequest
 	): Effect.Effect<LedgerTransaction, LedgerTransactionCreateRepositoryError> {
-		const errorContext = this.errorContext(organizationId, ledgerId, transactionId);
 		return Effect.gen({ self: this }, function* () {
 			const accountIds = [...new Set(request.ledgerEntries.map(entry => entry.accountId))].sort();
 			const accounts = yield* this.readAccounts(organizationId, ledgerId, accountIds);
@@ -198,7 +187,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 
 			return transaction;
-		}).pipe(Effect.mapError(cause => this.mapCreateError(cause, errorContext)));
+		}).pipe(Effect.mapError(mapTransactionCreateError));
 	}
 
 	updateTransaction(
@@ -207,7 +196,6 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		transactionId: LedgerTransactionID,
 		request: TransactionUpdateRequest
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
-		const errorContext = this.errorContext(organizationId, ledgerId, transactionId);
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
 			const currentEntries = Option.getOrThrow(current.entries);
@@ -235,7 +223,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 
 			return transaction;
-		}).pipe(Effect.mapError(cause => this.mapMutationError(cause, errorContext)));
+		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
 	postTransaction(
@@ -244,7 +232,6 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		transactionId: LedgerTransactionID,
 		postedAt: DateTime
 	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError> {
-		const errorContext = this.errorContext(organizationId, ledgerId, transactionId);
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
 			if (current.status === "posted") return current;
@@ -269,7 +256,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 
 			return transaction;
-		}).pipe(Effect.mapError(cause => this.mapMutationError(cause, errorContext)));
+		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
 	voidTransaction(
@@ -278,7 +265,6 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		transactionId: LedgerTransactionID,
 		updated: DateTime
 	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError> {
-		const errorContext = this.errorContext(organizationId, ledgerId, transactionId);
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
 			if (current.status === "voided") return current;
@@ -303,7 +289,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 
 			return transaction;
-		}).pipe(Effect.mapError(cause => this.mapMutationError(cause, errorContext)));
+		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
 	private readTransaction(
@@ -312,19 +298,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		transactionId: LedgerTransactionID
 	) {
 		return this.getTransaction(organizationId, ledgerId, transactionId).pipe(
-			Effect.flatMap(
-				Option.match({
-					onNone: () =>
-						Effect.fail(
-							new TransactionNotFound(
-								organizationId.toString(),
-								ledgerId.toString(),
-								transactionId.toString()
-							)
-						),
-					onSome: Effect.succeed,
-				})
-			)
+			Effect.flatMap(requireTransaction)
 		);
 	}
 
@@ -351,12 +325,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 							})
 						)
 				),
-				Effect.flatMap(accounts => {
-					const missingId = accountIds.find(accountId => !accounts.has(accountId));
-					return missingId === undefined
-						? Effect.succeed(accounts)
-						: Effect.fail(new AccountNotFound(organizationId.toString(), ledgerId.toString(), missingId));
-				})
+				Effect.flatMap(accounts =>
+					requireAccount(accountIds.every(accountId => accounts.has(accountId)) ? accounts : undefined)
+				)
 			);
 	}
 
@@ -423,17 +394,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			)
 			.returning({ id: LedgerTransactionsTable.id })
 			.pipe(
-				Effect.flatMap(rows =>
-					rows.length === 1
-						? Effect.void
-						: Effect.fail(
-								new TransactionVersionConflict(
-									current.organizationId.toString(),
-									current.ledgerId.toString(),
-									current.id.toString()
-								)
-							)
-				)
+				Effect.flatMap(rows => requireTransactionWrite(rows.length === 1))
 			);
 	}
 
@@ -507,82 +468,13 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 					)
 					.returning({ id: LedgerAccountsTable.id })
 					.pipe(
-						Effect.flatMap(rows =>
-							rows.length === 1
-								? Effect.void
-								: Effect.fail(
-										new AccountVersionConflict(organizationId.toString(), ledgerId.toString(), accountId)
-									)
-						)
+						Effect.flatMap(rows => requireAccountWrite(rows.length === 1))
 					);
 			},
 			{ concurrency: 1, discard: true }
 		);
 	}
 
-	private errorContext(
-		organizationId: OrgID,
-		ledgerId?: LedgerID,
-		transactionId?: LedgerTransactionID
-	): ErrorContext {
-		return {
-			organizationId: organizationId.toString(),
-			ledgerId: ledgerId?.toString(),
-			transactionId: transactionId?.toString(),
-		};
-	}
-
-	private mapInfrastructureError(
-		cause: unknown,
-		errorContext: ErrorContext
-	): TransactionInfrastructureError {
-		if (cause instanceof TransactionPersistenceDecodingFailure) return cause;
-		if (cause instanceof AccountPersistenceDecodingFailure) {
-			return new TransactionPersistenceDecodingFailure(cause, errorContext);
-		}
-		if (cause instanceof TransactionPersistenceFailure) return cause;
-		if (cause instanceof TransactionRepositoryUnavailable) return cause;
-		return isPostgresUnavailable(cause)
-			? new TransactionRepositoryUnavailable(cause, errorContext)
-			: new TransactionPersistenceFailure(cause, errorContext);
-	}
-
-	private mapConcurrentOrInfrastructure(cause: unknown, errorContext: ErrorContext) {
-		const code = postgresErrorCode(cause);
-		return code === "40001" || code === "40P01"
-			? new TransactionConcurrencyFailure(cause, errorContext)
-			: this.mapInfrastructureError(cause, errorContext);
-	}
-
-	private mapCreateError(
-		cause: unknown,
-		errorContext: ErrorContext
-	): LedgerTransactionCreateRepositoryError {
-		return cause instanceof AccountNotFound ||
-			cause instanceof AccountVersionConflict ||
-			cause instanceof LedgerAccountCurrencyMismatch ||
-			cause instanceof TransactionValidationFailure
-			? cause
-			: this.mapConcurrentOrInfrastructure(cause, errorContext);
-	}
-
-	private mapMutationError(
-		cause: unknown,
-		errorContext: ErrorContext
-	): LedgerTransactionUpdateRepositoryError {
-		return cause instanceof AccountNotFound ||
-			cause instanceof AccountVersionConflict ||
-			cause instanceof LedgerAccountCurrencyMismatch ||
-			cause instanceof TransactionLifecycleConflict ||
-			cause instanceof TransactionNotFound ||
-			cause instanceof TransactionPersistenceDecodingFailure ||
-			cause instanceof TransactionPersistenceFailure ||
-			cause instanceof TransactionRepositoryUnavailable ||
-			cause instanceof TransactionValidationFailure ||
-			cause instanceof TransactionVersionConflict
-			? cause
-			: this.mapConcurrentOrInfrastructure(cause, errorContext);
-	}
 }
 
 const ledgerTransactionRepoLayer = Layer.effect(

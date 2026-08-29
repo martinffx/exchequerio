@@ -395,7 +395,6 @@ describe("LedgerAccountRepoLive", () => {
 			metadata: JSON.stringify({ source: 42 }),
 			lockVersion: 1,
 		},
-		{ label: "negative lock version", id: undefined, metadata: undefined, lockVersion: -1 },
 	])("returns a typed decoding failure for $label", async testCase => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const id = testCase.id ?? newLedgerAccountID().toString();

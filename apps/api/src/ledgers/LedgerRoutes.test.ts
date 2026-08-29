@@ -233,12 +233,12 @@ describe("LedgerRoutes", () => {
 		vi
 			.mocked(implementation.getLedger)
 			.mockReturnValue(
-				Effect.fail(new LedgerNotFound(organizationId.toString(), ledgerId.toString()))
+				Effect.fail(new LedgerNotFound())
 			);
 		vi
 			.mocked(implementation.deleteLedger)
 			.mockReturnValue(
-				Effect.fail(new LedgerHasDependents(organizationId.toString(), ledgerId.toString()))
+				Effect.fail(new LedgerHasDependents())
 			);
 		const { server } = await buildRouteServer(implementation);
 
@@ -254,8 +254,6 @@ describe("LedgerRoutes", () => {
 		expect(notFound.statusCode).toBe(404);
 		expect(notFound.json()).toMatchObject({
 			type: "NOT_FOUND",
-			organizationId: organizationId.toString(),
-			ledgerId: ledgerId.toString(),
 		});
 		expect(conflict.statusCode).toBe(409);
 	});

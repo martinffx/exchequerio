@@ -32,7 +32,7 @@ const buildServer = async () => {
 		async () => ({})
 	);
 	server.get("/typed", async () => {
-		throw new NotFoundError("Organization not found", { organizationId: "org_123" });
+		throw new NotFoundError("Organization not found");
 	});
 	server.get("/pressure", async () => {
 		throw Object.assign(new Error("Server under pressure"), { code: "FST_UNDER_PRESSURE" });
@@ -68,20 +68,14 @@ describe("HttpError", () => {
 		expect(error.toProblemDetail()).toMatchObject({ status, type, title, detail: error.message });
 	});
 
-	it("serializes context without exposing the cause", () => {
+	it("serializes retryability without exposing the cause", () => {
 		const cause = new Error("database credentials");
 		const problem = new ConflictError("Organization conflict", {
 			cause,
-			organizationId: "org_123",
-			ledgerId: "lgr_123",
 			retryable: true,
 		}).toProblemDetail();
 
-		expect(problem).toMatchObject({
-			organizationId: "org_123",
-			ledgerId: "lgr_123",
-			retryable: true,
-		});
+		expect(problem).toMatchObject({ retryable: true });
 		expect(problem.instance).toMatch(/^\/instance\/[0-9a-f-]{36}$/);
 		expect(problem.traceId).toMatch(/^[0-9a-f-]{36}$/);
 		expect(problem).not.toHaveProperty("cause");
@@ -97,16 +91,12 @@ describe("globalErrorHandler", () => {
 		expect(response.json()).toMatchObject({ type: "BAD_REQUEST", status: 400 });
 	});
 
-	it("maps typed errors with their context", async () => {
+	it("maps typed errors", async () => {
 		const server = await buildServer();
 		const response = await server.inject({ method: "GET", url: "/typed" });
 
 		expect(response.statusCode).toBe(404);
-		expect(response.json()).toMatchObject({
-			type: "NOT_FOUND",
-			status: 404,
-			organizationId: "org_123",
-		});
+		expect(response.json()).toMatchObject({ type: "NOT_FOUND", status: 404 });
 	});
 
 	it("maps under-pressure errors as retryable", async () => {

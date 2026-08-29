@@ -53,10 +53,8 @@ type LedgerAccountBalance = Readonly<{
 }>;
 
 class LedgerAccountCurrencyMismatch extends BadRequestError {
-	constructor(accountId: LedgerAccountID, accountCurrency: string, entryCurrency: string) {
-		super(`Entry Currency ${entryCurrency} does not match Account Currency ${accountCurrency}`, {
-			accountId: accountId.toString(),
-		});
+	constructor(accountCurrency: string, entryCurrency: string) {
+		super(`Entry Currency ${entryCurrency} does not match Account Currency ${accountCurrency}`);
 	}
 }
 
@@ -260,7 +258,7 @@ class LedgerAccount {
 	): Effect.Effect<LedgerAccount, LedgerAccountCurrencyMismatch> {
 		if (entry.currency !== this.currency) {
 			return Effect.fail(
-				new LedgerAccountCurrencyMismatch(this.id, this.currency, entry.currency)
+				new LedgerAccountCurrencyMismatch(this.currency, entry.currency)
 			);
 		}
 

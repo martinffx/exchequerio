@@ -45,9 +45,9 @@ const mapInfrastructureError = (cause: unknown): OrganizationInfrastructureError
 		? new OrganizationRepositoryUnavailable(cause)
 		: new OrganizationPersistenceFailure(cause);
 
-const mapDeleteError = (cause: unknown, id: OrgID): OrganizationDeleteRepositoryError =>
+const mapDeleteError = (cause: unknown): OrganizationDeleteRepositoryError =>
 	postgresErrorCode(cause) === "23503"
-		? new OrganizationHasDependents(id.toString())
+		? new OrganizationHasDependents()
 		: mapInfrastructureError(cause);
 class OrganizationRepoLive implements OrganizationRepo {
 	constructor(private readonly db: DrizzleDatabase) {}
@@ -122,7 +122,7 @@ class OrganizationRepoLive implements OrganizationRepo {
 		return Effect.tryPromise({
 			try: () =>
 				this.db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id.toString())).returning(),
-			catch: cause => mapDeleteError(cause, id),
+			catch: mapDeleteError,
 		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
 	}
 }

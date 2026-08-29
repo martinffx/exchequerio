@@ -106,17 +106,6 @@ describe("handleDBError", () => {
 		expect((result as ConflictError).retryable).toBe(false);
 	});
 
-	it("should return ConflictError with context for code 23505", () => {
-		const error: DBError = new Error("unique violation") as DBError;
-		error.code = "23505";
-		const context = { organizationId: "org_123", ledgerId: "lgr_456" };
-
-		const result = handleDBError(error, context);
-
-		expect(result).toBeInstanceOf(ConflictError);
-		expect((result as ConflictError).context).toEqual(context);
-	});
-
 	it("should return NotFoundError for code 23503 (foreign key violation)", () => {
 		const error: DBError = new Error("foreign key violation") as DBError;
 		error.code = "23503";
@@ -125,17 +114,6 @@ describe("handleDBError", () => {
 
 		expect(result).toBeInstanceOf(NotFoundError);
 		expect(result.message).toBe("Referenced resource not found");
-	});
-
-	it("should return NotFoundError with context for code 23503", () => {
-		const error: DBError = new Error("foreign key violation") as DBError;
-		error.code = "23503";
-		const context = { accountId: "lat_789" };
-
-		const result = handleDBError(error, context);
-
-		expect(result).toBeInstanceOf(NotFoundError);
-		expect((result as NotFoundError).context).toEqual(context);
 	});
 
 	it("should return ServiceUnavailableError for code 40001 (serialization failure)", () => {
@@ -222,37 +200,4 @@ describe("handleDBError", () => {
 		expect(result.message).toBe("no code error");
 	});
 
-	it("should pass context to all error types", () => {
-		const context = {
-			organizationId: "org_123",
-			ledgerId: "lgr_456",
-			accountId: "lat_789",
-			transactionId: "ltr_101",
-			idempotencyKey: "idem_key",
-		};
-
-		// Test ConflictError with context
-		const error1: DBError = new Error("test") as DBError;
-		error1.code = "23505";
-		const result1 = handleDBError(error1, context);
-		expect((result1 as ConflictError).context).toEqual(context);
-
-		// Test NotFoundError with context
-		const error2: DBError = new Error("test") as DBError;
-		error2.code = "23503";
-		const result2 = handleDBError(error2, context);
-		expect((result2 as NotFoundError).context).toEqual(context);
-
-		// Test ServiceUnavailableError with context
-		const error3: DBError = new Error("test") as DBError;
-		error3.code = "40001";
-		const result3 = handleDBError(error3, context);
-		expect((result3 as ServiceUnavailableError).context).toEqual(context);
-
-		// Test InternalServerError with context
-		const error4: DBError = new Error("test") as DBError;
-		error4.code = "99999";
-		const result4 = handleDBError(error4, context);
-		expect((result4 as InternalServerError).context).toEqual(context);
-	});
 });
