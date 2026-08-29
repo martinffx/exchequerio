@@ -6,13 +6,11 @@ import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import {
 	AccountNotFound,
 	AccountVersionConflict,
-	requireAccount,
-	requireAccountWrite,
-} from "@/ledgers/accounts/AccountErrors";
-import {
 	LedgerAccount,
 	LedgerAccountCurrencyMismatch,
-} from "@/ledgers/accounts/domain/LedgerAccount";
+	requireAccount,
+	requireAccountWrite,
+} from "@/ledgers/accounts";
 import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
 import {
 	LedgerAccountsTable,

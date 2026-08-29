@@ -12,6 +12,7 @@ import type { LedgerAccountID, LedgerID, LedgerTransactionID, OrgID } from "@/re
 import { LedgerTransaction } from "./domain/LedgerTransaction";
 import {
 	TransactionConcurrencyFailure,
+	TransactionCreationPending,
 	TransactionIdempotencyUnavailable,
 	TransactionLifecycleConflict,
 	TransactionNotFound,
@@ -323,6 +324,16 @@ describe("TransactionRoutes", () => {
 			createBody,
 			{ "idempotency-key": "create-42" },
 			new TransactionIdempotencyUnavailable(new Error("offline")),
+			503,
+		],
+		[
+			"create pending",
+			"createTransaction",
+			"POST",
+			"",
+			createBody,
+			{ "idempotency-key": "create-42" },
+			new TransactionCreationPending(),
 			503,
 		],
 		[

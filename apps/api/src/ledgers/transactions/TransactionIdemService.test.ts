@@ -12,7 +12,7 @@ import {
 	TransactionIdemServiceTag,
 } from "./TransactionIdemService";
 
-const TTL_SECONDS = 5 * 60;
+const TTL_SECONDS = 15 * 60;
 
 const fixture = () => {
 	const organizationId = newOrgID();

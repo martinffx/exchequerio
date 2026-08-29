@@ -1,57 +1,16 @@
 SET LOCAL lock_timeout = '5s';--> statement-breakpoint
 
+DO $$
+BEGIN
+	IF EXISTS (SELECT 1 FROM "ledger_transactions")
+		OR EXISTS (SELECT 1 FROM "ledger_transaction_entries") THEN
+		RAISE EXCEPTION 'transactions Effect migration requires empty ledger_transactions and ledger_transaction_entries tables';
+	END IF;
+END $$;--> statement-breakpoint
+
 ALTER TABLE "ledger_transaction_entries" ADD COLUMN "ledger_id" text;--> statement-breakpoint
 ALTER TABLE "ledger_transactions" ADD COLUMN "posted_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "ledger_transactions" ADD COLUMN "lock_version" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
-
-UPDATE "ledger_transaction_entries" AS "entry"
-SET
-	"ledger_id" = "transaction"."ledger_id",
-	"status" = "transaction"."status"
-FROM "ledger_transactions" AS "transaction"
-WHERE "entry"."transaction_id" = "transaction"."id";--> statement-breakpoint
-
-UPDATE "ledger_transactions"
-SET "posted_at" = "updated"
-WHERE "status" = 'posted';--> statement-breakpoint
-
-DO $$
-BEGIN
-	IF EXISTS (
-		SELECT 1
-		FROM "ledger_transactions" AS "transaction"
-		LEFT JOIN "ledgers" AS "ledger"
-			ON "ledger"."id" = "transaction"."ledger_id"
-			AND "ledger"."organization_id" = "transaction"."organization_id"
-		WHERE "ledger"."id" IS NULL
-	) THEN
-		RAISE EXCEPTION 'ledger_transactions contains invalid organization/ledger ownership';
-	END IF;
-
-	IF EXISTS (
-		SELECT 1
-		FROM "ledger_transaction_entries" AS "entry"
-		JOIN "ledger_transactions" AS "transaction" ON "transaction"."id" = "entry"."transaction_id"
-		JOIN "ledger_accounts" AS "account" ON "account"."id" = "entry"."account_id"
-		WHERE "entry"."organization_id" <> "transaction"."organization_id"
-			OR "entry"."ledger_id" <> "transaction"."ledger_id"
-			OR "entry"."organization_id" <> "account"."organization_id"
-			OR "entry"."ledger_id" <> "account"."ledger_id"
-			OR "entry"."currency" <> "account"."currency_code"
-			OR "entry"."amount" <= 0
-			OR "entry"."amount" > 9007199254740991
-	) THEN
-		RAISE EXCEPTION 'ledger_transaction_entries contains invalid ownership, currency, or amount';
-	END IF;
-
-	IF EXISTS (
-		SELECT 1
-		FROM "ledger_transaction_entries"
-		WHERE "ledger_id" IS NULL
-	) THEN
-		RAISE EXCEPTION 'ledger_transaction_entries contains entries without a ledger';
-	END IF;
-END $$;--> statement-breakpoint
 
 ALTER TABLE "ledger_transaction_entries" DROP CONSTRAINT "ledger_transaction_entries_transaction_id_ledger_transactions_i";--> statement-breakpoint
 ALTER TABLE "ledger_transaction_entries" DROP CONSTRAINT "ledger_transaction_entries_account_id_ledger_accounts_id_fk";--> statement-breakpoint
@@ -67,8 +26,6 @@ ALTER TABLE "ledger_transaction_entries" ALTER COLUMN "status" DROP DEFAULT;--> 
 ALTER TABLE "ledger_transactions" ALTER COLUMN "status" DROP DEFAULT;--> statement-breakpoint
 ALTER TABLE "ledger_transaction_entries" ALTER COLUMN "status" SET DATA TYPE text USING "status"::text;--> statement-breakpoint
 ALTER TABLE "ledger_transactions" ALTER COLUMN "status" SET DATA TYPE text USING "status"::text;--> statement-breakpoint
-UPDATE "ledger_transaction_entries" SET "status" = 'voided' WHERE "status" = 'archived';--> statement-breakpoint
-UPDATE "ledger_transactions" SET "status" = 'voided' WHERE "status" = 'archived';--> statement-breakpoint
 DROP TYPE "ledger_transaction_status";--> statement-breakpoint
 CREATE TYPE "ledger_transaction_status" AS ENUM('pending', 'posted', 'voided');--> statement-breakpoint
 ALTER TABLE "ledger_transaction_entries" ALTER COLUMN "status" SET DATA TYPE "ledger_transaction_status" USING "status"::"ledger_transaction_status";--> statement-breakpoint

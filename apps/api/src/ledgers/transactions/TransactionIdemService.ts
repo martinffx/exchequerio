@@ -10,7 +10,7 @@ import {
 
 import { TransactionIdempotencyUnavailable } from "./TransactionErrors";
 
-const TTL_SECONDS = 5 * 60;
+const TTL_SECONDS = 15 * 60;
 const CLAIM_SCRIPT = `
 local claimed = redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2], "NX")
 if claimed then return {1, ARGV[1]} end

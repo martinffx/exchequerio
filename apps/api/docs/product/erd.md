@@ -31,11 +31,15 @@ erDiagram
         text description
         enum normal_balance
         text currency_code
-        integer minor_unit_exponent
+        bigint pending_amount
+        bigint posted_amount
+        bigint available_amount
         bigint pending_credits
         bigint pending_debits
         bigint posted_credits
         bigint posted_debits
+        bigint available_credits
+        bigint available_debits
         integer lock_version
         text metadata
         timestamptz created
@@ -46,10 +50,10 @@ erDiagram
         text id PK
         text organization_id FK
         text ledger_id FK
-        text idempotency_key
         text description
         enum status
         timestamptz posted_at
+        integer lock_version
         text metadata
         timestamptz created
         timestamptz updated
@@ -63,6 +67,8 @@ erDiagram
         text account_id FK
         enum direction
         bigint amount
+        text currency
+        enum status
         text metadata
         timestamptz created
     }
@@ -91,15 +97,14 @@ erDiagram
   Transaction and Account to share both owners.
 - Transaction status is `pending`, `posted`, or `voided`. `posted_at` exists only for Posted
   Transactions. Transactions have no Effective Time.
-- Entries inherit their Transaction's lifecycle. They store neither status nor Currency; reads
-  derive `currency_code` and `minor_unit_exponent` from the Account.
+- Entries store the Transaction status and the request Currency Code alongside the Amount. Currency
+  exponent handling is deferred until the Asset model exists.
 - Entry Amounts are positive integer Minor Units no greater than JavaScript's maximum safe integer.
-- Each Account stores four signed, safe-integer counters. Pending and available amounts are derived,
-  not stored.
-- `(organization_id, idempotency_key)` is unique when the legacy nullable key is present.
+- Each Account stores pending, posted, and available Amounts plus credit and debit counters for each
+  state. All nine projections are safe integers.
 - Transaction lists use `(ledger_id, created DESC, id DESC)`. Ownership and lookup indexes cover
   Organization, status, Transaction, and Account access paths.
 
-Create idempotency also uses Valkey, outside PostgreSQL. The Organization-scoped key maps to the
-server-owned Transaction ID for 24 hours; PostgreSQL's unique constraint remains the durable race
-recovery boundary.
+Create idempotency uses Valkey only. The Organization-scoped key maps to the server-owned
+Transaction ID for 15 minutes. A losing caller waits up to two seconds for that Transaction to
+appear and receives a retryable `503` if the winning request is still unresolved.

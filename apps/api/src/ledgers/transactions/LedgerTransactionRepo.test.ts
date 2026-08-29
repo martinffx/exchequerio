@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
 import { DatabaseTag, makeDatabaseLive } from "@/db";
-import { LedgerAccountCurrencyMismatch } from "@/ledgers/accounts/domain/LedgerAccount";
+import { AccountNotFound, LedgerAccountCurrencyMismatch } from "@/ledgers/accounts";
 import {
 	newLedgerAccountID,
 	newLedgerID,
@@ -27,7 +27,6 @@ import {
 	LedgerTransactionRepoTag,
 	ledgerTransactionRepoLayer,
 } from "./LedgerTransactionRepo";
-import { AccountNotFound } from "../accounts/AccountErrors";
 import { TransactionLifecycleConflict } from "./TransactionErrors";
 import type { TransactionCreateRequest } from "./TransactionSchema";
 

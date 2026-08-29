@@ -2,13 +2,14 @@ import { Clock, Context, Effect, Layer, Result, Schedule } from "effect";
 import { DateTime } from "luxon";
 
 import { postgresErrorCode } from "@/db";
-import { AccountVersionConflict } from "@/ledgers/accounts/AccountErrors";
+import { AccountVersionConflict } from "@/ledgers/accounts";
 import type { LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
 
 import type { LedgerTransaction } from "./domain/LedgerTransaction";
 import { type TransactionIdemService, TransactionIdemServiceTag } from "./TransactionIdemService";
 import {
 	TransactionConcurrencyFailure,
+	TransactionCreationPending,
 	type TransactionInfrastructureError,
 	TransactionNotFound,
 	TransactionValidationFailure,
@@ -40,7 +41,7 @@ const retrySchedule = Schedule.exponential(WINNER_LOAD_DELAY).pipe(
 type TransactionListError = TransactionInfrastructureError;
 type TransactionGetError = TransactionNotFound | TransactionInfrastructureError;
 type TransactionCreateError =
-	| TransactionNotFound
+	| TransactionCreationPending
 	| LedgerTransactionCreateRepositoryError
 	| TransactionInfrastructureError;
 type TransactionUpdateError = LedgerTransactionUpdateRepositoryError;
@@ -199,12 +200,15 @@ class TransactionServiceLive implements TransactionService {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID
-	): Effect.Effect<LedgerTransaction, TransactionGetError> {
+	): Effect.Effect<LedgerTransaction, TransactionCreationPending | TransactionInfrastructureError> {
 		return Effect.suspend(() => this.getTransaction(organizationId, ledgerId, transactionId)).pipe(
 			Effect.retry({
 				schedule: retrySchedule,
 				while: error => error instanceof TransactionNotFound,
-			})
+			}),
+			Effect.mapError(error =>
+				error instanceof TransactionNotFound ? new TransactionCreationPending() : error
+			)
 		);
 	}
 

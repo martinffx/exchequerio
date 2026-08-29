@@ -6,9 +6,9 @@ The Effect migration is complete. The authoritative implementation plan is
 | Task | Outcome                                                        | Status   |
 | ---- | -------------------------------------------------------------- | -------- |
 | T1   | Transaction domain, Luxon timestamps, and typed failures       | Complete |
-| T2   | Four-counter Account projection and derived balances           | Complete |
+| T2   | Retained Account projections and balance effects                | Complete |
 | T3   | Contracted Drizzle schema                                      | Complete |
-| T4   | Transactional legacy-data migration and regression             | Complete |
+| T4   | Empty-data schema migration and rejection regression           | Complete |
 | T5   | Managed Valkey idempotency repository                          | Complete |
 | T6   | Tenant-scoped Effect repository reads                          | Complete |
 | T7   | Atomic Pending and Posted creation                             | Complete |
@@ -20,7 +20,7 @@ The Effect migration is complete. The authoritative implementation plan is
 | T13  | Settlement bridge to the Effect Transaction service            | Complete |
 | T14  | Legacy Transaction stack removal                               | Complete |
 | T15  | Authenticated lifecycle, replay, balance, and tenancy journeys | Complete |
-| T16  | Cross-instance Valkey idempotency proof                        | Complete |
+| T16  | Valkey claim and release integration coverage                  | Complete |
 | T17  | Current documentation and final repository verification        | Complete |
 
 Current behavior lives in [`spec.md`](./spec.md), and the implementation boundaries live in

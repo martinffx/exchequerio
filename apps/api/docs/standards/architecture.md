@@ -128,46 +128,48 @@ declare module "fastify" {
 SELECT ... FROM ledger_accounts ORDER BY id FOR UPDATE;
 
 -- Domain validation before persistence
-Debit totals = Credit totals for each (currency_code, minor_unit_exponent) pair
+Debit totals = Credit totals for each currency_code
 
 -- Immutable entries
 Posted Transactions and their Entries cannot change
 
--- Idempotency support
-UNIQUE (organization_id, idempotency_key)
+-- Create idempotency is coordinated only through Valkey.
 ```
 
 ### Database Schema Design
 ```sql
--- Four authoritative Account counters; balance views are derived
+-- Nine authoritative Account projections
 CREATE TABLE ledger_accounts (
   id TEXT PRIMARY KEY,
   organization_id TEXT NOT NULL,
-  ledger_id TEXT NOT NULL,
-  currency_code TEXT NOT NULL,
-  minor_unit_exponent INTEGER NOT NULL,
+	ledger_id TEXT NOT NULL,
+	currency_code TEXT NOT NULL,
+  pending_amount BIGINT NOT NULL DEFAULT 0,
+  posted_amount BIGINT NOT NULL DEFAULT 0,
+  available_amount BIGINT NOT NULL DEFAULT 0,
   pending_credits BIGINT NOT NULL DEFAULT 0,
   pending_debits BIGINT NOT NULL DEFAULT 0,
   posted_credits BIGINT NOT NULL DEFAULT 0,
   posted_debits BIGINT NOT NULL DEFAULT 0,
-  lock_version INTEGER NOT NULL DEFAULT 0,
+  available_credits BIGINT NOT NULL DEFAULT 0,
+  available_debits BIGINT NOT NULL DEFAULT 0,
+  lock_version INTEGER NOT NULL DEFAULT 1,
   created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   UNIQUE (organization_id, ledger_id, id)
 );
 
 CREATE TABLE ledger_transactions (
-  id TEXT PRIMARY KEY,
-  organization_id TEXT NOT NULL,
-  ledger_id TEXT NOT NULL,
-  idempotency_key TEXT,
+	id TEXT PRIMARY KEY,
+	organization_id TEXT NOT NULL,
+	ledger_id TEXT NOT NULL,
   description TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'posted', 'voided')),
   posted_at TIMESTAMP WITH TIME ZONE,
+  lock_version INTEGER NOT NULL DEFAULT 1,
   created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  UNIQUE (organization_id, ledger_id, id),
-  UNIQUE (organization_id, idempotency_key)
+	updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+	UNIQUE (organization_id, ledger_id, id)
 );
 
 CREATE TABLE ledger_transaction_entries (
@@ -178,6 +180,8 @@ CREATE TABLE ledger_transaction_entries (
   account_id TEXT NOT NULL,
   direction TEXT NOT NULL CHECK (direction IN ('debit', 'credit')),
   amount BIGINT NOT NULL CHECK (amount > 0 AND amount <= 9007199254740991),
+  currency TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'posted', 'voided')),
   created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   FOREIGN KEY (organization_id, ledger_id, transaction_id)
     REFERENCES ledger_transactions (organization_id, ledger_id, id),
@@ -230,14 +234,14 @@ ORDER BY id
 FOR UPDATE;
 
 INSERT INTO ledger_transactions
-  (id, organization_id, ledger_id, idempotency_key, description, status, created, updated)
-VALUES ($4, $1, $2, $5, $6, 'pending', $7, $7);
+	(id, organization_id, ledger_id, description, status, created, updated)
+VALUES ($4, $1, $2, $5, 'pending', $6, $6);
 
 INSERT INTO ledger_transaction_entries
-  (id, organization_id, ledger_id, transaction_id, account_id, direction, amount, created)
+  (id, organization_id, ledger_id, transaction_id, account_id, direction, amount, currency, status, created)
 VALUES
-  ($8, $1, $2, $4, $9, 'debit', $10, $7),
-  ($11, $1, $2, $4, $12, 'credit', $10, $7);
+  ($7, $1, $2, $4, $8, 'debit', $9, $10, 'pending', $6),
+  ($11, $1, $2, $4, $12, 'credit', $9, $10, 'pending', $6);
 
 -- Apply one domain-derived aggregate delta per Account.
 UPDATE ledger_accounts
@@ -245,25 +249,23 @@ SET pending_debits = pending_debits + $13,
     pending_credits = pending_credits + $14,
     posted_debits = posted_debits + $15,
     posted_credits = posted_credits + $16,
+    available_debits = available_debits + $17,
+    available_credits = available_credits + $18,
+    pending_amount = pending_amount + $19,
+    posted_amount = posted_amount + $20,
+    available_amount = available_amount + $21,
     lock_version = lock_version + 1,
-    updated = $7
-WHERE organization_id = $1 AND ledger_id = $2 AND id = $9 AND lock_version = $17;
+    updated = $6
+WHERE organization_id = $1 AND ledger_id = $2 AND id = $8 AND lock_version = $22;
 
 COMMIT;
 ```
 
-### Idempotency Support
-```sql
-CREATE UNIQUE INDEX unique_ledger_transactions_organization_idempotency_key
-  ON ledger_transactions (organization_id, idempotency_key);
+### Idempotency support
 
--- PostgreSQL is the exact recovery boundary after a Valkey-first claim.
-INSERT INTO ledger_transactions (id, organization_id, ledger_id, status, idempotency_key)
-VALUES ($1, $2, $3, 'pending', $4)
-ON CONFLICT (organization_id, idempotency_key)
-DO NOTHING
-RETURNING id;
-```
+Transaction creation uses one Organization-scoped Valkey claim with a 15-minute expiry. PostgreSQL
+stores no idempotency key. A losing caller waits up to two seconds for the claimed Transaction ID to
+appear, then returns a retryable `503` if the winner remains unresolved.
 
 ### Security Standards
 ```sql

@@ -18,6 +18,8 @@ export {
 	AccountPersistenceFailure,
 	AccountRepositoryUnavailable,
 	AccountVersionConflict,
+	requireAccount,
+	requireAccountWrite,
 } from "./AccountErrors";
 export { AccountRoutes } from "./AccountRoutes";
 export type {

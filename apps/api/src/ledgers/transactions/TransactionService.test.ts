@@ -3,7 +3,7 @@ import { Settings } from "luxon";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AccountVersionConflict } from "@/ledgers/accounts/AccountErrors";
+import { AccountVersionConflict } from "@/ledgers/accounts";
 import {
 	newLedgerAccountID,
 	newLedgerTransactionID,
@@ -13,7 +13,11 @@ import {
 } from "@/repo/entities/types";
 
 import { LedgerTransaction } from "./domain/LedgerTransaction";
-import { TransactionValidationFailure, TransactionVersionConflict } from "./TransactionErrors";
+import {
+	TransactionCreationPending,
+	TransactionValidationFailure,
+	TransactionVersionConflict,
+} from "./TransactionErrors";
 import { type TransactionIdemService, TransactionIdemServiceTag } from "./TransactionIdemService";
 import { type LedgerTransactionRepo, LedgerTransactionRepoTag } from "./LedgerTransactionRepo";
 import type { TransactionCreateRequest, TransactionUpdateRequest } from "./TransactionSchema";
@@ -125,6 +129,23 @@ describe("TransactionService", () => {
 
 		expect(found).toBe(transaction);
 		expect(h.repository.getTransaction).toHaveBeenCalledWith(organizationId, ledgerId, transactionId);
+		expect(h.repository.createTransaction).not.toHaveBeenCalled();
+	});
+
+	it("reports an unresolved existing claim as retryable service unavailability", async () => {
+		const h = harness();
+		h.idempotency.claimTransactionId.mockReturnValue(Effect.succeed(Result.fail(transactionId)));
+		h.repository.getTransaction.mockReturnValue(Effect.succeed(Option.none()));
+
+		await expect(
+			h.run(service =>
+				service.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest)
+			)
+		).rejects.toMatchObject({
+			constructor: TransactionCreationPending,
+			retryable: true,
+			statusCode: 503,
+		});
 		expect(h.repository.createTransaction).not.toHaveBeenCalled();
 	});
 
