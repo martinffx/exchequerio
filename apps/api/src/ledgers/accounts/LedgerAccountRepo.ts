@@ -31,23 +31,64 @@ type LedgerAccountUpdateRepositoryError =
 	| AccountVersionConflict;
 type LedgerAccountDeleteRepositoryError = AccountInfrastructureError | AccountHasDependents;
 
+/**
+ * Persists Accounts and their stored Balance projections within a Ledger.
+ *
+ * Expected failures are returned through each operation's Effect error channel.
+ */
 interface LedgerAccountRepo {
+	/**
+	 * Lists Accounts for one Organization and Ledger.
+	 *
+	 * @param organizationId - Organization that owns the Accounts.
+	 * @param ledgerId - Ledger that contains the Accounts.
+	 * @param query - Pagination parameters for the result set.
+	 * @returns An Effect containing the requested page of Accounts.
+	 */
 	listAccounts(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		query: AccountListQuery
 	): Effect.Effect<LedgerAccount[], AccountInfrastructureError>;
+	/**
+	 * Finds an Account within one Organization and Ledger.
+	 *
+	 * @param organizationId - Organization that owns the Account.
+	 * @param ledgerId - Ledger that contains the Account.
+	 * @param accountId - Account to find.
+	 * @returns An Effect containing the Account when found, or `Option.none()` otherwise.
+	 */
 	getAccount(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Effect.Effect<Option.Option<LedgerAccount>, AccountInfrastructureError>;
+	/**
+	 * Creates an Account from a validated domain record.
+	 *
+	 * @param record - Account to persist, including its initial Balance projections.
+	 * @returns An Effect containing the created Account.
+	 */
 	createAccount(
 		record: LedgerAccount
 	): Effect.Effect<LedgerAccount, LedgerAccountCreateRepositoryError>;
+	/**
+	 * Updates an Account using optimistic concurrency control.
+	 *
+	 * @param record - Account state and lock version to persist.
+	 * @returns An Effect containing the updated Account.
+	 */
 	updateAccount(
 		record: LedgerAccount
 	): Effect.Effect<LedgerAccount, LedgerAccountUpdateRepositoryError>;
+	/**
+	 * Deletes an Account within one Organization and Ledger.
+	 *
+	 * @param organizationId - Organization that owns the Account.
+	 * @param ledgerId - Ledger that contains the Account.
+	 * @param accountId - Account to delete.
+	 * @returns An Effect containing the deleted Account, or `Option.none()` when absent.
+	 */
 	deleteAccount(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -57,9 +98,23 @@ interface LedgerAccountRepo {
 
 const LedgerAccountRepoTag = Context.Service<LedgerAccountRepo>("LedgerAccountRepo");
 
+/** PostgreSQL implementation of the Account repository contract. */
 class LedgerAccountRepoLive implements LedgerAccountRepo {
+	/**
+	 * Creates an Account repository backed by an Effect-enabled Drizzle database.
+	 *
+	 * @param db - Database used for all Account reads and writes.
+	 */
 	constructor(private readonly db: EffectDrizzleDatabase) {}
 
+	/**
+	 * Lists tenant-scoped Accounts by creation time with a stable identifier tie-breaker.
+	 *
+	 * @param organizationId - Organization that owns the Accounts.
+	 * @param ledgerId - Ledger that contains the Accounts.
+	 * @param query - Offset and limit for the result page.
+	 * @returns An Effect containing decoded Accounts in stable order.
+	 */
 	listAccounts(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -84,6 +139,14 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			);
 	}
 
+	/**
+	 * Reads one Account scoped to its Organization and Ledger.
+	 *
+	 * @param organizationId - Organization that owns the Account.
+	 * @param ledgerId - Ledger that contains the Account.
+	 * @param accountId - Account to read.
+	 * @returns An Effect containing the decoded Account, or `Option.none()` when absent.
+	 */
 	getAccount(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -106,6 +169,12 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			);
 	}
 
+	/**
+	 * Inserts an Account with every stored Balance projection supplied by the domain record.
+	 *
+	 * @param record - Account to insert.
+	 * @returns An Effect containing the inserted Account.
+	 */
 	createAccount(
 		record: LedgerAccount
 	): Effect.Effect<LedgerAccount, LedgerAccountCreateRepositoryError> {
@@ -120,6 +189,15 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			);
 	}
 
+	/**
+	 * Updates mutable Account fields when the stored lock version matches the record.
+	 *
+	 * The write increments the lock version. A missing row, tenant mismatch, or stale version returns
+	 * an Account version conflict through the Effect error channel.
+	 *
+	 * @param record - Account state and current lock version to persist.
+	 * @returns An Effect containing the updated Account with its incremented lock version.
+	 */
 	updateAccount(
 		record: LedgerAccount
 	): Effect.Effect<LedgerAccount, LedgerAccountUpdateRepositoryError> {
@@ -151,6 +229,14 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			);
 	}
 
+	/**
+	 * Deletes a tenant-scoped Account and rejects Accounts with dependent records.
+	 *
+	 * @param organizationId - Organization that owns the Account.
+	 * @param ledgerId - Ledger that contains the Account.
+	 * @param accountId - Account to delete.
+	 * @returns An Effect containing the deleted Account, or `Option.none()` when no row matches.
+	 */
 	deleteAccount(
 		organizationId: OrgID,
 		ledgerId: LedgerID,

@@ -21,17 +21,55 @@ type LedgerListQuery = {
 	readonly limit: number;
 };
 
+/**
+ * Persists Ledgers within their owning Organizations.
+ *
+ * Expected failures are returned through each operation's Effect error channel.
+ */
 interface LedgerRepo {
+	/**
+	 * Lists Ledgers for one Organization.
+	 *
+	 * @param organizationId - Organization that owns the Ledgers.
+	 * @param query - Pagination parameters for the result set.
+	 * @returns An Effect containing the requested page of Ledgers.
+	 */
 	listLedgers(
 		organizationId: OrgID,
 		query: LedgerListQuery
 	): Effect.Effect<Ledger[], LedgerInfrastructureError>;
+	/**
+	 * Finds a Ledger within one Organization.
+	 *
+	 * @param organizationId - Organization that owns the Ledger.
+	 * @param ledgerId - Ledger to find.
+	 * @returns An Effect containing the Ledger when found, or `Option.none()` otherwise.
+	 */
 	getLedger(
 		organizationId: OrgID,
 		ledgerId: LedgerID
 	): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError>;
+	/**
+	 * Creates a Ledger from a validated domain record.
+	 *
+	 * @param record - Ledger to persist.
+	 * @returns An Effect containing the created Ledger.
+	 */
 	createLedger(record: Ledger): Effect.Effect<Ledger, LedgerCreateRepositoryError>;
+	/**
+	 * Updates the mutable fields of an existing Ledger.
+	 *
+	 * @param record - Ledger state to persist.
+	 * @returns An Effect containing the updated Ledger, or `Option.none()` when absent.
+	 */
 	updateLedger(record: Ledger): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError>;
+	/**
+	 * Deletes a Ledger within one Organization.
+	 *
+	 * @param organizationId - Organization that owns the Ledger.
+	 * @param ledgerId - Ledger to delete.
+	 * @returns An Effect containing the deleted Ledger, or `Option.none()` when absent.
+	 */
 	deleteLedger(
 		organizationId: OrgID,
 		ledgerId: LedgerID
@@ -53,9 +91,22 @@ const publicColumns = {
 	updated: LedgersTable.updated,
 };
 
+/** PostgreSQL implementation of the Ledger repository contract. */
 class LedgerRepoLive implements LedgerRepo {
+	/**
+	 * Creates a Ledger repository backed by Drizzle.
+	 *
+	 * @param db - Database used for all Ledger reads and writes.
+	 */
 	constructor(private readonly db: DrizzleDatabase) {}
 
+	/**
+	 * Lists tenant-scoped Ledgers in ascending identifier order.
+	 *
+	 * @param organizationId - Organization that owns the Ledgers.
+	 * @param query - Offset and limit for the result page.
+	 * @returns An Effect containing decoded Ledgers in stable order.
+	 */
 	listLedgers(
 		organizationId: OrgID,
 		{ limit, offset }: LedgerListQuery
@@ -76,6 +127,13 @@ class LedgerRepoLive implements LedgerRepo {
 		);
 	}
 
+	/**
+	 * Reads one tenant-scoped Ledger.
+	 *
+	 * @param organizationId - Organization that owns the Ledger.
+	 * @param ledgerId - Ledger to read.
+	 * @returns An Effect containing the decoded Ledger, or `Option.none()` when absent.
+	 */
 	getLedger(
 		organizationId: OrgID,
 		ledgerId: LedgerID
@@ -96,6 +154,12 @@ class LedgerRepoLive implements LedgerRepo {
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}
 
+	/**
+	 * Inserts a Ledger and maps a missing parent Organization to a typed failure.
+	 *
+	 * @param record - Ledger to insert.
+	 * @returns An Effect containing the inserted Ledger.
+	 */
 	createLedger(record: Ledger): Effect.Effect<Ledger, LedgerCreateRepositoryError> {
 		return Effect.tryPromise({
 			try: () => this.db.insert(LedgersTable).values(record.toCreateRow()).returning(publicColumns),
@@ -106,6 +170,12 @@ class LedgerRepoLive implements LedgerRepo {
 		);
 	}
 
+	/**
+	 * Updates a Ledger only when its identifier and Organization both match.
+	 *
+	 * @param record - Ledger state whose mutable fields will be persisted.
+	 * @returns An Effect containing the updated Ledger, or `Option.none()` when no row matches.
+	 */
 	updateLedger(record: Ledger): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError> {
 		return Effect.tryPromise({
 			try: () =>
@@ -123,6 +193,13 @@ class LedgerRepoLive implements LedgerRepo {
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}
 
+	/**
+	 * Deletes a tenant-scoped Ledger and rejects Ledgers with dependent records.
+	 *
+	 * @param organizationId - Organization that owns the Ledger.
+	 * @param ledgerId - Ledger to delete.
+	 * @returns An Effect containing the deleted Ledger, or `Option.none()` when no row matches.
+	 */
 	deleteLedger(
 		organizationId: OrgID,
 		ledgerId: LedgerID

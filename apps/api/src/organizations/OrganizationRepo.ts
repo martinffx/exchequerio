@@ -20,19 +20,52 @@ type OrganizationListQuery = {
 	limit: number;
 };
 
+/**
+ * Persists Organizations and reports expected failures through Effect error channels.
+ */
 interface OrganizationRepo {
+	/**
+	 * Lists Organizations with pagination.
+	 *
+	 * @param query - Pagination parameters for the result set.
+	 * @returns An Effect containing the requested page of Organizations.
+	 */
 	listOrganizations(
 		query: OrganizationListQuery
 	): Effect.Effect<Organization[], OrganizationInfrastructureError>;
+	/**
+	 * Finds an Organization by identifier.
+	 *
+	 * @param id - Organization to find.
+	 * @returns An Effect containing the Organization when found, or `Option.none()` otherwise.
+	 */
 	getOrganization(
 		id: OrgID
 	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError>;
+	/**
+	 * Creates an Organization from a validated domain record.
+	 *
+	 * @param record - Organization to persist.
+	 * @returns An Effect containing the created Organization.
+	 */
 	createOrganization(
 		record: Organization
 	): Effect.Effect<Organization, OrganizationInfrastructureError>;
+	/**
+	 * Updates the mutable fields of an Organization.
+	 *
+	 * @param record - Organization state to persist.
+	 * @returns An Effect containing the updated Organization, or `Option.none()` when absent.
+	 */
 	updateOrganization(
 		record: Organization
 	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError>;
+	/**
+	 * Deletes an Organization by identifier.
+	 *
+	 * @param id - Organization to delete.
+	 * @returns An Effect containing the deleted Organization, or `Option.none()` when absent.
+	 */
 	deleteOrganization(
 		id: OrgID
 	): Effect.Effect<Option.Option<Organization>, OrganizationDeleteRepositoryError>;
@@ -49,9 +82,22 @@ const mapDeleteError = (cause: unknown): OrganizationDeleteRepositoryError =>
 	postgresErrorCode(cause) === "23503"
 		? new OrganizationHasDependents()
 		: mapInfrastructureError(cause);
+
+/** PostgreSQL implementation of the Organization repository contract. */
 class OrganizationRepoLive implements OrganizationRepo {
+	/**
+	 * Creates an Organization repository backed by Drizzle.
+	 *
+	 * @param db - Database used for all Organization reads and writes.
+	 */
 	constructor(private readonly db: DrizzleDatabase) {}
 
+	/**
+	 * Lists Organizations in ascending identifier order.
+	 *
+	 * @param query - Offset and limit for the result page.
+	 * @returns An Effect containing decoded Organizations in stable order.
+	 */
 	listOrganizations(
 		query: OrganizationListQuery
 	): Effect.Effect<Organization[], OrganizationInfrastructureError> {
@@ -70,6 +116,12 @@ class OrganizationRepoLive implements OrganizationRepo {
 		);
 	}
 
+	/**
+	 * Reads one Organization by identifier.
+	 *
+	 * @param id - Organization to read.
+	 * @returns An Effect containing the decoded Organization, or `Option.none()` when absent.
+	 */
 	getOrganization(
 		id: OrgID
 	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError> {
@@ -84,6 +136,12 @@ class OrganizationRepoLive implements OrganizationRepo {
 		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
 	}
 
+	/**
+	 * Inserts an Organization and requires PostgreSQL to return the created row.
+	 *
+	 * @param record - Organization to insert.
+	 * @returns An Effect containing the inserted Organization.
+	 */
 	createOrganization(
 		record: Organization
 	): Effect.Effect<Organization, OrganizationInfrastructureError> {
@@ -102,6 +160,12 @@ class OrganizationRepoLive implements OrganizationRepo {
 		);
 	}
 
+	/**
+	 * Updates an Organization when its identifier matches an existing row.
+	 *
+	 * @param record - Organization state whose mutable fields will be persisted.
+	 * @returns An Effect containing the updated Organization, or `Option.none()` when absent.
+	 */
 	updateOrganization(
 		record: Organization
 	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError> {
@@ -116,6 +180,12 @@ class OrganizationRepoLive implements OrganizationRepo {
 		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
 	}
 
+	/**
+	 * Deletes an Organization and rejects Organizations with dependent records.
+	 *
+	 * @param id - Organization to delete.
+	 * @returns An Effect containing the deleted Organization, or `Option.none()` when absent.
+	 */
 	deleteOrganization(
 		id: OrgID
 	): Effect.Effect<Option.Option<Organization>, OrganizationDeleteRepositoryError> {
