@@ -92,9 +92,9 @@ describe("LedgerAccountCategoryRoutes", () => {
 			);
 		});
 
-		it("should handle internal server error", async () => {
+		it("should return a generic internal server error when the database is unavailable", async () => {
 			mockLedgerAccountCategoryService.listLedgerAccountCategories.mockRejectedValue(
-				new Error("Internal Server Error")
+				new Error("connect ECONNREFUSED")
 			);
 
 			const rs = await server.inject({
@@ -106,6 +106,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.statusCode).toBe(500);
 			const response: InternalServerErrorResponse = rs.json();
 			expect(response.status).toEqual(500);
+			expect(response).not.toHaveProperty("status", 503);
 		});
 
 		it("should handle bad request error", async () => {
@@ -134,6 +135,25 @@ describe("LedgerAccountCategoryRoutes", () => {
 	});
 
 	describe("Get Ledger Account Category", () => {
+		it("should return a generic internal server error for unexpected response conversion", async () => {
+			const conversionFailure = new Error("unexpected conversion failure");
+			mockLedgerAccountCategoryService.getLedgerAccountCategory.mockResolvedValue({
+				toResponse: () => {
+					throw conversionFailure;
+				},
+			} as never);
+
+			const rs = await server.inject({
+				method: "GET",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(500);
+			const response: InternalServerErrorResponse = rs.json();
+			expect(response.status).toBe(500);
+		});
+
 		it("should return a category", async () => {
 			mockLedgerAccountCategoryService.getLedgerAccountCategory.mockResolvedValue(mockCategory);
 

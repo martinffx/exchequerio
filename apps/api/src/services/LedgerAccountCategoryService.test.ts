@@ -155,8 +155,62 @@ describe("LedgerAccountCategoryService", () => {
 			);
 
 			expect(result).toEqual(updatedCategory);
-			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalled();
-			expect(mockRepo.upsertLedgerAccountCategory).toHaveBeenCalled();
+			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalledBefore(
+				mockRepo.upsertLedgerAccountCategory
+			);
+			expect(mockRepo.upsertLedgerAccountCategory).toHaveBeenCalledWith(
+				expect.objectContaining({
+					id: categoryId,
+					name: "Updated Assets",
+					description: "Updated description",
+				})
+			);
+		});
+
+		it("should allow an update to recreate a category deleted after the existence read", async () => {
+			const request = { name: "Recreated", normalBalance: "credit" as const };
+			let stored: LedgerAccountCategoryEntity | undefined = new LedgerAccountCategoryEntity({
+				id: categoryId,
+				ledgerId,
+				name: "Existing",
+				normalBalance: "debit",
+				created: new Date(),
+				updated: new Date(),
+			});
+			mockRepo.getLedgerAccountCategory.mockImplementation(async () => {
+				const existing = stored as LedgerAccountCategoryEntity;
+				stored = undefined;
+				return existing;
+			});
+			mockRepo.upsertLedgerAccountCategory.mockImplementation(async entity => {
+				stored = entity;
+				return entity;
+			});
+
+			const result = await service.updateLedgerAccountCategory(
+				ledgerId.toString(),
+				categoryId.toString(),
+				request
+			);
+
+			expect(result).toBe(stored);
+			expect(result.name).toBe("Recreated");
+			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalledBefore(
+				mockRepo.upsertLedgerAccountCategory
+			);
+		});
+
+		it("should propagate the original upsert failure object", async () => {
+			const failure = new Error("database unavailable");
+			mockRepo.getLedgerAccountCategory.mockResolvedValue({} as LedgerAccountCategoryEntity);
+			mockRepo.upsertLedgerAccountCategory.mockRejectedValue(failure);
+
+			await expect(
+				service.updateLedgerAccountCategory(ledgerId.toString(), categoryId.toString(), {
+					name: "Assets",
+					normalBalance: "debit",
+				})
+			).rejects.toBe(failure);
 		});
 
 		it("should propagate NotFoundError if category does not exist", async () => {

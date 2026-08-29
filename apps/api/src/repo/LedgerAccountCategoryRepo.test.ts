@@ -12,9 +12,11 @@ import {
 	createOrganizationEntity,
 	getRepos,
 } from "./fixtures";
+import { LedgerAccountCategoriesTable } from "./schema";
 
 describe("LedgerAccountCategoryRepo", () => {
-	const { organizationRepo, ledgerRepo, ledgerAccountRepo, ledgerAccountCategoryRepo } = getRepos();
+	const { db, organizationRepo, ledgerRepo, ledgerAccountRepo, ledgerAccountCategoryRepo } =
+		getRepos();
 
 	// Test IDs - shared across test suite
 	let testOrgId: OrgID;
@@ -44,6 +46,11 @@ describe("LedgerAccountCategoryRepo", () => {
 		// Clean up test data
 		await ledgerRepo.deleteLedger(testOrgId, testLedgerId);
 		await organizationRepo.deleteOrganization(testOrgId);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.useRealTimers();
 	});
 
 	describe("listLedgerAccountCategories", () => {
@@ -129,6 +136,51 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("getLedgerAccountCategory", () => {
+		it("should treat malformed stored metadata as absent", async () => {
+			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
+			await db.insert(LedgerAccountCategoriesTable).values({
+				id: categoryId.toString(),
+				ledgerId: testLedgerId.toString(),
+				name: "Malformed metadata",
+				normalBalance: "debit",
+				metadata: "{not-json",
+			});
+
+			const category = await ledgerAccountCategoryRepo.getLedgerAccountCategory(
+				testLedgerId,
+				categoryId
+			);
+
+			expect(category.metadata).toBeUndefined();
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+		});
+
+		it("should propagate an unexpected row-decoding failure unchanged", async () => {
+			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
+			const entity = new LedgerAccountCategoryEntity({
+				id: categoryId,
+				ledgerId: testLedgerId,
+				name: "Decode failure",
+				normalBalance: "debit",
+				created: new Date(),
+				updated: new Date(),
+			});
+			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity);
+			const failure = new Error("unexpected decode failure");
+			const fromRecord = vi
+				.spyOn(LedgerAccountCategoryEntity, "fromRecord")
+				.mockImplementationOnce(() => {
+					throw failure;
+				});
+
+			await expect(
+				ledgerAccountCategoryRepo.getLedgerAccountCategory(testLedgerId, categoryId)
+			).rejects.toBe(failure);
+
+			fromRecord.mockRestore();
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+		});
+
 		it("should throw error when category not found", async () => {
 			const nonExistentId = new TypeID("lac") as LedgerAccountCategoryID;
 			await expect(
@@ -191,6 +243,31 @@ describe("LedgerAccountCategoryRepo", () => {
 
 	describe("upsertLedgerAccountCategory", () => {
 		describe("create (insert) operations", () => {
+			it("should let PostgreSQL set created and the application set updated", async () => {
+				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
+				const suppliedTime = new Date("2000-01-01T00:00:00.000Z");
+				const applicationTime = new Date("2001-01-01T00:00:00.000Z");
+				vi.useFakeTimers({ toFake: ["Date"] });
+				vi.setSystemTime(applicationTime);
+				const created = await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
+					new LedgerAccountCategoryEntity({
+						id: categoryId,
+						ledgerId: testLedgerId,
+						name: "Timestamp ownership",
+						normalBalance: "debit",
+						created: suppliedTime,
+						updated: suppliedTime,
+					})
+				);
+				vi.useRealTimers();
+
+				expect(created.created).not.toEqual(suppliedTime);
+				expect(created.created).not.toEqual(applicationTime);
+				expect(created.updated).toEqual(applicationTime);
+
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			});
+
 			it("should create new category with valid data", async () => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 				const entity = new LedgerAccountCategoryEntity({
@@ -273,6 +350,31 @@ describe("LedgerAccountCategoryRepo", () => {
 		});
 
 		describe("update operations", () => {
+			it("should preserve created time and apply the last replacement", async () => {
+				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
+				const first = await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
+					new LedgerAccountCategoryEntity({
+						id: categoryId,
+						ledgerId: testLedgerId,
+						name: "First writer",
+						normalBalance: "debit",
+						created: new Date("2000-01-01T00:00:00.000Z"),
+						updated: new Date("2000-01-01T00:00:00.000Z"),
+					})
+				);
+
+				await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
+					new LedgerAccountCategoryEntity({ ...first, name: "Second writer" })
+				);
+				const last = await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
+					new LedgerAccountCategoryEntity({ ...first, name: "Last writer" })
+				);
+
+				expect(last.name).toBe("Last writer");
+				expect(last.created).toEqual(first.created);
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			});
+
 			it("should update mutable fields (name, description, metadata)", async () => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 				const entity = new LedgerAccountCategoryEntity({
@@ -461,7 +563,7 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("linkAccountToCategory", () => {
-		it("should link account to category successfully", async () => {
+		it("should read the category before linking an account", async () => {
 			testCounter++;
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
@@ -485,10 +587,16 @@ describe("LedgerAccountCategoryRepo", () => {
 			});
 			await ledgerAccountRepo.upsertLedgerAccount(accountEntity);
 
+			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
+			const select = vi.spyOn(db, "select");
+			const insert = vi.spyOn(db, "insert");
 			await ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId);
 
-			// Verify link was created (no error means success)
-			expect(true).toBe(true);
+			expect(getCategory).toHaveBeenCalledOnce();
+			expect(getCategory).toHaveBeenCalledWith(testLedgerId, categoryId);
+			expect(select).toHaveBeenCalledOnce();
+			expect(select).toHaveBeenCalledBefore(insert);
+			getCategory.mockRestore();
 
 			// Cleanup
 			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(testLedgerId, categoryId, accountId);
@@ -568,6 +676,20 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
 		});
 
+		it("should report the category first when both category and account are missing", async () => {
+			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
+			const accountId = new TypeID("lat") as LedgerAccountID;
+			const getAccount = vi.spyOn(ledgerAccountRepo, "getLedgerAccount");
+			const insert = vi.spyOn(db, "insert");
+
+			await expect(
+				ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId)
+			).rejects.toThrow(`Category not found: ${categoryId.toString()}`);
+
+			expect(getAccount).not.toHaveBeenCalled();
+			expect(insert).not.toHaveBeenCalled();
+		});
+
 		it("should throw error when account doesn't exist", async () => {
 			testCounter++;
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
@@ -638,7 +760,7 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("unlinkAccountFromCategory", () => {
-		it("should unlink account from category successfully", async () => {
+		it("should read only the category before unlinking an account", async () => {
 			testCounter++;
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
@@ -665,7 +787,13 @@ describe("LedgerAccountCategoryRepo", () => {
 			// Link them
 			await ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId);
 
+			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
+			const deleteRows = vi.spyOn(db, "delete");
 			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(testLedgerId, categoryId, accountId);
+			expect(getCategory).toHaveBeenCalledOnce();
+			expect(getCategory).toHaveBeenCalledWith(testLedgerId, categoryId);
+			expect(getCategory).toHaveBeenCalledBefore(deleteRows);
+			getCategory.mockRestore();
 
 			// Try to unlink again - should fail
 			await expect(
@@ -763,7 +891,7 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("linkCategoryToParent", () => {
-		it("should link category to parent successfully", async () => {
+		it("should read the child then parent before linking categories", async () => {
 			testCounter++;
 			const parentCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
@@ -789,14 +917,20 @@ describe("LedgerAccountCategoryRepo", () => {
 				})
 			);
 
+			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
+			const insert = vi.spyOn(db, "insert");
 			await ledgerAccountCategoryRepo.linkCategoryToParent(
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
 			);
 
-			// Verify link was created (no error means success)
-			expect(true).toBe(true);
+			expect(getCategory.mock.calls).toEqual([
+				[testLedgerId, childCategoryId],
+				[testLedgerId, parentCategoryId],
+			]);
+			expect(getCategory.mock.invocationCallOrder[1]).toBeLessThan(insert.mock.invocationCallOrder[0]);
+			getCategory.mockRestore();
 
 			// Cleanup
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
@@ -949,13 +1083,26 @@ describe("LedgerAccountCategoryRepo", () => {
 				})
 			);
 
+			const insert = vi.spyOn(db, "insert");
 			await expect(
 				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, childCategoryId, childCategoryId)
 			).rejects.toThrow("Category cannot be its own parent");
+			expect(insert).not.toHaveBeenCalled();
 
 			// Cleanup
 			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
 			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+		});
+
+		it("should report not found before self-link conflict for a missing category", async () => {
+			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
+			const insert = vi.spyOn(db, "insert");
+
+			await expect(
+				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, categoryId, categoryId)
+			).rejects.toThrow(`Category not found: ${categoryId.toString()}`);
+
+			expect(insert).not.toHaveBeenCalled();
 		});
 
 		it("should throw error when child category doesn't exist", async () => {
@@ -992,6 +1139,18 @@ describe("LedgerAccountCategoryRepo", () => {
 			// Cleanup
 			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
 			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+		});
+
+		it("should report the child first when both child and parent are missing", async () => {
+			const childCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
+			const parentCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
+			const insert = vi.spyOn(db, "insert");
+
+			await expect(
+				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, childCategoryId, parentCategoryId)
+			).rejects.toThrow(`Category not found: ${childCategoryId.toString()}`);
+
+			expect(insert).not.toHaveBeenCalled();
 		});
 
 		it("should throw error when parent category doesn't exist", async () => {
@@ -1069,7 +1228,7 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("unlinkCategoryFromParent", () => {
-		it("should unlink category from parent successfully", async () => {
+		it("should read only the child before unlinking categories", async () => {
 			testCounter++;
 			const parentCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
@@ -1102,11 +1261,17 @@ describe("LedgerAccountCategoryRepo", () => {
 				parentCategoryId
 			);
 
+			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
+			const deleteRows = vi.spyOn(db, "delete");
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
 			);
+			expect(getCategory).toHaveBeenCalledOnce();
+			expect(getCategory).toHaveBeenCalledWith(testLedgerId, childCategoryId);
+			expect(getCategory).toHaveBeenCalledBefore(deleteRows);
+			getCategory.mockRestore();
 
 			// Try to unlink again - should fail
 			await expect(
