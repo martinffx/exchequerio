@@ -33,11 +33,7 @@ requests and database state.
   infrastructure.
 - Moving or renaming the existing Category files.
 
-Organization-scoped queries are a requested behavior change. Before this migration starts,
-`docs/specs/2026-08-29-categories-organization-scoping/design.md` and its `plan.json` must exist and
-be approved. This migration then lands first against the recorded Ledger-only baseline. The
-Organization-scoping implementation follows in a separate change set. If that ordering changes,
-this migration must be rebaselined and replanned before implementation.
+Organization-scoped Category queries remain a separate future change.
 
 ## User stories
 
@@ -82,7 +78,7 @@ use the server's managed Effect runtime.
 As an API maintainer, I want the migration diff to contain no product, tenancy, schema,
 concurrency, or operational-policy changes.
 
-- Organization scoping receives the named prerequisite spec, plan, and subsequent change set.
+- Organization scoping remains a separate future change.
 - OCC, real balances, cycle detection, stricter relationship validation, status-code modernization,
   and availability remapping do not enter this migration.
 - Any newly discovered deviation stops implementation until it is split out.
@@ -101,8 +97,6 @@ concurrency, or operational-policy changes.
 - The work uses branch `feat/categories-effect` and worktree
   `/Users/martinrichards/code/exchequerio/.worktrees/categories-effect`.
 - The recorded baseline commit is `47779c46418da3558f8f20f61e1edee20de6b72a`.
-- Implementation is blocked until the Organization-scoping design and plan named above are
-  approved.
 
 ## Context
 
@@ -344,8 +338,3 @@ Stricter decoding and real balances require separate product changes.
 The migration retains generic database `500` responses, last-writer-wins PUTs, the delete/recreate
 race, longer Category cycles, cross-Ledger Account links, Ledger-only Category scoping,
 unconstrained pagination values, and placeholder balances.
-
-## Execution prerequisite
-
-The migration is blocked until the named Organization-scoping design and plan are approved. No
-other design question remains within the behavior-preserving Effect migration.

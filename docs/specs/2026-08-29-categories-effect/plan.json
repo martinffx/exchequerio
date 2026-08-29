@@ -5,38 +5,12 @@
 	"phases": [
 		{
 			"id": "P1",
-			"name": "Prerequisite and baseline",
+			"name": "Baseline characterization",
 			"tasks": [
-				{
-					"id": "T1",
-					"name": "Verify the Organization-scoping prerequisite",
-					"depends_on": [],
-					"inputs": [
-						"docs/specs/2026-08-29-categories-organization-scoping/design.md",
-						"docs/specs/2026-08-29-categories-organization-scoping/plan.json",
-						"Recorded Category baseline commit 47779c46418da3558f8f20f61e1edee20de6b72a"
-					],
-					"description": "Block implementation until the separate Organization-scoping design and plan exist and are approved. Confirm that the Effect migration lands first against the recorded Ledger-only baseline and that Organization-scoping code follows in its own change set. If the approved ordering or Category method signatures differ, stop and rebaseline this migration before changing production code.",
-					"files": {
-						"create": [],
-						"modify": []
-					},
-					"validation": {
-						"tests": [
-							"Both named Organization-scoping artifacts exist and form an approved, decision-complete plan.",
-							"The approved ordering keeps Organization-scoping implementation outside this migration change set."
-						],
-						"acceptance": [
-							"T2 cannot start while either prerequisite artifact is missing or unapproved.",
-							"The Category baseline and internal signatures remain valid for a migration-first ordering.",
-							"No Organization-scoping code is added by this plan."
-						]
-					}
-				},
 				{
 					"id": "T2",
 					"name": "Characterize uncovered legacy behavior",
-					"depends_on": ["T1"],
+					"depends_on": [],
 					"inputs": [
 						"Approved behavior baseline in design.md",
 						"Current Promise repository, service, routes, and PostgreSQL test fixtures",
@@ -133,8 +107,7 @@
 					"depends_on": ["T3"],
 					"inputs": [
 						"Compile-green Category Effect cutover",
-						"Baseline commit 47779c46418da3558f8f20f61e1edee20de6b72a",
-						"Approved migration and Organization-scoping ordering"
+						"Baseline commit 47779c46418da3558f8f20f61e1edee20de6b72a"
 					],
 					"description": "Run the full repository CI once after the focused suites have passed. Compare the final diff with the recorded baseline and stop if it contains any unplanned HTTP, domain, error, SQL, transaction, concurrency, identifier, timestamp, tenancy, or operational change.",
 					"files": {
