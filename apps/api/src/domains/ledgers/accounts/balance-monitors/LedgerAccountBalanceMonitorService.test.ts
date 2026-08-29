@@ -182,17 +182,22 @@ describe("LedgerAccountBalanceMonitorService", () => {
 		}
 	);
 
-	it.each(["create", "update"] as const)(
-		"keeps malformed body Account IDs on the sanitized internal path for %s",
-		async operation => {
+	it.each([
+		["malformed", "create", "not-an-account"],
+		["malformed", "update", "not-an-account"],
+		["canonical wrong-prefix", "create", "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4"],
+		["canonical wrong-prefix", "update", "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4"],
+	] as const)(
+		"keeps %s body Account IDs on the sanitized internal path for %s",
+		async (_case, operation, invalidAccountId) => {
 			const repo = repository();
-			const malformed = { ...request, accountId: "not-an-account" };
+			const invalid = { ...request, accountId: invalidAccountId };
 
 			const error = await runService(repo, service =>
 				Effect.flip(
 					operation === "create"
-						? service.createLedgerAccountBalanceMonitor(malformed)
-						: service.updateLedgerAccountBalanceMonitor(monitorId.toString(), malformed)
+						? service.createLedgerAccountBalanceMonitor(invalid)
+						: service.updateLedgerAccountBalanceMonitor(monitorId.toString(), invalid)
 				)
 			);
 

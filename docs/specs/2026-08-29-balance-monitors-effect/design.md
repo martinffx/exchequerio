@@ -5,7 +5,8 @@
 The Ledger Account Balance Monitor resource still uses the API's legacy Promise service,
 repository plugin, route handler, and entity wiring. Organizations, Ledgers, Accounts, and
 Transactions already run through the server's managed Effect runtime. Balance Monitors must join
-that runtime without changing their observable behavior.
+that runtime without changing their observable behavior except for the approved request Account ID
+prefix validation described below.
 
 API clients currently use five CRUD endpoints. API maintainers support the resource through a
 service that delegates to a Drizzle repository. The current implementation is incomplete as a
@@ -13,8 +14,8 @@ Balance Monitor product, but this migration does not complete it. It changes the
 and code ownership only.
 
 Success means the complete Balance Monitor CRUD slice runs through Effect, follows the integrated
-resource structure, removes its legacy Promise wiring, and passes characterization tests without a
-behavioral deviation.
+resource structure, removes its legacy Promise wiring, and passes characterization tests with only
+the approved Account ID prefix deviation.
 
 ## Scope
 
@@ -28,7 +29,7 @@ behavioral deviation.
 - Remove the superseded Balance Monitor Promise service, repository, entity, route, plugin wiring,
   fixtures, tests, exports, and snapshots.
 - Preserve the existing HTTP, domain, error, persistence, transaction, concurrency, identifier,
-  timestamp, and operational behavior.
+  timestamp, and operational behavior except for strict request Account ID prefix validation.
 
 ### Out of scope
 
@@ -39,8 +40,8 @@ behavioral deviation.
 - Returning live balances or changing the placeholder response.
 - Adding active-state operations, optimistic locking, retries, idempotency, or explicit
   transactions.
-- Changing pagination constraints, success status codes, error statuses, public schemas, database
-  schemas, indexes, or migration history.
+- Changing pagination constraints, success status codes, public schemas, database schemas, indexes,
+  migration history, or error statuses beyond the approved Account ID validation deviation.
 - Refactoring shared schemas, runtime infrastructure, or adjacent resources beyond the wiring
   required to replace the Balance Monitor slice.
 
@@ -57,7 +58,8 @@ As an existing API client, I want to use every Balance Monitor endpoint without 
 response handling.
 
 - Given a request accepted before the migration, when the client sends the same request after the
-  migration, the route accepts it under the same authentication and permission rules.
+  migration, the route accepts it under the same authentication and permission rules unless the
+  body Account ID has a canonical non-`lat` prefix.
 - Paths, methods, request bodies, pagination defaults, response bodies, status codes, headers,
   operation IDs, tags, and advertised error schemas remain unchanged.
 - Create and delete continue to return `200`.
@@ -70,7 +72,8 @@ migration.
 
 - The repository runs the same SQL predicates, ordering, limits, offsets, assignments, and
   `RETURNING` operations.
-- Missing get, update, and delete operations return the same `404` behavior.
+- Missing get and delete operations return the same `404` behavior. Missing updates return `404`
+  when the body Account ID is valid.
 - PostgreSQL and unexpected failures return a sanitized `500` response.
 - Mutations remain single SQL statements with last-writer-wins concurrency.
 - The migration adds no transaction boundary, lock, retry, or idempotency mechanism.
@@ -141,9 +144,10 @@ not evaluate balances, track crossings, rearm monitors, or send webhooks.
 
 ### Current domain and persistence behavior
 
-Creation generates an `lbm` TypeID and parses the request Account ID as a `lat` TypeID. The internal
-name is the description or `"Balance Monitor"`. Creation and update force the stored threshold to
-`0` and active state to `true`.
+Creation generates an `lbm` TypeID. The legacy parser treated the request Account ID as a `lat`
+TypeID at compile time but accepted any canonical TypeID prefix at runtime. The migrated service
+requires the `lat` prefix. The internal name is the description or `"Balance Monitor"`. Creation and
+update force the stored threshold to `0` and active state to `true`.
 
 The table stores metadata as JSON text. Reading malformed JSON silently produces absent metadata.
 Update passes `undefined` for an omitted description or metadata value, so Drizzle preserves that
@@ -176,25 +180,25 @@ Monitors.
 | Concern               | Existing solution                                                     | Decision | Current requirement                                                |
 | --------------------- | --------------------------------------------------------------------- | -------- | ------------------------------------------------------------------ |
 | References            | Implemented Organizations and Transactions slices                     | reuse    | Follow proven CRUD and integrated runtime patterns                 |
-| HTTP surface          | Five nested Fastify routes and current TypeBox contracts              | modify   | Replace execution and ownership without changing HTTP behavior     |
+| HTTP surface          | Five nested Fastify routes and current TypeBox contracts              | modify   | Preserve the surface except for approved validation precedence     |
 | Path scope            | Parent Ledger and Account parameters are ignored                      | reuse    | Preserve current lookup and tenancy behavior                       |
-| Request behavior      | Body Account ID, optional description, alert conditions, and metadata | reuse    | Preserve accepted input and ignored alert conditions               |
+| Request behavior      | Body Account ID, optional description, alert conditions, and metadata | modify   | Require a `lat` Account ID and keep alert conditions ignored       |
 | Domain construction   | Legacy entity derives name, IDs, threshold, and active state          | modify   | Move the same transformations into the resource domain model       |
 | Response              | Empty conditions, zero balances, lock version zero                    | reuse    | Preserve the current JSON representation                           |
 | Alert evaluation      | No evaluator, rearm state, or webhook delivery                        | reuse    | Keep product completion outside the migration                      |
 | Persistence           | Existing Drizzle table and CRUD statements                            | modify   | Return Effects while preserving SQL and row conversion             |
 | Transactions          | One SQL statement per mutation                                        | reuse    | Add no transaction boundary                                        |
 | Concurrency           | Last writer wins                                                      | reuse    | Add no lock, retry, or idempotency mechanism                       |
-| Identifiers           | Shared TypeID types, parsers, and generators                          | reuse    | Preserve prefixes, creation, parsing points, and failure statuses  |
+| Identifiers           | Shared TypeID types, parsers, and generators                          | reuse    | Enforce the request Account ID prefix through the shared parser    |
 | Timestamps            | PostgreSQL `created` and application `updated`                        | modify   | Express application time through Effect without changing ownership |
-| Errors                | Shared HTTP errors and global Fastify handler                         | modify   | Carry expected failures through Effect with the same public result |
+| Errors                | Shared HTTP errors and global Fastify handler                         | modify   | Preserve results except for approved validation precedence         |
 | Runtime               | One server ManagedRuntime and live database Layer                     | modify   | Provide the new repository and service Layers                      |
 | Resource layout       | Legacy route, service, repository, and entity directories             | modify   | Replace them with the approved integrated domain slice             |
 | Legacy wiring         | RepoPlugin and ServicePlugin registrations                            | delete   | No Promise adapter remains for the migrated resource               |
 | Effect capabilities   | Resource repository tag, service tag, and composed Layer              | new      | The complete resource must run through the managed runtime         |
 | Resource errors       | Typed not-found and internal persistence failures                     | new      | Effect must retain current `404` and sanitized `500` semantics     |
 | Tests                 | Route snapshots, service stubs, and PostgreSQL repository tests       | modify   | Preserve characterization and test changed boundaries              |
-| Behavioral deviations | Product and contract changes listed out of scope                      | delete   | The migration contains no behavioral deviation                     |
+| Behavioral deviations | Legacy parser accepted canonical IDs with any prefix                  | modify   | Require `lat` and return sanitized `500` before persistence        |
 
 ## Architecture
 
@@ -420,9 +424,17 @@ directories and plugin-oriented exports. It does not match the approved migratio
 - The slice reuses existing shared pagination, metadata, and balance TypeBox definitions rather
   than extracting new common infrastructure.
 
+### Approved deviation
+
+Create and update require the body Account ID to use the `lat` TypeID prefix. A syntactically valid
+TypeID with another prefix fails before persistence and returns the same sanitized `500` response
+as a malformed Account ID. On update, this validation takes precedence over checking whether the
+Balance Monitor exists, so a missing monitor with a wrong-prefix body Account ID returns `500`
+instead of the legacy `404`.
+
 ## Open questions
 
-None. The migration contains no approved behavioral deviation.
+None.
 
 ## Implementation plan draft
 
@@ -535,9 +547,10 @@ types. List forwards pagination. Get, update, and delete parse only the Balance 
 generates the existing `lbm` TypeID; create and update parse the request Account ID and sample
 application time through Effect before domain construction. Convert repository absence to the
 resource not-found error and otherwise preserve repository failures. Keep malformed request Account
-IDs on the sanitized `500` path, and do not consult Account, Ledger, or Transaction services. Add
-only the service tag and Layer needed by the managed runtime; do not add an ID service, interface
-plus implementation pair, retry, or other orchestration.
+IDs and canonical non-`lat` Account IDs on the sanitized `500` path before persistence, and do not
+consult Account, Ledger, or Transaction services. Add only the service tag and Layer needed by the
+managed runtime; do not add an ID service, interface plus implementation pair, retry, or other
+orchestration.
 
 **Files:**
 
@@ -550,9 +563,12 @@ plus implementation pair, retry, or other orchestration.
   repository SQL tests.
 - Controlled time tests prove create and update pass application time to the domain model, while
   creation generates an `lbm` ID and all request Account IDs are parsed as `lat` IDs.
-- Missing get, update, and delete results become the same public `404` error behavior.
-- Repository failures propagate unchanged, and a malformed body Account ID remains a sanitized
-  internal failure rather than a new `400`.
+- Missing get and delete results become the same public `404` error behavior. Missing updates do so
+  when the body Account ID is valid.
+- Repository failures propagate unchanged. A malformed or canonical non-`lat` body Account ID
+  remains a sanitized internal failure rather than a new `400` and prevents repository delegation.
+- For the approved deviation, Account ID validation takes precedence over missing-monitor
+  classification during update.
 - The service error channels contain only errors the existing global HTTP handler can map.
 
 ### Phase 4: HTTP boundary
@@ -591,8 +607,9 @@ harness, or new plugin override hook.
 - Route tests cover every endpoint's success response, runtime delegation, matching service inputs,
   list defaults and explicit pagination, existing snapshots, and exact create/delete `200`
   behavior.
-- Focused tests cover missing get, update, and delete as `404`; representative tests retain shared
-  `401`, `403`, `400`, and sanitized `500` behavior without repeating those cases for every route.
+- Focused tests cover missing get and delete as `404`, plus missing update with a valid body Account
+  ID as `404`. Representative tests retain shared `401`, `403`, `400`, and sanitized `500` behavior
+  without repeating those cases for every route.
 - Route schemas retain every advertised error response, including `409`, `429`, and `503`, without
   manufacturing live Balance Monitor failures solely to exercise the global error handler.
 - Paths, parent-parameter behavior, headers, operation IDs, tags, schemas, and deterministic JSON
@@ -723,4 +740,5 @@ timestamp, or operational behavior.
 - The final diff contains no database schema or migration changes, product completion, parent
   scoping, new retry/locking/transaction/idempotency behavior, duplicated validation, handwritten
   mirror types, speculative abstractions, or unrelated cleanup.
-- Every behavior-preservation item in US-1 through US-4 is satisfied with no approved deviation.
+- Every behavior-preservation item in US-1 through US-4 is satisfied apart from the approved strict
+  request Account ID prefix validation.

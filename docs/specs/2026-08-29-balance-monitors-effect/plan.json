@@ -1,7 +1,7 @@
 {
 	"feature": "balance-monitors-effect",
 	"spec": "docs/specs/2026-08-29-balance-monitors-effect/design.md",
-	"goal": "Migrate the complete Ledger Account Balance Monitor CRUD slice to Effect without changing observable behavior.",
+	"goal": "Migrate the complete Ledger Account Balance Monitor CRUD slice to Effect while explicitly requiring lat-prefixed request Account IDs.",
 	"phases": [
 		{
 			"id": "P1",
@@ -92,7 +92,7 @@
 						"Existing TypeID aliases, newLedgerAccountBalanceMonitorID, and the shared Effect-based ID parser",
 						"The installed Effect v4 clock, service, Layer, and typed-error conventions used by integrated Ledger slices"
 					],
-					"description": "Create LedgerAccountBalanceMonitorService with the five existing use-case names and Effect return types. Forward list pagination. Parse only the Balance Monitor ID for get, update, and delete. Generate the existing lbm TypeID for create. Parse the request Account ID and sample application time through Effect for create and update before domain construction. Convert repository absence to the resource not-found error and preserve repository failures. Keep malformed request Account IDs on the sanitized 500 path. Do not consult Account, Ledger, or Transaction services or add an ID service, interface and implementation pair, retry, or unrelated orchestration.",
+					"description": "Create LedgerAccountBalanceMonitorService with the five existing use-case names and Effect return types. Forward list pagination. Parse only the Balance Monitor ID for get, update, and delete. Generate the existing lbm TypeID for create. Parse the request Account ID and sample application time through Effect for create and update before domain construction. Convert repository absence to the resource not-found error and preserve repository failures. Keep malformed and canonical non-lat request Account IDs on the sanitized 500 path before persistence. This strict prefix check is the approved behavioral deviation and takes precedence over missing-monitor classification during update. Do not consult Account, Ledger, or Transaction services or add an ID service, interface and implementation pair, retry, or unrelated orchestration.",
 					"files": {
 						"create": [
 							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService.ts",
@@ -105,13 +105,16 @@
 							"Effect repository stubs prove list pagination and all CRUD delegation without duplicating SQL tests",
 							"Controlled time tests prove create and update pass application time to the domain model",
 							"Creation generates an lbm ID and request Account IDs are parsed as lat IDs",
-							"Missing get, update, and delete results become the existing public 404 error behavior",
-							"Repository failures propagate unchanged and malformed body Account IDs remain sanitized internal failures"
+							"Missing get and delete results become the existing public 404 error behavior, as do missing updates with a valid body Account ID",
+							"Repository failures propagate unchanged and malformed body Account IDs remain sanitized internal failures",
+							"Canonical non-lat body Account IDs fail before repository delegation for create and update",
+							"Strict Account ID validation takes precedence over missing-monitor classification during update"
 						],
 						"acceptance": [
 							"All five use cases return Effects",
 							"The service error channels contain only errors the existing global HTTP handler can map",
-							"No parent-resource dependency, retry, idempotency, or new identifier abstraction is introduced"
+							"No parent-resource dependency, retry, idempotency, or new identifier abstraction is introduced",
+							"The only approved behavioral deviation is strict lat prefix validation for request Account IDs"
 						]
 					}
 				}
@@ -144,7 +147,7 @@
 							"Every endpoint preserves its success response, runtime delegation, matching service inputs, and snapshots",
 							"List defaults to offset 0 and limit 20 and accepts explicit pagination",
 							"Create and delete return exactly 200",
-							"Missing get, update, and delete return 404",
+							"Missing get and delete return 404, as does missing update with a valid body Account ID",
 							"Representative tests preserve shared 401, 403, 400, and sanitized 500 behavior"
 						],
 						"acceptance": [
@@ -267,7 +270,7 @@
 						"acceptance": [
 							"Existing observable characterization coverage and snapshots remain present and are not weakened",
 							"The final diff contains no database schema or migration changes, product completion, parent scoping, new retry, locking, transaction, or idempotency behavior, duplicate validation, handwritten mirror types, speculative abstractions, or unrelated cleanup",
-							"Every behavior-preservation item in US-1 through US-4 is satisfied with no approved deviation"
+							"Every behavior-preservation item in US-1 through US-4 is satisfied apart from the approved strict request Account ID prefix validation"
 						]
 					}
 				}
