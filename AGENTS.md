@@ -13,11 +13,11 @@ Read only the documents relevant to the work:
 
 ## Repository map
 
-| Scope | Source | Required references |
-| --- | --- | --- |
-| Ledger API | `apps/api/` | [Architecture](./apps/api/docs/standards/architecture.md), [coding standards](./apps/api/docs/standards/coding.md), [ERD](./apps/api/docs/product/erd.md), and the relevant document under [`apps/api/docs/spec`](./apps/api/docs/spec/) |
-| Customer portal | `apps/web/` | [Architecture](./apps/web/docs/standards/architecture.md) and [coding standards](./apps/web/docs/standards/coding.md) |
-| Documentation site | `apps/docs/` | [Content standards](./apps/docs/docs/standards/coding.md) and [CONTEXT.md](./CONTEXT.md) for all Ledger terminology |
+| Scope              | Source       | Required references                                                                                                                                                                                           |
+| ------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ledger API         | `apps/api/`  | [Shared standards](./docs/standards/README.md), [API addendum](./docs/standards/api.md), [ERD](./apps/api/docs/product/erd.md), and the relevant document under [`apps/api/docs/spec`](./apps/api/docs/spec/) |
+| Customer portal    | `apps/web/`  | [Shared standards](./docs/standards/README.md) and [web addendum](./docs/standards/web.md)                                                                                                                    |
+| Documentation site | `apps/docs/` | [Shared standards](./docs/standards/README.md), [documentation addendum](./docs/standards/documentation.md), and [CONTEXT.md](./CONTEXT.md) for all Ledger terminology                                        |
 
 ## Agent workflow
 
@@ -48,7 +48,7 @@ Skills provide task guidance; they do not prove that a dependency is installed. 
 - API dependencies flow from Routes to Services to Repositories and Entities to PostgreSQL. Keep transport validation in Routes, business orchestration in Services, persistence in Repositories, and transformations or invariants in Entities.
 - Treat domain purity as a behavioral boundary, not an import ban. Following the Organization model, entities may own `fromRequest`, `fromRow`, and `toRow` with Effect-based decoding and type-only transport or row contracts; they must not perform I/O. Repositories own SQL, transactions, and database error translation.
 - Web work follows React Router framework conventions. Keep route composition in `apps/web/app/routes`, reusable UI in `apps/web/app/components`, and shared helpers in `apps/web/app/lib`.
-- Public documentation uses Docusaurus under `apps/docs`; follow its content standard rather than duplicating writing conventions here.
+- Public documentation uses Docusaurus under `apps/docs`; follow the [documentation addendum](./docs/standards/documentation.md) rather than duplicating writing conventions here.
 - Use stub-driven TDD for changed behavior and keep tests at the narrowest useful layer. Avoid repeating the same contract across layers. API integration tests use PostgreSQL.
 
 ## Commands

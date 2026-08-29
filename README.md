@@ -151,9 +151,10 @@ pnpm run ci
 ## Documentation
 
 - [Getting Started](AGENTS.md) — Full development guide
-- [API Architecture](apps/api/docs/standards/architecture.md) — Backend design patterns and principles
-- [API Coding Standards](apps/api/docs/standards/coding.md) — Backend development
-- [Web Architecture](apps/web/docs/standards/architecture.md) — Frontend development
+- [Engineering Standards](docs/standards/README.md) — Shared standards and app addenda
+- [Ledger API Standards](docs/standards/api.md) — Backend architecture and development
+- [Customer Portal Standards](docs/standards/web.md) — Frontend architecture and development
+- [Documentation Standards](docs/standards/documentation.md) — Public content guidance
 
 ## Contributing
 

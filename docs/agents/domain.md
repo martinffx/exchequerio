@@ -12,13 +12,16 @@
 
 1. Read root `CONTEXT.md` when it exists.
 2. Read ADRs in `docs/adr/` that are relevant to the work.
-3. Proceed silently when these documents do not yet exist.
+3. Read the [engineering standards](../standards/README.md) for implementation work. Read the
+   [documentation addendum](../standards/documentation.md) when editing domain documentation.
+4. Proceed silently when these documents do not yet exist.
 
 ## Ownership
 
 - `CONTEXT.md` records domain language, distinctions, and business invariants for the Exchequer
   ledger domain.
 - ADRs record architectural decisions and trade-offs.
+- Engineering standards record implementation and documentation rules.
 - This file only tells agents how to locate and consume those documents.
 
 ## Creation

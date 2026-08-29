@@ -4,13 +4,14 @@
 
 The Transaction slice follows Routes → Service → Repository → PostgreSQL.
 
-- `TransactionRoutes` owns Fastify validation, permissions, status codes, and response mapping.
+- `TransactionRoutes` owns Fastify validation, permissions, status codes, and response handling.
 - `TransactionService` owns idempotency orchestration, server time, request limits, and retry selection.
 - `LedgerTransactionRepo` owns tenant-scoped SQL, PostgreSQL transactions, optimistic writes, Account
   counter updates, and application of database error translations defined by the Transaction error
   module.
-- `LedgerTransaction` and `LedgerTransactionEntry` own lifecycle transitions, balancing, metadata,
-  Amount validation, and counter effects without performing I/O.
+- `LedgerTransaction` and `LedgerTransactionEntry` own request, persistence, and response
+  transformations, lifecycle transitions, balancing, metadata, Amount validation, and counter effects
+  without performing I/O.
 - `TransactionIdemService` owns Valkey claim, completion, lookup, and compare-and-delete release
   operations.
 
