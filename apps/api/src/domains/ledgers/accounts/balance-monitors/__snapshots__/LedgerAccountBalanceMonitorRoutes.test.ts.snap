@@ -1,6 +1,82 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`LedgerAccountBalanceMonitorRoutes > GET / > should return a list of monitors 1`] = `
+exports[`LedgerAccountBalanceMonitorRoutes > creates with the existing 200 response 1`] = `
+{
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "alertCondition": [],
+  "balances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test balance monitor",
+  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "lockVersion": 0,
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes > gets through the Effect service and ignores parent path IDs 1`] = `
+{
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "alertCondition": [],
+  "balances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test balance monitor",
+  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "lockVersion": 0,
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes > lists through the Effect service with the existing defaults and response 1`] = `
 [
   {
     "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
@@ -40,83 +116,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > GET / > should return a list of mon
 ]
 `;
 
-exports[`LedgerAccountBalanceMonitorRoutes > GET /:ledgerAccountBalanceMonitorId > should return a monitor 1`] = `
-{
-  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
-  "alertCondition": [],
-  "balances": [
-    {
-      "amount": 0,
-      "balanceType": "pending",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "posted",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "availableBalance",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-  ],
-  "created": "2025-01-01T00:00:00.000Z",
-  "description": "Test balance monitor",
-  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "lockVersion": 0,
-  "updated": "2025-01-01T00:00:00.000Z",
-}
-`;
-
-exports[`LedgerAccountBalanceMonitorRoutes > POST / > should create a monitor 1`] = `
-{
-  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
-  "alertCondition": [],
-  "balances": [
-    {
-      "amount": 0,
-      "balanceType": "pending",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "posted",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "availableBalance",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-  ],
-  "created": "2025-01-01T00:00:00.000Z",
-  "description": "Test balance monitor",
-  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "lockVersion": 0,
-  "updated": "2025-01-01T00:00:00.000Z",
-}
-`;
-
-exports[`LedgerAccountBalanceMonitorRoutes > PUT /:ledgerAccountBalanceMonitorId > should update a monitor 1`] = `
+exports[`LedgerAccountBalanceMonitorRoutes > updates with the existing response and service inputs 1`] = `
 {
   "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "alertCondition": [],

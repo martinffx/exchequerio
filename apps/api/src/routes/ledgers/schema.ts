@@ -88,28 +88,6 @@ const Balances = Type.Array(Balance, {
 });
 type Balances = Static<typeof Balances>;
 
-const AlertOperator = Type.Union([
-	Type.Literal("="),
-	Type.Literal("<"),
-	Type.Literal(">"),
-	Type.Literal("<="),
-	Type.Literal(">="),
-	Type.Literal("!="),
-]);
-type AlertOperator = Static<typeof AlertOperator>;
-const AlertField = Type.Union([
-	Type.Literal("balance"),
-	Type.Literal("created"),
-	Type.Literal("updated"),
-]);
-type AlertField = Static<typeof AlertField>;
-const AlertCondition = Type.Object({
-	field: AlertField,
-	operator: AlertOperator,
-	value: Type.Number(),
-});
-type AlertCondition = Static<typeof AlertCondition>;
-
 /**
  * Ledger
  */
@@ -426,79 +404,6 @@ type CreateLedgerAccountStatementRequest = FastifyRequest<{
 	Body: LedgerAccountStatementRequest;
 }>;
 
-/**
- * Ledger Account Balance Monitor
- */
-const LedgerAccountBalanceMonitorId = Type.String({
-	description: "Unique identifier for the ledger account balance monitor.",
-	pattern: "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-});
-type LedgerAccountBalanceMonitorId = Static<typeof LedgerAccountBalanceMonitorId>;
-const LedgerAccountBalanceMonitorIdParameters = Type.Object({
-	balanceMonitorId: LedgerAccountBalanceMonitorId,
-});
-type LedgerAccountBalanceMonitorIdParameters = Static<
-	typeof LedgerAccountBalanceMonitorIdParameters
->;
-const LedgerAccountBalanceMonitorResponse = Type.Object(
-	{
-		id: LedgerAccountBalanceMonitorId,
-		accountId: LedgerAccountId,
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
-		),
-		alertCondition: Type.Array(AlertCondition),
-		balances: Balances,
-		metadata: Type.Optional(Metadata),
-		lockVersion: Type.Number(),
-		created: Type.String(),
-		updated: Type.String(),
-	},
-	{
-		$id: "LedgerAccountBalanceMonitorResponse",
-		description:
-			"A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
-	}
-);
-type LedgerAccountBalanceMonitorResponse = Static<typeof LedgerAccountBalanceMonitorResponse>;
-const LedgerAccountBalanceMonitorRequest = Type.Object(
-	{
-		accountId: Type.String({
-			description: "The ledger account associated with this balance monitor.",
-		}),
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
-		),
-		alertCondition: Type.Array(AlertCondition),
-		metadata: Type.Optional(Metadata),
-	},
-	{
-		$id: "LedgerAccountBalanceMonitorRequest",
-	}
-);
-type LedgerAccountBalanceMonitorRequest = Static<typeof LedgerAccountBalanceMonitorRequest>;
-
-type ListLedgerAccountBalanceMonitorsRequest = FastifyRequest<{
-	Querystring: PaginationQuery;
-}>;
-type GetLedgerAccountBalanceMonitorRequest = FastifyRequest<{
-	Params: LedgerAccountBalanceMonitorIdParameters;
-}>;
-type CreateLedgerAccountBalanceMonitorRequest = FastifyRequest<{
-	Body: LedgerAccountBalanceMonitorRequest;
-}>;
-type UpdateLedgerAccountBalanceMonitorRequest = FastifyRequest<{
-	Params: LedgerAccountBalanceMonitorIdParameters;
-	Body: LedgerAccountBalanceMonitorRequest;
-}>;
-type DeleteLedgerAccountBalanceMonitorRequest = FastifyRequest<{
-	Params: LedgerAccountBalanceMonitorIdParameters;
-}>;
-
 export {
 	LinkAccountToCategoryParameters as LinkAccountToCategoryParams,
 	LinkCategoryToCategoryParameters as LinkCategoryToCategoryParams,
@@ -516,9 +421,6 @@ export {
 	LedgerAccountStatementIdParameters as LedgerAccountStatementIdParams,
 	LedgerAccountStatementResponse,
 	LedgerAccountStatementRequest,
-	LedgerAccountBalanceMonitorIdParameters as LedgerAccountBalanceMonitorIdParams,
-	LedgerAccountBalanceMonitorRequest,
-	LedgerAccountBalanceMonitorResponse,
 	type ListLedgersRequest,
 	type GetLedgerRequest,
 	type CreateLedgerRequest,
@@ -540,11 +442,6 @@ export {
 	type UnlinkLedgerAccountCategoryToCategoryRequest,
 	type CreateLedgerAccountStatementRequest,
 	type GetLedgerAccountStatementRequest,
-	type ListLedgerAccountBalanceMonitorsRequest,
-	type GetLedgerAccountBalanceMonitorRequest,
-	type CreateLedgerAccountBalanceMonitorRequest,
-	type UpdateLedgerAccountBalanceMonitorRequest,
-	type DeleteLedgerAccountBalanceMonitorRequest,
 	Balances,
 	PendingBalance,
 	PostedBalance,
@@ -553,11 +450,7 @@ export {
 	type Metadata,
 	type NormalBalance,
 	type Balance,
-	type AlertOperator,
-	type AlertField,
-	type AlertCondition,
 	type LedgerAccountId,
 	type LedgerAccountCategoryId,
 	type LedgerAccountStatementId,
-	type LedgerAccountBalanceMonitorId,
 };

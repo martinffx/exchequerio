@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
 import { LedgerRoutes } from "@/domains/ledgers";
 import { AccountRoutes } from "@/domains/ledgers/accounts";
+import { LedgerAccountBalanceMonitorRoutes } from "@/domains/ledgers/accounts/balance-monitors";
 import { LedgerAccountSettlementRoutes } from "@/domains/ledgers/settlements";
 import { TransactionRoutes } from "@/domains/ledgers/transactions";
-import { LedgerAccountBalanceMonitorRoutes } from "./LedgerAccountBalanceMonitorRoutes";
 import { LedgerAccountCategoryRoutes } from "./LedgerAccountCategoryRoutes";
 import { LedgerAccountStatementRoutes } from "./LedgerAccountStatementRoutes";
 
