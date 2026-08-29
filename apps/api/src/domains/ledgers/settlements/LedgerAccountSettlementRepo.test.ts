@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
@@ -31,7 +31,6 @@ import {
 	type OrgID,
 } from "@/repo/entities/types";
 import {
-	LedgerAccountSettlementEntriesTable,
 	LedgerAccountSettlementsTable,
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
@@ -153,7 +152,6 @@ describe("LedgerAccountSettlementRepoLive", () => {
 		try {
 			const db = (await database()).db;
 			const ids = organizationIds.map(id => id.toString());
-			await db.delete(LedgerAccountSettlementEntriesTable);
 			await db
 				.delete(LedgerAccountSettlementsTable)
 				.where(inArray(LedgerAccountSettlementsTable.organizationId, ids));
@@ -169,6 +167,10 @@ describe("LedgerAccountSettlementRepoLive", () => {
 		} finally {
 			await runtime.dispose();
 		}
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it("creates, decodes, and reads a Settlement by Organization while ignoring Ledger scope", async () => {
@@ -268,6 +270,26 @@ describe("LedgerAccountSettlementRepoLive", () => {
 		).rejects.toThrow(ConflictError);
 	});
 
+	it("captures update timestamps when mutation Effects execute", async () => {
+		const original = await runRepo(repository =>
+			repository.createSettlement(settlement(context, { description: "Original" }))
+		);
+		const repository = await runtime.runPromise(LedgerAccountSettlementRepoTag);
+		const constructionTime = new Date("2026-08-29T12:00:00.000Z");
+		const updateTime = new Date("2026-08-29T12:01:00.000Z");
+		const statusTime = new Date("2026-08-29T12:02:00.000Z");
+		vi.useFakeTimers({ toFake: ["Date"] });
+
+		vi.setSystemTime(constructionTime);
+		const update = repository.updateSettlement(original);
+		vi.setSystemTime(updateTime);
+		expect((await runtime.runPromise(update)).updated).toEqual(updateTime);
+
+		const statusUpdate = repository.updateStatus(context.organizationId, original.id, "processing");
+		vi.setSystemTime(statusTime);
+		expect((await runtime.runPromise(statusUpdate)).updated).toEqual(statusTime);
+	});
+
 	it("validates Entry eligibility and retains links during Pending rollback", async () => {
 		const db = (await database()).db;
 		const record = await runRepo(repository => repository.createSettlement(settlement(context)));
@@ -320,6 +342,23 @@ describe("LedgerAccountSettlementRepoLive", () => {
 				])
 			)
 		).rejects.toThrow(NotFoundError);
+
+		await db
+			.update(LedgerTransactionsTable)
+			.set({ status: "pending" })
+			.where(inArray(LedgerTransactionsTable.id, [transactionId.toString()]));
+		try {
+			await expect(
+				runRepo(repository =>
+					repository.addEntriesToSettlement(context.organizationId, record.id, [eligibleId.toString()])
+				)
+			).rejects.toThrow(ConflictError);
+		} finally {
+			await db
+				.update(LedgerTransactionsTable)
+				.set({ status: "posted", postedAt: new Date() })
+				.where(inArray(LedgerTransactionsTable.id, [transactionId.toString()]));
+		}
 
 		await runRepo(repository =>
 			repository.addEntriesToSettlement(context.organizationId, record.id, [eligibleId.toString()])

@@ -206,6 +206,37 @@ describe("LedgerAccountSettlementService", () => {
 		expect(test.repository.createSettlement).toHaveBeenCalledOnce();
 	});
 
+	it("starts both Account lookups before either lookup completes", async () => {
+		const started: string[] = [];
+		let release!: () => void;
+		const blocked = new Promise<void>(resolve => {
+			release = resolve;
+		});
+		const test = makeTest({
+			account: {
+				getAccount: vi.fn((_organizationId: OrgID, _ledgerId: LedgerID, id: LedgerAccountID) =>
+					Effect.promise(async () => {
+						started.push(id.toString());
+						await blocked;
+						return id.toString() === settledAccountId.toString()
+							? account(settledAccountId)
+							: account(contraAccountId, "USD", "credit");
+					})
+				),
+			},
+		});
+
+		const result = test.run(service =>
+			service.createLedgerAccountSettlement(organizationId, ledgerId, request())
+		);
+		try {
+			await vi.waitFor(() => expect(started).toHaveLength(2));
+		} finally {
+			release();
+		}
+		await expect(result).resolves.toMatchObject({ currency: "USD", normalBalance: "debit" });
+	});
+
 	it("rejects mismatched Account currencies before persistence", async () => {
 		const test = makeTest({
 			account: {

@@ -1,4 +1,5 @@
 import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Context, Effect, Layer } from "effect";
 
 import { DatabaseTag, type EffectDrizzleDatabase, postgresErrorCode } from "@/db";
@@ -15,44 +16,63 @@ import {
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import type { SettlementStatus } from "./LedgerAccountSettlementSchema";
 
+type LedgerAccountSettlementListRepositoryError = EffectDrizzleQueryError;
+type LedgerAccountSettlementGetRepositoryError = EffectDrizzleQueryError | NotFoundError;
+type LedgerAccountSettlementCreateRepositoryError =
+	| ConflictError
+	| EffectDrizzleQueryError
+	| NotFoundError;
+type LedgerAccountSettlementUpdateRepositoryError = ConflictError | EffectDrizzleQueryError;
+type LedgerAccountSettlementDeleteRepositoryError = ConflictError | EffectDrizzleQueryError;
+type LedgerAccountSettlementEntryRepositoryError =
+	| ConflictError
+	| EffectDrizzleQueryError
+	| NotFoundError;
+type LedgerAccountSettlementReadRepositoryError = EffectDrizzleQueryError;
+type LedgerAccountSettlementStatusRepositoryError = EffectDrizzleQueryError | NotFoundError;
+
 interface LedgerAccountSettlementRepo {
 	listSettlements(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		offset: number,
 		limit: number
-	): Effect.Effect<LedgerAccountSettlementEntity[], unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity[], LedgerAccountSettlementListRepositoryError>;
 	getSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementGetRepositoryError>;
 	createSettlement(
 		entity: LedgerAccountSettlementEntity
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementCreateRepositoryError>;
 	updateSettlement(
 		entity: LedgerAccountSettlementEntity
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateRepositoryError>;
 	deleteSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<void, unknown>;
+	): Effect.Effect<void, LedgerAccountSettlementDeleteRepositoryError>;
 	addEntriesToSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		entryIds: string[]
-	): Effect.Effect<void, unknown>;
+	): Effect.Effect<void, LedgerAccountSettlementEntryRepositoryError>;
 	removeEntriesFromSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		entryIds: string[]
-	): Effect.Effect<void, unknown>;
-	getEntryIds(settlementId: LedgerAccountSettlementID): Effect.Effect<string[], unknown>;
-	calculateAmount(settlementId: LedgerAccountSettlementID): Effect.Effect<number, unknown>;
+	): Effect.Effect<void, LedgerAccountSettlementEntryRepositoryError>;
+	getEntryIds(
+		settlementId: LedgerAccountSettlementID
+	): Effect.Effect<string[], LedgerAccountSettlementReadRepositoryError>;
+	calculateAmount(
+		settlementId: LedgerAccountSettlementID
+	): Effect.Effect<number, LedgerAccountSettlementReadRepositoryError>;
 	updateStatus(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		status: SettlementStatus
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementStatusRepositoryError>;
 }
 
 const LedgerAccountSettlementRepoTag = Context.Service<LedgerAccountSettlementRepo>(
@@ -67,7 +87,7 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 		ledgerId: LedgerID,
 		offset: number,
 		limit: number
-	): Effect.Effect<LedgerAccountSettlementEntity[], unknown> {
+	): Effect.Effect<LedgerAccountSettlementEntity[], LedgerAccountSettlementListRepositoryError> {
 		return this.db
 			.select(getTableColumns(LedgerAccountSettlementsTable))
 			.from(LedgerAccountSettlementsTable)
@@ -90,7 +110,7 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 	getSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementGetRepositoryError> {
 		return this.db
 			.select(getTableColumns(LedgerAccountSettlementsTable))
 			.from(LedgerAccountSettlementsTable)
@@ -112,7 +132,7 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 
 	createSettlement(
 		entity: LedgerAccountSettlementEntity
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementCreateRepositoryError> {
 		return this.db
 			.insert(LedgerAccountSettlementsTable)
 			.values(entity.toRow())
@@ -131,31 +151,33 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 
 	updateSettlement(
 		entity: LedgerAccountSettlementEntity
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
-		return this.db
-			.update(LedgerAccountSettlementsTable)
-			.set({ ...entity.toRow(), updated: new Date() })
-			.where(
-				and(
-					eq(LedgerAccountSettlementsTable.id, entity.id.toString()),
-					eq(LedgerAccountSettlementsTable.organizationId, entity.organizationId.toString()),
-					eq(LedgerAccountSettlementsTable.status, "drafting")
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateRepositoryError> {
+		return Effect.suspend(() =>
+			this.db
+				.update(LedgerAccountSettlementsTable)
+				.set({ ...entity.toRow(), updated: new Date() })
+				.where(
+					and(
+						eq(LedgerAccountSettlementsTable.id, entity.id.toString()),
+						eq(LedgerAccountSettlementsTable.organizationId, entity.organizationId.toString()),
+						eq(LedgerAccountSettlementsTable.status, "drafting")
+					)
 				)
-			)
-			.returning()
-			.pipe(
-				Effect.flatMap(rows =>
-					rows[0] === undefined
-						? Effect.fail(new ConflictError("Settlement not found or not in drafting status"))
-						: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+				.returning()
+				.pipe(
+					Effect.flatMap(rows =>
+						rows[0] === undefined
+							? Effect.fail(new ConflictError("Settlement not found or not in drafting status"))
+							: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+					)
 				)
-			);
+		);
 	}
 
 	deleteSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<void, unknown> {
+	): Effect.Effect<void, LedgerAccountSettlementDeleteRepositoryError> {
 		return this.db
 			.delete(LedgerAccountSettlementsTable)
 			.where(
@@ -179,7 +201,7 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		entryIds: string[]
-	): Effect.Effect<void, unknown> {
+	): Effect.Effect<void, LedgerAccountSettlementEntryRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const settlement = yield* this.getSettlement(organizationId, settlementId);
 			if (settlement.status !== "drafting") {
@@ -257,7 +279,7 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		entryIds: string[]
-	): Effect.Effect<void, unknown> {
+	): Effect.Effect<void, LedgerAccountSettlementEntryRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const settlement = yield* this.getSettlement(organizationId, settlementId);
 			if (settlement.status !== "drafting") {
@@ -276,7 +298,9 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 		});
 	}
 
-	getEntryIds(settlementId: LedgerAccountSettlementID): Effect.Effect<string[], unknown> {
+	getEntryIds(
+		settlementId: LedgerAccountSettlementID
+	): Effect.Effect<string[], LedgerAccountSettlementReadRepositoryError> {
 		return this.db
 			.select({ entryId: LedgerAccountSettlementEntriesTable.entryId })
 			.from(LedgerAccountSettlementEntriesTable)
@@ -284,7 +308,9 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 			.pipe(Effect.map(rows => rows.map(row => row.entryId)));
 	}
 
-	calculateAmount(settlementId: LedgerAccountSettlementID): Effect.Effect<number, unknown> {
+	calculateAmount(
+		settlementId: LedgerAccountSettlementID
+	): Effect.Effect<number, LedgerAccountSettlementReadRepositoryError> {
 		return this.db
 			.select({ total: sql<string>`COALESCE(SUM(${LedgerTransactionEntriesTable.amount}), 0)` })
 			.from(LedgerAccountSettlementEntriesTable)
@@ -300,24 +326,26 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		status: SettlementStatus
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
-		return this.db
-			.update(LedgerAccountSettlementsTable)
-			.set({ status, updated: new Date() })
-			.where(
-				and(
-					eq(LedgerAccountSettlementsTable.id, settlementId.toString()),
-					eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString())
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementStatusRepositoryError> {
+		return Effect.suspend(() =>
+			this.db
+				.update(LedgerAccountSettlementsTable)
+				.set({ status, updated: new Date() })
+				.where(
+					and(
+						eq(LedgerAccountSettlementsTable.id, settlementId.toString()),
+						eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString())
+					)
 				)
-			)
-			.returning()
-			.pipe(
-				Effect.flatMap(rows =>
-					rows[0] === undefined
-						? Effect.fail(new NotFoundError(`Settlement not found: ${settlementId.toString()}`))
-						: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+				.returning()
+				.pipe(
+					Effect.flatMap(rows =>
+						rows[0] === undefined
+							? Effect.fail(new NotFoundError(`Settlement not found: ${settlementId.toString()}`))
+							: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+					)
 				)
-			);
+		);
 	}
 }
 
@@ -326,7 +354,17 @@ const ledgerAccountSettlementRepoLayer = Layer.effect(
 	DatabaseTag.pipe(Effect.map(database => new LedgerAccountSettlementRepoLive(database.effectDb)))
 );
 
-export type { LedgerAccountSettlementRepo };
+export type {
+	LedgerAccountSettlementCreateRepositoryError,
+	LedgerAccountSettlementDeleteRepositoryError,
+	LedgerAccountSettlementEntryRepositoryError,
+	LedgerAccountSettlementGetRepositoryError,
+	LedgerAccountSettlementListRepositoryError,
+	LedgerAccountSettlementReadRepositoryError,
+	LedgerAccountSettlementRepo,
+	LedgerAccountSettlementStatusRepositoryError,
+	LedgerAccountSettlementUpdateRepositoryError,
+};
 export {
 	LedgerAccountSettlementRepoLive,
 	LedgerAccountSettlementRepoTag,

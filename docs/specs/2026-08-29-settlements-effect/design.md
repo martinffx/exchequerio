@@ -8,10 +8,11 @@ The split leaves Settlement routes with two execution models and requires a lega
 Effect Transaction service.
 
 This migration moves the complete Settlement slice to Effect. It preserves observed implementation
-behavior at baseline commit `47779c4`, including defects and race conditions. `CONTEXT.md` remains
-authoritative for the domain contract. When the baseline conflicts with that contract, this
-migration records and temporarily retains the implementation defect. Any correction requires a
-separate design, plan, and change set.
+behavior at baseline commit `47779c4`, including defects and race conditions, except for one
+approved operational change: create and update start both Account lookups concurrently.
+`CONTEXT.md` remains authoritative for the domain contract. When the baseline conflicts with that
+contract, this migration records and temporarily retains the implementation defect. Any other
+correction requires a separate design, plan, and change set.
 
 ## Scope
 
@@ -23,15 +24,15 @@ In scope:
   service dependencies.
 - Remove only the legacy Settlement repository and service registrations and the Settlement to
   Transaction promise bridge.
-- Preserve the observed HTTP, error, persistence, transaction, concurrency, identifier, timestamp,
-  and operational behavior.
+- Preserve the observed HTTP, error, persistence, transaction, identifier, timestamp, and
+  operational behavior apart from the approved concurrent Account lookups.
 - Add characterization tests where the current suite does not pin important baseline behavior.
 
 Out of scope:
 
 - Database migrations or schema changes.
 - Settlement lifecycle fixes, stronger Ledger scoping, atomic posting, uniqueness constraints,
-  retries, or new error types.
+  retries, other concurrency changes, or new runtime error classes.
 - Automatic Entry gathering by Effective At Upper Bound.
 - Changes to Transaction, Account, Ledger, or Organization behavior.
 - Public API cleanup, response completion, pagination changes, or operational redesign.
@@ -43,7 +44,8 @@ Out of scope:
 - US-2, must: As an Organization, I retain the current Settlement data isolation and lookup
   behavior, including operations that do not enforce the Ledger path parameter.
 - US-3, must: As an operator, I observe the same SQL ordering, status transitions, Transaction
-  creation ordering, timestamps, identifiers, and partial-failure behavior.
+  creation ordering, timestamps, identifiers, and partial-failure behavior except that create and
+  update start both Account lookups concurrently.
 - US-4, must: As a maintainer, I can compose and test Settlement through Effect services and the
   shared runtime without Fastify service or repository decorations.
 
@@ -62,9 +64,10 @@ Out of scope:
 - Routes retain transport validation and permissions. Services retain orchestration. Repositories
   retain persistence. Entities retain transformations and invariants.
 - The migration introduces no dependency, generic executor, runtime resource, Settlement-specific
-  error hierarchy, transaction boundary, retry policy, or concurrency policy.
-- Every correction to a baseline defect remains outside this design and requires a separate design,
-  plan, and change set.
+  error hierarchy, transaction boundary, retry policy, or concurrency policy beyond the approved
+  concurrent Account lookups.
+- Every other correction to a baseline defect remains outside this design and requires a separate
+  design, plan, and change set.
 
 ## Context and baseline
 
@@ -100,6 +103,7 @@ TypeBox validation, operation IDs, response schemas, and error schemas remain un
 | IDs | Existing TypeID parsers and `newLedgerAccountSettlementID` | reuse | Preserve identifiers |
 | Time | Entity-owned `Date` creation at mutation points | reuse | Preserve timestamp behavior |
 | Errors | Existing `ConflictError`, `NotFoundError`, and generic 500 handling | reuse | Preserve problem responses |
+| Account lookup concurrency | Sequential `Effect.all` default | modify | Start both lookups concurrently |
 | Transaction posting | Existing Transaction service and idempotency key | reuse | Preserve posting behavior |
 | Legacy plugin wiring | Fastify repository and service decorations | delete | Use one managed runtime |
 | Settlement schema | Existing PostgreSQL tables, indexes, and check constraint | reuse | Avoid data migration |
@@ -161,10 +165,11 @@ posted -> archiving
 archiving -> archived
 ```
 
-The migration preserves the current call order:
+The migration preserves the current call order except for the approved Account lookup change:
 
 - List verifies the Ledger before querying Settlements.
-- Create and update fetch both Accounts concurrently, compare currencies, and then persist.
+- Create and update explicitly fetch both Accounts concurrently, compare currencies, and then
+  persist. The baseline used Effect's sequential default; this concurrency change is approved.
 - Update performs Account validation before checking whether the Settlement exists.
 - Get, delete, Entry mutation, and most transition operations scope by Organization and Settlement
   ID. They continue to ignore the Ledger path where the baseline ignores it.
@@ -250,9 +255,10 @@ promise repository in Effect would reduce the first diff but retain the bridge a
 actual persistence migration. The selected design costs more file movement now and leaves one
 cohesive runtime boundary.
 
-Strict behavior preservation keeps known defects. Fixing them during migration would make failures
-harder to attribute and would combine compatibility work with product changes. Separate change
-sets keep review, rollback, and baseline comparison clear.
+Behavior preservation keeps known defects apart from the approved concurrent Account lookups.
+Fixing other defects during migration would make failures harder to attribute and would combine
+compatibility work with product changes. Separate change sets keep review, rollback, and baseline
+comparison clear.
 
 ## Open questions
 

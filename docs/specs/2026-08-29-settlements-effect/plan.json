@@ -101,7 +101,7 @@
 						"LedgerAccountSettlementRepoTag",
 						"Approved Settlement lifecycle and posting behavior"
 					],
-					"description": "Add the Effect Settlement service, Context.Service tag, and Layer. Move existing Ledger and Account orchestration from routes into the service. List verifies the Ledger before querying. Create and update load both Accounts concurrently and compare currencies. Update completes Account validation before checking whether the Settlement exists. Preserve the lifecycle table, amount calculation, Transaction request, metadata precedence, idempotency key, Entry directions, and all current partial-failure ordering.",
+					"description": "Add the Effect Settlement service, Context.Service tag, and Layer. Move existing Ledger and Account orchestration from routes into the service. List verifies the Ledger before querying. Create and update explicitly load both Accounts concurrently and compare currencies; this is an approved deviation from the baseline's sequential Effect.all default. Update completes Account validation before checking whether the Settlement exists. Preserve the lifecycle table, amount calculation, Transaction request, metadata precedence, idempotency key, Entry directions, and all other partial-failure ordering.",
 					"files": {
 						"create": [
 							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementService.ts",
@@ -127,7 +127,7 @@
 						"acceptance": [
 							"All service methods return Effects",
 							"The service depends directly on existing Effect services without a promise bridge",
-							"No retry, transaction, clock, concurrency, or new error policy is introduced",
+							"No retry, transaction, clock, new error policy, or concurrency policy beyond the approved concurrent Account lookups is introduced",
 							"Focused service tests pass"
 						]
 					}
@@ -258,7 +258,7 @@
 						"acceptance": [
 							"No legacy Settlement repository, service decoration, promise bridge, or old Settlement schema import remains",
 							"Categories, Statements, and Balance Monitors retain their existing plugin and fixture wiring",
-							"The final diff contains no database migration, schema snapshot change, dependency update, new error hierarchy, retry, transaction wrapper, concurrency policy, shared abstraction, or unrelated cleanup",
+							"The final diff contains no database migration, schema snapshot change, dependency update, new error hierarchy, retry, transaction wrapper, concurrency policy beyond the approved concurrent Account lookups, shared abstraction, or unrelated cleanup",
 							"Focused tests, the full API suite, build, types, repository checks, and full local CI pass"
 						]
 					}

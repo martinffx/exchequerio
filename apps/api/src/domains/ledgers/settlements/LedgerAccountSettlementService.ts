@@ -1,9 +1,18 @@
 import { Context, Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
 
-import { type LedgerService, LedgerServiceTag } from "@/domains/ledgers/LedgerService";
-import { type AccountService, AccountServiceTag } from "@/domains/ledgers/accounts/AccountService";
 import {
+	type LedgerGetError,
+	type LedgerService,
+	LedgerServiceTag,
+} from "@/domains/ledgers/LedgerService";
+import {
+	type AccountGetError,
+	type AccountService,
+	AccountServiceTag,
+} from "@/domains/ledgers/accounts/AccountService";
+import {
+	type TransactionCreateError,
 	type TransactionService,
 	TransactionServiceTag,
 } from "@/domains/ledgers/transactions/LedgerTransactionService";
@@ -13,13 +22,42 @@ import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities
 
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import {
+	type LedgerAccountSettlementCreateRepositoryError,
+	type LedgerAccountSettlementDeleteRepositoryError,
+	type LedgerAccountSettlementEntryRepositoryError,
+	type LedgerAccountSettlementGetRepositoryError,
+	type LedgerAccountSettlementListRepositoryError,
+	type LedgerAccountSettlementReadRepositoryError,
 	type LedgerAccountSettlementRepo,
 	LedgerAccountSettlementRepoTag,
+	type LedgerAccountSettlementStatusRepositoryError,
+	type LedgerAccountSettlementUpdateRepositoryError,
 } from "./LedgerAccountSettlementRepo";
 import type {
 	LedgerAccountSettlementRequest,
 	SettlementStatus,
 } from "./LedgerAccountSettlementSchema";
+
+type LedgerAccountSettlementListError = LedgerAccountSettlementListRepositoryError | LedgerGetError;
+type LedgerAccountSettlementGetError = LedgerAccountSettlementGetRepositoryError;
+type LedgerAccountSettlementCreateError =
+	| AccountGetError
+	| ConflictError
+	| LedgerAccountSettlementCreateRepositoryError;
+type LedgerAccountSettlementUpdateError =
+	| AccountGetError
+	| ConflictError
+	| LedgerAccountSettlementGetRepositoryError
+	| LedgerAccountSettlementUpdateRepositoryError;
+type LedgerAccountSettlementDeleteError = LedgerAccountSettlementDeleteRepositoryError;
+type LedgerAccountSettlementEntryError = LedgerAccountSettlementEntryRepositoryError;
+type LedgerAccountSettlementTransitionError =
+	| ConflictError
+	| LedgerAccountSettlementGetRepositoryError
+	| LedgerAccountSettlementReadRepositoryError
+	| LedgerAccountSettlementStatusRepositoryError
+	| LedgerAccountSettlementUpdateRepositoryError
+	| TransactionCreateError;
 
 interface LedgerAccountSettlementService {
 	listLedgerAccountSettlements(
@@ -27,42 +65,42 @@ interface LedgerAccountSettlementService {
 		ledgerId: LedgerID,
 		offset: number,
 		limit: number
-	): Effect.Effect<LedgerAccountSettlementEntity[], unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity[], LedgerAccountSettlementListError>;
 	getLedgerAccountSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementGetError>;
 	createLedgerAccountSettlement(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		request: LedgerAccountSettlementRequest
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementCreateError>;
 	updateLedgerAccountSettlement(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID,
 		request: LedgerAccountSettlementRequest
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateError>;
 	deleteLedgerAccountSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<void, unknown>;
+	): Effect.Effect<void, LedgerAccountSettlementDeleteError>;
 	addLedgerAccountSettlementEntries(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		entryIds: string[]
-	): Effect.Effect<void, unknown>;
+	): Effect.Effect<void, LedgerAccountSettlementEntryError>;
 	removeLedgerAccountSettlementEntries(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		entryIds: string[]
-	): Effect.Effect<void, unknown>;
+	): Effect.Effect<void, LedgerAccountSettlementEntryError>;
 	transitionSettlementStatus(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID,
 		targetStatus: SettlementStatus
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown>;
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementTransitionError>;
 }
 
 const LedgerAccountSettlementServiceTag = Context.Service<LedgerAccountSettlementService>(
@@ -82,7 +120,7 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 		ledgerId: LedgerID,
 		offset: number,
 		limit: number
-	): Effect.Effect<LedgerAccountSettlementEntity[], unknown> {
+	): Effect.Effect<LedgerAccountSettlementEntity[], LedgerAccountSettlementListError> {
 		return this.ledgerService
 			.getLedger(organizationId, ledgerId)
 			.pipe(Effect.andThen(this.repository.listSettlements(organizationId, ledgerId, offset, limit)));
@@ -91,7 +129,7 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 	getLedgerAccountSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementGetError> {
 		return this.repository.getSettlement(organizationId, settlementId);
 	}
 
@@ -99,7 +137,7 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		request: LedgerAccountSettlementRequest
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementCreateError> {
 		return this.getAccounts(organizationId, ledgerId, request).pipe(
 			Effect.flatMap(([settledAccount]) =>
 				Effect.sync(() =>
@@ -120,7 +158,7 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID,
 		request: LedgerAccountSettlementRequest
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateError> {
 		return this.getAccounts(organizationId, ledgerId, request).pipe(
 			Effect.flatMap(([settledAccount]) =>
 				this.repository
@@ -146,7 +184,7 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 	deleteLedgerAccountSettlement(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<void, unknown> {
+	): Effect.Effect<void, LedgerAccountSettlementDeleteError> {
 		return this.repository.deleteSettlement(organizationId, settlementId);
 	}
 
@@ -154,7 +192,7 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		entryIds: string[]
-	): Effect.Effect<void, unknown> {
+	): Effect.Effect<void, LedgerAccountSettlementEntryError> {
 		return this.repository.addEntriesToSettlement(organizationId, settlementId, entryIds);
 	}
 
@@ -162,7 +200,7 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
 		entryIds: string[]
-	): Effect.Effect<void, unknown> {
+	): Effect.Effect<void, LedgerAccountSettlementEntryError> {
 		return this.repository.removeEntriesFromSettlement(organizationId, settlementId, entryIds);
 	}
 
@@ -171,7 +209,7 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID,
 		targetStatus: SettlementStatus
-	): Effect.Effect<LedgerAccountSettlementEntity, unknown> {
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementTransitionError> {
 		return Effect.suspend(() => this.repository.getSettlement(organizationId, settlementId)).pipe(
 			Effect.flatMap(settlement =>
 				this.validateStatusTransition(settlement.status, targetStatus).pipe(
@@ -219,7 +257,12 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 		);
 	}
 
-	private updateAmount(settlement: LedgerAccountSettlementEntity): Effect.Effect<void, unknown> {
+	private updateAmount(
+		settlement: LedgerAccountSettlementEntity
+	): Effect.Effect<
+		void,
+		LedgerAccountSettlementReadRepositoryError | LedgerAccountSettlementUpdateRepositoryError
+	> {
 		return this.repository.calculateAmount(settlement.id).pipe(
 			Effect.flatMap(amount => Effect.sync(() => settlement.withAmount(amount))),
 			Effect.flatMap(updated => this.repository.updateSettlement(updated)),
@@ -231,7 +274,10 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		settlement: LedgerAccountSettlementEntity
-	): Effect.Effect<void, unknown> {
+	): Effect.Effect<
+		void,
+		ConflictError | LedgerAccountSettlementUpdateRepositoryError | TransactionCreateError
+	> {
 		const request: TransactionCreateRequest = {
 			status: "posted",
 			description: settlement.description ?? `Settlement ${settlement.id.toString()}`,
@@ -307,7 +353,16 @@ const ledgerAccountSettlementServiceLayer = Layer.effect(
 	})
 );
 
-export type { LedgerAccountSettlementService };
+export type {
+	LedgerAccountSettlementCreateError,
+	LedgerAccountSettlementDeleteError,
+	LedgerAccountSettlementEntryError,
+	LedgerAccountSettlementGetError,
+	LedgerAccountSettlementListError,
+	LedgerAccountSettlementService,
+	LedgerAccountSettlementTransitionError,
+	LedgerAccountSettlementUpdateError,
+};
 export {
 	LedgerAccountSettlementServiceLive,
 	LedgerAccountSettlementServiceTag,
