@@ -7,7 +7,6 @@ import {
 	OrganizationListQuery,
 	OrganizationResponse,
 	OrganizationUpdateRequest,
-	toOrganizationResponse,
 } from "./OrganizationSchema";
 import { OrganizationServiceTag } from "./OrganizationService";
 import {
@@ -51,7 +50,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: value => value.map(organization => toOrganizationResponse(organization)),
+				onSuccess: value => value.map(organization => organization.toResponse()),
 				onFailure: error => {
 					throw error;
 				},
@@ -77,7 +76,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: toOrganizationResponse,
+				onSuccess: organization => organization.toResponse(),
 				onFailure: error => {
 					throw error;
 				},
@@ -105,7 +104,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 					reply
 						.status(201)
 						.header("location", `/api/organizations/${value.id.toString()}`)
-						.send(toOrganizationResponse(value)),
+						.send(value.toResponse()),
 				onFailure: error => {
 					throw error;
 				},
@@ -134,7 +133,7 @@ const OrganizationRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: toOrganizationResponse,
+				onSuccess: organization => organization.toResponse(),
 				onFailure: error => {
 					throw error;
 				},

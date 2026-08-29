@@ -28,7 +28,6 @@ export type {
 	AccountResponse,
 	AccountUpdateRequest,
 } from "./AccountSchema";
-export { toAccountResponse } from "./AccountSchema";
 export type { AccountService } from "./AccountService";
 export { AccountServiceTag } from "./AccountService";
 export { accountLayer };

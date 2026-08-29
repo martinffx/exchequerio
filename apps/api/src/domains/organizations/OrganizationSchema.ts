@@ -1,6 +1,4 @@
 import { type Static, Type } from "@sinclair/typebox";
-import type { DateTime } from "luxon";
-import type { Organization } from "./Organization";
 
 const OrganizationIdSchema = Type.String({ pattern: "^org_[0-9a-z]{26}$" });
 const OrganizationIdParameters = Type.Object({ orgId: OrganizationIdSchema });
@@ -36,20 +34,6 @@ type OrganizationCreateRequest = Static<typeof OrganizationCreateRequest>;
 type OrganizationUpdateRequest = Static<typeof OrganizationUpdateRequest>;
 type OrganizationResponse = Static<typeof OrganizationResponse>;
 
-const toIso = (value: DateTime): string => {
-	const encoded = value.toISO();
-	if (encoded === null) throw new Error("Organization contains an invalid timestamp");
-	return encoded;
-};
-
-const toOrganizationResponse = (organization: Organization): OrganizationResponse => ({
-	id: organization.id.toString(),
-	name: organization.name,
-	description: organization.description ?? undefined,
-	created: toIso(organization.created),
-	updated: toIso(organization.updated),
-});
-
 export {
 	OrganizationCreateRequest,
 	OrganizationIdParameters,
@@ -57,5 +41,4 @@ export {
 	OrganizationListQuery,
 	OrganizationResponse,
 	OrganizationUpdateRequest,
-	toOrganizationResponse,
 };

@@ -13,7 +13,10 @@ import {
 import type { LedgerTransactionEntryInsertRow, LedgerTransactionEntryRow } from "@/repo/schema";
 
 import { TransactionValidationFailure } from "./LedgerTransactionErrors";
-import type { TransactionRequestEntry as LedgerTransactionEntryRequest } from "./LedgerTransactionSchema";
+import type {
+	TransactionRequestEntry as LedgerTransactionEntryRequest,
+	TransactionResponseEntry,
+} from "./LedgerTransactionSchema";
 
 type LedgerTransactionEntryDirection = "debit" | "credit";
 type LedgerTransactionEntryStatus = "pending" | "posted" | "voided";
@@ -141,6 +144,17 @@ class LedgerTransactionEntry {
 			status: this.status,
 			metadata: encodeMetadata(this.metadata),
 			created: this.created.toJSDate(),
+		};
+	}
+
+	toResponse(): TransactionResponseEntry {
+		return {
+			id: this.id.toString(),
+			accountId: this.accountId.toString(),
+			direction: this.direction,
+			amount: this.amount,
+			currencyCode: this.currency,
+			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
 		};
 	}
 

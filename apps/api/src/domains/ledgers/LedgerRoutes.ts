@@ -18,7 +18,6 @@ import {
 	LedgerListQuery,
 	LedgerResponse,
 	LedgerUpdateRequest,
-	toLedgerResponse,
 } from "./LedgerSchema";
 import { LedgerServiceTag } from "./LedgerService";
 
@@ -49,7 +48,7 @@ const LedgerRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: ledgers => ledgers.map(ledger => toLedgerResponse(ledger)),
+				onSuccess: ledgers => ledgers.map(ledger => ledger.toResponse()),
 				onFailure: error => {
 					throw error;
 				},
@@ -77,7 +76,7 @@ const LedgerRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: toLedgerResponse,
+				onSuccess: ledger => ledger.toResponse(),
 				onFailure: error => {
 					throw error;
 				},
@@ -111,7 +110,7 @@ const LedgerRoutes: FastifyPluginAsync = async server => {
 					reply
 						.status(201)
 						.header("location", `/api/ledgers/${ledger.id.toString()}`)
-						.send(toLedgerResponse(ledger)),
+						.send(ledger.toResponse()),
 				onFailure: error => {
 					throw error;
 				},
@@ -142,7 +141,7 @@ const LedgerRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: toLedgerResponse,
+				onSuccess: ledger => ledger.toResponse(),
 				onFailure: error => {
 					throw error;
 				},

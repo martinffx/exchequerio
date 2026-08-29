@@ -13,6 +13,7 @@ import type {
 import { AccountPersistenceDecodingFailure } from "./AccountErrors";
 import type {
 	AccountCreateRequest as LedgerAccountCreateRequest,
+	AccountResponse,
 	AccountUpdateRequest as LedgerAccountUpdateRequest,
 } from "./AccountSchema";
 
@@ -51,6 +52,12 @@ type LedgerAccountBalance = Readonly<{
 	debits: number;
 	amount: number;
 }>;
+
+const toIso = (value: DateTime): string => {
+	const encoded = value.toISO();
+	if (encoded === null) throw new Error("Account contains an invalid timestamp");
+	return encoded;
+};
 
 class LedgerAccountCurrencyMismatch extends BadRequestError {
 	constructor(accountCurrency: string, entryCurrency: string) {
@@ -238,6 +245,22 @@ class LedgerAccount {
 			metadata: encodeMetadata(this.metadata),
 			created: this.created.toJSDate(),
 			updated: this.updated.toJSDate(),
+		};
+	}
+
+	toResponse(): AccountResponse {
+		return {
+			id: this.id.toString(),
+			ledgerId: this.ledgerId.toString(),
+			name: this.name,
+			...(this.description === undefined ? {} : { description: this.description }),
+			normalBalance: this.normalBalance,
+			currencyCode: this.currency,
+			balances: this.balances.map(balance => ({ ...balance })),
+			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+			lockVersion: this.lockVersion,
+			created: toIso(this.created),
+			updated: toIso(this.updated),
 		};
 	}
 

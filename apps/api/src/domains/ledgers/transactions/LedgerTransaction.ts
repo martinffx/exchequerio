@@ -21,6 +21,8 @@ import {
 } from "./LedgerTransactionErrors";
 import type {
 	TransactionCreateRequest as LedgerTransactionCreateRequest,
+	TransactionListItemResponse,
+	TransactionResponse,
 	TransactionUpdateRequest as LedgerTransactionUpdateRequest,
 } from "./LedgerTransactionSchema";
 import { LedgerTransactionEntry } from "./LedgerTransactionEntry";
@@ -41,6 +43,12 @@ type LedgerTransactionOptions = Readonly<{
 	created: DateTime;
 	updated: DateTime;
 }>;
+
+const toIso = (value: DateTime): string => {
+	const encoded = value.toISO();
+	if (encoded === null) throw new Error("Transaction contains an invalid timestamp");
+	return encoded;
+};
 
 /**
  * A balanced collection of Ledger Entries that share one lifecycle.
@@ -208,6 +216,26 @@ class LedgerTransaction {
 			lockVersion: this.lockVersion,
 			created: this.created.toJSDate(),
 			updated: this.updated.toJSDate(),
+		};
+	}
+
+	toListItemResponse(): TransactionListItemResponse {
+		return {
+			id: this.id.toString(),
+			ledgerId: this.ledgerId.toString(),
+			...(this.description === undefined ? {} : { description: this.description }),
+			status: this.status,
+			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+			...(this.postedAt === undefined ? {} : { postedAt: toIso(this.postedAt) }),
+			created: toIso(this.created),
+			updated: toIso(this.updated),
+		};
+	}
+
+	toResponse(): TransactionResponse {
+		return {
+			...this.toListItemResponse(),
+			ledgerEntries: Option.getOrThrow(this.entries).map(entry => entry.toResponse()),
 		};
 	}
 

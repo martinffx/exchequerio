@@ -3,7 +3,7 @@ import { DateTime } from "luxon";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
 import type { LedgerInsertRow, LedgerRow, LedgerUpdateRow } from "@/repo/schema";
 import { parseId } from "@/lib/utils";
-import type { LedgerCreateRequest, LedgerUpdateRequest } from "./LedgerSchema";
+import type { LedgerCreateRequest, LedgerResponse, LedgerUpdateRequest } from "./LedgerSchema";
 import { LedgerPersistenceDecodingFailure } from "./LedgerErrors";
 
 type LedgerMetadata = Readonly<Record<string, string>>;
@@ -34,6 +34,12 @@ const decodeMetadata = (value: string | null): LedgerMetadata | undefined => {
 		throw new Error("Ledger metadata values must be strings");
 	}
 	return decoded as Record<string, string>;
+};
+
+const toIso = (value: DateTime): string => {
+	const encoded = value.toISO();
+	if (encoded === null) throw new Error("Ledger contains an invalid timestamp");
+	return encoded;
 };
 
 class Ledger {
@@ -116,6 +122,17 @@ class Ledger {
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			metadata: this.metadata === undefined ? null : JSON.stringify(this.metadata),
 			updated: this.updated.toJSDate(),
+		};
+	}
+
+	toResponse(): LedgerResponse {
+		return {
+			id: this.id.toString(),
+			name: this.name,
+			...(this.description === undefined ? {} : { description: this.description }),
+			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+			created: toIso(this.created),
+			updated: toIso(this.updated),
 		};
 	}
 }

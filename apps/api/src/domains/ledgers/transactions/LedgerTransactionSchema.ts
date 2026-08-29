@@ -1,7 +1,4 @@
 import { type Static, Type } from "@sinclair/typebox";
-import { Option } from "effect";
-import type { DateTime } from "luxon";
-import type { LedgerTransaction } from "./LedgerTransaction";
 
 const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const TransactionIdSchema = Type.String({ pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
@@ -101,37 +98,6 @@ type TransactionListItemResponse = Static<typeof TransactionListItemResponse>;
 type TransactionListResponse = Static<typeof TransactionListResponse>;
 type TransactionDeleteResponse = Static<typeof TransactionDeleteResponse>;
 
-const toIso = (value: DateTime): string => {
-	const encoded = value.toISO();
-	if (encoded === null) throw new Error("Transaction contains an invalid timestamp");
-	return encoded;
-};
-
-const toTransactionListItemResponse = (
-	transaction: LedgerTransaction
-): TransactionListItemResponse => ({
-	id: transaction.id.toString(),
-	ledgerId: transaction.ledgerId.toString(),
-	...(transaction.description === undefined ? {} : { description: transaction.description }),
-	status: transaction.status,
-	...(transaction.metadata === undefined ? {} : { metadata: transaction.metadata }),
-	...(transaction.postedAt === undefined ? {} : { postedAt: toIso(transaction.postedAt) }),
-	created: toIso(transaction.created),
-	updated: toIso(transaction.updated),
-});
-
-const toTransactionResponse = (transaction: LedgerTransaction): TransactionResponse => ({
-	...toTransactionListItemResponse(transaction),
-	ledgerEntries: Option.getOrThrow(transaction.entries).map(entry => ({
-		id: entry.id.toString(),
-		accountId: entry.accountId.toString(),
-		direction: entry.direction,
-		amount: entry.amount,
-		currencyCode: entry.currency,
-		...(entry.metadata === undefined ? {} : { metadata: entry.metadata }),
-	})),
-});
-
 export {
 	AccountIdSchema,
 	AmountSchema,
@@ -151,6 +117,4 @@ export {
 	TransactionRequestEntry,
 	TransactionResponse,
 	TransactionResponseEntry,
-	toTransactionListItemResponse,
-	toTransactionResponse,
 };

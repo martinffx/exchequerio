@@ -6,7 +6,7 @@ import type {
 	OrganizationRow,
 	OrganizationUpdateRow,
 } from "../../repo/schema";
-import type { OrganizationUpdateRequest } from "./OrganizationSchema";
+import type { OrganizationResponse, OrganizationUpdateRequest } from "./OrganizationSchema";
 import {
 	type OrganizationInfrastructureError,
 	OrganizationPersistenceDecodingFailure,
@@ -28,6 +28,12 @@ const parseDate = (jsDate: Date): Effect.Effect<DateTime, Error> =>
 			? Effect.succeed(date)
 			: Effect.fail(new Error("Invalid Organization timestamp"));
 	});
+
+const toIso = (value: DateTime): string => {
+	const encoded = value.toISO();
+	if (encoded === null) throw new Error("Organization contains an invalid timestamp");
+	return encoded;
+};
 
 class Organization {
 	readonly id: OrgID;
@@ -91,6 +97,16 @@ class Organization {
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			description: this.description ?? null,
 			updated: this.updated.toJSDate(),
+		};
+	}
+
+	toResponse(): OrganizationResponse {
+		return {
+			id: this.id.toString(),
+			name: this.name,
+			description: this.description ?? undefined,
+			created: toIso(this.created),
+			updated: toIso(this.updated),
 		};
 	}
 }

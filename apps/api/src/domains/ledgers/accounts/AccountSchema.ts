@@ -1,6 +1,4 @@
 import { type Static, Type } from "@sinclair/typebox";
-import type { DateTime } from "luxon";
-import type { LedgerAccount } from "./LedgerAccount";
 
 const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const AccountIdSchema = Type.String({ pattern: "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
@@ -62,26 +60,6 @@ type AccountCreateRequest = Static<typeof AccountCreateRequest>;
 type AccountUpdateRequest = Static<typeof AccountUpdateRequest>;
 type AccountResponse = Static<typeof AccountResponse>;
 
-const toIso = (value: DateTime): string => {
-	const encoded = value.toISO();
-	if (encoded === null) throw new Error("Account contains an invalid timestamp");
-	return encoded;
-};
-
-const toAccountResponse = (account: LedgerAccount): AccountResponse => ({
-	id: account.id.toString(),
-	ledgerId: account.ledgerId.toString(),
-	name: account.name,
-	...(account.description === undefined ? {} : { description: account.description }),
-	normalBalance: account.normalBalance,
-	currencyCode: account.currency,
-	balances: account.balances.map(balance => ({ ...balance })),
-	...(account.metadata === undefined ? {} : { metadata: account.metadata }),
-	lockVersion: account.lockVersion,
-	created: toIso(account.created),
-	updated: toIso(account.updated),
-});
-
 export {
 	AccountCollectionParameters,
 	AccountCreateRequest,
@@ -90,5 +68,4 @@ export {
 	AccountListQuery,
 	AccountResponse,
 	AccountUpdateRequest,
-	toAccountResponse,
 };

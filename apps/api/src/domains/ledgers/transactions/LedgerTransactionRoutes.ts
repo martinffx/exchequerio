@@ -23,8 +23,6 @@ import {
 	TransactionListResponse,
 	TransactionUpdateRequest,
 	TransactionResponse,
-	toTransactionListItemResponse,
-	toTransactionResponse,
 } from "./LedgerTransactionSchema";
 import { TransactionServiceTag } from "./LedgerTransactionService";
 
@@ -66,8 +64,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: transactions =>
-					transactions.map(transaction => toTransactionListItemResponse(transaction)),
+				onSuccess: transactions => transactions.map(transaction => transaction.toListItemResponse()),
 				onFailure: error => {
 					throw error;
 				},
@@ -97,7 +94,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: toTransactionResponse,
+				onSuccess: transaction => transaction.toResponse(),
 				onFailure: error => {
 					throw error;
 				},
@@ -150,7 +147,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 							"location",
 							`/api/ledgers/${transaction.ledgerId.toString()}/transactions/${transaction.id.toString()}`
 						)
-						.send(toTransactionResponse(transaction)),
+						.send(transaction.toResponse()),
 				onFailure: error => {
 					throw error;
 				},
@@ -186,7 +183,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: toTransactionResponse,
+				onSuccess: transaction => transaction.toResponse(),
 				onFailure: error => {
 					throw error;
 				},
@@ -221,7 +218,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: toTransactionResponse,
+				onSuccess: transaction => transaction.toResponse(),
 				onFailure: error => {
 					throw error;
 				},

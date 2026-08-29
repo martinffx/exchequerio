@@ -19,7 +19,6 @@ import {
 	AccountListQuery,
 	AccountResponse,
 	AccountUpdateRequest,
-	toAccountResponse,
 } from "./AccountSchema";
 import { AccountServiceTag } from "./AccountService";
 
@@ -55,7 +54,7 @@ const AccountRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: accounts => accounts.map(account => toAccountResponse(account)),
+				onSuccess: accounts => accounts.map(account => account.toResponse()),
 				onFailure: error => {
 					throw error;
 				},
@@ -86,7 +85,7 @@ const AccountRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: toAccountResponse,
+				onSuccess: account => account.toResponse(),
 				onFailure: error => {
 					throw error;
 				},
@@ -129,7 +128,7 @@ const AccountRoutes: FastifyPluginAsync = async server => {
 							"location",
 							`/api/ledgers/${account.ledgerId.toString()}/accounts/${account.id.toString()}`
 						)
-						.send(toAccountResponse(account)),
+						.send(account.toResponse()),
 				onFailure: error => {
 					throw error;
 				},
@@ -168,7 +167,7 @@ const AccountRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: toAccountResponse,
+				onSuccess: account => account.toResponse(),
 				onFailure: error => {
 					throw error;
 				},
