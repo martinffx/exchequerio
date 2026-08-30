@@ -1,12 +1,9 @@
 import { Type } from "@sinclair/typebox";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import type { FastifyPluginAsync } from "fastify";
 import { TypeID } from "typeid-js";
-import { LedgerServiceTag } from "@/domains/ledgers";
-import { AccountServiceTag } from "@/domains/ledgers/accounts";
 import {
 	BadRequestErrorResponse,
-	ConflictError,
 	ConflictErrorResponse,
 	ForbiddenErrorResponse,
 	InternalServerErrorResponse,
@@ -17,21 +14,14 @@ import {
 } from "@/lib/errors";
 import { PaginationQuery } from "@/routes/schema";
 import {
-	type AddLedgerAccountSettlementEntryRequest,
-	type CreateLedgerAccountSettlementRequest,
-	type DeleteLedgerAccountSettlementRequest,
-	type GetLedgerAccountSettlementRequest,
 	LedgerAccountSettlementEntriesRequest,
 	LedgerAccountSettlementIdParams,
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
-	LedgerIdParams,
-	type ListLedgerAccountSettlementsRequest,
-	type RemoveLedgerAccountSettlementEntryRequest,
 	SettlementStatus,
-	type TransitionLedgerAccountSettlementStatusRequest,
-	type UpdateLedgerAccountSettlementRequest,
-} from "./schema";
+} from "./LedgerAccountSettlementSchema";
+import { LedgerAccountSettlementServiceTag } from "./LedgerAccountSettlementService";
+import { LedgerIdParams } from "@/routes/ledgers/schema";
 
 const TAGS = ["Ledger Account Settlements"];
 const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
@@ -57,20 +47,22 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:settlement:read"]),
 		},
-		async (rq: ListLedgerAccountSettlementsRequest): Promise<LedgerAccountSettlementResponse[]> => {
+		async rq => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			await rq.server.runtime.runPromise(
-				LedgerServiceTag.use(service => service.getLedger(orgId, ledgerId))
+			const result = await rq.server.runtime.runPromise(
+				Effect.result(
+					LedgerAccountSettlementServiceTag.use(service =>
+						service.listLedgerAccountSettlements(orgId, ledgerId, rq.query.offset, rq.query.limit)
+					)
+				)
 			);
-			const settlements =
-				await rq.server.services.ledgerAccountSettlementService.listLedgerAccountSettlements(
-					orgId,
-					ledgerId,
-					rq.query.offset,
-					rq.query.limit
-				);
-			return settlements.map(settlement => settlement.toResponse());
+			return Result.match(result, {
+				onSuccess: settlements => settlements.map(settlement => settlement.toResponse()),
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 
@@ -98,15 +90,22 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:settlement:read"]),
 		},
-		async (rq: GetLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
+		async rq => {
 			const orgId = rq.token.orgId;
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
-			const settlement =
-				await rq.server.services.ledgerAccountSettlementService.getLedgerAccountSettlement(
-					orgId,
-					settlementId
-				);
-			return settlement.toResponse();
+			const result = await rq.server.runtime.runPromise(
+				Effect.result(
+					LedgerAccountSettlementServiceTag.use(service =>
+						service.getLedgerAccountSettlement(orgId, settlementId)
+					)
+				)
+			);
+			return Result.match(result, {
+				onSuccess: settlement => settlement.toResponse(),
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 
@@ -136,30 +135,22 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
-		async (rq: CreateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
+		async rq => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-
-			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledAccountId);
-			const contraAccountId = TypeID.fromString<"lat">(rq.body.contraAccountId);
-			const [settledAccount, contraAccount] = await rq.server.runtime.runPromise(
-				Effect.all([
-					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, settledAccountId)),
-					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, contraAccountId)),
-				])
+			const result = await rq.server.runtime.runPromise(
+				Effect.result(
+					LedgerAccountSettlementServiceTag.use(service =>
+						service.createLedgerAccountSettlement(orgId, ledgerId, rq.body)
+					)
+				)
 			);
-			if (settledAccount.currency !== contraAccount.currency) {
-				throw new ConflictError("Settlement accounts must use the same currency");
-			}
-
-			const created =
-				await rq.server.services.ledgerAccountSettlementService.createLedgerAccountSettlement(
-					orgId,
-					settledAccount.currency,
-					settledAccount.normalBalance,
-					rq.body
-				);
-			return created.toResponse();
+			return Result.match(result, {
+				onSuccess: settlement => settlement.toResponse(),
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 
@@ -190,31 +181,23 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
-		async (rq: UpdateLedgerAccountSettlementRequest): Promise<LedgerAccountSettlementResponse> => {
+		async rq => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-
-			const settledAccountId = TypeID.fromString<"lat">(rq.body.settledAccountId);
-			const contraAccountId = TypeID.fromString<"lat">(rq.body.contraAccountId);
-			const [settledAccount, contraAccount] = await rq.server.runtime.runPromise(
-				Effect.all([
-					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, settledAccountId)),
-					AccountServiceTag.use(service => service.getAccount(orgId, ledgerId, contraAccountId)),
-				])
+			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
+			const result = await rq.server.runtime.runPromise(
+				Effect.result(
+					LedgerAccountSettlementServiceTag.use(service =>
+						service.updateLedgerAccountSettlement(orgId, ledgerId, settlementId, rq.body)
+					)
+				)
 			);
-			if (settledAccount.currency !== contraAccount.currency) {
-				throw new ConflictError("Settlement accounts must use the same currency");
-			}
-
-			const updated =
-				await rq.server.services.ledgerAccountSettlementService.updateLedgerAccountSettlement(
-					orgId,
-					rq.params.settlementId,
-					settledAccount.currency,
-					settledAccount.normalBalance,
-					rq.body
-				);
-			return updated.toResponse();
+			return Result.match(result, {
+				onSuccess: settlement => settlement.toResponse(),
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 
@@ -243,13 +226,22 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:settlement:delete"]),
 		},
-		async (rq: DeleteLedgerAccountSettlementRequest): Promise<void> => {
+		async rq => {
 			const orgId = rq.token.orgId;
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
-			await rq.server.services.ledgerAccountSettlementService.deleteLedgerAccountSettlement(
-				orgId,
-				settlementId
+			const result = await rq.server.runtime.runPromise(
+				Effect.result(
+					LedgerAccountSettlementServiceTag.use(service =>
+						service.deleteLedgerAccountSettlement(orgId, settlementId)
+					)
+				)
 			);
+			return Result.match(result, {
+				onSuccess: () => undefined,
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 
@@ -281,14 +273,22 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
-		async (rq: AddLedgerAccountSettlementEntryRequest): Promise<void> => {
+		async rq => {
 			const orgId = rq.token.orgId;
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
-			await rq.server.services.ledgerAccountSettlementService.addLedgerAccountSettlementEntries(
-				orgId,
-				settlementId,
-				rq.body.entries
+			const result = await rq.server.runtime.runPromise(
+				Effect.result(
+					LedgerAccountSettlementServiceTag.use(service =>
+						service.addLedgerAccountSettlementEntries(orgId, settlementId, rq.body.entries)
+					)
+				)
 			);
+			return Result.match(result, {
+				onSuccess: () => undefined,
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 
@@ -319,14 +319,22 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
-		async (rq: RemoveLedgerAccountSettlementEntryRequest): Promise<void> => {
+		async rq => {
 			const orgId = rq.token.orgId;
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
-			await rq.server.services.ledgerAccountSettlementService.removeLedgerAccountSettlementEntries(
-				orgId,
-				settlementId,
-				rq.body.entries
+			const result = await rq.server.runtime.runPromise(
+				Effect.result(
+					LedgerAccountSettlementServiceTag.use(service =>
+						service.removeLedgerAccountSettlementEntries(orgId, settlementId, rq.body.entries)
+					)
+				)
 			);
+			return Result.match(result, {
+				onSuccess: () => undefined,
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 
@@ -359,22 +367,25 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:settlement:write"]),
 		},
-		async (
-			rq: TransitionLedgerAccountSettlementStatusRequest
-		): Promise<LedgerAccountSettlementResponse> => {
+		async rq => {
 			const orgId = rq.token.orgId;
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			const targetStatus = rq.params.status;
 
-			const settlement =
-				await rq.server.services.ledgerAccountSettlementService.transitionSettlementStatus(
-					orgId,
-					ledgerId,
-					settlementId,
-					targetStatus
-				);
-			return settlement.toResponse();
+			const result = await rq.server.runtime.runPromise(
+				Effect.result(
+					LedgerAccountSettlementServiceTag.use(service =>
+						service.transitionSettlementStatus(orgId, ledgerId, settlementId, targetStatus)
+					)
+				)
+			);
+			return Result.match(result, {
+				onSuccess: settlement => settlement.toResponse(),
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 };

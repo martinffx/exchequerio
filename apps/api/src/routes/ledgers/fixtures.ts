@@ -4,7 +4,6 @@ import {
 	LedgerAccountBalanceMonitorEntity,
 	LedgerAccountCategoryEntity,
 	LedgerAccountEntity,
-	LedgerAccountSettlementEntity,
 	LedgerAccountStatementEntity,
 	LedgerEntity,
 	OrganizationEntity,
@@ -94,46 +93,6 @@ function createLedgerAccountCategoryFixture(
 	});
 }
 
-function createLedgerAccountSettlementFixture(
-	overrides?: Partial<{
-		id: TypeID<"las">;
-		organizationId: TypeID<"org">;
-		transactionId?: TypeID<"ltr">;
-		settledAccountId: TypeID<"lat">;
-		contraAccountId: TypeID<"lat">;
-		amount: number;
-		normalBalance: "debit" | "credit";
-		currency: string;
-		status: "drafting" | "processing" | "pending" | "posted" | "archiving" | "archived";
-		description?: string;
-		externalReference?: string;
-		effectiveAtUpperBound?: Date;
-		metadata?: Record<string, unknown>;
-		created: Date;
-		updated: Date;
-	}>
-): LedgerAccountSettlementEntity {
-	const now = new Date();
-	return new LedgerAccountSettlementEntity({
-		id: new TypeID("las"),
-		organizationId: new TypeID("org"),
-		transactionId: undefined,
-		settledAccountId: new TypeID("lat"),
-		contraAccountId: new TypeID("lat"),
-		amount: 0,
-		normalBalance: "debit",
-		currency: "USD",
-		status: "drafting",
-		description: faker.lorem.sentence(),
-		externalReference: undefined,
-		effectiveAtUpperBound: undefined,
-		metadata: undefined,
-		created: now,
-		updated: now,
-		...overrides,
-	});
-}
-
 function createLedgerAccountStatementFixture(
 	overrides?: Partial<{
 		id: TypeID<"lst">;
@@ -204,7 +163,6 @@ export {
 	createLedgerFixture,
 	createLedgerAccountFixture,
 	createLedgerAccountCategoryFixture,
-	createLedgerAccountSettlementFixture,
 	createLedgerAccountStatementFixture,
 	createLedgerAccountBalanceMonitorFixture,
 };

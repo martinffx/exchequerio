@@ -31,6 +31,8 @@ export {
 	LedgerAccountSettlementServiceTag,
 	ledgerAccountSettlementServiceLayer,
 } from "./LedgerAccountSettlementService";
+export { settlementLayer };
+export { LedgerAccountSettlementRoutes } from "./LedgerAccountSettlementRoutes";
 export {
 	LedgerAccountSettlementEntriesRequest,
 	LedgerAccountSettlementId,
@@ -40,3 +42,11 @@ export {
 	NormalBalance,
 	SettlementStatus,
 } from "./LedgerAccountSettlementSchema";
+import { Layer } from "effect";
+
+import { ledgerAccountSettlementRepoLayer } from "./LedgerAccountSettlementRepo";
+import { ledgerAccountSettlementServiceLayer } from "./LedgerAccountSettlementService";
+
+const settlementLayer = ledgerAccountSettlementServiceLayer.pipe(
+	Layer.provide(ledgerAccountSettlementRepoLayer)
+);

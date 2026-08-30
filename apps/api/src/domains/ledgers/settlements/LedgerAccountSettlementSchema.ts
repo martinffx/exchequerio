@@ -101,6 +101,7 @@ const LedgerAccountSettlementEntriesRequest = Type.Object({
 });
 
 type LedgerAccountSettlementId = Static<typeof LedgerAccountSettlementId>;
+type LedgerAccountSettlementIdParams = Static<typeof LedgerAccountSettlementIdParams>;
 type LedgerAccountSettlementRequest = Static<typeof LedgerAccountSettlementRequest>;
 type LedgerAccountSettlementResponse = Static<typeof LedgerAccountSettlementResponse>;
 type LedgerAccountSettlementEntriesRequest = Static<typeof LedgerAccountSettlementEntriesRequest>;

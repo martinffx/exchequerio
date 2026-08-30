@@ -1,16 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { Effect, Layer } from "effect";
-import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/auth";
 import { Config } from "@/config";
 import { makeDatabaseLive } from "@/db";
-import { Ledger, LedgerServiceTag } from "@/domains/ledgers";
-import type { LedgerService } from "@/domains/ledgers";
-import { AccountServiceTag, LedgerAccount } from "@/domains/ledgers/accounts";
-import type { AccountService } from "@/domains/ledgers/accounts";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import type {
 	LedgerAccountID,
@@ -20,7 +15,6 @@ import type {
 } from "@/repo/entities/types";
 import { buildServer } from "@/server";
 import { ServerConfigTag, type ServerRuntimeLayer } from "@/runtime";
-import type { LedgerAccountSettlementService } from "@/services";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -29,17 +23,21 @@ import type {
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
-import { createLedgerAccountSettlementFixture } from "./fixtures";
+import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
+import {
+	type LedgerAccountSettlementService,
+	LedgerAccountSettlementServiceTag,
+} from "./LedgerAccountSettlementService";
 
-const effectLedgerService = vi.mocked<LedgerService>({
-	getLedger: vi.fn(),
-} as unknown as LedgerService);
+type PromiseService = {
+	[K in keyof LedgerAccountSettlementService]: LedgerAccountSettlementService[K] extends (
+		...args: infer A
+	) => Effect.Effect<infer B, unknown, unknown>
+		? (...args: A) => Promise<B>
+		: never;
+};
 
-const effectAccountService = vi.mocked<AccountService>({
-	getAccount: vi.fn(),
-} as unknown as AccountService);
-
-const mockLedgerAccountSettlementService = vi.mocked<LedgerAccountSettlementService>({
+const mockLedgerAccountSettlementService = vi.mocked<PromiseService>({
 	listLedgerAccountSettlements: vi.fn(),
 	getLedgerAccountSettlement: vi.fn(),
 	createLedgerAccountSettlement: vi.fn(),
@@ -48,7 +46,30 @@ const mockLedgerAccountSettlementService = vi.mocked<LedgerAccountSettlementServ
 	addLedgerAccountSettlementEntries: vi.fn(),
 	removeLedgerAccountSettlementEntries: vi.fn(),
 	transitionSettlementStatus: vi.fn(),
-} as unknown as LedgerAccountSettlementService);
+} as unknown as PromiseService);
+
+const effectSettlementService: LedgerAccountSettlementService = {
+	listLedgerAccountSettlements: (...args) =>
+		Effect.promise(() => mockLedgerAccountSettlementService.listLedgerAccountSettlements(...args)),
+	getLedgerAccountSettlement: (...args) =>
+		Effect.promise(() => mockLedgerAccountSettlementService.getLedgerAccountSettlement(...args)),
+	createLedgerAccountSettlement: (...args) =>
+		Effect.promise(() => mockLedgerAccountSettlementService.createLedgerAccountSettlement(...args)),
+	updateLedgerAccountSettlement: (...args) =>
+		Effect.promise(() => mockLedgerAccountSettlementService.updateLedgerAccountSettlement(...args)),
+	deleteLedgerAccountSettlement: (...args) =>
+		Effect.promise(() => mockLedgerAccountSettlementService.deleteLedgerAccountSettlement(...args)),
+	addLedgerAccountSettlementEntries: (...args) =>
+		Effect.promise(() =>
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries(...args)
+		),
+	removeLedgerAccountSettlementEntries: (...args) =>
+		Effect.promise(() =>
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries(...args)
+		),
+	transitionSettlementStatus: (...args) =>
+		Effect.promise(() => mockLedgerAccountSettlementService.transitionSettlementStatus(...args)),
+};
 
 describe("LedgerAccountSettlementRoutes", () => {
 	let server: FastifyInstance;
@@ -60,30 +81,23 @@ describe("LedgerAccountSettlementRoutes", () => {
 	const settledAccountId = TypeID.fromString("lat_01h2x3y4z5a6b7c8d9e0f1g2h6") as LedgerAccountID;
 	const contraAccountId = TypeID.fromString("lat_01h2x3y4z5a6b7c8d9e0f1g2h8") as LedgerAccountID;
 	const ledgerIdStr = ledgerId.toString();
+	const differentLedgerIdStr = new TypeID("lgr").toString();
 	const settlementIdStr = settlementId.toString();
 	const fixedDate = new Date("2025-01-01T00:00:00.000Z");
-	const fixedDateTime = DateTime.fromJSDate(fixedDate, { zone: "utc" }) as DateTime<true>;
-
-	const effectLedger = new Ledger({
-		id: ledgerId,
-		organizationId: orgId,
-		name: "Ledger",
-		created: fixedDateTime,
-		updated: fixedDateTime,
-	});
-	const effectAccount = LedgerAccount.fromCreateRequest(
-		settledAccountId,
-		orgId,
-		ledgerId,
-		{ name: "Settled account", normalBalance: "debit", currencyCode: "USD" },
-		fixedDateTime
-	);
-	const mockSettlement = createLedgerAccountSettlementFixture({
+	const mockSettlement = new LedgerAccountSettlementEntity({
 		id: settlementId,
 		organizationId: orgId,
+		transactionId: undefined,
 		settledAccountId: settledAccountId,
 		contraAccountId: contraAccountId,
+		amount: 0,
+		normalBalance: "debit",
+		currency: "USD",
+		status: "drafting",
 		description: "Test settlement",
+		externalReference: undefined,
+		effectiveAtUpperBound: undefined,
+		metadata: undefined,
 		created: fixedDate,
 		updated: fixedDate,
 	});
@@ -96,20 +110,12 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	beforeAll(async () => {
 		const config = new Config();
-		effectLedgerService.getLedger.mockReturnValue(Effect.succeed(effectLedger));
-		effectAccountService.getAccount.mockReturnValue(Effect.succeed(effectAccount));
 		server = await buildServer({
 			runtimeLayer: Layer.mergeAll(
 				Layer.succeed(ServerConfigTag, config),
 				makeDatabaseLive(config.databaseUrl),
-				Layer.succeed(LedgerServiceTag, effectLedgerService),
-				Layer.succeed(AccountServiceTag, effectAccountService)
+				Layer.succeed(LedgerAccountSettlementServiceTag, effectSettlementService)
 			) as ServerRuntimeLayer,
-			servicePluginOpts: {
-				services: {
-					ledgerAccountSettlementService: mockLedgerAccountSettlementService,
-				},
-			},
 		});
 	});
 
@@ -223,6 +229,22 @@ describe("LedgerAccountSettlementRoutes", () => {
 			);
 		});
 
+		it("does not scope the lookup to the path Ledger", async () => {
+			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockResolvedValue(mockSettlement);
+
+			const rs = await server.inject({
+				method: "GET",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${differentLedgerIdStr}/settlements/${settlementIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(200);
+			expect(mockLedgerAccountSettlementService.getLedgerAccountSettlement).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
+				expect.objectContaining({ prefix: "las" })
+			);
+		});
+
 		it("should handle not found error", async () => {
 			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockRejectedValue(
 				new NotFoundError("Settlement not found")
@@ -303,8 +325,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(rs.json()).toMatchSnapshot();
 			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
-				"USD",
-				"debit",
+				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({
 					settledAccountId: settledAccountId.toString(),
 					contraAccountId: contraAccountId.toString(),
@@ -313,16 +334,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("rejects accounts with a different currency", async () => {
-			const incompatibleAccount = LedgerAccount.fromCreateRequest(
-				contraAccountId,
-				orgId,
-				ledgerId,
-				{ name: "Contra account", normalBalance: "debit", currencyCode: "EUR" },
-				fixedDateTime
+			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockRejectedValue(
+				new ConflictError("Settlement accounts must use the same currency")
 			);
-			effectAccountService.getAccount
-				.mockReturnValueOnce(Effect.succeed(effectAccount))
-				.mockReturnValueOnce(Effect.succeed(incompatibleAccount));
 
 			const rs = await server.inject({
 				method: "POST",
@@ -337,7 +351,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			});
 
 			expect(rs.statusCode).toBe(409);
-			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).not.toHaveBeenCalled();
+			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).toHaveBeenCalledOnce();
 		});
 
 		it("should handle unauthorized error", async () => {
@@ -591,6 +605,22 @@ describe("LedgerAccountSettlementRoutes", () => {
 			);
 		});
 
+		it("does not scope the deletion to the path Ledger", async () => {
+			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockResolvedValue();
+
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${differentLedgerIdStr}/settlements/${settlementIdStr}`,
+			});
+
+			expect(rs.statusCode).toBe(200);
+			expect(mockLedgerAccountSettlementService.deleteLedgerAccountSettlement).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
+				expect.objectContaining({ prefix: "las" })
+			);
+		});
+
 		it("should handle not found error", async () => {
 			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockRejectedValue(
 				new NotFoundError("Settlement not found")
@@ -684,6 +714,27 @@ describe("LedgerAccountSettlementRoutes", () => {
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" }),
 				expect.any(Array)
+			);
+		});
+
+		it("does not scope the Entry addition to the path Ledger", async () => {
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockResolvedValue();
+			const entryId = new TypeID("lte").toString();
+
+			const rs = await server.inject({
+				method: "PATCH",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${differentLedgerIdStr}/settlements/${settlementIdStr}/entries`,
+				payload: { entries: [entryId] },
+			});
+
+			expect(rs.statusCode).toBe(200);
+			expect(
+				mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries
+			).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
+				expect.objectContaining({ prefix: "las" }),
+				[entryId]
 			);
 		});
 
@@ -811,6 +862,27 @@ describe("LedgerAccountSettlementRoutes", () => {
 			);
 		});
 
+		it("does not scope the Entry removal to the path Ledger", async () => {
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockResolvedValue();
+			const entryId = new TypeID("lte").toString();
+
+			const rs = await server.inject({
+				method: "DELETE",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${differentLedgerIdStr}/settlements/${settlementIdStr}/entries`,
+				payload: { entries: [entryId] },
+			});
+
+			expect(rs.statusCode).toBe(200);
+			expect(
+				mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries
+			).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
+				expect.objectContaining({ prefix: "las" }),
+				[entryId]
+			);
+		});
+
 		it("should handle not found error", async () => {
 			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockRejectedValue(
 				new NotFoundError("Settlement not found")
@@ -914,15 +986,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Transition Settlement Status", () => {
 		it("should transition settlement status to processing", async () => {
-			const processingSettlement = createLedgerAccountSettlementFixture({
-				id: settlementId,
-				organizationId: orgId,
-				settledAccountId: settledAccountId,
-				contraAccountId: contraAccountId,
+			const processingSettlement = new LedgerAccountSettlementEntity({
+				...mockSettlement,
 				status: "processing",
-				description: "Test settlement",
-				created: fixedDate,
-				updated: fixedDate,
 			});
 			mockLedgerAccountSettlementService.transitionSettlementStatus.mockResolvedValue(
 				processingSettlement

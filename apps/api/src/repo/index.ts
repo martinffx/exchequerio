@@ -2,7 +2,6 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
-import { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
 import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import type { RepoPluginOptions, Repos } from "./types";
 
@@ -18,15 +17,12 @@ const RepoPlugin: FastifyPluginAsync<RepoPluginOptions> = fp(
 
 		const ledgerAccountCategoryRepo =
 			opts.repos?.ledgerAccountCategoryRepo ?? new LedgerAccountCategoryRepo(db);
-		const ledgerAccountSettlementRepo =
-			opts.repos?.ledgerAccountSettlementRepo ?? new LedgerAccountSettlementRepo(db);
 		const ledgerAccountStatementRepo =
 			opts.repos?.ledgerAccountStatementRepo ?? new LedgerAccountStatementRepo(db);
 		const ledgerAccountBalanceMonitorRepo =
 			opts.repos?.ledgerAccountBalanceMonitorRepo ?? new LedgerAccountBalanceMonitorRepo(db);
 		const repos: Repos = {
 			ledgerAccountCategoryRepo,
-			ledgerAccountSettlementRepo,
 			ledgerAccountStatementRepo,
 			ledgerAccountBalanceMonitorRepo,
 		};

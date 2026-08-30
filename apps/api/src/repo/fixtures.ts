@@ -16,7 +16,6 @@ import type { LedgerID } from "@/repo/entities/types";
 import { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
-import { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
 import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import { LedgerRepo } from "./LedgerRepo";
 import * as schema from "./schema";
@@ -64,7 +63,6 @@ function getRepos(): TestRepos {
 	const ledgerRepo = new LedgerRepo(db);
 	const ledgerAccountRepo = new LedgerAccountRepo(db);
 	const ledgerAccountCategoryRepo = new LedgerAccountCategoryRepo(db);
-	const ledgerAccountSettlementRepo = new LedgerAccountSettlementRepo(db);
 	const ledgerAccountStatementRepo = new LedgerAccountStatementRepo(db);
 	const ledgerAccountBalanceMonitorRepo = new LedgerAccountBalanceMonitorRepo(db);
 
@@ -74,7 +72,6 @@ function getRepos(): TestRepos {
 		ledgerRepo,
 		ledgerAccountRepo,
 		ledgerAccountCategoryRepo,
-		ledgerAccountSettlementRepo,
 		ledgerAccountStatementRepo,
 		ledgerAccountBalanceMonitorRepo,
 	};
