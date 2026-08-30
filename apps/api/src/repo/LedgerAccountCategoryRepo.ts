@@ -1,8 +1,23 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
-import { ConflictError, NotFoundError } from "@/lib/errors";
+// oxlint-disable-next-line boundaries/element-types -- The in-place Category migration reuses shared PostgreSQL error inspection.
+import { postgresConstraint, postgresErrorCode } from "@/db/errors";
+// oxlint-disable-next-line boundaries/element-types -- The legacy Category repository must expose the canonical Account ownership error.
+import { AccountNotFound } from "@/domains/ledgers/accounts/AccountErrors";
+// oxlint-disable-next-line boundaries/element-types -- The legacy Category repository must expose the canonical Ledger ownership error.
+import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
-import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
-import { getDBErrorCode, isDBError } from "./errors";
+import type {
+	LedgerAccountCategoryID,
+	LedgerAccountID,
+	LedgerID,
+	OrgID,
+} from "@/repo/entities/types";
+import {
+	CategoryConflict,
+	CategoryNotFound,
+	CategoryPersistenceDecodingFailure,
+	mapCategoryInfrastructureError,
+} from "./LedgerAccountCategoryErrors";
 import {
 	LedgerAccountCategoriesTable,
 	LedgerAccountCategoryAccountsTable,
@@ -10,82 +25,87 @@ import {
 } from "./schema";
 import type { DrizzleDB } from "./types";
 
-/**
- * Repository for ledger account category data access operations.
- * Handles CRUD operations with ledger tenancy and many-to-many relationships.
- */
+const decodeCategory = (
+	record: Parameters<typeof LedgerAccountCategoryEntity.fromRecord>[0]
+): LedgerAccountCategoryEntity => {
+	try {
+		return LedgerAccountCategoryEntity.fromRecord(record);
+	} catch (error) {
+		throw new CategoryPersistenceDecodingFailure(error);
+	}
+};
+
+const isTypedFailure = (cause: unknown) =>
+	cause instanceof CategoryNotFound ||
+	cause instanceof CategoryConflict ||
+	cause instanceof LedgerNotFound ||
+	cause instanceof AccountNotFound ||
+	cause instanceof CategoryPersistenceDecodingFailure;
+
+const rethrowPersistence = (cause: unknown): never => {
+	throw isTypedFailure(cause) ? cause : mapCategoryInfrastructureError(cause);
+};
+
 class LedgerAccountCategoryRepo {
 	constructor(private readonly db: DrizzleDB) {}
 
-	/**
-	 * Lists all ledger account categories for a specific ledger with pagination.
-	 *
-	 * @param ledgerId - Ledger ID to list categories from
-	 * @param offset - Number of records to skip for pagination
-	 * @param limit - Maximum number of records to return
-	 * @returns Array of ledger account category entities
-	 */
 	public async listLedgerAccountCategories(
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		offset: number,
 		limit: number
 	): Promise<LedgerAccountCategoryEntity[]> {
-		const results = await this.db
-			.select(getTableColumns(LedgerAccountCategoriesTable))
-			.from(LedgerAccountCategoriesTable)
-			.where(eq(LedgerAccountCategoriesTable.ledgerId, ledgerId.toString()))
-			.orderBy(desc(LedgerAccountCategoriesTable.created))
-			.limit(limit)
-			.offset(offset);
-
-		return results.map(record => LedgerAccountCategoryEntity.fromRecord(record));
+		try {
+			const rows = await this.db
+				.select(getTableColumns(LedgerAccountCategoriesTable))
+				.from(LedgerAccountCategoriesTable)
+				.where(
+					and(
+						eq(LedgerAccountCategoriesTable.organizationId, organizationId.toString()),
+						eq(LedgerAccountCategoriesTable.ledgerId, ledgerId.toString())
+					)
+				)
+				.orderBy(desc(LedgerAccountCategoriesTable.created))
+				.limit(limit)
+				.offset(offset);
+			return rows.map(row => decodeCategory(row));
+		} catch (error) {
+			return rethrowPersistence(error);
+		}
 	}
 
-	/**
-	 * Retrieves a single ledger account category by ID with ledger validation.
-	 *
-	 * @param ledgerId - Ledger ID for tenancy validation
-	 * @param categoryId - Unique category identifier
-	 * @returns The ledger account category entity
-	 * @throws {NotFoundError} If category not found or doesn't belong to the ledger
-	 */
 	public async getLedgerAccountCategory(
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID
 	): Promise<LedgerAccountCategoryEntity> {
-		const result = await this.db
-			.select(getTableColumns(LedgerAccountCategoriesTable))
-			.from(LedgerAccountCategoriesTable)
-			.where(
-				and(
-					eq(LedgerAccountCategoriesTable.id, categoryId.toString()),
-					eq(LedgerAccountCategoriesTable.ledgerId, ledgerId.toString())
+		try {
+			const rows = await this.db
+				.select(getTableColumns(LedgerAccountCategoriesTable))
+				.from(LedgerAccountCategoriesTable)
+				.where(
+					and(
+						eq(LedgerAccountCategoriesTable.organizationId, organizationId.toString()),
+						eq(LedgerAccountCategoriesTable.ledgerId, ledgerId.toString()),
+						eq(LedgerAccountCategoriesTable.id, categoryId.toString())
+					)
 				)
-			)
-			.limit(1);
-
-		if (result.length === 0) {
-			throw new NotFoundError(`Category not found: ${categoryId.toString()}`);
+				.limit(1);
+			if (rows.length === 0) {
+				throw new CategoryNotFound(`Category not found: ${categoryId.toString()}`);
+			}
+			return decodeCategory(rows[0]);
+		} catch (error) {
+			return rethrowPersistence(error);
 		}
-
-		return LedgerAccountCategoryEntity.fromRecord(result[0]);
 	}
 
-	/**
-	 * Creates a new ledger account category or updates an existing one (upsert).
-	 *
-	 * @param entity - The ledger account category entity to create or update
-	 * @returns The created or updated ledger account category entity
-	 * @throws {NotFoundError} If the referenced ledger doesn't exist
-	 * @throws {ConflictError} If immutable fields were changed
-	 */
 	public async upsertLedgerAccountCategory(
 		entity: LedgerAccountCategoryEntity
 	): Promise<LedgerAccountCategoryEntity> {
 		try {
 			const record = entity.toRecord();
-
-			const result = await this.db
+			const rows = await this.db
 				.insert(LedgerAccountCategoriesTable)
 				.values(record)
 				.onConflictDoUpdate({
@@ -97,199 +117,170 @@ class LedgerAccountCategoryRepo {
 						metadata: record.metadata,
 						updated: record.updated,
 					},
-					where: eq(LedgerAccountCategoriesTable.ledgerId, entity.ledgerId.toString()),
+					where: and(
+						eq(LedgerAccountCategoriesTable.organizationId, entity.organizationId.toString()),
+						eq(LedgerAccountCategoriesTable.ledgerId, entity.ledgerId.toString())
+					),
 				})
 				.returning();
-
-			if (result.length === 0) {
-				throw new ConflictError("Category not found or ledgerId mismatch");
+			if (rows.length === 0) {
+				throw new CategoryConflict("Category not found or ledgerId mismatch");
 			}
-
-			return LedgerAccountCategoryEntity.fromRecord(result[0]);
+			return decodeCategory(rows[0]);
 		} catch (error) {
-			// PostgreSQL foreign key violation (ledger doesn't exist)
-			if (isDBError(error) && getDBErrorCode(error) === "23503") {
-				throw new NotFoundError(`Ledger not found: ${entity.ledgerId.toString()}`);
-			}
-			throw error;
+			if (postgresErrorCode(error) === "23503") throw new LedgerNotFound();
+			return rethrowPersistence(error);
 		}
 	}
 
-	/**
-	 * Deletes a ledger account category with ledger validation.
-	 *
-	 * @param ledgerId - Ledger ID for tenancy validation
-	 * @param categoryId - Unique category identifier to delete
-	 * @throws {NotFoundError} If category not found or doesn't belong to the ledger
-	 *
-	 * @remarks
-	 * - CASCADE deletes on junction tables handle cleanup of parent/account relationships
-	 * - No manual dependency checks needed - DB enforces referential integrity
-	 */
 	public async deleteLedgerAccountCategory(
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID
 	): Promise<void> {
-		const deleteResult = await this.db
-			.delete(LedgerAccountCategoriesTable)
-			.where(
-				and(
-					eq(LedgerAccountCategoriesTable.id, categoryId.toString()),
-					eq(LedgerAccountCategoriesTable.ledgerId, ledgerId.toString())
+		try {
+			const rows = await this.db
+				.delete(LedgerAccountCategoriesTable)
+				.where(
+					and(
+						eq(LedgerAccountCategoriesTable.organizationId, organizationId.toString()),
+						eq(LedgerAccountCategoriesTable.ledgerId, ledgerId.toString()),
+						eq(LedgerAccountCategoriesTable.id, categoryId.toString())
+					)
 				)
-			)
-			.returning({ id: LedgerAccountCategoriesTable.id });
-
-		if (deleteResult.length === 0) {
-			throw new NotFoundError(`Category not found: ${categoryId.toString()}`);
+				.returning({ id: LedgerAccountCategoriesTable.id });
+			if (rows.length === 0) {
+				throw new CategoryNotFound(`Category not found: ${categoryId.toString()}`);
+			}
+		} catch (error) {
+			rethrowPersistence(error);
 		}
 	}
 
-	/**
-	 * Links an account to a category (many-to-many).
-	 *
-	 * @param ledgerId - Ledger ID for tenancy validation
-	 * @param categoryId - Category to link to
-	 * @param accountId - Account to link
-	 * @throws {NotFoundError} If category or account doesn't exist
-	 *
-	 * @remarks
-	 * - Uses onConflictDoNothing for idempotent operation
-	 * - Verifies category exists and belongs to ledger first
-	 */
 	public async linkAccountToCategory(
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID,
 		accountId: LedgerAccountID
 	): Promise<void> {
-		// Verify category exists and belongs to ledger
-		await this.getLedgerAccountCategory(ledgerId, categoryId);
-
+		await this.getLedgerAccountCategory(organizationId, ledgerId, categoryId);
 		try {
 			await this.db
 				.insert(LedgerAccountCategoryAccountsTable)
 				.values({
+					organizationId: organizationId.toString(),
+					ledgerId: ledgerId.toString(),
 					categoryId: categoryId.toString(),
 					accountId: accountId.toString(),
 				})
 				.onConflictDoNothing();
 		} catch (error) {
-			// PostgreSQL foreign key violation (account doesn't exist)
-			if (isDBError(error) && getDBErrorCode(error) === "23503") {
-				throw new NotFoundError(`Account not found: ${accountId.toString()}`);
+			if (postgresErrorCode(error) === "23503") {
+				const constraint = postgresConstraint(error);
+				if (constraint === "ledger_account_category_accounts_account_ownership_fk") {
+					throw new AccountNotFound();
+				}
+				if (constraint === "ledger_account_category_accounts_category_ownership_fk") {
+					throw new CategoryNotFound(`Category not found: ${categoryId.toString()}`);
+				}
 			}
-			throw error;
+			rethrowPersistence(error);
 		}
 	}
 
-	/**
-	 * Unlinks an account from a category.
-	 *
-	 * @param ledgerId - Ledger ID for tenancy validation
-	 * @param categoryId - Category to unlink from
-	 * @param accountId - Account to unlink
-	 * @throws {NotFoundError} If category doesn't exist or account not linked to category
-	 */
 	public async unlinkAccountFromCategory(
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID,
 		accountId: LedgerAccountID
 	): Promise<void> {
-		// Verify category exists and belongs to ledger
-		await this.getLedgerAccountCategory(ledgerId, categoryId);
-
-		const result = await this.db
-			.delete(LedgerAccountCategoryAccountsTable)
-			.where(
-				and(
-					eq(LedgerAccountCategoryAccountsTable.categoryId, categoryId.toString()),
-					eq(LedgerAccountCategoryAccountsTable.accountId, accountId.toString())
+		await this.getLedgerAccountCategory(organizationId, ledgerId, categoryId);
+		try {
+			const rows = await this.db
+				.delete(LedgerAccountCategoryAccountsTable)
+				.where(
+					and(
+						eq(LedgerAccountCategoryAccountsTable.organizationId, organizationId.toString()),
+						eq(LedgerAccountCategoryAccountsTable.ledgerId, ledgerId.toString()),
+						eq(LedgerAccountCategoryAccountsTable.categoryId, categoryId.toString()),
+						eq(LedgerAccountCategoryAccountsTable.accountId, accountId.toString())
+					)
 				)
-			)
-			.returning({ categoryId: LedgerAccountCategoryAccountsTable.categoryId });
-
-		if (result.length === 0) {
-			throw new NotFoundError(
-				`Account ${accountId.toString()} not linked to category ${categoryId.toString()}`
-			);
+				.returning({ categoryId: LedgerAccountCategoryAccountsTable.categoryId });
+			if (rows.length === 0) {
+				throw new CategoryNotFound(
+					`Account ${accountId.toString()} not linked to category ${categoryId.toString()}`
+				);
+			}
+		} catch (error) {
+			rethrowPersistence(error);
 		}
 	}
 
-	/**
-	 * Links a category to a parent category (many-to-many hierarchy).
-	 *
-	 * @param ledgerId - Ledger ID for tenancy validation
-	 * @param categoryId - Child category to link
-	 * @param parentCategoryId - Parent category to link to
-	 * @throws {NotFoundError} If either category doesn't exist
-	 * @throws {ConflictError} If attempting self-reference
-	 *
-	 * @remarks
-	 * - Prevents self-reference via DB CHECK constraint
-	 * - Verifies both categories exist and belong to same ledger
-	 * - Uses onConflictDoNothing for idempotent operation
-	 */
 	public async linkCategoryToParent(
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID,
 		parentCategoryId: LedgerAccountCategoryID
 	): Promise<void> {
-		// Verify both categories exist and belong to same ledger
-		await this.getLedgerAccountCategory(ledgerId, categoryId);
-		await this.getLedgerAccountCategory(ledgerId, parentCategoryId);
-
-		// Prevent self-reference
+		await this.getLedgerAccountCategory(organizationId, ledgerId, categoryId);
+		await this.getLedgerAccountCategory(organizationId, ledgerId, parentCategoryId);
 		if (categoryId.toString() === parentCategoryId.toString()) {
-			throw new ConflictError("Category cannot be its own parent");
+			throw new CategoryConflict("Category cannot be its own parent");
 		}
-
 		try {
 			await this.db
 				.insert(LedgerAccountCategoryParentsTable)
 				.values({
+					organizationId: organizationId.toString(),
+					ledgerId: ledgerId.toString(),
 					categoryId: categoryId.toString(),
 					parentCategoryId: parentCategoryId.toString(),
 				})
 				.onConflictDoNothing();
 		} catch (error) {
-			// PostgreSQL CHECK constraint violation (self-reference)
-			if (error instanceof Error && "code" in error && error.code === "23514") {
-				throw new ConflictError("Category cannot be its own parent");
+			if (postgresErrorCode(error) === "23514") {
+				throw new CategoryConflict("Category cannot be its own parent");
 			}
-			throw error;
+			if (postgresErrorCode(error) === "23503") {
+				const constraint = postgresConstraint(error);
+				if (constraint === "ledger_account_category_parents_child_ownership_fk") {
+					throw new CategoryNotFound(`Category not found: ${categoryId.toString()}`);
+				}
+				if (constraint === "ledger_account_category_parents_parent_ownership_fk") {
+					throw new CategoryNotFound(`Category not found: ${parentCategoryId.toString()}`);
+				}
+			}
+			rethrowPersistence(error);
 		}
 	}
 
-	/**
-	 * Unlinks a category from a parent category.
-	 *
-	 * @param ledgerId - Ledger ID for tenancy validation
-	 * @param categoryId - Child category to unlink
-	 * @param parentCategoryId - Parent category to unlink from
-	 * @throws {NotFoundError} If category doesn't exist or not linked to parent
-	 */
 	public async unlinkCategoryFromParent(
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID,
 		parentCategoryId: LedgerAccountCategoryID
 	): Promise<void> {
-		// Verify category exists and belongs to ledger
-		await this.getLedgerAccountCategory(ledgerId, categoryId);
-
-		const result = await this.db
-			.delete(LedgerAccountCategoryParentsTable)
-			.where(
-				and(
-					eq(LedgerAccountCategoryParentsTable.categoryId, categoryId.toString()),
-					eq(LedgerAccountCategoryParentsTable.parentCategoryId, parentCategoryId.toString())
+		await this.getLedgerAccountCategory(organizationId, ledgerId, categoryId);
+		try {
+			const rows = await this.db
+				.delete(LedgerAccountCategoryParentsTable)
+				.where(
+					and(
+						eq(LedgerAccountCategoryParentsTable.organizationId, organizationId.toString()),
+						eq(LedgerAccountCategoryParentsTable.ledgerId, ledgerId.toString()),
+						eq(LedgerAccountCategoryParentsTable.categoryId, categoryId.toString()),
+						eq(LedgerAccountCategoryParentsTable.parentCategoryId, parentCategoryId.toString())
+					)
 				)
-			)
-			.returning({ categoryId: LedgerAccountCategoryParentsTable.categoryId });
-
-		if (result.length === 0) {
-			throw new NotFoundError(
-				`Category ${categoryId.toString()} not linked to parent ${parentCategoryId.toString()}`
-			);
+				.returning({ categoryId: LedgerAccountCategoryParentsTable.categoryId });
+			if (rows.length === 0) {
+				throw new CategoryNotFound(
+					`Category ${categoryId.toString()} not linked to parent ${parentCategoryId.toString()}`
+				);
+			}
+		} catch (error) {
+			rethrowPersistence(error);
 		}
 	}
 }

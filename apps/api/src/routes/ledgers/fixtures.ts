@@ -69,6 +69,7 @@ function createLedgerAccountFixture(
 function createLedgerAccountCategoryFixture(
 	overrides?: Partial<{
 		id: TypeID<"lac">;
+		organizationId: TypeID<"org">;
 		ledgerId: TypeID<"lgr">;
 		name: string;
 		description?: string;
@@ -81,6 +82,7 @@ function createLedgerAccountCategoryFixture(
 	const now = new Date();
 	return new LedgerAccountCategoryEntity({
 		id: new TypeID("lac"),
+		organizationId: new TypeID("org"),
 		ledgerId: new TypeID("lgr"),
 		name: faker.finance.accountName(),
 		description: faker.lorem.sentence(),

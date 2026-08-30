@@ -3,7 +3,9 @@ import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/auth";
+import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { ConflictError, NotFoundError } from "@/lib/errors";
+import { CategoryRepositoryUnavailable } from "@/repo/LedgerAccountCategoryErrors";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
 import { buildServer } from "@/server";
 import type { LedgerAccountCategoryService } from "@/services";
@@ -69,6 +71,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual([mockCategory.toResponse()]);
 			expect(mockLedgerAccountCategoryService.listLedgerAccountCategories).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				0,
 				20
@@ -86,15 +89,16 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(mockLedgerAccountCategoryService.listLedgerAccountCategories).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				10,
 				5
 			);
 		});
 
-		it("should return a generic internal server error when the database is unavailable", async () => {
+		it("should return service unavailable when the Category repository is unavailable", async () => {
 			mockLedgerAccountCategoryService.listLedgerAccountCategories.mockRejectedValue(
-				new Error("connect ECONNREFUSED")
+				new CategoryRepositoryUnavailable(new Error("connect ECONNREFUSED"))
 			);
 
 			const rs = await server.inject({
@@ -103,10 +107,22 @@ describe("LedgerAccountCategoryRoutes", () => {
 				url: `/api/ledgers/${ledgerIdStr}/accounts/categories`,
 			});
 
-			expect(rs.statusCode).toBe(500);
-			const response: InternalServerErrorResponse = rs.json();
-			expect(response.status).toEqual(500);
-			expect(response).not.toHaveProperty("status", 503);
+			expect(rs.statusCode).toBe(503);
+			expect(rs.json()).toMatchObject({ status: 503 });
+		});
+
+		it("should return 404 when the Ledger is not owned by the token Organization", async () => {
+			mockLedgerAccountCategoryService.listLedgerAccountCategories.mockRejectedValue(
+				new LedgerNotFound()
+			);
+
+			const rs = await server.inject({
+				method: "GET",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories`,
+			});
+
+			expect(rs.statusCode).toBe(404);
 		});
 
 		it("should handle bad request error", async () => {
@@ -166,6 +182,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(mockCategory.toResponse());
 			expect(mockLedgerAccountCategoryService.getLedgerAccountCategory).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" })
 			);
@@ -230,6 +247,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(mockCategory.toResponse());
 			expect(mockLedgerAccountCategoryService.createLedgerAccountCategory).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				ledgerIdStr,
 				expect.objectContaining({
 					name: "Assets",
@@ -237,6 +255,21 @@ describe("LedgerAccountCategoryRoutes", () => {
 					normalBalance: "debit",
 				})
 			);
+		});
+
+		it("should return 404 when the Ledger is not owned by the token Organization", async () => {
+			mockLedgerAccountCategoryService.createLedgerAccountCategory.mockRejectedValue(
+				new LedgerNotFound()
+			);
+
+			const rs = await server.inject({
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories`,
+				payload: { name: "Assets", normalBalance: "debit" },
+			});
+
+			expect(rs.statusCode).toBe(404);
 		});
 
 		it("should handle bad request error", async () => {
@@ -331,6 +364,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(rs.json()).toEqual(updatedCategory.toResponse());
 			expect(mockLedgerAccountCategoryService.updateLedgerAccountCategory).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				ledgerIdStr,
 				categoryIdStr,
 				expect.objectContaining({
@@ -406,6 +440,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(mockLedgerAccountCategoryService.deleteLedgerAccountCategory).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" })
 			);
@@ -467,6 +502,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(mockLedgerAccountCategoryService.linkLedgerAccountToCategory).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" }),
 				expect.objectContaining({ prefix: "lat" })
@@ -541,6 +577,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 			expect(rs.statusCode).toBe(200);
 			expect(mockLedgerAccountCategoryService.unlinkLedgerAccountToCategory).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" }),
 				expect.objectContaining({ prefix: "lat" })
@@ -605,6 +642,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(
 				mockLedgerAccountCategoryService.linkLedgerAccountCategoryToCategory
 			).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" }),
 				expect.objectContaining({ prefix: "lac" })
@@ -669,6 +707,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(
 				mockLedgerAccountCategoryService.unlinkLedgerAccountCategoryToCategory
 			).toHaveBeenCalledWith(
+				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "lac" }),
 				expect.objectContaining({ prefix: "lac" })

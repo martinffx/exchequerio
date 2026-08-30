@@ -1,5 +1,15 @@
+import { eq } from "drizzle-orm";
 import { TypeID } from "typeid-js";
+import { AccountNotFound } from "@/domains/ledgers/accounts/AccountErrors";
+import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
+import {
+	CategoryNotFound,
+	CategoryPersistenceDecodingFailure,
+	CategoryPersistenceFailure,
+	CategoryRepositoryUnavailable,
+} from "./LedgerAccountCategoryErrors";
+import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import type {
 	LedgerAccountCategoryID,
 	LedgerAccountID,
@@ -12,7 +22,11 @@ import {
 	createOrganizationEntity,
 	getRepos,
 } from "./fixtures";
-import { LedgerAccountCategoriesTable } from "./schema";
+import {
+	LedgerAccountCategoriesTable,
+	LedgerAccountCategoryAccountsTable,
+	LedgerAccountCategoryParentsTable,
+} from "./schema";
 
 describe("LedgerAccountCategoryRepo", () => {
 	const { db, organizationRepo, ledgerRepo, ledgerAccountRepo, ledgerAccountCategoryRepo } =
@@ -56,6 +70,7 @@ describe("LedgerAccountCategoryRepo", () => {
 	describe("listLedgerAccountCategories", () => {
 		it("should return empty array when no categories exist", async () => {
 			const categories = await ledgerAccountCategoryRepo.listLedgerAccountCategories(
+				testOrgId,
 				testLedgerId,
 				0,
 				10
@@ -67,6 +82,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const entity = new LedgerAccountCategoryEntity({
 				id: categoryId,
+				organizationId: testOrgId,
 				ledgerId: testLedgerId,
 				name: "Assets",
 				description: "Asset accounts",
@@ -78,6 +94,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity);
 
 			const categories = await ledgerAccountCategoryRepo.listLedgerAccountCategories(
+				testOrgId,
 				testLedgerId,
 				0,
 				10
@@ -87,7 +104,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			expect(categories[0].normalBalance).toBe("debit");
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should order categories by created date (descending)", async () => {
@@ -98,6 +115,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: category1Id,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: "First Category",
 					normalBalance: "debit",
@@ -110,6 +128,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: category2Id,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: "Second Category",
 					normalBalance: "credit",
@@ -119,6 +138,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			);
 
 			const categories = await ledgerAccountCategoryRepo.listLedgerAccountCategories(
+				testOrgId,
 				testLedgerId,
 				0,
 				10
@@ -130,8 +150,16 @@ describe("LedgerAccountCategoryRepo", () => {
 			expect(categories[1].name).toBe("First Category");
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, category1Id);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, category2Id);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				category1Id
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				category2Id
+			);
 		});
 	});
 
@@ -140,6 +168,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			await db.insert(LedgerAccountCategoriesTable).values({
 				id: categoryId.toString(),
+				organizationId: testOrgId.toString(),
 				ledgerId: testLedgerId.toString(),
 				name: "Malformed metadata",
 				normalBalance: "debit",
@@ -147,18 +176,20 @@ describe("LedgerAccountCategoryRepo", () => {
 			});
 
 			const category = await ledgerAccountCategoryRepo.getLedgerAccountCategory(
+				testOrgId,
 				testLedgerId,
 				categoryId
 			);
 
 			expect(category.metadata).toBeUndefined();
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
-		it("should propagate an unexpected row-decoding failure unchanged", async () => {
+		it("should map an unexpected row-decoding failure to CategoryPersistenceDecodingFailure", async () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const entity = new LedgerAccountCategoryEntity({
 				id: categoryId,
+				organizationId: testOrgId,
 				ledgerId: testLedgerId,
 				name: "Decode failure",
 				normalBalance: "debit",
@@ -174,17 +205,17 @@ describe("LedgerAccountCategoryRepo", () => {
 				});
 
 			await expect(
-				ledgerAccountCategoryRepo.getLedgerAccountCategory(testLedgerId, categoryId)
-			).rejects.toBe(failure);
+				ledgerAccountCategoryRepo.getLedgerAccountCategory(testOrgId, testLedgerId, categoryId)
+			).rejects.toBeInstanceOf(CategoryPersistenceDecodingFailure);
 
 			fromRecord.mockRestore();
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should throw error when category not found", async () => {
 			const nonExistentId = new TypeID("lac") as LedgerAccountCategoryID;
 			await expect(
-				ledgerAccountCategoryRepo.getLedgerAccountCategory(testLedgerId, nonExistentId)
+				ledgerAccountCategoryRepo.getLedgerAccountCategory(testOrgId, testLedgerId, nonExistentId)
 			).rejects.toThrow(`Category not found: ${nonExistentId.toString()}`);
 		});
 
@@ -192,6 +223,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const entity = new LedgerAccountCategoryEntity({
 				id: categoryId,
+				organizationId: testOrgId,
 				ledgerId: testLedgerId,
 				name: "Liabilities",
 				description: "Liability accounts",
@@ -204,6 +236,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity);
 
 			const category = await ledgerAccountCategoryRepo.getLedgerAccountCategory(
+				testOrgId,
 				testLedgerId,
 				categoryId
 			);
@@ -215,13 +248,14 @@ describe("LedgerAccountCategoryRepo", () => {
 			expect(category.metadata).toEqual({ code: "2000" });
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should throw error when category belongs to different ledger", async () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const entity = new LedgerAccountCategoryEntity({
 				id: categoryId,
+				organizationId: testOrgId,
 				ledgerId: testLedgerId,
 				name: "Test Category",
 				normalBalance: "debit",
@@ -233,11 +267,11 @@ describe("LedgerAccountCategoryRepo", () => {
 			// Try to access with different ledger ID
 			const differentLedgerId = new TypeID("lgr") as LedgerID;
 			await expect(
-				ledgerAccountCategoryRepo.getLedgerAccountCategory(differentLedgerId, categoryId)
+				ledgerAccountCategoryRepo.getLedgerAccountCategory(testOrgId, differentLedgerId, categoryId)
 			).rejects.toThrow("Category not found");
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 	});
 
@@ -252,6 +286,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				const created = await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 					new LedgerAccountCategoryEntity({
 						id: categoryId,
+						organizationId: testOrgId,
 						ledgerId: testLedgerId,
 						name: "Timestamp ownership",
 						normalBalance: "debit",
@@ -265,13 +300,18 @@ describe("LedgerAccountCategoryRepo", () => {
 				expect(created.created).not.toEqual(applicationTime);
 				expect(created.updated).toEqual(applicationTime);
 
-				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId
+				);
 			});
 
 			it("should create new category with valid data", async () => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 				const entity = new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: "Revenue",
 					description: "Revenue accounts",
@@ -290,7 +330,11 @@ describe("LedgerAccountCategoryRepo", () => {
 				expect(created.metadata).toEqual({ type: "income" });
 
 				// Cleanup
-				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId
+				);
 			});
 
 			it("should throw error when ledger doesn't exist", async () => {
@@ -298,6 +342,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				const nonExistentLedgerId = new TypeID("lgr") as LedgerID;
 				const entity = new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: nonExistentLedgerId,
 					name: "Test Category",
 					normalBalance: "debit",
@@ -305,9 +350,9 @@ describe("LedgerAccountCategoryRepo", () => {
 					updated: new Date(),
 				});
 
-				await expect(ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity)).rejects.toThrow(
-					`Ledger not found: ${nonExistentLedgerId.toString()}`
-				);
+				await expect(
+					ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity)
+				).rejects.toBeInstanceOf(LedgerNotFound);
 				// No cleanup needed - category was never created
 			});
 
@@ -315,6 +360,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 				const entity = new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: "Expenses",
 					normalBalance: "debit",
@@ -326,13 +372,18 @@ describe("LedgerAccountCategoryRepo", () => {
 				expect(created.normalBalance).toBe("debit");
 
 				// Cleanup
-				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId
+				);
 			});
 
 			it("should create category without description or metadata", async () => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 				const entity = new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: "Minimal Category",
 					normalBalance: "credit",
@@ -345,7 +396,11 @@ describe("LedgerAccountCategoryRepo", () => {
 				expect(created.metadata).toBeUndefined();
 
 				// Cleanup
-				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId
+				);
 			});
 		});
 
@@ -355,6 +410,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				const first = await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 					new LedgerAccountCategoryEntity({
 						id: categoryId,
+						organizationId: testOrgId,
 						ledgerId: testLedgerId,
 						name: "First writer",
 						normalBalance: "debit",
@@ -372,13 +428,18 @@ describe("LedgerAccountCategoryRepo", () => {
 
 				expect(last.name).toBe("Last writer");
 				expect(last.created).toEqual(first.created);
-				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId
+				);
 			});
 
 			it("should update mutable fields (name, description, metadata)", async () => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 				const entity = new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: "Original Name",
 					description: "Original description",
@@ -389,6 +450,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity);
 
 				const existing = await ledgerAccountCategoryRepo.getLedgerAccountCategory(
+					testOrgId,
 					testLedgerId,
 					categoryId
 				);
@@ -407,13 +469,18 @@ describe("LedgerAccountCategoryRepo", () => {
 				expect(result.metadata).toEqual({ updated: true });
 
 				// Cleanup
-				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId
+				);
 			});
 
 			it("should fail when trying to change ledgerId", async () => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 				const entity = new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: "Original Name",
 					description: "Original description",
@@ -424,6 +491,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity);
 
 				const existing = await ledgerAccountCategoryRepo.getLedgerAccountCategory(
+					testOrgId,
 					testLedgerId,
 					categoryId
 				);
@@ -437,7 +505,11 @@ describe("LedgerAccountCategoryRepo", () => {
 				await expect(ledgerAccountCategoryRepo.upsertLedgerAccountCategory(updated)).rejects.toThrow();
 
 				// Cleanup
-				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId
+				);
 			});
 		});
 
@@ -446,6 +518,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 				const entity = new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: "Idempotent Category",
 					normalBalance: "debit",
@@ -466,7 +539,11 @@ describe("LedgerAccountCategoryRepo", () => {
 				expect(second.name).toBe("Updated Category");
 
 				// Cleanup
-				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId
+				);
 			});
 		});
 	});
@@ -476,6 +553,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const entity = new LedgerAccountCategoryEntity({
 				id: categoryId,
+				organizationId: testOrgId,
 				ledgerId: testLedgerId,
 				name: "Category to Delete",
 				normalBalance: "debit",
@@ -484,10 +562,10 @@ describe("LedgerAccountCategoryRepo", () => {
 			});
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity);
 
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 
 			await expect(
-				ledgerAccountCategoryRepo.getLedgerAccountCategory(testLedgerId, categoryId)
+				ledgerAccountCategoryRepo.getLedgerAccountCategory(testOrgId, testLedgerId, categoryId)
 			).rejects.toThrow("Category not found");
 			// No cleanup needed - resource was deleted
 		});
@@ -495,7 +573,7 @@ describe("LedgerAccountCategoryRepo", () => {
 		it("should throw error when category not found", async () => {
 			const nonExistentId = new TypeID("lac") as LedgerAccountCategoryID;
 			await expect(
-				ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, nonExistentId)
+				ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, nonExistentId)
 			).rejects.toThrow(`Category not found: ${nonExistentId.toString()}`);
 			// No cleanup needed - no resource was created
 		});
@@ -504,6 +582,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const entity = new LedgerAccountCategoryEntity({
 				id: categoryId,
+				organizationId: testOrgId,
 				ledgerId: testLedgerId,
 				name: "Category to Delete",
 				normalBalance: "debit",
@@ -514,11 +593,11 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			const otherLedgerId = new TypeID("lgr") as LedgerID;
 			await expect(
-				ledgerAccountCategoryRepo.deleteLedgerAccountCategory(otherLedgerId, categoryId)
+				ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, otherLedgerId, categoryId)
 			).rejects.toThrow("Category not found");
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should cascade delete category-account links", async () => {
@@ -526,6 +605,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const entity = new LedgerAccountCategoryEntity({
 				id: categoryId,
+				organizationId: testOrgId,
 				ledgerId: testLedgerId,
 				name: "Category to Delete",
 				normalBalance: "debit",
@@ -546,14 +626,19 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountRepo.upsertLedgerAccount(accountEntity);
 
 			// Link account to category
-			await ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.linkAccountToCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 
 			// Delete category (should cascade delete link)
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 
 			// Verify category is deleted
 			await expect(
-				ledgerAccountCategoryRepo.getLedgerAccountCategory(testLedgerId, categoryId)
+				ledgerAccountCategoryRepo.getLedgerAccountCategory(testOrgId, testLedgerId, categoryId)
 			).rejects.toThrow("Category not found");
 
 			// Cleanup account
@@ -569,6 +654,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Link Test Category ${testCounter}`,
 					normalBalance: "debit",
@@ -590,18 +676,28 @@ describe("LedgerAccountCategoryRepo", () => {
 			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
 			const select = vi.spyOn(db, "select");
 			const insert = vi.spyOn(db, "insert");
-			await ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.linkAccountToCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 
 			expect(getCategory).toHaveBeenCalledOnce();
-			expect(getCategory).toHaveBeenCalledWith(testLedgerId, categoryId);
+			expect(getCategory).toHaveBeenCalledWith(testOrgId, testLedgerId, categoryId);
 			expect(select).toHaveBeenCalledOnce();
 			expect(select).toHaveBeenCalledBefore(insert);
 			getCategory.mockRestore();
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should be idempotent (linking twice should not error)", async () => {
@@ -610,6 +706,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Link Test Category ${testCounter}`,
 					normalBalance: "debit",
@@ -629,17 +726,27 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountRepo.upsertLedgerAccount(accountEntity);
 
 			// First link
-			await ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.linkAccountToCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 
 			// Second link should succeed (onConflictDoNothing)
 			await expect(
-				ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId)
+				ledgerAccountCategoryRepo.linkAccountToCategory(testOrgId, testLedgerId, categoryId, accountId)
 			).resolves.not.toThrow();
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should throw error when category doesn't exist", async () => {
@@ -648,6 +755,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Link Test Category ${testCounter}`,
 					normalBalance: "debit",
@@ -668,12 +776,17 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			const nonExistentCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			await expect(
-				ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, nonExistentCategoryId, accountId)
+				ledgerAccountCategoryRepo.linkAccountToCategory(
+					testOrgId,
+					testLedgerId,
+					nonExistentCategoryId,
+					accountId
+				)
 			).rejects.toThrow(`Category not found: ${nonExistentCategoryId.toString()}`);
 
 			// Cleanup
 			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should report the category first when both category and account are missing", async () => {
@@ -683,7 +796,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const insert = vi.spyOn(db, "insert");
 
 			await expect(
-				ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId)
+				ledgerAccountCategoryRepo.linkAccountToCategory(testOrgId, testLedgerId, categoryId, accountId)
 			).rejects.toThrow(`Category not found: ${categoryId.toString()}`);
 
 			expect(getAccount).not.toHaveBeenCalled();
@@ -696,6 +809,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Link Test Category ${testCounter}`,
 					normalBalance: "debit",
@@ -716,12 +830,17 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			const nonExistentAccountId = new TypeID("lat") as LedgerAccountID;
 			await expect(
-				ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, nonExistentAccountId)
-			).rejects.toThrow(`Account not found: ${nonExistentAccountId.toString()}`);
+				ledgerAccountCategoryRepo.linkAccountToCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId,
+					nonExistentAccountId
+				)
+			).rejects.toBeInstanceOf(AccountNotFound);
 
 			// Cleanup
 			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should throw error when category belongs to different ledger", async () => {
@@ -730,6 +849,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Link Test Category ${testCounter}`,
 					normalBalance: "debit",
@@ -750,12 +870,12 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			const otherLedgerId = new TypeID("lgr") as LedgerID;
 			await expect(
-				ledgerAccountCategoryRepo.linkAccountToCategory(otherLedgerId, categoryId, accountId)
+				ledgerAccountCategoryRepo.linkAccountToCategory(testOrgId, otherLedgerId, categoryId, accountId)
 			).rejects.toThrow("Category not found");
 
 			// Cleanup
 			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 	});
 
@@ -766,6 +886,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Unlink Test Category ${testCounter}`,
 					normalBalance: "debit",
@@ -785,26 +906,41 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountRepo.upsertLedgerAccount(accountEntity);
 
 			// Link them
-			await ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.linkAccountToCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 
 			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
 			const deleteRows = vi.spyOn(db, "delete");
-			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 			expect(getCategory).toHaveBeenCalledOnce();
-			expect(getCategory).toHaveBeenCalledWith(testLedgerId, categoryId);
+			expect(getCategory).toHaveBeenCalledWith(testOrgId, testLedgerId, categoryId);
 			expect(getCategory).toHaveBeenCalledBefore(deleteRows);
 			getCategory.mockRestore();
 
 			// Try to unlink again - should fail
 			await expect(
-				ledgerAccountCategoryRepo.unlinkAccountFromCategory(testLedgerId, categoryId, accountId)
+				ledgerAccountCategoryRepo.unlinkAccountFromCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId,
+					accountId
+				)
 			).rejects.toThrow(
 				`Account ${accountId.toString()} not linked to category ${categoryId.toString()}`
 			);
 
 			// Cleanup
 			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should throw error when link doesn't exist", async () => {
@@ -813,6 +949,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Unlink Test Category ${testCounter}`,
 					normalBalance: "debit",
@@ -832,19 +969,34 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountRepo.upsertLedgerAccount(accountEntity);
 
 			// Link them
-			await ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.linkAccountToCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 
 			const unlinkedAccountId = new TypeID("lat") as LedgerAccountID;
 			await expect(
-				ledgerAccountCategoryRepo.unlinkAccountFromCategory(testLedgerId, categoryId, unlinkedAccountId)
+				ledgerAccountCategoryRepo.unlinkAccountFromCategory(
+					testOrgId,
+					testLedgerId,
+					categoryId,
+					unlinkedAccountId
+				)
 			).rejects.toThrow(
 				`Account ${unlinkedAccountId.toString()} not linked to category ${categoryId.toString()}`
 			);
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
 		it("should throw error when category doesn't exist", async () => {
@@ -853,6 +1005,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: categoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Unlink Test Category ${testCounter}`,
 					normalBalance: "debit",
@@ -872,11 +1025,17 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountRepo.upsertLedgerAccount(accountEntity);
 
 			// Link them
-			await ledgerAccountCategoryRepo.linkAccountToCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.linkAccountToCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 
 			const nonExistentCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			await expect(
 				ledgerAccountCategoryRepo.unlinkAccountFromCategory(
+					testOrgId,
 					testLedgerId,
 					nonExistentCategoryId,
 					accountId
@@ -884,9 +1043,14 @@ describe("LedgerAccountCategoryRepo", () => {
 			).rejects.toThrow(`Category not found: ${nonExistentCategoryId.toString()}`);
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(testLedgerId, categoryId, accountId);
+			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(
+				testOrgId,
+				testLedgerId,
+				categoryId,
+				accountId
+			);
 			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, categoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 	});
 
@@ -897,6 +1061,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -909,6 +1074,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -920,26 +1086,36 @@ describe("LedgerAccountCategoryRepo", () => {
 			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
 			const insert = vi.spyOn(db, "insert");
 			await ledgerAccountCategoryRepo.linkCategoryToParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
 			);
 
 			expect(getCategory.mock.calls).toEqual([
-				[testLedgerId, childCategoryId],
-				[testLedgerId, parentCategoryId],
+				[testOrgId, testLedgerId, childCategoryId],
+				[testOrgId, testLedgerId, parentCategoryId],
 			]);
 			expect(getCategory.mock.invocationCallOrder[1]).toBeLessThan(insert.mock.invocationCallOrder[0]);
 			getCategory.mockRestore();
 
 			// Cleanup
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
 			);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 
 		it("should be idempotent (linking twice should not error)", async () => {
@@ -948,6 +1124,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -960,6 +1137,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -970,6 +1148,7 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			// First link
 			await ledgerAccountCategoryRepo.linkCategoryToParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
@@ -977,17 +1156,31 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			// Second link should succeed (onConflictDoNothing)
 			await expect(
-				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, childCategoryId, parentCategoryId)
+				ledgerAccountCategoryRepo.linkCategoryToParent(
+					testOrgId,
+					testLedgerId,
+					childCategoryId,
+					parentCategoryId
+				)
 			).resolves.not.toThrow();
 
 			// Cleanup
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
 			);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 
 		it("should allow multiple parents (many-to-many)", async () => {
@@ -996,6 +1189,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1008,6 +1202,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1021,6 +1216,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parent2Id,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: "Second Parent Category",
 					normalBalance: "debit",
@@ -1031,6 +1227,7 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			// Link to first parent
 			await ledgerAccountCategoryRepo.linkCategoryToParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
@@ -1038,23 +1235,38 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			// Link to second parent - should succeed
 			await expect(
-				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, childCategoryId, parent2Id)
+				ledgerAccountCategoryRepo.linkCategoryToParent(
+					testOrgId,
+					testLedgerId,
+					childCategoryId,
+					parent2Id
+				)
 			).resolves.not.toThrow();
 
 			// Cleanup
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parent2Id
 			);
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
 			);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parent2Id);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, parent2Id);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 
 		it("should prevent self-referential parent link", async () => {
@@ -1063,6 +1275,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1075,6 +1288,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1085,13 +1299,26 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			const insert = vi.spyOn(db, "insert");
 			await expect(
-				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, childCategoryId, childCategoryId)
+				ledgerAccountCategoryRepo.linkCategoryToParent(
+					testOrgId,
+					testLedgerId,
+					childCategoryId,
+					childCategoryId
+				)
 			).rejects.toThrow("Category cannot be its own parent");
 			expect(insert).not.toHaveBeenCalled();
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 
 		it("should report not found before self-link conflict for a missing category", async () => {
@@ -1099,7 +1326,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const insert = vi.spyOn(db, "insert");
 
 			await expect(
-				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, categoryId, categoryId)
+				ledgerAccountCategoryRepo.linkCategoryToParent(testOrgId, testLedgerId, categoryId, categoryId)
 			).rejects.toThrow(`Category not found: ${categoryId.toString()}`);
 
 			expect(insert).not.toHaveBeenCalled();
@@ -1111,6 +1338,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1123,6 +1351,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1133,12 +1362,25 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			const nonExistentId = new TypeID("lac") as LedgerAccountCategoryID;
 			await expect(
-				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, nonExistentId, parentCategoryId)
+				ledgerAccountCategoryRepo.linkCategoryToParent(
+					testOrgId,
+					testLedgerId,
+					nonExistentId,
+					parentCategoryId
+				)
 			).rejects.toThrow(`Category not found: ${nonExistentId.toString()}`);
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 
 		it("should report the child first when both child and parent are missing", async () => {
@@ -1147,7 +1389,12 @@ describe("LedgerAccountCategoryRepo", () => {
 			const insert = vi.spyOn(db, "insert");
 
 			await expect(
-				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, childCategoryId, parentCategoryId)
+				ledgerAccountCategoryRepo.linkCategoryToParent(
+					testOrgId,
+					testLedgerId,
+					childCategoryId,
+					parentCategoryId
+				)
 			).rejects.toThrow(`Category not found: ${childCategoryId.toString()}`);
 
 			expect(insert).not.toHaveBeenCalled();
@@ -1159,6 +1406,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1171,6 +1419,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1181,12 +1430,25 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			const nonExistentId = new TypeID("lac") as LedgerAccountCategoryID;
 			await expect(
-				ledgerAccountCategoryRepo.linkCategoryToParent(testLedgerId, childCategoryId, nonExistentId)
+				ledgerAccountCategoryRepo.linkCategoryToParent(
+					testOrgId,
+					testLedgerId,
+					childCategoryId,
+					nonExistentId
+				)
 			).rejects.toThrow(`Category not found: ${nonExistentId.toString()}`);
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 
 		it("should throw error when categories belong to different ledgers", async () => {
@@ -1195,6 +1457,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1207,6 +1470,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1218,12 +1482,25 @@ describe("LedgerAccountCategoryRepo", () => {
 			// Create another ledger
 			const otherLedgerId = new TypeID("lgr") as LedgerID;
 			await expect(
-				ledgerAccountCategoryRepo.linkCategoryToParent(otherLedgerId, childCategoryId, parentCategoryId)
+				ledgerAccountCategoryRepo.linkCategoryToParent(
+					testOrgId,
+					otherLedgerId,
+					childCategoryId,
+					parentCategoryId
+				)
 			).rejects.toThrow("Category not found");
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 	});
 
@@ -1234,6 +1511,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1246,6 +1524,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1256,6 +1535,7 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			// Link them
 			await ledgerAccountCategoryRepo.linkCategoryToParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
@@ -1264,18 +1544,20 @@ describe("LedgerAccountCategoryRepo", () => {
 			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
 			const deleteRows = vi.spyOn(db, "delete");
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
 			);
 			expect(getCategory).toHaveBeenCalledOnce();
-			expect(getCategory).toHaveBeenCalledWith(testLedgerId, childCategoryId);
+			expect(getCategory).toHaveBeenCalledWith(testOrgId, testLedgerId, childCategoryId);
 			expect(getCategory).toHaveBeenCalledBefore(deleteRows);
 			getCategory.mockRestore();
 
 			// Try to unlink again - should fail
 			await expect(
 				ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+					testOrgId,
 					testLedgerId,
 					childCategoryId,
 					parentCategoryId
@@ -1285,8 +1567,16 @@ describe("LedgerAccountCategoryRepo", () => {
 			);
 
 			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 
 		it("should throw error when link doesn't exist", async () => {
@@ -1295,6 +1585,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1307,6 +1598,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1317,6 +1609,7 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			// Link them
 			await ledgerAccountCategoryRepo.linkCategoryToParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
@@ -1325,6 +1618,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const unlinkedParentId = new TypeID("lac") as LedgerAccountCategoryID;
 			await expect(
 				ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+					testOrgId,
 					testLedgerId,
 					childCategoryId,
 					unlinkedParentId
@@ -1335,12 +1629,21 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			// Cleanup
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
 			);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 
 		it("should throw error when child category doesn't exist", async () => {
@@ -1349,6 +1652,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: parentCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Parent Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1361,6 +1665,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: childCategoryId,
+					organizationId: testOrgId,
 					ledgerId: testLedgerId,
 					name: `Child Category ${testCounter}`,
 					normalBalance: "debit",
@@ -1371,6 +1676,7 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			// Link them
 			await ledgerAccountCategoryRepo.linkCategoryToParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
@@ -1379,6 +1685,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			const nonExistentId = new TypeID("lac") as LedgerAccountCategoryID;
 			await expect(
 				ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+					testOrgId,
 					testLedgerId,
 					nonExistentId,
 					parentCategoryId
@@ -1387,12 +1694,21 @@ describe("LedgerAccountCategoryRepo", () => {
 
 			// Cleanup
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+				testOrgId,
 				testLedgerId,
 				childCategoryId,
 				parentCategoryId
 			);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, childCategoryId);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testLedgerId, parentCategoryId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				childCategoryId
+			);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+				testOrgId,
+				testLedgerId,
+				parentCategoryId
+			);
 		});
 	});
 
@@ -1429,6 +1745,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: category1Id,
+					organizationId: testOrgId,
 					ledgerId: ledger1Id,
 					name: "Category 1",
 					normalBalance: "debit",
@@ -1439,6 +1756,7 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
 				new LedgerAccountCategoryEntity({
 					id: category2Id,
+					organizationId: testOrgId,
 					ledgerId: ledger2Id,
 					name: "Category 2",
 					normalBalance: "debit",
@@ -1450,26 +1768,27 @@ describe("LedgerAccountCategoryRepo", () => {
 
 		afterAll(async () => {
 			// Clean up
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(ledger1Id, category1Id);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(ledger2Id, category2Id);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, ledger1Id, category1Id);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, ledger2Id, category2Id);
 			await ledgerRepo.deleteLedger(testOrgId, ledger1Id);
 			await ledgerRepo.deleteLedger(testOrgId, ledger2Id);
 		});
 
 		it("should not allow ledger1 to access ledger2's categories", async () => {
 			await expect(
-				ledgerAccountCategoryRepo.getLedgerAccountCategory(ledger1Id, category2Id)
+				ledgerAccountCategoryRepo.getLedgerAccountCategory(testOrgId, ledger1Id, category2Id)
 			).rejects.toThrow("Category not found");
 		});
 
 		it("should not allow ledger2 to access ledger1's categories", async () => {
 			await expect(
-				ledgerAccountCategoryRepo.getLedgerAccountCategory(ledger2Id, category1Id)
+				ledgerAccountCategoryRepo.getLedgerAccountCategory(testOrgId, ledger2Id, category1Id)
 			).rejects.toThrow("Category not found");
 		});
 
 		it("should list only own ledger's categories", async () => {
 			const ledger1Categories = await ledgerAccountCategoryRepo.listLedgerAccountCategories(
+				testOrgId,
 				ledger1Id,
 				0,
 				10
@@ -1478,12 +1797,190 @@ describe("LedgerAccountCategoryRepo", () => {
 			expect(ledger1Categories[0].id.toString()).toBe(category1Id.toString());
 
 			const ledger2Categories = await ledgerAccountCategoryRepo.listLedgerAccountCategories(
+				testOrgId,
 				ledger2Id,
 				0,
 				10
 			);
 			expect(ledger2Categories).toHaveLength(1);
 			expect(ledger2Categories[0].id.toString()).toBe(category2Id.toString());
+		});
+	});
+
+	describe("Organization ownership and typed failures", () => {
+		it("makes every read, delete, and relationship operation invisible cross-Organization", async () => {
+			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
+			const accountId = new TypeID("lat") as LedgerAccountID;
+			const foreignOrganizationId = new TypeID("org") as OrgID;
+			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
+				new LedgerAccountCategoryEntity({
+					id: categoryId,
+					organizationId: testOrgId,
+					ledgerId: testLedgerId,
+					name: "Tenant scoped",
+					normalBalance: "debit",
+					created: new Date(),
+					updated: new Date(),
+				})
+			);
+
+			expect(
+				await ledgerAccountCategoryRepo.listLedgerAccountCategories(
+					foreignOrganizationId,
+					testLedgerId,
+					0,
+					20
+				)
+			).toEqual([]);
+			const operations = [
+				() =>
+					ledgerAccountCategoryRepo.getLedgerAccountCategory(
+						foreignOrganizationId,
+						testLedgerId,
+						categoryId
+					),
+				() =>
+					ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+						foreignOrganizationId,
+						testLedgerId,
+						categoryId
+					),
+				() =>
+					ledgerAccountCategoryRepo.linkAccountToCategory(
+						foreignOrganizationId,
+						testLedgerId,
+						categoryId,
+						accountId
+					),
+				() =>
+					ledgerAccountCategoryRepo.unlinkAccountFromCategory(
+						foreignOrganizationId,
+						testLedgerId,
+						categoryId,
+						accountId
+					),
+				() =>
+					ledgerAccountCategoryRepo.linkCategoryToParent(
+						foreignOrganizationId,
+						testLedgerId,
+						categoryId,
+						categoryId
+					),
+				() =>
+					ledgerAccountCategoryRepo.unlinkCategoryFromParent(
+						foreignOrganizationId,
+						testLedgerId,
+						categoryId,
+						categoryId
+					),
+			];
+			for (const operation of operations) {
+				await expect(operation()).rejects.toBeInstanceOf(CategoryNotFound);
+			}
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
+		});
+
+		it("writes Organization and Ledger ownership to both junction tables", async () => {
+			const childId = new TypeID("lac") as LedgerAccountCategoryID;
+			const parentId = new TypeID("lac") as LedgerAccountCategoryID;
+			const accountId = new TypeID("lat") as LedgerAccountID;
+			for (const id of [childId, parentId]) {
+				await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
+					new LedgerAccountCategoryEntity({
+						id,
+						organizationId: testOrgId,
+						ledgerId: testLedgerId,
+						name: `Ownership ${id.toString()}`,
+						normalBalance: "debit",
+						created: new Date(),
+						updated: new Date(),
+					})
+				);
+			}
+			await ledgerAccountRepo.upsertLedgerAccount(
+				createLedgerAccountEntity({
+					id: accountId,
+					organizationId: testOrgId,
+					ledgerId: testLedgerId,
+				})
+			);
+			await ledgerAccountCategoryRepo.linkAccountToCategory(
+				testOrgId,
+				testLedgerId,
+				childId,
+				accountId
+			);
+			await ledgerAccountCategoryRepo.linkCategoryToParent(testOrgId, testLedgerId, childId, parentId);
+
+			const [accountLink] = await db
+				.select()
+				.from(LedgerAccountCategoryAccountsTable)
+				.where(eq(LedgerAccountCategoryAccountsTable.categoryId, childId.toString()));
+			const [parentLink] = await db
+				.select()
+				.from(LedgerAccountCategoryParentsTable)
+				.where(eq(LedgerAccountCategoryParentsTable.categoryId, childId.toString()));
+			expect(accountLink).toMatchObject({
+				organizationId: testOrgId.toString(),
+				ledgerId: testLedgerId.toString(),
+			});
+			expect(parentLink).toMatchObject({
+				organizationId: testOrgId.toString(),
+				ledgerId: testLedgerId.toString(),
+			});
+
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, childId);
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, parentId);
+			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, testLedgerId, accountId);
+		});
+
+		it("rejects an existing Account from a different Ledger", async () => {
+			const otherLedgerId = new TypeID("lgr") as LedgerID;
+			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
+			const accountId = new TypeID("lat") as LedgerAccountID;
+			await ledgerRepo.upsertLedger(
+				createLedgerEntity({ id: otherLedgerId, organizationId: testOrgId, name: "Other" })
+			);
+			await ledgerAccountRepo.upsertLedgerAccount(
+				createLedgerAccountEntity({
+					id: accountId,
+					organizationId: testOrgId,
+					ledgerId: otherLedgerId,
+				})
+			);
+			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
+				new LedgerAccountCategoryEntity({
+					id: categoryId,
+					organizationId: testOrgId,
+					ledgerId: testLedgerId,
+					name: "Owned Category",
+					normalBalance: "debit",
+					created: new Date(),
+					updated: new Date(),
+				})
+			);
+
+			await expect(
+				ledgerAccountCategoryRepo.linkAccountToCategory(testOrgId, testLedgerId, categoryId, accountId)
+			).rejects.toBeInstanceOf(AccountNotFound);
+
+			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
+			await ledgerAccountRepo.deleteLedgerAccount(testOrgId, otherLedgerId, accountId);
+			await ledgerRepo.deleteLedger(testOrgId, otherLedgerId);
+		});
+
+		it.each([
+			[Object.assign(new Error("offline"), { code: "08006" }), CategoryRepositoryUnavailable],
+			[new Error("unexpected database failure"), CategoryPersistenceFailure],
+		])("maps persistence failures through the Category contract %#", async (failure, ErrorType) => {
+			const repository = new LedgerAccountCategoryRepo({
+				select: () => {
+					throw failure;
+				},
+			} as never);
+			await expect(
+				repository.listLedgerAccountCategories(testOrgId, testLedgerId, 0, 20)
+			).rejects.toBeInstanceOf(ErrorType);
 		});
 	});
 });

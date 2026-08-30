@@ -5,7 +5,7 @@ import type {
 	LedgerAccountCategoryRequest,
 	LedgerAccountCategoryResponse,
 } from "@/routes/ledgers/schema";
-import type { LedgerAccountCategoryID, LedgerID } from "./types";
+import type { LedgerAccountCategoryID, LedgerID, OrgID } from "./types";
 
 // Infer types from Drizzle schema
 type LedgerAccountCategoryRecord = InferSelectModel<typeof LedgerAccountCategoriesTable>;
@@ -14,6 +14,7 @@ type NormalBalance = "debit" | "credit";
 
 interface LedgerAccountCategoryEntityOptions {
 	id: LedgerAccountCategoryID;
+	organizationId: OrgID;
 	ledgerId: LedgerID;
 	name: string;
 	description?: string;
@@ -25,6 +26,7 @@ interface LedgerAccountCategoryEntityOptions {
 
 class LedgerAccountCategoryEntity {
 	public readonly id: LedgerAccountCategoryID;
+	public readonly organizationId: OrgID;
 	public readonly ledgerId: LedgerID;
 	public readonly name: string;
 	public readonly description?: string;
@@ -35,6 +37,7 @@ class LedgerAccountCategoryEntity {
 
 	constructor(options: LedgerAccountCategoryEntityOptions) {
 		this.id = options.id;
+		this.organizationId = options.organizationId;
 		this.ledgerId = options.ledgerId;
 		this.name = options.name;
 		this.description = options.description;
@@ -46,12 +49,14 @@ class LedgerAccountCategoryEntity {
 
 	public static fromRequest(
 		rq: LedgerAccountCategoryRequest,
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		id?: string
 	): LedgerAccountCategoryEntity {
 		const now = new Date();
 		return new LedgerAccountCategoryEntity({
 			id: id ? TypeID.fromString<"lac">(id) : new TypeID("lac"),
+			organizationId,
 			ledgerId,
 			name: rq.name,
 			description: rq.description,
@@ -75,6 +80,7 @@ class LedgerAccountCategoryEntity {
 
 		return new LedgerAccountCategoryEntity({
 			id: TypeID.fromString<"lac">(record.id),
+			organizationId: TypeID.fromString<"org">(record.organizationId),
 			ledgerId: TypeID.fromString<"lgr">(record.ledgerId),
 			name: record.name,
 			description: record.description ?? undefined,
@@ -88,6 +94,7 @@ class LedgerAccountCategoryEntity {
 	public toRecord(): LedgerAccountCategoryInsert {
 		return {
 			id: this.id.toString(),
+			organizationId: this.organizationId.toString(),
 			ledgerId: this.ledgerId.toString(),
 			name: this.name,
 			description: this.description,

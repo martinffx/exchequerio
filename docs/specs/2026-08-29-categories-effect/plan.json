@@ -1,40 +1,60 @@
 {
-	"feature": "categories-effect",
+	"feature": "categories-ownership-effect",
 	"spec": "docs/specs/2026-08-29-categories-effect/design.md",
-	"goal": "Migrate Ledger Account Categories to the managed Effect runtime without changing HTTP, domain, error, persistence, transaction, concurrency, identifier, timestamp, tenancy, or operational behavior.",
+	"goal": "Enforce Organization and Ledger ownership for Categories and their relationships, then migrate the hardened slice to Effect with explicit error unions.",
 	"phases": [
 		{
 			"id": "P1",
-			"name": "Baseline characterization",
+			"name": "Ownership and error behavior",
 			"tasks": [
 				{
-					"id": "T2",
-					"name": "Characterize uncovered legacy behavior",
+					"id": "T3",
+					"name": "Harden Category ownership and failure behavior",
 					"depends_on": [],
 					"inputs": [
-						"Approved behavior baseline in design.md",
-						"Current Promise repository, service, routes, and PostgreSQL test fixtures",
-						"Current test inventory of 38 repository, 13 service, and 39 route cases"
+						"Committed Category characterization tests",
+						"Organization and Ledger ownership decisions in design.md",
+						"Composite ownership patterns in LedgerAccountsTable and LedgerTransactionEntriesTable",
+						"Existing LedgerNotFound and AccountNotFound errors"
 					],
-					"description": "Add test-only characterization before changing production code. Lock the behaviors most exposed by the adapter and execution-model change: malformed stored metadata, PostgreSQL-owned creation time, application-owned update time, preservation of created time on upsert, read-before-upsert order, last-writer-wins replacement, delete-between-read-and-upsert recreation, relationship failure precedence, unexpected row-decoding failure, and database unavailability remaining a generic internal server response. Preserve the existing test inventory and assertions.",
+					"description": "Add organization_id to Categories and organization_id plus ledger_id to both relationship tables, with the composite ownership keys and cascades defined in design.md. Generate and review a migration that backfills from Ledgers and child Categories, aborts on cross-scope Account or parent rows, and never deletes data. Carry OrgID on the Category entity, scope every repository method by Organization and Ledger, and make each service method validate Ledger ownership before its existing sequence. Pass request.token.orgId from every route. Add CategoryNotFound, CategoryConflict, CategoryPersistenceDecodingFailure, CategoryPersistenceFailure, and CategoryRepositoryUnavailable; map PostgreSQL unavailability to 503 and add 404 OpenAPI responses to list and create. Retain all unrelated HTTP, timestamp, pagination, upsert, and relationship behavior.",
 					"files": {
-						"create": [],
+						"create": [
+							"apps/api/src/repo/LedgerAccountCategoryErrors.test.ts",
+							"apps/api/src/repo/LedgerAccountCategoryErrors.ts",
+							"apps/api/src/repo/LedgerAccountCategoryMigration.test.ts",
+							"apps/api/src/repo/entities/LedgerAccountCategoryEntity.test.ts",
+							"apps/api/migrations/20260829170957_category_ownership/migration.sql",
+							"apps/api/migrations/20260829170957_category_ownership/snapshot.json"
+						],
 						"modify": [
+							"apps/api/src/repo/schema.ts",
+							"apps/api/src/repo/entities/LedgerAccountCategoryEntity.ts",
+							"apps/api/src/repo/LedgerAccountCategoryRepo.ts",
 							"apps/api/src/repo/LedgerAccountCategoryRepo.test.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.ts",
 							"apps/api/src/services/LedgerAccountCategoryService.test.ts",
+							"apps/api/src/services/index.ts",
+							"apps/api/src/routes/ledgers/fixtures.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.ts",
 							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
 						]
 					},
 					"validation": {
 						"tests": [
-							"pnpm --filter=@exchequerio/api test -- src/repo/LedgerAccountCategoryRepo.test.ts",
-							"pnpm --filter=@exchequerio/api test -- src/services/LedgerAccountCategoryService.test.ts",
-							"pnpm --filter=@exchequerio/api test -- src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
+							"pnpm run docker:up",
+							"pnpm --filter=@exchequerio/api db:migrate",
+							"pnpm --filter=@exchequerio/api test -- src/repo/LedgerAccountCategoryMigration.test.ts src/repo/LedgerAccountCategoryRepo.test.ts src/services/LedgerAccountCategoryService.test.ts src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts",
+							"pnpm --filter=@exchequerio/api types",
+							"git diff --check"
 						],
 						"acceptance": [
-							"All new characterization tests pass against the legacy Promise implementation.",
-							"No production file changes in T2.",
-							"Existing JWT 401, readonly-token 403, CRUD, relationship, and error assertions remain present."
+							"A valid database backfills Category and relationship ownership without deleting rows.",
+							"Migration tests fail and roll back for pre-existing cross-Ledger or cross-Organization Account and parent links.",
+							"PostgreSQL rejects new cross-scope Account and parent relationships through composite constraints.",
+							"Every operation returns 404 for a Ledger owned by another Organization.",
+							"PostgreSQL unavailability returns the Category 503 response; other persistence and decoding failures return 500.",
+							"Methods, paths, permissions, success responses, IDs, timestamps, ordering, pagination, upsert races, and valid relationship sequencing remain unchanged."
 						]
 					}
 				}
@@ -42,20 +62,20 @@
 		},
 		{
 			"id": "P2",
-			"name": "Atomic Effect cutover",
+			"name": "Typed Effect cutover",
 			"tasks": [
 				{
-					"id": "T3",
-					"name": "Cut the complete Category slice over to Effect",
-					"depends_on": ["T2"],
+					"id": "T4",
+					"name": "Cut the hardened Category slice over to Effect",
+					"depends_on": ["T3"],
 					"inputs": [
-						"Green legacy characterization suite from T2",
+						"Green ownership hardening from T3",
+						"Category error family from T3",
 						"Organizations ownership pattern",
-						"Transaction native Effect Drizzle pattern",
-						"DatabaseTag.effectDb and Effect 4.0.0-rc.112",
-						"Existing Category entity and TypeBox-derived request type"
+						"Transaction Effect Drizzle pattern",
+						"DatabaseTag.effectDb and Effect 4.0.0-rc.112"
 					],
-					"description": "Perform one compile-green production cutover because splitting repository, service, plugin, runtime, and route removal creates known invalid intermediate states. Replace the Promise repository with an Effect contract, tag, live implementation, and Layer backed by DatabaseTag.effectDb. Convert all eight repository operations while preserving exact SQL and sequential statement order. Convert all nine service operations and preserve the separate update existence read followed by ID-based upsert. Compose the service into the existing runtime, remove only Category from legacy repository and service plugins and fixtures, and run every route through server.runtime. Adapt the focused tests without removing baseline assertions. Repository and service Effects use unknown failures: expected shared NotFoundError and ConflictError values, native adapter failures, and synchronous TypeID, entity, or response-conversion throws enter the failure channel unchanged and never become defects or ServiceUnavailableError values.",
+					"description": "Perform one compile-green Effect cutover of the hardened Category repository, service, runtime, plugins, routes, and focused tests. Define the eight repository and nine service capabilities with operation-specific unions of LedgerNotFound, AccountNotFound, CategoryNotFound, CategoryConflict, and Category infrastructure errors; no capability uses unknown as its failure type. Map SQL and row-decoding failures at their owning boundaries and retain their causes. Compose the Category repository from DatabaseTag.effectDb, compose the service from the Category repository and Ledger service tags, run routes through server.runtime, and remove only Category from legacy plugin wiring. Preserve the ownership baseline and operation order from T3.",
 					"files": {
 						"create": [],
 						"modify": [
@@ -74,24 +94,16 @@
 					},
 					"validation": {
 						"tests": [
-							"Repository tests run through the Category Layer and preserve CRUD, Ledger isolation, upsert, cascade, relationship, sequencing, timestamp, metadata, and failure cases.",
-							"Service tests use an Effect repository Layer and preserve delegation, entity construction, update ordering, races, and original failure objects.",
-							"Route success and service-failure cases use an isolated Fastify server with Layer.succeed.",
-							"Existing invalid-JWT 401 and readonly-token 403 cases continue through buildServer and its real authentication and permission hooks.",
-							"A failing native adapter and a synchronous conversion throw are failures rather than defects and reach the existing handler as generic 500 responses.",
 							"pnpm --filter=@exchequerio/api types",
-							"pnpm --filter=@exchequerio/api test -- src/repo/LedgerAccountCategoryRepo.test.ts src/services/LedgerAccountCategoryService.test.ts src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
+							"pnpm --filter=@exchequerio/api test -- src/repo/LedgerAccountCategoryRepo.test.ts src/services/LedgerAccountCategoryService.test.ts src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts",
+							"git diff --check"
 						],
 						"acceptance": [
-							"The package typechecks at the end of the cutover; no completed task leaves broken consumers or temporary compatibility code.",
-							"All nine routes preserve their methods, paths, permissions, schemas, operation IDs, statuses, headers, response bodies, and error details.",
-							"Create remains 200 without Location; every other mutation remains 200 with its existing body.",
-							"List remains Ledger-scoped, created-descending, and offset/limit paginated.",
-							"Update remains a nontransactional existence read followed by ID-based upsert with last-writer-wins and delete/recreate behavior.",
-							"Link Account reads the Category then inserts without pre-reading the Account; unlink Account reads the Category then deletes.",
-							"Link parent reads child then parent, checks direct equality, then inserts; unlink parent reads only the child then deletes.",
-							"No Organization predicate, transaction, concurrency combinator, lock, retry, idempotency key, schema change, new runtime, generic executor, or reusable test harness is introduced.",
-							"Settlement, Statement, and Balance Monitor legacy wiring remains unchanged."
+							"Repository and service capabilities contain no unknown failure type.",
+							"Expected adapter and decoding failures remain Effect failures with the exact typed Category error rather than defects.",
+							"All nine routes run through the server-owned managed runtime.",
+							"Category is absent from legacy repository and service construction while unrelated slices remain unchanged.",
+							"The package typechecks with no compatibility bridge or generic executor."
 						]
 					}
 				}
@@ -99,29 +111,35 @@
 		},
 		{
 			"id": "P3",
-			"name": "Verification",
+			"name": "Final verification",
 			"tasks": [
 				{
-					"id": "T4",
-					"name": "Run CI and audit behavior deviations",
-					"depends_on": ["T3"],
+					"id": "T5",
+					"name": "Validate both stacked change sets",
+					"depends_on": ["T4"],
 					"inputs": [
-						"Compile-green Category Effect cutover",
-						"Baseline commit 47779c46418da3558f8f20f61e1edee20de6b72a"
+						"Ownership and error behavior commit from T3",
+						"Typed Effect cutover commit from T4",
+						"Committed Category characterization baseline"
 					],
-					"description": "Run the full repository CI once after the focused suites have passed. Compare the final diff with the recorded baseline and stop if it contains any unplanned HTTP, domain, error, SQL, transaction, concurrency, identifier, timestamp, tenancy, or operational change.",
+					"description": "Run repository-wide validation, audit each stacked commit against its approved behavior, and review the complete branch. Keep the recovery stash until both commits and all checks pass.",
 					"files": {
 						"create": [],
 						"modify": []
 					},
 					"validation": {
-						"tests": ["pnpm run ci", "git diff --check"],
+						"tests": [
+							"pnpm run check",
+							"pnpm run ci",
+							"git diff --check",
+							"git status --short --untracked-files=all"
+						],
 						"acceptance": [
-							"The final diff contains only the files owned by T2 and T3.",
-							"Entity code, TypeBox schemas, database schema, migrations, dependencies, and unrelated slices are unchanged.",
-							"The final route, service, and repository assertion inventory is at least the characterized baseline.",
-							"Organization scoping, OCC, lock_version, transactions, retries, idempotency keys, real balances, cycle detection, and relationship hardening remain outside this change set.",
-							"Any discovered deviation returns to design or planning before implementation continues."
+							"The first commit contains ownership, schema, migration, error, and associated test changes without the Effect cutover.",
+							"The second commit contains the typed Effect cutover without unrelated product or infrastructure changes.",
+							"Focused, migration, type, formatting, lint, and full CI validation pass.",
+							"A final code review covers the complete committed branch, including both change sets.",
+							"The worktree is clean before the recovery stash is removed. Nothing is pushed or opened as a pull request."
 						]
 					}
 				}

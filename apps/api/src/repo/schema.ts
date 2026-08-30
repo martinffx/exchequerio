@@ -241,19 +241,35 @@ type LedgerTransactionEntryRow = typeof LedgerTransactionEntriesTable.$inferSele
 type LedgerTransactionEntryInsertRow = typeof LedgerTransactionEntriesTable.$inferInsert;
 
 // Account Category Definitions: Chart of accounts structure
-const LedgerAccountCategoriesTable = pgTable("ledger_account_categories", {
-	id: text("id").primaryKey(),
-	ledgerId: text("ledger_id")
-		.notNull()
-		.references(() => LedgersTable.id),
-	name: text("name").notNull(),
-	description: text("description"),
-	normalBalance: ledgerNormalBalance("normal_balance").notNull(),
-	parentCategoryId: text("parent_category_id"),
-	metadata: text("metadata"),
-	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
-	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-});
+const LedgerAccountCategoriesTable = pgTable(
+	"ledger_account_categories",
+	{
+		id: text("id").primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => OrganizationsTable.id),
+		ledgerId: text("ledger_id").notNull(),
+		name: text("name").notNull(),
+		description: text("description"),
+		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
+		parentCategoryId: text("parent_category_id"),
+		metadata: text("metadata"),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => ({
+		organizationLedgerFk: foreignKey({
+			name: "ledger_account_categories_organization_ledger_fk",
+			columns: [table.organizationId, table.ledgerId],
+			foreignColumns: [LedgersTable.organizationId, LedgersTable.id],
+		}),
+		organizationLedgerIdUnique: unique("unique_ledger_account_categories_organization_ledger_id").on(
+			table.organizationId,
+			table.ledgerId,
+			table.id
+		),
+	})
+);
 type LedgerAccountCategoryRow = typeof LedgerAccountCategoriesTable.$inferSelect;
 type LedgerAccountCategoryInsertRow = Required<typeof LedgerAccountCategoriesTable.$inferInsert>;
 
@@ -261,16 +277,34 @@ type LedgerAccountCategoryInsertRow = Required<typeof LedgerAccountCategoriesTab
 const LedgerAccountCategoryParentsTable = pgTable(
 	"ledger_account_category_parents",
 	{
-		categoryId: text("category_id")
+		organizationId: text("organization_id")
 			.notNull()
-			.references(() => LedgerAccountCategoriesTable.id, { onDelete: "cascade" }),
-		parentCategoryId: text("parent_category_id")
-			.notNull()
-			.references(() => LedgerAccountCategoriesTable.id, { onDelete: "cascade" }),
+			.references(() => OrganizationsTable.id),
+		ledgerId: text("ledger_id").notNull(),
+		categoryId: text("category_id").notNull(),
+		parentCategoryId: text("parent_category_id").notNull(),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
 		pk: primaryKey({ columns: [table.categoryId, table.parentCategoryId] }),
+		childCategoryOwnershipFk: foreignKey({
+			name: "ledger_account_category_parents_child_ownership_fk",
+			columns: [table.organizationId, table.ledgerId, table.categoryId],
+			foreignColumns: [
+				LedgerAccountCategoriesTable.organizationId,
+				LedgerAccountCategoriesTable.ledgerId,
+				LedgerAccountCategoriesTable.id,
+			],
+		}).onDelete("cascade"),
+		parentCategoryOwnershipFk: foreignKey({
+			name: "ledger_account_category_parents_parent_ownership_fk",
+			columns: [table.organizationId, table.ledgerId, table.parentCategoryId],
+			foreignColumns: [
+				LedgerAccountCategoriesTable.organizationId,
+				LedgerAccountCategoriesTable.ledgerId,
+				LedgerAccountCategoriesTable.id,
+			],
+		}).onDelete("cascade"),
 		noSelfRef: check("no_self_reference", sql`${table.categoryId} <> ${table.parentCategoryId}`),
 		parentIdx: index("idx_category_parents_parent").on(table.parentCategoryId),
 	})
@@ -284,16 +318,34 @@ type LedgerAccountCategoryParentInsertRow = Required<
 const LedgerAccountCategoryAccountsTable = pgTable(
 	"ledger_account_category_accounts",
 	{
-		categoryId: text("category_id")
+		organizationId: text("organization_id")
 			.notNull()
-			.references(() => LedgerAccountCategoriesTable.id, { onDelete: "cascade" }),
-		accountId: text("account_id")
-			.notNull()
-			.references(() => LedgerAccountsTable.id, { onDelete: "cascade" }),
+			.references(() => OrganizationsTable.id),
+		ledgerId: text("ledger_id").notNull(),
+		categoryId: text("category_id").notNull(),
+		accountId: text("account_id").notNull(),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
 		pk: primaryKey({ columns: [table.categoryId, table.accountId] }),
+		categoryOwnershipFk: foreignKey({
+			name: "ledger_account_category_accounts_category_ownership_fk",
+			columns: [table.organizationId, table.ledgerId, table.categoryId],
+			foreignColumns: [
+				LedgerAccountCategoriesTable.organizationId,
+				LedgerAccountCategoriesTable.ledgerId,
+				LedgerAccountCategoriesTable.id,
+			],
+		}).onDelete("cascade"),
+		accountOwnershipFk: foreignKey({
+			name: "ledger_account_category_accounts_account_ownership_fk",
+			columns: [table.organizationId, table.ledgerId, table.accountId],
+			foreignColumns: [
+				LedgerAccountsTable.organizationId,
+				LedgerAccountsTable.ledgerId,
+				LedgerAccountsTable.id,
+			],
+		}).onDelete("cascade"),
 		accountIdx: index("idx_category_accounts_account").on(table.accountId),
 	})
 );

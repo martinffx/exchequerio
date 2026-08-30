@@ -49,6 +49,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					400: BadRequestErrorResponse,
 					401: UnauthorizedErrorResponse,
 					403: ForbiddenErrorResponse,
+					404: NotFoundErrorResponse,
 					429: TooManyRequestsErrorResponse,
 					500: InternalServerErrorResponse,
 					503: ServiceUnavailableErrorResponse,
@@ -59,6 +60,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		async (rq: ListLedgerAccountCategoriesRequest): Promise<LedgerAccountCategoryResponse[]> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categories = await ledgerAccountCategoryService.listLedgerAccountCategories(
+				rq.token.orgId,
 				ledgerId,
 				rq.query.offset,
 				rq.query.limit
@@ -95,6 +97,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const category = await ledgerAccountCategoryService.getLedgerAccountCategory(
+				rq.token.orgId,
 				ledgerId,
 				categoryId
 			);
@@ -117,6 +120,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					400: BadRequestErrorResponse,
 					401: UnauthorizedErrorResponse,
 					403: ForbiddenErrorResponse,
+					404: NotFoundErrorResponse,
 					409: ConflictErrorResponse,
 					429: TooManyRequestsErrorResponse,
 					500: InternalServerErrorResponse,
@@ -127,6 +131,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: CreateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
 			const category = await ledgerAccountCategoryService.createLedgerAccountCategory(
+				rq.token.orgId,
 				rq.params.ledgerId,
 				rq.body
 			);
@@ -163,6 +168,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		},
 		async (rq: UpdateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
 			const category = await ledgerAccountCategoryService.updateLedgerAccountCategory(
+				rq.token.orgId,
 				rq.params.ledgerId,
 				rq.params.categoryId,
 				rq.body
@@ -199,7 +205,11 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 		async (rq: DeleteLedgerAccountCategoryRequest): Promise<void> => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
-			await ledgerAccountCategoryService.deleteLedgerAccountCategory(ledgerId, categoryId);
+			await ledgerAccountCategoryService.deleteLedgerAccountCategory(
+				rq.token.orgId,
+				ledgerId,
+				categoryId
+			);
 		}
 	);
 
@@ -232,7 +242,12 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
 			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
-			await ledgerAccountCategoryService.linkLedgerAccountToCategory(ledgerId, categoryId, accountId);
+			await ledgerAccountCategoryService.linkLedgerAccountToCategory(
+				rq.token.orgId,
+				ledgerId,
+				categoryId,
+				accountId
+			);
 		}
 	);
 
@@ -266,6 +281,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const accountId = TypeID.fromString<"lat">(rq.params.accountId);
 			await ledgerAccountCategoryService.unlinkLedgerAccountToCategory(
+				rq.token.orgId,
 				ledgerId,
 				categoryId,
 				accountId
@@ -303,6 +319,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const parentCategoryId = TypeID.fromString<"lac">(rq.params.parentCategoryId);
 			await ledgerAccountCategoryService.linkLedgerAccountCategoryToCategory(
+				rq.token.orgId,
 				ledgerId,
 				categoryId,
 				parentCategoryId
@@ -340,6 +357,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			const categoryId = TypeID.fromString<"lac">(rq.params.categoryId);
 			const parentCategoryId = TypeID.fromString<"lac">(rq.params.parentCategoryId);
 			await ledgerAccountCategoryService.unlinkLedgerAccountCategoryToCategory(
+				rq.token.orgId,
 				ledgerId,
 				categoryId,
 				parentCategoryId

@@ -1,108 +1,117 @@
-# Ledger Account Categories Effect migration
+# Ledger Account Categories ownership and Effect migration
 
 ## Problem
 
-The Ledger Account Category slice still runs through Promise-based routes, service wiring, and a
-Node Drizzle repository. Organizations, Ledgers, Accounts, and Transactions use the server's
-managed Effect runtime. Categories need the same execution model without changing their API,
-domain, persistence, concurrency, or operational behavior.
+Ledger Account Category operations use Ledger IDs without checking that the authenticated
+Organization owns the Ledger. The Category and relationship tables also lack the composite
+ownership constraints used by Accounts and Transactions. A caller with another Organization's
+Ledger ID can reach its Categories, and PostgreSQL accepts cross-Ledger Account relationships.
 
-API callers continue to use the existing nine Category operations. The migration is successful
-when those operations run through Effect and produce the same observable results from the same
-requests and database state.
+Categories also remain on Promise-based routes, service wiring, and a Node Drizzle repository while
+the integrated Ledger slices use the server's managed Effect runtime. The prepared Category Effect
+cutover exposes `unknown` failures across repository and service boundaries.
+
+The work ships as two stacked change sets:
+
+1. Add Organization and Ledger ownership, enforce relationship ownership, and define Category error
+   behavior.
+2. Move the hardened Category slice to Effect with explicit error unions.
+
+The first change set intentionally changes tenancy, persistence, and availability behavior. The
+second change set follows `EFFECT_MIGRATION.md` and preserves that new baseline.
 
 ## Scope
 
 ### In scope
 
-- Migrate all nine Ledger Account Category operations to the managed Effect runtime.
-- Convert the Category service and repository contracts to return Effects.
-- Use `drizzle-orm/effect-postgres` through `DatabaseTag.effectDb`.
-- Add Category service and repository tags and Layers for their real dependencies.
-- Remove Category construction from the legacy service and repository plugins.
-- Adapt focused route, service, and PostgreSQL repository tests without weakening assertions.
+- Store Organization and Ledger ownership on Categories and both Category relationship tables.
+- Scope all nine Category operations by the authenticated Organization and route Ledger.
+- Return `404` when the Organization does not own the route Ledger.
+- Reject cross-Ledger Account and parent relationships in PostgreSQL.
+- Backfill existing ownership without deleting data and abort on inconsistent relationships.
+- Add Category-specific not-found, conflict, persistence-decoding, persistence-failure, and
+  repository-unavailable errors.
+- Return `503` when PostgreSQL is unavailable.
+- Migrate Category routes, service, and repository to the managed Effect runtime with explicit
+  error unions.
+- Preserve existing Category HTTP success contracts, sequencing, timestamps, upsert behavior,
+  pagination, and relationship idempotency.
 
 ### Out of scope
 
-- Organization-scoped Category queries.
 - Optimistic concurrency control or a Category `lock_version`.
 - Real Category balance aggregation or changes to the placeholder balance response.
-- Full cycle detection or stricter Account and Category relationship validation.
-- HTTP status, header, schema, permission, pagination, or error-policy changes.
-- Database schema changes, migrations, retries, transactions, clocks, ID services, or new runtime
-  infrastructure.
-- Moving or renaming the existing Category files.
-
-Organization-scoped Category queries remain a separate future change.
+- Full cycle detection beyond direct self-link rejection.
+- Transactions, retries, idempotency keys, clocks, ID services, or a new runtime.
+- Moving the Category slice into the domain directory or adding a generic route executor.
 
 ## User stories
 
-All stories are must-have.
+### US-1: Isolate Categories by Organization
 
-### US-1: Preserve Category CRUD
+As an authenticated API caller, I can operate only on Categories in Ledgers owned by my
+Organization.
 
-As an authenticated Ledger API caller, I want Category list, get, create, replace, and delete
-operations to behave as they did before the migration.
+- Every operation reads `request.token.orgId` and the route Ledger ID.
+- A foreign-Organization Ledger is indistinguishable from a missing Ledger and returns `404`.
+- Repository predicates include both Organization ID and Ledger ID.
+- List and create validate Ledger ownership instead of returning an empty list or relying only on a
+  foreign-key failure.
 
-- Given the same valid request and database state, each route returns the same status, headers, and
-  JSON body.
-- Permissions, TypeBox validation, pagination, `created DESC` ordering, Ledger scoping, identifiers,
-  timestamps, metadata handling, placeholder balances, and public errors remain unchanged.
-- PUT remains last-writer-wins and keeps the existing nontransactional read-then-upsert behavior.
+### US-2: Enforce relationship ownership
 
-### US-2: Preserve Category relationships
+As a Ledger operator, I cannot create a Category relationship across Ledger or Organization
+boundaries.
 
-As an authenticated Ledger API caller, I want Account membership and parent Category links to keep
-their current behavior.
+- Account membership requires the Account and Category to share Organization and Ledger ownership.
+- Parent relationships require the child and parent Category to share Organization and Ledger
+  ownership.
+- PostgreSQL enforces both rules with composite foreign keys.
+- Duplicate valid links remain successful and idempotent.
+- Parent Categories may still have multiple children and parents. Direct self-links remain
+  conflicts, and longer cycles remain possible.
 
-- Duplicate links remain successful and idempotent.
-- Missing links on unlink return the existing `404` details.
-- Multiple parents and direct self-link rejection remain unchanged.
-- Existing query order, absence of transactions, and cross-Ledger Account-link behavior remain
-  unchanged.
+### US-3: Use typed Category failures
 
-### US-3: Run the Category slice through Effect
+As an API maintainer, I can distinguish supported Category and infrastructure failures without an
+`unknown` failure channel.
+
+- Missing Categories fail with `CategoryNotFound`.
+- Immutable ownership mismatches and direct self-links fail with `CategoryConflict`.
+- Stored-row decoding fails with `CategoryPersistenceDecodingFailure`.
+- Other PostgreSQL failures fail with `CategoryPersistenceFailure`.
+- PostgreSQL unavailability fails with `CategoryRepositoryUnavailable` and returns `503`.
+- Errors retain the original failure as their cause where one exists.
+
+### US-4: Complete the Effect cutover
 
 As an API maintainer, I want Category routes, service orchestration, and PostgreSQL operations to
 use the server's managed Effect runtime.
 
 - Routes execute Category Effects through `server.runtime`.
-- The Category service Layer depends on the Category repository Layer.
+- The Category service Layer depends on the Category repository and Ledger service Layers.
 - The live repository uses `DatabaseTag.effectDb`.
-- The migration adds no runtime, resource lifetime, transaction, retry, clock, ID-generator, or
-  generic executor abstraction.
+- Repository and service methods declare operation-specific error unions. They never use `unknown`
+  as the Effect failure type.
 - Unrelated legacy slices keep their existing wiring.
 
-### US-4: Isolate behavior changes
+### US-5: Preserve unrelated Category behavior
 
-As an API maintainer, I want the migration diff to contain no product, tenancy, schema,
-concurrency, or operational-policy changes.
+As an API caller, I receive the existing result when the request does not exercise the intentional
+ownership or availability changes.
 
-- Organization scoping remains a separate future change.
-- OCC, real balances, cycle detection, stricter relationship validation, status-code modernization,
-  and availability remapping do not enter this migration.
-- Any newly discovered deviation stops implementation until it is split out.
+- Methods, paths, permissions, request bodies, success statuses, headers, response bodies, and
+  operation IDs remain unchanged.
+- Lists retain `created DESC` ordering and existing offset and limit behavior.
+- PUT remains last-writer-wins and keeps its nontransactional existence read followed by an ID-based
+  upsert.
+- Category creation and updates retain their existing ID and timestamp behavior.
+- Malformed stored metadata remains tolerated as absent.
+- Relationship operations retain their relative call order and `ON CONFLICT DO NOTHING` behavior.
 
-## Constraints
+## Current baseline
 
-- `CONTEXT.md` defines Ledger Account Category terminology and invariants.
-- The existing HTTP contract, source, tests, and PostgreSQL schema define current behavior.
-- `EFFECT_MIGRATION.md` defines the migration sequence and requires zero behavior deviations.
-- Organizations provides the basic Effect ownership pattern. Transactions is the nearest integrated
-  slice and provides the current Effect Drizzle pattern.
-- Fastify and TypeBox remain the HTTP and OpenAPI boundary. Drizzle remains the PostgreSQL adapter.
-- The repository owns SQL and database error translation. The service owns orchestration. The entity
-  owns synchronous representation conversion and performs no I/O.
-- The target package uses Effect `4.0.0-rc.112`.
-- The work uses branch `feat/categories-effect` and worktree
-  `/Users/martinrichards/code/exchequerio/.worktrees/categories-effect`.
-- The recorded baseline commit is `47779c46418da3558f8f20f61e1edee20de6b72a`.
-
-## Context
-
-### HTTP baseline
-
-All routes use the prefix `/api/ledgers/:ledgerId/accounts/categories`.
+All routes use `/api/ledgers/:ledgerId/accounts/categories`.
 
 | Operation      | Route suffix                                       | Success | Permission                       |
 | -------------- | -------------------------------------------------- | ------: | -------------------------------- |
@@ -116,225 +125,158 @@ All routes use the prefix `/api/ledgers/:ledgerId/accounts/categories`.
 | Link parent    | `PATCH /:categoryId/categories/:parentCategoryId`  |   `200` | `ledger:account:category:write`  |
 | Unlink parent  | `DELETE /:categoryId/categories/:parentCategoryId` |   `200` | `ledger:account:category:write`  |
 
-Create sets no `Location` header. The request and response schemas remain in the existing TypeBox
-module. Responses retain three zero-valued USD balance entries and ISO timestamps.
+Create sets no `Location` header. Responses retain three zero-valued USD balance entries and ISO
+timestamps. Category IDs remain `lac` TypeIDs.
 
-### Domain and persistence baseline
+Before this work, Category queries use Ledger ID alone, Category rows do not store Organization ID,
+and relationship rows store only their two resource IDs. Account linking checks Account existence
+through a foreign-key error but does not require the Account to share the Category's Ledger.
 
-- Queries scope Categories by Ledger ID only. Routes do not pass the authenticated Organization ID
-  into the Category slice.
-- Lists order by `created DESC` and use the existing offset and limit values without additional
-  bounds.
-- Create generates a `lac` TypeID in `LedgerAccountCategoryEntity`. PostgreSQL supplies `created`,
-  and application time supplies `updated`.
-- Update reads the Category for existence, builds replacement state, then performs an ID-based
-  upsert. The read and upsert do not share a transaction.
-- The upsert updates name, description, Normal Balance, metadata, and updated time. It rejects a
-  Ledger ID mismatch.
-- Categories have no `lock_version`. Concurrent PUTs are last-writer-wins, and a delete between the
-  existence read and upsert can recreate the Category.
-- Category deletion relies on database cascades to remove junction rows.
-- Account and parent links use separate existence checks and writes. Duplicate links use
-  `ON CONFLICT DO NOTHING`.
-- Parent links allow multiple parents and reject only direct self-links. Longer cycles remain
-  possible.
-- Account links verify that the Account exists but do not verify that it belongs to the Category's
-  Ledger.
-- Malformed stored metadata is silently treated as absent.
+Update reads the Category for existence and then performs an ID-based upsert. These statements do
+not share a transaction. A concurrent delete can therefore allow the upsert to recreate the
+Category. Relationship operations also use separate reads and writes. These concurrency behaviors
+remain unchanged.
 
-### Error and operational baseline
+## Change set 1: ownership and error behavior
 
-- Fastify validation returns `400`.
-- Authentication and permission failures return `401` and `403`.
-- Missing or cross-Ledger Categories, missing Account foreign keys, and absent relationships return
-  the existing `404` details.
-- Direct self-links and upsert Ledger mismatches return the existing `409` details.
-- Unexpected row decoding, database, and availability failures return a generic `500`.
-- Existing OpenAPI `429` and `503` schemas remain, but the migration adds no producer for them.
-- Category operations have no retry, idempotency-key, transaction, lock, or Category-specific
-  resource lifetime.
+### Data model
 
-The baseline API suite passes 32 test files and 490 tests.
+`ledger_account_categories` gains a non-null `organization_id`. It uses a composite foreign key
+from `(organization_id, ledger_id)` to `ledgers(organization_id, id)` and a unique key on
+`(organization_id, ledger_id, id)` for relationship ownership references.
 
-## Research decisions
+`ledger_account_category_accounts` gains non-null `organization_id` and `ledger_id` columns. Its
+Category foreign key becomes
+`(organization_id, ledger_id, category_id) -> ledger_account_categories`, and its Account foreign
+key becomes `(organization_id, ledger_id, account_id) -> ledger_accounts`. Both preserve cascade
+deletion. The existing `(category_id, account_id)` primary key and Account index remain.
 
-| Concern                                         | Existing solution                                           | Decision | Current requirement                                         |
-| ----------------------------------------------- | ----------------------------------------------------------- | -------- | ----------------------------------------------------------- |
-| Runtime                                         | One server-owned managed Effect runtime                     | reuse    | Run Category effects at the route boundary                  |
-| HTTP contract                                   | Existing Fastify routes and TypeBox schemas                 | reuse    | Preserve paths, permissions, schemas, statuses, and headers |
-| Route execution                                 | Promise service through `server.services`                   | modify   | Run one Effect through `server.runtime`                     |
-| Category model                                  | Entity owns request, row, and response conversion           | reuse    | Preserve IDs, timestamps, metadata tolerance, and balances  |
-| Service                                         | Constructor-injected Promise class                          | modify   | Return Effects and expose the repository dependency         |
-| Repository                                      | Node Drizzle Promise adapter                                | modify   | Express the same SQL through Effect Drizzle                 |
-| Tags and Layers                                 | None for Categories                                         | new      | Compose real service and database dependencies              |
-| Errors                                          | Shared HTTP errors and generic unexpected `500`             | reuse    | Preserve current status and detail behavior                 |
-| Legacy plugin entries                           | Category constructors and decorations                       | delete   | Remove the obsolete Category bridge                         |
-| Tests                                           | Route stubs, service stubs, and PostgreSQL repository tests | modify   | Exercise Effect wiring without weakening contracts          |
-| Schema and migrations                           | Existing Category and junction tables                       | reuse    | Preserve persistence behavior                               |
-| Transactions, locks, retries, clock, ID service | None                                                        | reuse    | Preserve their absence                                      |
+`ledger_account_category_parents` gains the same ownership columns. Composite foreign keys connect
+both the child and parent IDs to Categories under the stored Organization and Ledger. They preserve
+cascade deletion. The existing primary key, parent index, and direct self-reference check remain.
 
-## Architecture
+The Category entity carries `organizationId`. Request construction receives both Organization and
+Ledger IDs, row conversion decodes both IDs, and row encoding writes both values. The public
+response does not add Organization ID.
 
-The migration converts the existing files in place:
+### Migration
+
+The generated migration performs these steps in one transaction:
+
+1. Add nullable ownership columns.
+2. Backfill each Category's Organization from its Ledger.
+3. Backfill each relationship's Organization and Ledger from its child Category.
+4. Raise an exception if an Account relationship's Account has different Organization or Ledger
+   ownership.
+5. Raise an exception if a parent relationship's parent Category has different Organization or
+   Ledger ownership.
+6. Add non-null, unique, index, and composite foreign-key constraints only after validation passes.
+
+The migration never deletes or rewrites relationship rows to make invalid data fit. PostgreSQL
+rolls back the transaction when validation fails.
+
+### Application boundaries
+
+Routes pass `request.token.orgId` into every Category service method. Each method first calls
+`LedgerService.getLedger(organizationId, ledgerId)`. This gives list and create the same ownership
+check as resource-specific operations. It also makes a foreign Ledger return the existing
+`LedgerNotFound` response.
+
+During the first change set, the Promise-based Category service accepts a narrow Ledger ownership
+dependency. `services/index.ts` supplies it by running the existing `LedgerServiceTag` capability
+through `server.runtime`. This matches the current managed-runtime adapter pattern. Category route
+fixtures also supply `organizationId` when they construct Category entities. The Effect cutover
+removes this temporary Promise adapter when the Category service begins using `LedgerServiceTag`
+directly.
+
+The Category repository receives Organization and Ledger IDs on every operation. Category reads,
+writes, and deletes filter by both values. Relationship inserts write both ownership columns, and
+their composite foreign keys provide the final ownership check.
+
+The leading Ledger ownership check is new. After it succeeds, operation order remains:
+
+- Update reads the Category, then upserts it.
+- Link Account reads the Category, then inserts the junction row without pre-reading the Account.
+- Unlink Account reads the Category, then deletes the junction row.
+- Link parent reads the child, reads the parent, checks direct equality, then inserts.
+- Unlink parent reads the child, then deletes the junction row.
+
+Create and upsert map an ownership foreign-key failure to `LedgerNotFound`. Account-link ownership
+foreign-key failures map to the existing `AccountNotFound`. Parent ownership failures map to
+`CategoryNotFound`. The repository maps all other adapter failures through the Category
+infrastructure error family.
+
+### Error contract
+
+`LedgerAccountCategoryErrors.ts` defines:
+
+- `CategoryNotFound`, a `NotFoundError` with the existing Category details.
+- `CategoryConflict`, a `ConflictError` for immutable ownership mismatch and direct self-links.
+- `CategoryPersistenceDecodingFailure`, an `InternalServerError` for stored-row conversion.
+- `CategoryPersistenceFailure`, an `InternalServerError` for other persistence failures.
+- `CategoryRepositoryUnavailable`, a `ServiceUnavailableError` for PostgreSQL unavailability.
+
+Each mapping keeps its cause. The route error schemas remain unchanged except that list and create
+advertise their newly reachable `404` response. The existing `503` schema now corresponds to a
+produced response.
+
+## Change set 2: typed Effect cutover
+
+The Effect cutover starts only after the ownership change set passes its focused and migration
+tests. Its baseline is the hardened Category behavior above.
 
 ```text
 Fastify and TypeBox Category routes
-  -> existing managed ServerRuntime
+  -> managed ServerRuntime
      -> LedgerAccountCategoryServiceTag
+        -> LedgerServiceTag
         -> LedgerAccountCategoryRepoTag
            -> DatabaseTag.effectDb
-              -> existing PostgreSQL tables
+              -> PostgreSQL
 ```
 
-### Entity and conversion ownership
+The repository retains its eight operations and adds a tag, live Layer, and explicit capability
+types. Each operation declares the smallest union of `LedgerNotFound`, `AccountNotFound`,
+`CategoryNotFound`, `CategoryConflict`, and Category infrastructure errors that it can produce.
+Repository code catches Effect Drizzle failures at the SQL boundary and converts row failures at
+the entity boundary. No expected failure crosses either boundary as `unknown`.
 
-`LedgerAccountCategoryEntity` remains the pure Category model:
+The service retains its nine operations and exposes `LedgerAccountCategoryServiceTag`. Its Layer
+depends on `LedgerServiceTag` and `LedgerAccountCategoryRepoTag`. Each method validates Ledger
+ownership, performs its existing orchestration, and declares an operation-specific error union.
 
-- `fromRequest` owns Category ID generation and request conversion.
-- `fromRecord` owns TypeID, nullable-field, timestamp, and metadata decoding, including tolerant
-  handling of malformed metadata.
-- `toRecord` owns Drizzle row encoding and application-generated update time.
-- `toResponse` owns the unchanged HTTP representation and placeholder balances.
+Routes parse identifiers with the shared typed parser, obtain the Category service through its tag,
+and execute one program through `server.runtime`. Successful Effects convert entities to the
+existing response shape. Failed Effects reach the global handler as their typed HTTP error values.
 
-The service uses the TypeBox-derived request type instead of a handwritten mirror. The migration
-adds no domain validation, decoder abstraction, clock, ID generator, or error class.
-
-### Repository boundary
-
-`LedgerAccountCategoryRepo.ts` keeps the existing operation names and contains:
-
-- An Effect-returning `LedgerAccountCategoryRepo` contract.
-- `LedgerAccountCategoryRepoTag` for runtime lookup.
-- `LedgerAccountCategoryRepoLive` backed by `DatabaseTag.effectDb`.
-- `ledgerAccountCategoryRepoLayer` for live construction.
-
-Every operation keeps its tables, predicates, ordering, limits, offsets, conflict clauses,
-returning clauses, and sequential call order. The relationship sequences are exact:
-
-- Link Account reads the Category, then inserts the junction row; it does not pre-read the Account.
-- Unlink Account reads the Category, then deletes the junction row.
-- Link parent reads the child, reads the parent, checks direct equality, then inserts the junction
-  row.
-- Unlink parent reads only the child, then deletes the junction row.
-
-Multi-step update and relationship operations remain separate sequential Effects rather than
-concurrent programs or database transactions.
-
-The repository continues to create the existing shared `NotFoundError` and `ConflictError` values.
-It inspects Effect-wrapped PostgreSQL causes for the existing foreign-key and self-reference cases.
-All other SQL and row-decoding failures retain the generic public `500` response. Database
-unavailability does not become `503`.
-
-Repository and service capabilities use `unknown` as the Effect failure type because preserving the
-existing raw failure objects is part of the migration. Expected `NotFoundError` and `ConflictError`
-values enter the failure channel unchanged. Native adapter failures and synchronous TypeID, request,
-row, and response conversion throws also enter the failure channel unchanged rather than becoming
-defects. Routes rethrow those failures to the existing global handler. No failure is remapped to a
-new Category error or `ServiceUnavailableError`.
-
-### Service boundary
-
-`LedgerAccountCategoryService` keeps its nine method names and argument conventions. Each method
-returns an Effect and performs the same orchestration:
-
-- List, get, delete, link, and unlink delegate to the repository.
-- Create builds a new entity and upserts it.
-- Update parses IDs, reads for existence, builds replacement state, then upserts it.
-
-`LedgerAccountCategoryServiceTag` exposes the service. Its Layer depends only on the repository
-tag. The service gains no Organization, Ledger, Account, clock, retry, transaction, or idempotency
-dependency.
-
-### HTTP and runtime boundary
-
-The existing route module keeps its schemas, paths, permissions, operation IDs, statuses, headers,
-and response conversion. Each handler obtains the service through its tag, runs one program through
-`server.runtime`, and rethrows failures to the existing global error handler.
-
-The runtime composes the Category repository and service Layers into the server Layer. The legacy
-repository and service plugins remove only their Category types, constructors, decorations, and
-test injection path. Settlement, Statement, and Balance Monitor wiring remains unchanged.
-
-## API design
-
-There are no public API changes. Request fields, optional-field behavior, response fields, TypeID
-patterns, pagination defaults, OpenAPI operation IDs, advertised error schemas, and empty mutation
-bodies remain unchanged. The migration adds no `Location`, ETag, version, or retry header and
-publishes no events.
-
-The internal service and repository contracts change from Promise-returning classes to
-Effect-returning capabilities with `Context.Service` tags and Layers.
-
-## Data model
-
-There are no schema or migration changes.
-
-- `ledger_account_categories` keeps its columns, Ledger foreign key, timestamp defaults, and absence
-  of Organization ID and lock version.
-- `ledger_account_category_accounts` keeps its composite key, independent Category and Account
-  foreign keys, Account index, and cascade deletes.
-- `ledger_account_category_parents` keeps its composite key, direct self-reference check, parent
-  index, and cascade deletes.
-- Existing Drizzle row types remain canonical. The migration adds no mirror persistence model.
+The runtime composes the Category repository and service Layers. The legacy repository and service
+plugins remove only their Category types, construction, decoration, and fixture injection. The
+Settlement, Statement, and Balance Monitor wiring remains unchanged.
 
 ## Test design
 
-- Before production changes, test-only characterization locks the uncovered adapter, timestamp,
-  sequencing, and concurrency behavior against the legacy implementation.
-- Route success and service-failure tests use an isolated Fastify server with a complete Effect
-  service provided through `Layer.succeed`.
-- Existing invalid-JWT `401` and readonly-token `403` cases continue to use `buildServer` with its
-  real authentication and permission hooks. They use the default runtime because their prehandlers
-  reject the request before Category persistence runs.
-- The route suite retains its current 39 cases or an equivalent named assertion matrix. The
-  repository suite retains 38 cases and the service suite retains 13 cases, plus the new baseline
-  characterizations. Harness rewrites may consolidate setup but must not remove behavior assertions.
-- Service tests provide an Effect repository stub and verify delegation, creation, and
-  read-before-upsert sequencing.
-- Repository tests use the existing PostgreSQL Layer and preserve assertions for ordering,
-  pagination, Ledger isolation, foreign-key errors, immutable Ledger ownership, cascades,
-  idempotent links, multiple parents, direct self-link rejection, and missing unlinks.
-- Baseline characterizations cover malformed stored metadata, PostgreSQL-owned creation time,
-  application-owned update time, created-time preservation on upsert, read-before-upsert order,
-  last-writer-wins replacement, the delete-between-read-and-upsert recreation window, relationship
-  failure precedence, row-decoding failure, and database unavailability remaining a generic `500`.
-- Narrow tests prove that handlers use the runtime and that the Category Layers compose. The
-  migration adds no reusable or duplicate end-to-end harness.
+Ownership tests precede the Effect cutover:
 
-Validation runs from the repository root:
+- Migration integration tests prove valid backfill, all composite constraints, and transactional
+  failure for existing cross-scope Account and parent rows.
+- Repository tests cover Organization isolation for every operation, ownership predicates,
+  cross-Ledger Account rejection, parent ownership rejection, cascades, and duplicate links.
+- Service tests verify Organization propagation, leading Ledger validation, existing operation
+  order, last-writer-wins updates, and the delete/recreate window.
+- Route tests prove foreign-Organization access returns `404`, Account-not-found failures map to
+  `404`, PostgreSQL unavailability returns `503`, and authentication and permission behavior
+  remains.
 
-```bash
-pnpm run ci
-```
+Effect tests then prove that repository and service failures use the failure channel with their
+exact typed value rather than defects or `unknown`. Existing characterization assertions for HTTP,
+pagination, timestamps, metadata tolerance, upserts, races, and relationship sequencing remain.
 
-Before integration, compare the final diff against the recorded baseline and reject any HTTP,
-domain, error, SQL, transaction, concurrency, identifier, timestamp, or operational deviation.
-
-## Trade-offs
-
-The native Effect Drizzle adapter matches the nearest integrated slices and removes a transitional
-Promise boundary. A Promise-backed Effect repository would preserve the old adapter but add wrapper
-code and keep Categories on a different path from Accounts and Transactions.
-
-Converting in place avoids an unrelated relocation. The older file layout remains until a current
-requirement justifies changing it.
-
-The production conversion is one atomic, compile-green cutover. Splitting repository, legacy
-plugin, service, runtime, and route removal into separately completed tasks would leave known broken
-intermediate states. Test-only characterization remains a separate earlier task because it leaves
-production unchanged.
-
-Shared errors already express every caller-visible distinction. Category-specific errors would add
-types without changing handling.
-
-Exact sequencing preserves the current concurrency contract. Transactions, split create and update
-operations, or OCC would change persistence behavior.
-
-The existing entity conversions preserve tolerant metadata decoding and placeholder balances.
-Stricter decoding and real balances require separate product changes.
+Validation runs focused Category and migration tests after the first change set, then API typecheck
+and focused Effect tests after the second. The final branch must pass `pnpm run check`,
+`pnpm run ci`, and `git diff --check`.
 
 ## Known limitations
 
-The migration retains generic database `500` responses, last-writer-wins PUTs, the delete/recreate
-race, longer Category cycles, cross-Ledger Account links, Ledger-only Category scoping,
-unconstrained pagination values, and placeholder balances.
+Categories retain last-writer-wins PUTs, the delete/recreate race, longer Category cycles,
+unconstrained pagination values, and placeholder balances. These limitations do not weaken
+Organization or Ledger ownership.
