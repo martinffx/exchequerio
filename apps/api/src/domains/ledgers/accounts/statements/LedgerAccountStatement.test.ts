@@ -73,9 +73,12 @@ describe("LedgerAccountStatement", () => {
 	});
 
 	// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
-	it.each([null, "not-json"])("treats %s metadata as absent", metadata => {
-		expect(LedgerAccountStatement.fromRow(row(metadata)).metadata).toBeUndefined();
-	});
+	it.each([null, "not-json", JSON.stringify({ count: 1 })])(
+		"treats %s metadata as absent",
+		metadata => {
+			expect(LedgerAccountStatement.fromRow(row(metadata)).metadata).toBeUndefined();
+		}
+	);
 
 	it("encodes the existing insert representation with a fresh updated time", () => {
 		const statement = LedgerAccountStatement.fromRow(row());

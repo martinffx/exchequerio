@@ -4,9 +4,16 @@ import fastify, { type FastifyInstance } from "fastify";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { signJWT } from "@/auth";
 import { ConflictError, globalErrorHandler, NotFoundError } from "@/lib/errors";
-import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/repo/entities/types";
+import type {
+	LedgerAccountID,
+	LedgerAccountStatementID,
+	LedgerID,
+	OrgID,
+} from "@/repo/entities/types";
 import { ServerRuntime } from "@/runtime";
+import { buildServer } from "@/server";
 
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import { LedgerAccountStatementRoutes } from "./LedgerAccountStatementRoutes";
@@ -20,6 +27,7 @@ const statementId = TypeID.fromString<"lst">(
 	"lst_01h2x3y4z5a6b7c8d9e0f1g2h5"
 ) as LedgerAccountStatementID;
 const fixedDate = new Date("2025-01-01T00:00:00.000Z");
+const orgId = TypeID.fromString<"org">("org_01h2x3y4z5a6b7c8d9e0f1g2h3") as OrgID;
 
 const statement = new LedgerAccountStatement({
 	id: statementId,
@@ -115,7 +123,7 @@ describe("LedgerAccountStatementRoutes", () => {
 		expect(runPromise).toHaveBeenCalledOnce();
 	});
 
-	it("keeps the existing empty metadata object on the wire", async () => {
+	it("preserves metadata key-value pairs on the wire", async () => {
 		const implementation = service();
 		vi.mocked(implementation.getLedgerAccountStatement).mockReturnValue(
 			Effect.succeed(
@@ -133,7 +141,44 @@ describe("LedgerAccountStatementRoutes", () => {
 		});
 
 		expect(response.statusCode).toBe(200);
-		expect(response.json<{ metadata?: Record<string, unknown> }>().metadata).toEqual({});
+		expect(response.json<{ metadata?: Record<string, string> }>().metadata).toEqual({
+			period: "monthly",
+		});
+	});
+
+	it("registers the production GET route behind authentication", async () => {
+		const server = await buildServer();
+		servers.push(server);
+
+		const response = await server.inject({
+			method: "GET",
+			url: `/api/ledgers/${ledgerId.toString()}/accounts/${pathAccountId.toString()}/statements/${statementId.toString()}`,
+		});
+
+		expect(response.statusCode).toBe(401);
+	});
+
+	it("registers the production POST route with write permission", async () => {
+		const server = await buildServer();
+		servers.push(server);
+		const tokenReadOnly = signJWT({
+			sub: orgId.toString(),
+			scope: ["org_readonly"],
+		});
+
+		const response = await server.inject({
+			method: "POST",
+			headers: { Authorization: `Bearer ${tokenReadOnly}` },
+			url: `/api/ledgers/${ledgerId.toString()}/accounts/${pathAccountId.toString()}/statements`,
+			payload: {
+				ledgerId: ledgerId.toString(),
+				accountId: bodyAccountId.toString(),
+				startDatetime: fixedDate.toISOString(),
+				endDatetime: "2025-02-01T00:00:00.000Z",
+			},
+		});
+
+		expect(response.statusCode).toBe(403);
 	});
 
 	it("keeps validation and typed failure responses", async () => {

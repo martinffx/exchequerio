@@ -1,10 +1,7 @@
 import { type Static, Type } from "@sinclair/typebox";
 import type { FastifyRequest } from "fastify";
 
-const Metadata = Type.Mapped(Type.KeyOf(Type.String()), () => Type.String(), {
-	description:
-		"Additional data represented as key-value pairs. Both the key and value must be strings.",
-});
+import { MetadataSchema } from "@/lib/schema";
 const NormalBalance = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 const Balance = Type.Union([
 	Type.Object({
@@ -101,7 +98,7 @@ const LedgerAccountStatementResponse = Type.Object(
 		currencyExponent: Type.Number({
 			description: "The currency exponent of the ledger account settlement.",
 		}),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 		created: Type.String({
 			description: "Timestamp of when the ledger account category was created.",
 		}),

@@ -5,7 +5,8 @@
 Migrate the existing Ledger Account Statement slice to Effect v4 and relocate it under
 `apps/api/src/domains/ledgers/accounts/statements`, using Organizations and the integrated Ledger
 Account slice as structural references. The migration preserves the current HTTP, domain, error,
-persistence, transaction, concurrency, identifier, timestamp, and operational behavior exactly.
+persistence, transaction, concurrency, identifier, timestamp, and operational behavior, except for
+the approved metadata correction described below.
 
 This is an internal architecture migration, not completion of the Ledger Account Statement domain
 described in `CONTEXT.md`. The current placeholder behavior is the compatibility baseline for this
@@ -36,6 +37,8 @@ domain change.
 - Remove only Statement-specific legacy repository, service, route, schema, fixture, and plugin
   wiring after equivalent Effect-owned replacements exist.
 - Add parity coverage for behavior that the existing tests leave implicit.
+- Use one shared `Record<string, string>` metadata schema across the API and preserve valid stored
+  Statement metadata keys in responses.
 
 ### Out of scope
 
@@ -49,9 +52,10 @@ domain change.
 - New transaction boundaries, locks, retries, idempotency, concurrency controls, clocks, identifier
   services, error hierarchies, runtime abstractions, or observability infrastructure.
 - Changes to Settlement, Category, Balance Monitor, Account, Ledger, Transaction, or Organization
-  behavior beyond imports and composition required to detach Statement legacy wiring.
+  behavior beyond imports and composition required to detach Statement legacy wiring and the
+  approved shared metadata-schema correction.
 
-Any proposed deviation from the compatibility baseline requires a separate approved design,
+Any further deviation from the compatibility baseline requires a separate approved design,
 `plan.json`, branch or stacked change set, and implementation. The first deferred project is
 **Complete Ledger Account Statements**; it must define the actual snapshot, tenancy, period,
 currency, version, persistence, and concurrency contracts before changing them.
@@ -143,7 +147,7 @@ behavior, and `delete` applies only after the replacement is active.
 | Description | Accepted on create, never persisted, and omitted from responses | reuse | Preserve request and response behavior |
 | Stored aggregates | Create writes zero opening, closing, credit, and debit totals and zero transaction count | reuse | Preserve placeholder persistence |
 | Response projection | Start and end equal `statementDate`; version is `0`; Normal Balance is Debit; Currency is `USD`; Minor Unit Exponent is `2`; all three starting and ending Balances are zero | reuse | Preserve the exact wire representation |
-| Metadata | Create stores no metadata; valid stored JSON is decoded in the domain model, but the current response serializer emits an empty object; malformed JSON is silently treated as absent | reuse | Preserve both domain decoding and the existing wire representation |
+| Metadata | Create stores no metadata; valid stored JSON is decoded in the domain model; malformed JSON is silently treated as absent; the legacy TypeBox schema erased response keys | modify | Use the shared `Record<string, string>` schema, preserve valid string key-value pairs on the wire, and treat malformed or non-string stored metadata as absent |
 | Timestamps | Request construction captures one `Date`; insert omits Created Time for the database default and writes a fresh Updated Time; returned timestamps come from `INSERT ... RETURNING` or SELECT | reuse | Preserve timestamp sources and ordering |
 | Read SQL | Select by Statement ID with `LIMIT 1` | reuse | Preserve access pattern and absence behavior |
 | Create SQL | One `INSERT ... RETURNING` into `ledger_account_statements` | reuse | Preserve atomicity and returned persisted values |
@@ -188,8 +192,9 @@ Updated Time. It owns pure or lazy typed transformations from the validated crea
 persisted row, to the insert row, and to the existing response.
 
 The migration may use Effect to represent decoding failure, matching the integrated slices, but it
-must preserve legacy successful decoding. In particular, malformed metadata remains `undefined`;
-it must not become a new typed client or server error. No Clock or ID-generator service is added:
+must preserve legacy successful decoding. In particular, malformed metadata and metadata containing
+non-string values remain `undefined`; they must not become new typed client or server errors. No
+Clock or ID-generator service is added:
 native `Date` and TypeID creation preserve the existing behavior.
 
 ### Repository
@@ -223,7 +228,10 @@ legacy repository and service plugin option types and decorators; other legacy r
 
 ## API design
 
-There are no public API changes.
+The only public API change is the approved metadata correction: metadata is consistently described
+and typed as a string key-value record, and valid Statement metadata keys are preserved in
+responses. There is no data migration or backfill, and Balance schemas are unchanged. Existing
+Fastify scalar coercion remains unchanged.
 
 ### Get
 
@@ -269,8 +277,7 @@ The existing response schema and field names remain unchanged. Every response co
 - return Pending, Posted, and Available starting and ending Balances with zero Amount, Credits, and
   Debits;
 - set `currency` to `USD` and `currencyExponent` to `2` at both Statement and Balance levels;
-- return an empty metadata object when stored metadata decodes successfully, matching the current
-  response serializer; and
+- return valid stored metadata string key-value pairs without erasing their keys; and
 - serialize persisted Created and Updated Times as ISO strings.
 
 The current RFC 7807-style problem format remains shared with the rest of the API. Validation and
@@ -309,7 +316,8 @@ Verification follows stub-driven TDD and assigns one contract to each active bou
 - Route tests use a runtime Layer override rather than legacy service decoration. They lock paths,
   permissions, validation, advertised status schemas, success payloads including current metadata
   serialization, `200` create status, ignored path scope, body-ID precedence, Not Found, and generic
-  internal failures.
+  internal failures. Production-server smoke tests also prove the real nested registration retains
+  authentication and write authorization.
 - Runtime composition and type checking prove the Statement Layer is available from the shared
   runtime. The migration does not retest unchanged runtime reuse or disposal behavior.
 - Focused type checking, linting, formatting checks, Statement tests, and the API test suite must

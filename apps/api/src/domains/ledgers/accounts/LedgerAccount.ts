@@ -2,7 +2,8 @@ import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 
 import { BadRequestError } from "@/lib/errors";
-import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import type { Metadata } from "@/lib/schema";
+import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import type {
 	LedgerAccountInsertRow,

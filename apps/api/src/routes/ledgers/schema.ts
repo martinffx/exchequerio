@@ -6,12 +6,6 @@ import type { PaginationQuery } from "../schema";
 /**
  * Common Types
  */
-const Metadata = Type.Mapped(Type.KeyOf(Type.String()), () => Type.String(), {
-	description:
-		"Additional data represented as key-value pairs. Both the key and value must be strings.",
-});
-type Metadata = Static<typeof Metadata>;
-
 const NormalBalance = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 type NormalBalance = Static<typeof NormalBalance>;
 
@@ -106,7 +100,7 @@ const LedgerResponse = Type.Object(
 		id: LedgerId,
 		name: Type.String(),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 		created: Type.String(),
 		updated: Type.String(),
 	},
@@ -129,7 +123,7 @@ const LedgerRequest = Type.Object(
 				default: 2,
 			})
 		),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{ $id: "LedgerRequest" }
 );
@@ -171,7 +165,7 @@ const LedgerAccountResponse = Type.Object(
 		normalBalance: NormalBalance,
 		balances: Balances,
 		ledgerId: Type.String(),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 		lockVersion: Type.Number(),
 		created: Type.String(),
 		updated: Type.String(),
@@ -187,7 +181,7 @@ const LedgerAccountRequest = Type.Object(
 	{
 		name: Type.String(),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{
 		$id: "LedgerAccountRequest",
@@ -356,9 +350,10 @@ export {
 	PostedBalance,
 	AvailableBalance,
 	// Export unused types to make the schema's public surface explicit
-	type Metadata,
 	type NormalBalance,
 	type Balance,
 	type LedgerAccountId,
 	type LedgerAccountCategoryId,
 };
+
+export type { Metadata } from "@/lib/schema";

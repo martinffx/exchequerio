@@ -41,7 +41,7 @@ function createLedgerAccountFixture(
 		postedCredits: number;
 		postedDebits: number;
 		lockVersion: number;
-		metadata?: Record<string, unknown>;
+		metadata?: Metadata;
 		created: Date;
 		updated: Date;
 	}>

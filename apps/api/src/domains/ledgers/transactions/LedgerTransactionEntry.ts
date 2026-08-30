@@ -1,7 +1,8 @@
 import { Effect } from "effect";
 import { DateTime } from "luxon";
 
-import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import type { Metadata } from "@/lib/schema";
+import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import {
 	newLedgerTransactionEntryID,
 	type LedgerAccountID,

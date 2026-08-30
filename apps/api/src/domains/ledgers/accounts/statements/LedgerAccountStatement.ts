@@ -1,6 +1,7 @@
 import type { InferInsertModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 
+import type { Metadata } from "@/lib/schema";
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/repo/entities/types";
 import type { LedgerAccountStatementRow, LedgerAccountStatementsTable } from "@/repo/schema";
 
@@ -21,7 +22,7 @@ type LedgerAccountStatementOptions = {
 	readonly totalCredits: number;
 	readonly totalDebits: number;
 	readonly transactionCount: number;
-	readonly metadata?: Record<string, unknown>;
+	readonly metadata?: Metadata;
 	readonly created: Date;
 	readonly updated: Date;
 };
@@ -36,7 +37,7 @@ class LedgerAccountStatement {
 	readonly totalCredits: number;
 	readonly totalDebits: number;
 	readonly transactionCount: number;
-	readonly metadata?: Record<string, unknown>;
+	readonly metadata?: Metadata;
 	readonly created: Date;
 	readonly updated: Date;
 
@@ -74,10 +75,18 @@ class LedgerAccountStatement {
 	}
 
 	static fromRow(row: LedgerAccountStatementRow): LedgerAccountStatement {
-		let metadata: Record<string, unknown> | undefined;
+		let metadata: Metadata | undefined;
 		if (row.metadata) {
 			try {
-				metadata = JSON.parse(row.metadata) as Record<string, unknown>;
+				const parsed: unknown = JSON.parse(row.metadata);
+				if (
+					typeof parsed === "object" &&
+					parsed !== null &&
+					!Array.isArray(parsed) &&
+					Object.values(parsed).every(value => typeof value === "string")
+				) {
+					metadata = parsed as Metadata;
+				}
 			} catch {
 				metadata = undefined;
 			}

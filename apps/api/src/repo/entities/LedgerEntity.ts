@@ -1,5 +1,6 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
+import type { Metadata } from "@/lib/schema";
 import type { LedgersTable } from "@/repo/schema";
 import type { LedgerRequest, LedgerResponse } from "@/routes/ledgers/schema";
 import type { LedgerID, OrgID } from "./types";
@@ -13,7 +14,7 @@ interface LedgerEntityOptions {
 	organizationId: OrgID;
 	name: string;
 	description?: string;
-	metadata?: Record<string, unknown>;
+	metadata?: Metadata;
 	created: Date;
 	updated: Date;
 }
@@ -23,7 +24,7 @@ class LedgerEntity {
 	public readonly organizationId: OrgID;
 	public readonly name: string;
 	public readonly description?: string;
-	public readonly metadata?: Record<string, unknown>;
+	public readonly metadata?: Metadata;
 	public readonly created: Date;
 	public readonly updated: Date;
 
@@ -54,10 +55,10 @@ class LedgerEntity {
 	// Create entity from database record
 	public static fromRecord(record: LedgerRecord): LedgerEntity {
 		// Parse metadata from TEXT (JSON string) to object
-		let metadata: Record<string, unknown> | undefined;
+		let metadata: Metadata | undefined;
 		if (record.metadata) {
 			try {
-				metadata = JSON.parse(record.metadata) as Record<string, unknown>;
+				metadata = JSON.parse(record.metadata) as Metadata;
 			} catch {
 				metadata = undefined;
 			}

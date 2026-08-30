@@ -1,17 +1,17 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { ListQuery } from "@/lib/ListQuery";
+import { MetadataSchema } from "@/lib/schema";
 
 /** Canonical Ledger TypeID used by Ledger-scoped routes. */
 const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const LedgerIdParameters = Type.Object({ ledgerId: LedgerIdSchema });
 /** Shared pagination for Ledger collections. */
 const LedgerListQuery = ListQuery;
-const LedgerMetadataSchema = Type.Record(Type.String(), Type.String());
 const LedgerCreateRequest = Type.Object(
 	{
 		name: Type.String(),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(LedgerMetadataSchema),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{ additionalProperties: false }
 );
@@ -19,7 +19,7 @@ const LedgerUpdateRequest = Type.Object(
 	{
 		name: Type.String(),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(LedgerMetadataSchema),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{ additionalProperties: false }
 );
@@ -27,7 +27,7 @@ const LedgerResponse = Type.Object({
 	id: LedgerIdSchema,
 	name: Type.String(),
 	description: Type.Optional(Type.String()),
-	metadata: Type.Optional(LedgerMetadataSchema),
+	metadata: Type.Optional(MetadataSchema),
 	created: Type.String({ format: "date-time" }),
 	updated: Type.String({ format: "date-time" }),
 });
@@ -43,7 +43,6 @@ export {
 	LedgerIdParameters,
 	LedgerIdSchema,
 	LedgerListQuery,
-	LedgerMetadataSchema,
 	LedgerResponse,
 	LedgerUpdateRequest,
 };
