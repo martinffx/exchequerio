@@ -1,5 +1,4 @@
 import { Context, Effect, Layer } from "effect";
-import { TypeID } from "typeid-js";
 // oxlint-disable boundaries/element-types -- The approved in-place migration composes Category orchestration with the integrated Ledger service.
 import {
 	type LedgerGetError,
@@ -78,15 +77,12 @@ class LedgerAccountCategoryService {
 
 	createLedgerAccountCategory(
 		organizationId: OrgID,
-		ledgerId: string,
+		ledgerId: LedgerID,
 		request: LedgerAccountCategoryRequest
 	): Effect.Effect<LedgerAccountCategoryEntity, CategoryCreateError> {
-		const typedLedgerId = TypeID.fromString<"lgr">(ledgerId) as LedgerID;
-		return this.ledgerService.getLedger(organizationId, typedLedgerId).pipe(
+		return this.ledgerService.getLedger(organizationId, ledgerId).pipe(
 			Effect.andThen(
-				Effect.sync(() =>
-					LedgerAccountCategoryEntity.fromRequest(request, organizationId, typedLedgerId)
-				)
+				Effect.sync(() => LedgerAccountCategoryEntity.fromRequest(request, organizationId, ledgerId))
 			),
 			Effect.flatMap(entity => this.repository.upsertLedgerAccountCategory(entity))
 		);
@@ -94,19 +90,22 @@ class LedgerAccountCategoryService {
 
 	updateLedgerAccountCategory(
 		organizationId: OrgID,
-		ledgerId: string,
-		categoryId: string,
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID,
 		request: LedgerAccountCategoryRequest
 	): Effect.Effect<LedgerAccountCategoryEntity, CategoryUpdateError> {
-		const typedLedgerId = TypeID.fromString<"lgr">(ledgerId) as LedgerID;
-		const typedCategoryId = TypeID.fromString<"lac">(categoryId) as LedgerAccountCategoryID;
-		return this.ledgerService.getLedger(organizationId, typedLedgerId).pipe(
+		return this.ledgerService.getLedger(organizationId, ledgerId).pipe(
 			Effect.flatMap(() =>
-				this.repository.getLedgerAccountCategory(organizationId, typedLedgerId, typedCategoryId)
+				this.repository.getLedgerAccountCategory(organizationId, ledgerId, categoryId)
 			),
 			Effect.andThen(
 				Effect.sync(() =>
-					LedgerAccountCategoryEntity.fromRequest(request, organizationId, typedLedgerId, categoryId)
+					LedgerAccountCategoryEntity.fromRequest(
+						request,
+						organizationId,
+						ledgerId,
+						categoryId.toString()
+					)
 				)
 			),
 			Effect.flatMap(entity => this.repository.upsertLedgerAccountCategory(entity))

@@ -1,12 +1,15 @@
 import fastify, { type FastifyInstance } from "fastify";
-import { Effect, Layer, Result } from "effect";
+import { Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/auth";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { ConflictError, globalErrorHandler, NotFoundError } from "@/lib/errors";
-import { CategoryRepositoryUnavailable } from "@/repo/LedgerAccountCategoryErrors";
+import {
+	CategoryPersistenceFailure,
+	CategoryRepositoryUnavailable,
+} from "@/repo/LedgerAccountCategoryErrors";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
 import type { OrgID } from "@/repo/entities/types";
 import { buildServer } from "@/server";
@@ -19,7 +22,6 @@ import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
 	ForbiddenErrorResponse,
-	InternalServerErrorResponse,
 	NotFoundErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
@@ -145,6 +147,21 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.json()).toMatchObject({ status: 503 });
 		});
 
+		it("should return an internal server error for a typed Category persistence failure", async () => {
+			mockLedgerAccountCategoryService.listLedgerAccountCategories.mockReturnValue(
+				Effect.fail(new CategoryPersistenceFailure(new Error("unexpected database failure")))
+			);
+
+			const rs = await server.inject({
+				method: "GET",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories`,
+			});
+
+			expect(rs.statusCode).toBe(500);
+			expect(rs.json()).toMatchObject({ status: 500 });
+		});
+
 		it("should return 404 when the Ledger is not owned by the token Organization", async () => {
 			mockLedgerAccountCategoryService.listLedgerAccountCategories.mockReturnValue(
 				Effect.fail(new LedgerNotFound())
@@ -185,33 +202,6 @@ describe("LedgerAccountCategoryRoutes", () => {
 	});
 
 	describe("Get Ledger Account Category", () => {
-		it("should return a generic internal server error for unexpected response conversion", async () => {
-			const conversionFailure = new Error("unexpected conversion failure");
-			const runPromise = vi.spyOn(runtime, "runPromise");
-			mockLedgerAccountCategoryService.getLedgerAccountCategory.mockReturnValue(
-				Effect.succeed({
-					toResponse: () => {
-						throw conversionFailure;
-					},
-				} as never)
-			);
-
-			const rs = await server.inject({
-				method: "GET",
-				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}`,
-			});
-
-			expect(rs.statusCode).toBe(500);
-			const response: InternalServerErrorResponse = rs.json();
-			expect(response.status).toBe(500);
-			const execution = runPromise.mock.results[0].value as Promise<Result.Result<unknown, unknown>>;
-			const result = await execution;
-			expect(Result.isFailure(result)).toBe(true);
-			if (Result.isFailure(result)) expect(result.failure).toBe(conversionFailure);
-			runPromise.mockRestore();
-		});
-
 		it("should return a category", async () => {
 			mockLedgerAccountCategoryService.getLedgerAccountCategory.mockReturnValue(
 				Effect.succeed(mockCategory)
@@ -294,7 +284,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.json()).toEqual(mockCategory.toResponse());
 			expect(mockLedgerAccountCategoryService.createLedgerAccountCategory).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
-				ledgerIdStr,
+				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({
 					name: "Assets",
 					description: "Asset accounts",
@@ -413,8 +403,8 @@ describe("LedgerAccountCategoryRoutes", () => {
 			expect(rs.json()).toEqual(updatedCategory.toResponse());
 			expect(mockLedgerAccountCategoryService.updateLedgerAccountCategory).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
-				ledgerIdStr,
-				categoryIdStr,
+				expect.objectContaining({ prefix: "lgr" }),
+				expect.objectContaining({ prefix: "lac" }),
 				expect.objectContaining({
 					name: "Updated Assets",
 					description: "Updated description",

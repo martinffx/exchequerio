@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyPluginAsync } from "fastify";
 import { Effect, Result } from "effect";
-import { TypeID } from "typeid-js";
 
 import {
 	BadRequestErrorResponse,
@@ -13,6 +12,8 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
+import { parseId } from "@/lib/utils";
+import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
 import { LedgerAccountCategoryServiceTag } from "@/services/LedgerAccountCategoryService";
 import { PaginationQuery } from "@/routes/schema";
 import {
@@ -59,25 +60,16 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:read"]),
 		},
 		async (rq: ListLedgerAccountCategoriesRequest): Promise<LedgerAccountCategoryResponse[]> => {
-			const effect = Effect.try({
-				try: () => TypeID.fromString<"lgr">(rq.params.ledgerId),
-				catch: error => error,
-			}).pipe(
+			const effect = parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId).pipe(
 				Effect.flatMap(ledgerId =>
 					LedgerAccountCategoryServiceTag.use(service =>
 						service.listLedgerAccountCategories(rq.token.orgId, ledgerId, rq.query.offset, rq.query.limit)
 					)
-				),
-				Effect.flatMap(categories =>
-					Effect.try({
-						try: () => categories.map(category => category.toResponse()),
-						catch: error => error,
-					})
 				)
 			);
 			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: value => value,
+				onSuccess: categories => categories.map(category => category.toResponse()),
 				onFailure: error => {
 					throw error;
 				},
@@ -110,26 +102,19 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:read"]),
 		},
 		async (rq: GetLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
-			const effect = Effect.try({
-				try: () =>
-					[
-						TypeID.fromString<"lgr">(rq.params.ledgerId),
-						TypeID.fromString<"lac">(rq.params.categoryId),
-					] as const,
-				catch: error => error,
-			}).pipe(
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.categoryId),
+			]).pipe(
 				Effect.flatMap(([ledgerId, categoryId]) =>
 					LedgerAccountCategoryServiceTag.use(service =>
 						service.getLedgerAccountCategory(rq.token.orgId, ledgerId, categoryId)
 					)
-				),
-				Effect.flatMap(category =>
-					Effect.try({ try: () => category.toResponse(), catch: error => error })
 				)
 			);
 			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: value => value,
+				onSuccess: category => category.toResponse(),
 				onFailure: error => {
 					throw error;
 				},
@@ -162,16 +147,16 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: CreateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
-			const effect = LedgerAccountCategoryServiceTag.use(service =>
-				service.createLedgerAccountCategory(rq.token.orgId, rq.params.ledgerId, rq.body)
-			).pipe(
-				Effect.flatMap(category =>
-					Effect.try({ try: () => category.toResponse(), catch: error => error })
+			const effect = parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId).pipe(
+				Effect.flatMap(ledgerId =>
+					LedgerAccountCategoryServiceTag.use(service =>
+						service.createLedgerAccountCategory(rq.token.orgId, ledgerId, rq.body)
+					)
 				)
 			);
 			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: value => value,
+				onSuccess: category => category.toResponse(),
 				onFailure: error => {
 					throw error;
 				},
@@ -207,21 +192,19 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UpdateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
-			const effect = LedgerAccountCategoryServiceTag.use(service =>
-				service.updateLedgerAccountCategory(
-					rq.token.orgId,
-					rq.params.ledgerId,
-					rq.params.categoryId,
-					rq.body
-				)
-			).pipe(
-				Effect.flatMap(category =>
-					Effect.try({ try: () => category.toResponse(), catch: error => error })
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.categoryId),
+			]).pipe(
+				Effect.flatMap(([ledgerId, categoryId]) =>
+					LedgerAccountCategoryServiceTag.use(service =>
+						service.updateLedgerAccountCategory(rq.token.orgId, ledgerId, categoryId, rq.body)
+					)
 				)
 			);
 			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: value => value,
+				onSuccess: category => category.toResponse(),
 				onFailure: error => {
 					throw error;
 				},
@@ -255,14 +238,10 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:delete"]),
 		},
 		async (rq: DeleteLedgerAccountCategoryRequest): Promise<void> => {
-			const effect = Effect.try({
-				try: () =>
-					[
-						TypeID.fromString<"lgr">(rq.params.ledgerId),
-						TypeID.fromString<"lac">(rq.params.categoryId),
-					] as const,
-				catch: error => error,
-			}).pipe(
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.categoryId),
+			]).pipe(
 				Effect.flatMap(([ledgerId, categoryId]) =>
 					LedgerAccountCategoryServiceTag.use(service =>
 						service.deleteLedgerAccountCategory(rq.token.orgId, ledgerId, categoryId)
@@ -305,15 +284,11 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: LinkLedgerAccountToCategoryRequest): Promise<void> => {
-			const effect = Effect.try({
-				try: () =>
-					[
-						TypeID.fromString<"lgr">(rq.params.ledgerId),
-						TypeID.fromString<"lac">(rq.params.categoryId),
-						TypeID.fromString<"lat">(rq.params.accountId),
-					] as const,
-				catch: error => error,
-			}).pipe(
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.categoryId),
+				parseId<"lat", LedgerAccountID>("lat", rq.params.accountId),
+			]).pipe(
 				Effect.flatMap(([ledgerId, categoryId, accountId]) =>
 					LedgerAccountCategoryServiceTag.use(service =>
 						service.linkLedgerAccountToCategory(rq.token.orgId, ledgerId, categoryId, accountId)
@@ -356,15 +331,11 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UnlinkLedgerAccountToCategoryRequest): Promise<void> => {
-			const effect = Effect.try({
-				try: () =>
-					[
-						TypeID.fromString<"lgr">(rq.params.ledgerId),
-						TypeID.fromString<"lac">(rq.params.categoryId),
-						TypeID.fromString<"lat">(rq.params.accountId),
-					] as const,
-				catch: error => error,
-			}).pipe(
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.categoryId),
+				parseId<"lat", LedgerAccountID>("lat", rq.params.accountId),
+			]).pipe(
 				Effect.flatMap(([ledgerId, categoryId, accountId]) =>
 					LedgerAccountCategoryServiceTag.use(service =>
 						service.unlinkLedgerAccountToCategory(rq.token.orgId, ledgerId, categoryId, accountId)
@@ -407,15 +378,11 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: LinkLedgerAccountCategoryToCategoryRequest): Promise<void> => {
-			const effect = Effect.try({
-				try: () =>
-					[
-						TypeID.fromString<"lgr">(rq.params.ledgerId),
-						TypeID.fromString<"lac">(rq.params.categoryId),
-						TypeID.fromString<"lac">(rq.params.parentCategoryId),
-					] as const,
-				catch: error => error,
-			}).pipe(
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.categoryId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.parentCategoryId),
+			]).pipe(
 				Effect.flatMap(([ledgerId, categoryId, parentCategoryId]) =>
 					LedgerAccountCategoryServiceTag.use(service =>
 						service.linkLedgerAccountCategoryToCategory(
@@ -463,15 +430,11 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UnlinkLedgerAccountCategoryToCategoryRequest): Promise<void> => {
-			const effect = Effect.try({
-				try: () =>
-					[
-						TypeID.fromString<"lgr">(rq.params.ledgerId),
-						TypeID.fromString<"lac">(rq.params.categoryId),
-						TypeID.fromString<"lac">(rq.params.parentCategoryId),
-					] as const,
-				catch: error => error,
-			}).pipe(
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.categoryId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.parentCategoryId),
+			]).pipe(
 				Effect.flatMap(([ledgerId, categoryId, parentCategoryId]) =>
 					LedgerAccountCategoryServiceTag.use(service =>
 						service.unlinkLedgerAccountCategoryToCategory(

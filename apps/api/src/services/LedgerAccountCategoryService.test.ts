@@ -1,11 +1,13 @@
 import { TypeID } from "typeid-js";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
+import { DateTime } from "luxon";
 import { describe, expect, it, vi } from "vitest";
-import { NotFoundError } from "@/lib/errors";
-import { type LedgerService, LedgerServiceTag } from "@/domains/ledgers/LedgerService";
+import { Ledger } from "@/domains/ledgers/Ledger";
+import type { LedgerRepo } from "@/domains/ledgers/LedgerRepo";
+import { LedgerService, LedgerServiceTag } from "@/domains/ledgers/LedgerService";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
-import { CategoryPersistenceFailure } from "@/repo/LedgerAccountCategoryErrors";
+import { CategoryNotFound, CategoryPersistenceFailure } from "@/repo/LedgerAccountCategoryErrors";
 import type {
 	LedgerAccountCategoryID,
 	LedgerAccountID,
@@ -28,25 +30,40 @@ describe("LedgerAccountCategoryService", () => {
 	const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 	const accountId = new TypeID("lat") as LedgerAccountID;
 	const parentCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
-	const mockRepo = vi.mocked<LedgerAccountCategoryRepo>({
-		listLedgerAccountCategories: vi.fn(),
-		getLedgerAccountCategory: vi.fn(),
-		upsertLedgerAccountCategory: vi.fn(),
-		deleteLedgerAccountCategory: vi.fn(),
-		linkAccountToCategory: vi.fn(),
-		unlinkAccountFromCategory: vi.fn(),
-		linkCategoryToParent: vi.fn(),
-		unlinkCategoryFromParent: vi.fn(),
-	} as unknown as LedgerAccountCategoryRepo);
-	const ledgerOwnership = vi.mocked<LedgerService>({
-		getLedger: vi.fn(() => Effect.succeed(undefined as never)),
-	} as unknown as LedgerService);
+	const ledger = new Ledger({
+		id: ledgerId,
+		organizationId,
+		name: "Ledger",
+		created: DateTime.utc(),
+		updated: DateTime.utc(),
+	});
+	// oxlint-disable-next-line unicorn/no-array-callback-reference -- Effect Option constructor, not an iterator.
+	const foundLedger = Option.some(ledger);
+	const mockRepo = {
+		listLedgerAccountCategories: vi.fn<LedgerAccountCategoryRepo["listLedgerAccountCategories"]>(),
+		getLedgerAccountCategory: vi.fn<LedgerAccountCategoryRepo["getLedgerAccountCategory"]>(),
+		upsertLedgerAccountCategory: vi.fn<LedgerAccountCategoryRepo["upsertLedgerAccountCategory"]>(),
+		deleteLedgerAccountCategory: vi.fn<LedgerAccountCategoryRepo["deleteLedgerAccountCategory"]>(),
+		linkAccountToCategory: vi.fn<LedgerAccountCategoryRepo["linkAccountToCategory"]>(),
+		unlinkAccountFromCategory: vi.fn<LedgerAccountCategoryRepo["unlinkAccountFromCategory"]>(),
+		linkCategoryToParent: vi.fn<LedgerAccountCategoryRepo["linkCategoryToParent"]>(),
+		unlinkCategoryFromParent: vi.fn<LedgerAccountCategoryRepo["unlinkCategoryFromParent"]>(),
+	} satisfies LedgerAccountCategoryRepo;
+	const ledgerRepo = {
+		listLedgers: vi.fn<LedgerRepo["listLedgers"]>(() => Effect.succeed([ledger])),
+		getLedger: vi.fn<LedgerRepo["getLedger"]>(() => Effect.succeed(foundLedger)),
+		createLedger: vi.fn<LedgerRepo["createLedger"]>(() => Effect.succeed(ledger)),
+		updateLedger: vi.fn<LedgerRepo["updateLedger"]>(() => Effect.succeed(foundLedger)),
+		deleteLedger: vi.fn<LedgerRepo["deleteLedger"]>(() => Effect.succeed(foundLedger)),
+	} satisfies LedgerRepo;
+	const ledgerOwnership = new LedgerService(ledgerRepo);
+	const ledgerGet = vi.spyOn(ledgerOwnership, "getLedger");
 	const repoLayer = Layer.succeed(LedgerAccountCategoryRepoTag, mockRepo);
 	const ledgerLayer = Layer.succeed(LedgerServiceTag, ledgerOwnership);
 	const serviceLayer = ledgerAccountCategoryServiceLayer.pipe(
 		Layer.provide(Layer.merge(repoLayer, ledgerLayer))
 	);
-	const run = <A>(use: (service: LedgerAccountCategoryService) => Effect.Effect<A, unknown>) =>
+	const run = <A, E>(use: (service: LedgerAccountCategoryService) => Effect.Effect<A, E>) =>
 		Effect.runPromise(LedgerAccountCategoryServiceTag.use(use).pipe(Effect.provide(serviceLayer)));
 	const service = {
 		listLedgerAccountCategories: (
@@ -86,7 +103,7 @@ describe("LedgerAccountCategoryService", () => {
 
 	afterEach(() => {
 		vi.clearAllMocks();
-		ledgerOwnership.getLedger.mockReturnValue(Effect.succeed(undefined as never));
+		ledgerGet.mockReturnValue(Effect.succeed(ledger));
 	});
 
 	describe("listLedgerAccountCategories", () => {
@@ -156,13 +173,13 @@ describe("LedgerAccountCategoryService", () => {
 			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalledTimes(1);
 		});
 
-		it("should propagate NotFoundError from repo", async () => {
-			const error = new NotFoundError(`Category not found: ${categoryId.toString()}`);
+		it("should propagate CategoryNotFound from repo", async () => {
+			const error = new CategoryNotFound(`Category not found: ${categoryId.toString()}`);
 			mockRepo.getLedgerAccountCategory.mockReturnValue(Effect.fail(error));
 
 			await expect(
 				service.getLedgerAccountCategory(organizationId, ledgerId, categoryId)
-			).rejects.toThrow(NotFoundError);
+			).rejects.toThrow(CategoryNotFound);
 			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalledWith(
 				organizationId,
 				ledgerId,
@@ -192,11 +209,7 @@ describe("LedgerAccountCategoryService", () => {
 
 			mockRepo.upsertLedgerAccountCategory.mockReturnValue(Effect.succeed(category));
 
-			const result = await service.createLedgerAccountCategory(
-				organizationId,
-				ledgerId.toString(),
-				request
-			);
+			const result = await service.createLedgerAccountCategory(organizationId, ledgerId, request);
 
 			expect(result).toEqual(category);
 			expect(mockRepo.upsertLedgerAccountCategory).toHaveBeenCalled();
@@ -239,8 +252,8 @@ describe("LedgerAccountCategoryService", () => {
 
 			const result = await service.updateLedgerAccountCategory(
 				organizationId,
-				ledgerId.toString(),
-				categoryId.toString(),
+				ledgerId,
+				categoryId,
 				request
 			);
 
@@ -284,8 +297,8 @@ describe("LedgerAccountCategoryService", () => {
 
 			const result = await service.updateLedgerAccountCategory(
 				organizationId,
-				ledgerId.toString(),
-				categoryId.toString(),
+				ledgerId,
+				categoryId,
 				request
 			);
 
@@ -304,19 +317,14 @@ describe("LedgerAccountCategoryService", () => {
 			mockRepo.upsertLedgerAccountCategory.mockReturnValue(Effect.fail(failure));
 
 			await expect(
-				service.updateLedgerAccountCategory(
-					organizationId,
-					ledgerId.toString(),
-					categoryId.toString(),
-					{
-						name: "Assets",
-						normalBalance: "debit",
-					}
-				)
+				service.updateLedgerAccountCategory(organizationId, ledgerId, categoryId, {
+					name: "Assets",
+					normalBalance: "debit",
+				})
 			).rejects.toBe(failure);
 		});
 
-		it("should propagate NotFoundError if category does not exist", async () => {
+		it("should propagate CategoryNotFound if category does not exist", async () => {
 			const request = {
 				name: "Assets",
 				normalBalance: "debit" as const,
@@ -324,17 +332,12 @@ describe("LedgerAccountCategoryService", () => {
 				metadata: {},
 			};
 
-			const error = new NotFoundError(`Category not found: ${categoryId.toString()}`);
+			const error = new CategoryNotFound(`Category not found: ${categoryId.toString()}`);
 			mockRepo.getLedgerAccountCategory.mockReturnValue(Effect.fail(error));
 
 			await expect(
-				service.updateLedgerAccountCategory(
-					organizationId,
-					ledgerId.toString(),
-					categoryId.toString(),
-					request
-				)
-			).rejects.toThrow(NotFoundError);
+				service.updateLedgerAccountCategory(organizationId, ledgerId, categoryId, request)
+			).rejects.toThrow(CategoryNotFound);
 			expect(mockRepo.getLedgerAccountCategory).toHaveBeenCalled();
 			expect(mockRepo.upsertLedgerAccountCategory).not.toHaveBeenCalled();
 		});
@@ -354,13 +357,13 @@ describe("LedgerAccountCategoryService", () => {
 			expect(mockRepo.deleteLedgerAccountCategory).toHaveBeenCalledTimes(1);
 		});
 
-		it("should propagate NotFoundError from repo", async () => {
-			const error = new NotFoundError(`Category not found: ${categoryId.toString()}`);
+		it("should propagate CategoryNotFound from repo", async () => {
+			const error = new CategoryNotFound(`Category not found: ${categoryId.toString()}`);
 			mockRepo.deleteLedgerAccountCategory.mockReturnValue(Effect.fail(error));
 
 			await expect(
 				service.deleteLedgerAccountCategory(organizationId, ledgerId, categoryId)
-			).rejects.toThrow(NotFoundError);
+			).rejects.toThrow(CategoryNotFound);
 			expect(mockRepo.deleteLedgerAccountCategory).toHaveBeenCalledWith(
 				organizationId,
 				ledgerId,
@@ -448,17 +451,15 @@ describe("LedgerAccountCategoryService", () => {
 			() => service.listLedgerAccountCategories(organizationId, ledgerId, 0, 20),
 			() => service.getLedgerAccountCategory(organizationId, ledgerId, categoryId),
 			() =>
-				service.createLedgerAccountCategory(organizationId, ledgerId.toString(), {
+				service.createLedgerAccountCategory(organizationId, ledgerId, {
 					name: "Assets",
 					normalBalance: "debit",
 				}),
 			() =>
-				service.updateLedgerAccountCategory(
-					organizationId,
-					ledgerId.toString(),
-					categoryId.toString(),
-					{ name: "Assets", normalBalance: "debit" }
-				),
+				service.updateLedgerAccountCategory(organizationId, ledgerId, categoryId, {
+					name: "Assets",
+					normalBalance: "debit",
+				}),
 			() => service.deleteLedgerAccountCategory(organizationId, ledgerId, categoryId),
 			() => service.linkLedgerAccountToCategory(organizationId, ledgerId, categoryId, accountId),
 			() => service.unlinkLedgerAccountToCategory(organizationId, ledgerId, categoryId, accountId),
@@ -482,7 +483,7 @@ describe("LedgerAccountCategoryService", () => {
 			"validates the Organization-owned Ledger before repository work",
 			async operation => {
 				const failure = new LedgerNotFound();
-				ledgerOwnership.getLedger.mockReturnValueOnce(Effect.fail(failure));
+				ledgerGet.mockReturnValueOnce(Effect.fail(failure));
 
 				await expect(operation()).rejects.toBe(failure);
 				expect(mockRepo.listLedgerAccountCategories).not.toHaveBeenCalled();
