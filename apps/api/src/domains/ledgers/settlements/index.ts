@@ -22,21 +22,22 @@ export type {
 	LedgerAccountSettlementEntryError,
 	LedgerAccountSettlementGetError,
 	LedgerAccountSettlementListError,
-	LedgerAccountSettlementService,
 	LedgerAccountSettlementTransitionError,
 	LedgerAccountSettlementUpdateError,
 } from "./LedgerAccountSettlementService";
 export {
-	LedgerAccountSettlementServiceLive,
+	LedgerAccountSettlementService,
 	LedgerAccountSettlementServiceTag,
 	ledgerAccountSettlementServiceLayer,
 } from "./LedgerAccountSettlementService";
 export { settlementLayer };
 export { LedgerAccountSettlementRoutes } from "./LedgerAccountSettlementRoutes";
 export {
+	LedgerAccountSettlementCollectionParameters,
 	LedgerAccountSettlementEntriesRequest,
 	LedgerAccountSettlementId,
 	LedgerAccountSettlementIdParams,
+	LedgerAccountSettlementListQuery,
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
 	NormalBalance,

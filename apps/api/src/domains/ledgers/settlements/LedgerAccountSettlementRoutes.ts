@@ -12,16 +12,16 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
-import { PaginationQuery } from "@/routes/schema";
 import {
+	LedgerAccountSettlementCollectionParameters as LedgerIdParams,
 	LedgerAccountSettlementEntriesRequest,
 	LedgerAccountSettlementIdParams,
+	LedgerAccountSettlementListQuery as PaginationQuery,
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
 	SettlementStatus,
 } from "./LedgerAccountSettlementSchema";
 import { LedgerAccountSettlementServiceTag } from "./LedgerAccountSettlementService";
-import { LedgerIdParams } from "@/routes/ledgers/schema";
 
 const TAGS = ["Ledger Account Settlements"];
 const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {

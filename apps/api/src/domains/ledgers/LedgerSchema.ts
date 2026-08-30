@@ -2,10 +2,11 @@ import { type Static, Type } from "@sinclair/typebox";
 
 const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const LedgerIdParameters = Type.Object({ ledgerId: LedgerIdSchema });
-const LedgerListQuery = Type.Object({
+const LedgerPaginationProperties = {
 	offset: Type.Integer({ default: 0, minimum: 0, maximum: 10_000 }),
 	limit: Type.Integer({ default: 20, minimum: 1, maximum: 100 }),
-});
+};
+const LedgerListQuery = Type.Object(LedgerPaginationProperties);
 const LedgerMetadataSchema = Type.Record(Type.String(), Type.String());
 const LedgerCreateRequest = Type.Object(
 	{
@@ -44,6 +45,7 @@ export {
 	LedgerIdSchema,
 	LedgerListQuery,
 	LedgerMetadataSchema,
+	LedgerPaginationProperties,
 	LedgerResponse,
 	LedgerUpdateRequest,
 };

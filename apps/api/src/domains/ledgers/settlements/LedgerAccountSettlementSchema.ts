@@ -1,4 +1,5 @@
 import { type Static, Type } from "@sinclair/typebox";
+import { LedgerIdSchema, LedgerPaginationProperties } from "../LedgerSchema";
 
 const Metadata = Type.Mapped(Type.KeyOf(Type.String()), () => Type.String(), {
 	description:
@@ -29,6 +30,8 @@ const LedgerAccountSettlementId = Type.String({
 const LedgerAccountSettlementIdParams = Type.Object({
 	settlementId: LedgerAccountSettlementId,
 });
+const LedgerAccountSettlementCollectionParameters = Type.Object({ ledgerId: LedgerIdSchema });
+const LedgerAccountSettlementListQuery = Type.Object(LedgerPaginationProperties);
 
 const LedgerAccountSettlementResponse = Type.Object(
 	{
@@ -102,6 +105,10 @@ const LedgerAccountSettlementEntriesRequest = Type.Object({
 
 type LedgerAccountSettlementId = Static<typeof LedgerAccountSettlementId>;
 type LedgerAccountSettlementIdParams = Static<typeof LedgerAccountSettlementIdParams>;
+type LedgerAccountSettlementCollectionParameters = Static<
+	typeof LedgerAccountSettlementCollectionParameters
+>;
+type LedgerAccountSettlementListQuery = Static<typeof LedgerAccountSettlementListQuery>;
 type LedgerAccountSettlementRequest = Static<typeof LedgerAccountSettlementRequest>;
 type LedgerAccountSettlementResponse = Static<typeof LedgerAccountSettlementResponse>;
 type LedgerAccountSettlementEntriesRequest = Static<typeof LedgerAccountSettlementEntriesRequest>;
@@ -110,8 +117,10 @@ type SettlementStatus = Static<typeof SettlementStatus>;
 
 export {
 	LedgerAccountSettlementEntriesRequest,
+	LedgerAccountSettlementCollectionParameters,
 	LedgerAccountSettlementId,
 	LedgerAccountSettlementIdParams,
+	LedgerAccountSettlementListQuery,
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
 	NormalBalance,

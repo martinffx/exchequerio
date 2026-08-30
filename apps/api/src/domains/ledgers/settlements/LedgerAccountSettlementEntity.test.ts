@@ -162,22 +162,42 @@ describe("LedgerAccountSettlementEntity", () => {
 		expect(response).not.toHaveProperty("effectiveAtUpperBound");
 	});
 
-	it("updates one field and the Updated Time while preserving every other field", () => {
-		const entity = LedgerAccountSettlementEntity.fromRow(settlementRow());
-		const transactionId = newLedgerTransactionID();
-		const nextTime = new Date("2026-08-30T12:00:00.000Z");
-		vi.useFakeTimers();
-		vi.setSystemTime(nextTime);
+	it.each([
+		[
+			"Amount",
+			(entity: LedgerAccountSettlementEntity) => ({
+				changed: entity.withAmount(300),
+				expected: { amount: 300 },
+			}),
+		],
+		[
+			"Status",
+			(entity: LedgerAccountSettlementEntity) => ({
+				changed: entity.withStatus("processing"),
+				expected: { status: "processing" },
+			}),
+		],
+		[
+			"Transaction ID",
+			(entity: LedgerAccountSettlementEntity) => {
+				const transactionId = newLedgerTransactionID();
+				return {
+					changed: entity.withTransactionId(transactionId),
+					expected: { transactionId },
+				};
+			},
+		],
+	] as const)(
+		"updates %s and the Updated Time while preserving every other field",
+		(_name, update) => {
+			const entity = LedgerAccountSettlementEntity.fromRow(settlementRow());
+			const nextTime = new Date("2026-08-30T12:00:00.000Z");
+			vi.useFakeTimers();
+			vi.setSystemTime(nextTime);
 
-		for (const changed of [
-			entity.withAmount(300),
-			entity.withStatus("processing"),
-			entity.withTransactionId(transactionId),
-		]) {
-			expect(changed.created).toBe(entity.created);
-			expect(changed.updated).toEqual(nextTime);
-			expect(changed.id).toBe(entity.id);
-			expect(changed.organizationId).toBe(entity.organizationId);
+			const { changed, expected } = update(entity);
+
+			expect(changed).toEqual({ ...entity, ...expected, updated: nextTime });
 		}
-	});
+	);
 });

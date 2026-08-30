@@ -189,11 +189,14 @@ timestamp behavior. The migration adds no clock service or timestamp abstraction
 
 ## API design
 
-The migration makes no public HTTP change. `LedgerAccountSettlementSchema.ts` owns local TypeBox
-definitions that exactly match the current Settlement JSON shape, required fields, optional fields,
-IDs, status values, validation, pagination, and OpenAPI metadata. The slice does not import the
-legacy Ledger route schema or create shared schema infrastructure. Small TypeBox definitions remain
-local, as they do in the integrated Account and Transaction slices.
+The migration preserves public HTTP behavior except for Settlement list pagination. Settlement now
+uses the bounded integer contract shared by the Effect Ledger slices. `offset` defaults to `0` and
+is limited to `10,000`; `limit` defaults to `20` and is limited to `1` through `100`.
+`LedgerAccountSettlementSchema.ts` owns the Settlement-specific JSON shape, required fields,
+optional fields, IDs, status values, validation, and OpenAPI metadata. `LedgerSchema.ts` owns the
+shared Ledger ID and pagination field schemas used by the Ledger, Account, Transaction, and
+Settlement slices. Each slice keeps its local TypeBox objects so its handling of undeclared
+properties remains unchanged. The Settlement slice does not import the legacy Ledger route schema.
 
 Responses retain the current omissions and defaults. In particular, `externalReference` remains
 stored but omitted by `toResponse`, `effectiveAtUpperBound` remains absent from the response, and a

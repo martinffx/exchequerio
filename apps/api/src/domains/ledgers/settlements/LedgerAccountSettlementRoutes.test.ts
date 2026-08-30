@@ -29,15 +29,7 @@ import {
 	LedgerAccountSettlementServiceTag,
 } from "./LedgerAccountSettlementService";
 
-type PromiseService = {
-	[K in keyof LedgerAccountSettlementService]: LedgerAccountSettlementService[K] extends (
-		...args: infer A
-	) => Effect.Effect<infer B, unknown, unknown>
-		? (...args: A) => Promise<B>
-		: never;
-};
-
-const mockLedgerAccountSettlementService = vi.mocked<PromiseService>({
+const mockLedgerAccountSettlementService = vi.mocked<LedgerAccountSettlementService>({
 	listLedgerAccountSettlements: vi.fn(),
 	getLedgerAccountSettlement: vi.fn(),
 	createLedgerAccountSettlement: vi.fn(),
@@ -46,30 +38,7 @@ const mockLedgerAccountSettlementService = vi.mocked<PromiseService>({
 	addLedgerAccountSettlementEntries: vi.fn(),
 	removeLedgerAccountSettlementEntries: vi.fn(),
 	transitionSettlementStatus: vi.fn(),
-} as unknown as PromiseService);
-
-const effectSettlementService: LedgerAccountSettlementService = {
-	listLedgerAccountSettlements: (...args) =>
-		Effect.promise(() => mockLedgerAccountSettlementService.listLedgerAccountSettlements(...args)),
-	getLedgerAccountSettlement: (...args) =>
-		Effect.promise(() => mockLedgerAccountSettlementService.getLedgerAccountSettlement(...args)),
-	createLedgerAccountSettlement: (...args) =>
-		Effect.promise(() => mockLedgerAccountSettlementService.createLedgerAccountSettlement(...args)),
-	updateLedgerAccountSettlement: (...args) =>
-		Effect.promise(() => mockLedgerAccountSettlementService.updateLedgerAccountSettlement(...args)),
-	deleteLedgerAccountSettlement: (...args) =>
-		Effect.promise(() => mockLedgerAccountSettlementService.deleteLedgerAccountSettlement(...args)),
-	addLedgerAccountSettlementEntries: (...args) =>
-		Effect.promise(() =>
-			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries(...args)
-		),
-	removeLedgerAccountSettlementEntries: (...args) =>
-		Effect.promise(() =>
-			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries(...args)
-		),
-	transitionSettlementStatus: (...args) =>
-		Effect.promise(() => mockLedgerAccountSettlementService.transitionSettlementStatus(...args)),
-};
+} as unknown as LedgerAccountSettlementService);
 
 describe("LedgerAccountSettlementRoutes", () => {
 	let server: FastifyInstance;
@@ -114,7 +83,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			runtimeLayer: Layer.mergeAll(
 				Layer.succeed(ServerConfigTag, config),
 				makeDatabaseLive(config.databaseUrl),
-				Layer.succeed(LedgerAccountSettlementServiceTag, effectSettlementService)
+				Layer.succeed(LedgerAccountSettlementServiceTag, mockLedgerAccountSettlementService)
 			) as ServerRuntimeLayer,
 		});
 	});
@@ -129,9 +98,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("List Ledger Account Settlements", () => {
 		it("should return a list of settlements", async () => {
-			mockLedgerAccountSettlementService.listLedgerAccountSettlements.mockResolvedValue([
-				mockSettlement,
-			]);
+			mockLedgerAccountSettlementService.listLedgerAccountSettlements.mockReturnValue(
+				Effect.succeed([mockSettlement])
+			);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -150,9 +119,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should return a list with pagination", async () => {
-			mockLedgerAccountSettlementService.listLedgerAccountSettlements.mockResolvedValue([
-				mockSettlement,
-			]);
+			mockLedgerAccountSettlementService.listLedgerAccountSettlements.mockReturnValue(
+				Effect.succeed([mockSettlement])
+			);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -194,9 +163,23 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(response.status).toEqual(400);
 		});
 
+		it.each(["offset=-1", "offset=10001", "limit=0", "limit=101", "offset=1.5"])(
+			"rejects invalid pagination: %s",
+			async query => {
+				const rs = await server.inject({
+					method: "GET",
+					headers: { Authorization: `Bearer ${token}` },
+					url: `/api/ledgers/${ledgerIdStr}/settlements?${query}`,
+				});
+
+				expect(rs.statusCode).toBe(400);
+				expect(mockLedgerAccountSettlementService.listLedgerAccountSettlements).not.toHaveBeenCalled();
+			}
+		);
+
 		it("should handle internal server error", async () => {
-			mockLedgerAccountSettlementService.listLedgerAccountSettlements.mockRejectedValue(
-				new Error("Internal Server Error")
+			mockLedgerAccountSettlementService.listLedgerAccountSettlements.mockReturnValue(
+				Effect.die(new Error("Internal Server Error"))
 			);
 
 			const rs = await server.inject({
@@ -213,7 +196,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Get Ledger Account Settlement", () => {
 		it("should return a settlement", async () => {
-			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockResolvedValue(mockSettlement);
+			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockReturnValue(
+				Effect.succeed(mockSettlement)
+			);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -230,7 +215,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("does not scope the lookup to the path Ledger", async () => {
-			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockResolvedValue(mockSettlement);
+			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockReturnValue(
+				Effect.succeed(mockSettlement)
+			);
 
 			const rs = await server.inject({
 				method: "GET",
@@ -246,8 +233,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockRejectedValue(
-				new NotFoundError("Settlement not found")
+			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockReturnValue(
+				Effect.fail(new NotFoundError("Settlement not found"))
 			);
 
 			const rs = await server.inject({
@@ -286,8 +273,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockRejectedValue(
-				new Error("Internal Server Error")
+			mockLedgerAccountSettlementService.getLedgerAccountSettlement.mockReturnValue(
+				Effect.die(new Error("Internal Server Error"))
 			);
 
 			const rs = await server.inject({
@@ -304,8 +291,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Create Ledger Account Settlement", () => {
 		it("should create a settlement", async () => {
-			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockResolvedValue(
-				mockSettlement
+			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockReturnValue(
+				Effect.succeed(mockSettlement)
 			);
 
 			const rs = await server.inject({
@@ -334,8 +321,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("rejects accounts with a different currency", async () => {
-			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockRejectedValue(
-				new ConflictError("Settlement accounts must use the same currency")
+			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockReturnValue(
+				Effect.fail(new ConflictError("Settlement accounts must use the same currency"))
 			);
 
 			const rs = await server.inject({
@@ -404,8 +391,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockRejectedValue(
-				new ConflictError("Settlement already exists")
+			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockReturnValue(
+				Effect.fail(new ConflictError("Settlement already exists"))
 			);
 
 			const rs = await server.inject({
@@ -426,8 +413,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockRejectedValue(
-				new Error("Internal Server Error")
+			mockLedgerAccountSettlementService.createLedgerAccountSettlement.mockReturnValue(
+				Effect.die(new Error("Internal Server Error"))
 			);
 
 			const rs = await server.inject({
@@ -450,8 +437,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Update Ledger Account Settlement", () => {
 		it("should update a settlement", async () => {
-			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockResolvedValue(
-				mockSettlement
+			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockReturnValue(
+				Effect.succeed(mockSettlement)
 			);
 
 			const rs = await server.inject({
@@ -473,8 +460,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
-				new NotFoundError("Settlement not found")
+			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockReturnValue(
+				Effect.fail(new NotFoundError("Settlement not found"))
 			);
 
 			const rs = await server.inject({
@@ -544,8 +531,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
-				new ConflictError("Cannot update posted settlement")
+			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockReturnValue(
+				Effect.fail(new ConflictError("Cannot update posted settlement"))
 			);
 
 			const rs = await server.inject({
@@ -566,8 +553,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockRejectedValue(
-				new Error("Internal Server Error")
+			mockLedgerAccountSettlementService.updateLedgerAccountSettlement.mockReturnValue(
+				Effect.die(new Error("Internal Server Error"))
 			);
 
 			const rs = await server.inject({
@@ -590,7 +577,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Delete Ledger Account Settlement", () => {
 		it("should delete a settlement", async () => {
-			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockResolvedValue();
+			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockReturnValue(Effect.void);
 
 			const rs = await server.inject({
 				method: "DELETE",
@@ -606,7 +593,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("does not scope the deletion to the path Ledger", async () => {
-			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockResolvedValue();
+			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockReturnValue(Effect.void);
 
 			const rs = await server.inject({
 				method: "DELETE",
@@ -619,22 +606,6 @@ describe("LedgerAccountSettlementRoutes", () => {
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" })
 			);
-		});
-
-		it("should handle not found error", async () => {
-			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockRejectedValue(
-				new NotFoundError("Settlement not found")
-			);
-
-			const rs = await server.inject({
-				method: "DELETE",
-				headers: { Authorization: `Bearer ${token}` },
-				url: `/api/ledgers/${ledgerIdStr}/settlements/${settlementIdStr}`,
-			});
-
-			expect(rs.statusCode).toBe(404);
-			const response: NotFoundErrorResponse = rs.json();
-			expect(response.status).toEqual(404);
 		});
 
 		it("should handle unauthorized error", async () => {
@@ -662,8 +633,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockRejectedValue(
-				new ConflictError("Cannot delete posted settlement")
+			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockReturnValue(
+				Effect.fail(new ConflictError("Cannot delete posted settlement"))
 			);
 
 			const rs = await server.inject({
@@ -678,8 +649,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockRejectedValue(
-				new Error("Internal Server Error")
+			mockLedgerAccountSettlementService.deleteLedgerAccountSettlement.mockReturnValue(
+				Effect.die(new Error("Internal Server Error"))
 			);
 
 			const rs = await server.inject({
@@ -696,7 +667,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Add Settlement Entries", () => {
 		it("should add entries to a settlement", async () => {
-			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockResolvedValue();
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.void
+			);
 
 			const rs = await server.inject({
 				method: "PATCH",
@@ -718,7 +691,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("does not scope the Entry addition to the path Ledger", async () => {
-			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockResolvedValue();
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.void
+			);
 			const entryId = new TypeID("lte").toString();
 
 			const rs = await server.inject({
@@ -739,8 +714,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockRejectedValue(
-				new NotFoundError("Settlement not found")
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.fail(new NotFoundError("Settlement not found"))
 			);
 
 			const rs = await server.inject({
@@ -801,8 +776,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockRejectedValue(
-				new ConflictError("Cannot add entries to posted settlement")
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.fail(new ConflictError("Cannot add entries to posted settlement"))
 			);
 
 			const rs = await server.inject({
@@ -820,8 +795,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockRejectedValue(
-				new Error("Internal Server Error")
+			mockLedgerAccountSettlementService.addLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.die(new Error("Internal Server Error"))
 			);
 
 			const rs = await server.inject({
@@ -841,7 +816,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 
 	describe("Remove Settlement Entries", () => {
 		it("should remove entries from a settlement", async () => {
-			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockResolvedValue();
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.void
+			);
 
 			const rs = await server.inject({
 				method: "DELETE",
@@ -863,7 +840,9 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("does not scope the Entry removal to the path Ledger", async () => {
-			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockResolvedValue();
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.void
+			);
 			const entryId = new TypeID("lte").toString();
 
 			const rs = await server.inject({
@@ -884,8 +863,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockRejectedValue(
-				new NotFoundError("Settlement not found")
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.fail(new NotFoundError("Settlement not found"))
 			);
 
 			const rs = await server.inject({
@@ -946,8 +925,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error", async () => {
-			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockRejectedValue(
-				new ConflictError("Cannot remove entries from posted settlement")
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.fail(new ConflictError("Cannot remove entries from posted settlement"))
 			);
 
 			const rs = await server.inject({
@@ -965,8 +944,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockRejectedValue(
-				new Error("Internal Server Error")
+			mockLedgerAccountSettlementService.removeLedgerAccountSettlementEntries.mockReturnValue(
+				Effect.die(new Error("Internal Server Error"))
 			);
 
 			const rs = await server.inject({
@@ -990,8 +969,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 				...mockSettlement,
 				status: "processing",
 			});
-			mockLedgerAccountSettlementService.transitionSettlementStatus.mockResolvedValue(
-				processingSettlement
+			mockLedgerAccountSettlementService.transitionSettlementStatus.mockReturnValue(
+				Effect.succeed(processingSettlement)
 			);
 
 			const rs = await server.inject({
@@ -1011,8 +990,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle not found error", async () => {
-			mockLedgerAccountSettlementService.transitionSettlementStatus.mockRejectedValue(
-				new NotFoundError("Settlement not found")
+			mockLedgerAccountSettlementService.transitionSettlementStatus.mockReturnValue(
+				Effect.fail(new NotFoundError("Settlement not found"))
 			);
 
 			const rs = await server.inject({
@@ -1063,8 +1042,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle conflict error for invalid transition", async () => {
-			mockLedgerAccountSettlementService.transitionSettlementStatus.mockRejectedValue(
-				new ConflictError("Invalid transition from posted to drafting")
+			mockLedgerAccountSettlementService.transitionSettlementStatus.mockReturnValue(
+				Effect.fail(new ConflictError("Invalid transition from posted to drafting"))
 			);
 
 			const rs = await server.inject({
@@ -1079,8 +1058,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 		});
 
 		it("should handle internal server error", async () => {
-			mockLedgerAccountSettlementService.transitionSettlementStatus.mockRejectedValue(
-				new Error("Internal Server Error")
+			mockLedgerAccountSettlementService.transitionSettlementStatus.mockReturnValue(
+				Effect.die(new Error("Internal Server Error"))
 			);
 
 			const rs = await server.inject({

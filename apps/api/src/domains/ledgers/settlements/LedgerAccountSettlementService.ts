@@ -59,55 +59,7 @@ type LedgerAccountSettlementTransitionError =
 	| LedgerAccountSettlementUpdateRepositoryError
 	| TransactionCreateError;
 
-interface LedgerAccountSettlementService {
-	listLedgerAccountSettlements(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		offset: number,
-		limit: number
-	): Effect.Effect<LedgerAccountSettlementEntity[], LedgerAccountSettlementListError>;
-	getLedgerAccountSettlement(
-		organizationId: OrgID,
-		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementGetError>;
-	createLedgerAccountSettlement(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		request: LedgerAccountSettlementRequest
-	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementCreateError>;
-	updateLedgerAccountSettlement(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		settlementId: LedgerAccountSettlementID,
-		request: LedgerAccountSettlementRequest
-	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateError>;
-	deleteLedgerAccountSettlement(
-		organizationId: OrgID,
-		settlementId: LedgerAccountSettlementID
-	): Effect.Effect<void, LedgerAccountSettlementDeleteError>;
-	addLedgerAccountSettlementEntries(
-		organizationId: OrgID,
-		settlementId: LedgerAccountSettlementID,
-		entryIds: string[]
-	): Effect.Effect<void, LedgerAccountSettlementEntryError>;
-	removeLedgerAccountSettlementEntries(
-		organizationId: OrgID,
-		settlementId: LedgerAccountSettlementID,
-		entryIds: string[]
-	): Effect.Effect<void, LedgerAccountSettlementEntryError>;
-	transitionSettlementStatus(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		settlementId: LedgerAccountSettlementID,
-		targetStatus: SettlementStatus
-	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementTransitionError>;
-}
-
-const LedgerAccountSettlementServiceTag = Context.Service<LedgerAccountSettlementService>(
-	"LedgerAccountSettlementService"
-);
-
-class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementService {
+class LedgerAccountSettlementService {
 	constructor(
 		private readonly repository: LedgerAccountSettlementRepo,
 		private readonly ledgerService: LedgerService,
@@ -337,6 +289,10 @@ class LedgerAccountSettlementServiceLive implements LedgerAccountSettlementServi
 	}
 }
 
+const LedgerAccountSettlementServiceTag = Context.Service<LedgerAccountSettlementService>(
+	"LedgerAccountSettlementService"
+);
+
 const ledgerAccountSettlementServiceLayer = Layer.effect(
 	LedgerAccountSettlementServiceTag,
 	Effect.gen(function* () {
@@ -344,7 +300,7 @@ const ledgerAccountSettlementServiceLayer = Layer.effect(
 		const ledgerService = yield* LedgerServiceTag;
 		const accountService = yield* AccountServiceTag;
 		const transactionService = yield* TransactionServiceTag;
-		return new LedgerAccountSettlementServiceLive(
+		return new LedgerAccountSettlementService(
 			repository,
 			ledgerService,
 			accountService,
@@ -359,12 +315,11 @@ export type {
 	LedgerAccountSettlementEntryError,
 	LedgerAccountSettlementGetError,
 	LedgerAccountSettlementListError,
-	LedgerAccountSettlementService,
 	LedgerAccountSettlementTransitionError,
 	LedgerAccountSettlementUpdateError,
 };
 export {
-	LedgerAccountSettlementServiceLive,
+	LedgerAccountSettlementService,
 	LedgerAccountSettlementServiceTag,
 	ledgerAccountSettlementServiceLayer,
 };
