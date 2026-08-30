@@ -1,5 +1,8 @@
 import { eq } from "drizzle-orm";
 import { TypeID } from "typeid-js";
+import { Effect, Layer, ManagedRuntime, Result } from "effect";
+import { Config } from "@/config";
+import { type Database, DatabaseTag, type EffectDrizzleDatabase, makeDatabaseLive } from "@/db";
 import { AccountNotFound } from "@/domains/ledgers/accounts/AccountErrors";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
@@ -9,7 +12,6 @@ import {
 	CategoryPersistenceFailure,
 	CategoryRepositoryUnavailable,
 } from "./LedgerAccountCategoryErrors";
-import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import type {
 	LedgerAccountCategoryID,
 	LedgerAccountID,
@@ -27,10 +29,48 @@ import {
 	LedgerAccountCategoryAccountsTable,
 	LedgerAccountCategoryParentsTable,
 } from "./schema";
+import {
+	type LedgerAccountCategoryRepo,
+	LedgerAccountCategoryRepoLive,
+	LedgerAccountCategoryRepoTag,
+	ledgerAccountCategoryRepoLayer,
+} from "./LedgerAccountCategoryRepo";
 
 describe("LedgerAccountCategoryRepo", () => {
-	const { db, organizationRepo, ledgerRepo, ledgerAccountRepo, ledgerAccountCategoryRepo } =
-		getRepos();
+	const { db, organizationRepo, ledgerRepo, ledgerAccountRepo } = getRepos();
+	const runtime: ManagedRuntime.ManagedRuntime<Database | LedgerAccountCategoryRepo, never> =
+		ManagedRuntime.make(
+			ledgerAccountCategoryRepoLayer.pipe(
+				Layer.provideMerge(makeDatabaseLive(new Config().databaseUrl))
+			)
+		);
+	let liveRepo: LedgerAccountCategoryRepo;
+	let effectDb: EffectDrizzleDatabase;
+	const ledgerAccountCategoryRepo = {
+		listLedgerAccountCategories: (
+			...args: Parameters<LedgerAccountCategoryRepo["listLedgerAccountCategories"]>
+		) => runtime.runPromise(liveRepo.listLedgerAccountCategories(...args)),
+		getLedgerAccountCategory: (
+			...args: Parameters<LedgerAccountCategoryRepo["getLedgerAccountCategory"]>
+		) => runtime.runPromise(liveRepo.getLedgerAccountCategory(...args)),
+		upsertLedgerAccountCategory: (
+			...args: Parameters<LedgerAccountCategoryRepo["upsertLedgerAccountCategory"]>
+		) => runtime.runPromise(liveRepo.upsertLedgerAccountCategory(...args)),
+		deleteLedgerAccountCategory: (
+			...args: Parameters<LedgerAccountCategoryRepo["deleteLedgerAccountCategory"]>
+		) => runtime.runPromise(liveRepo.deleteLedgerAccountCategory(...args)),
+		linkAccountToCategory: (
+			...args: Parameters<LedgerAccountCategoryRepo["linkAccountToCategory"]>
+		) => runtime.runPromise(liveRepo.linkAccountToCategory(...args)),
+		unlinkAccountFromCategory: (
+			...args: Parameters<LedgerAccountCategoryRepo["unlinkAccountFromCategory"]>
+		) => runtime.runPromise(liveRepo.unlinkAccountFromCategory(...args)),
+		linkCategoryToParent: (...args: Parameters<LedgerAccountCategoryRepo["linkCategoryToParent"]>) =>
+			runtime.runPromise(liveRepo.linkCategoryToParent(...args)),
+		unlinkCategoryFromParent: (
+			...args: Parameters<LedgerAccountCategoryRepo["unlinkCategoryFromParent"]>
+		) => runtime.runPromise(liveRepo.unlinkCategoryFromParent(...args)),
+	};
 
 	// Test IDs - shared across test suite
 	let testOrgId: OrgID;
@@ -38,6 +78,8 @@ describe("LedgerAccountCategoryRepo", () => {
 	let testCounter = 0;
 
 	beforeAll(async () => {
+		liveRepo = await runtime.runPromise(LedgerAccountCategoryRepoTag);
+		effectDb = (await runtime.runPromise(DatabaseTag)).effectDb;
 		// Create test organization
 		testOrgId = new TypeID("org") as OrgID;
 		const orgEntity = createOrganizationEntity({
@@ -60,6 +102,7 @@ describe("LedgerAccountCategoryRepo", () => {
 		// Clean up test data
 		await ledgerRepo.deleteLedger(testOrgId, testLedgerId);
 		await organizationRepo.deleteOrganization(testOrgId);
+		await runtime.dispose();
 	});
 
 	afterEach(() => {
@@ -68,6 +111,31 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("listLedgerAccountCategories", () => {
+		it("maps a native adapter failure into the typed Effect failure channel", async () => {
+			const failure = new Error("native adapter failure");
+			const repository = new LedgerAccountCategoryRepoLive({
+				select: () => ({
+					from: () => ({
+						where: () => ({
+							orderBy: () => ({
+								limit: () => ({ offset: () => Effect.fail(failure) }),
+							}),
+						}),
+					}),
+				}),
+			} as never);
+
+			const result = await Effect.runPromise(
+				Effect.result(repository.listLedgerAccountCategories(testOrgId, testLedgerId, 0, 10))
+			);
+
+			expect(Result.isFailure(result)).toBe(true);
+			if (Result.isFailure(result)) {
+				expect(result.failure).toBeInstanceOf(CategoryPersistenceFailure);
+				expect(result.failure.cause).toBe(failure);
+			}
+		});
+
 		it("should return empty array when no categories exist", async () => {
 			const categories = await ledgerAccountCategoryRepo.listLedgerAccountCategories(
 				testOrgId,
@@ -648,6 +716,32 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("linkAccountToCategory", () => {
+		it("maps a 23503 Category-read failure instead of translating it to Account not found", async () => {
+			const failure = Object.assign(new Error("category read failed"), { code: "23503" });
+			const repository = new LedgerAccountCategoryRepoLive({
+				select: () => ({
+					from: () => ({
+						where: () => ({ limit: () => Effect.fail(failure) }),
+					}),
+				}),
+				insert: () => ({
+					values: () => ({ onConflictDoNothing: () => Effect.die("insert must not run") }),
+				}),
+			} as never);
+
+			const result = await Effect.runPromise(
+				Effect.result(
+					repository.linkAccountToCategory(testOrgId, testLedgerId, new TypeID("lac"), new TypeID("lat"))
+				)
+			);
+
+			expect(Result.isFailure(result)).toBe(true);
+			if (Result.isFailure(result)) {
+				expect(result.failure).toBeInstanceOf(CategoryPersistenceFailure);
+				expect(result.failure.cause).toBe(failure);
+			}
+		});
+
 		it("should read the category before linking an account", async () => {
 			testCounter++;
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
@@ -673,9 +767,9 @@ describe("LedgerAccountCategoryRepo", () => {
 			});
 			await ledgerAccountRepo.upsertLedgerAccount(accountEntity);
 
-			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
-			const select = vi.spyOn(db, "select");
-			const insert = vi.spyOn(db, "insert");
+			const getCategory = vi.spyOn(liveRepo, "getLedgerAccountCategory");
+			const select = vi.spyOn(effectDb, "select");
+			const insert = vi.spyOn(effectDb, "insert");
 			await ledgerAccountCategoryRepo.linkAccountToCategory(
 				testOrgId,
 				testLedgerId,
@@ -913,8 +1007,8 @@ describe("LedgerAccountCategoryRepo", () => {
 				accountId
 			);
 
-			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
-			const deleteRows = vi.spyOn(db, "delete");
+			const getCategory = vi.spyOn(liveRepo, "getLedgerAccountCategory");
+			const deleteRows = vi.spyOn(effectDb, "delete");
 			await ledgerAccountCategoryRepo.unlinkAccountFromCategory(
 				testOrgId,
 				testLedgerId,
@@ -1083,8 +1177,8 @@ describe("LedgerAccountCategoryRepo", () => {
 				})
 			);
 
-			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
-			const insert = vi.spyOn(db, "insert");
+			const getCategory = vi.spyOn(liveRepo, "getLedgerAccountCategory");
+			const insert = vi.spyOn(effectDb, "insert");
 			await ledgerAccountCategoryRepo.linkCategoryToParent(
 				testOrgId,
 				testLedgerId,
@@ -1541,8 +1635,8 @@ describe("LedgerAccountCategoryRepo", () => {
 				parentCategoryId
 			);
 
-			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
-			const deleteRows = vi.spyOn(db, "delete");
+			const getCategory = vi.spyOn(liveRepo, "getLedgerAccountCategory");
+			const deleteRows = vi.spyOn(effectDb, "delete");
 			await ledgerAccountCategoryRepo.unlinkCategoryFromParent(
 				testOrgId,
 				testLedgerId,
@@ -1973,14 +2067,18 @@ describe("LedgerAccountCategoryRepo", () => {
 			[Object.assign(new Error("offline"), { code: "08006" }), CategoryRepositoryUnavailable],
 			[new Error("unexpected database failure"), CategoryPersistenceFailure],
 		])("maps persistence failures through the Category contract %#", async (failure, ErrorType) => {
-			const repository = new LedgerAccountCategoryRepo({
-				select: () => {
-					throw failure;
-				},
+			const repository = new LedgerAccountCategoryRepoLive({
+				select: () => ({
+					from: () => ({
+						where: () => ({ orderBy: () => ({ limit: () => ({ offset: () => Effect.fail(failure) }) }) }),
+					}),
+				}),
 			} as never);
-			await expect(
-				repository.listLedgerAccountCategories(testOrgId, testLedgerId, 0, 20)
-			).rejects.toBeInstanceOf(ErrorType);
+			const result = await Effect.runPromise(
+				Effect.result(repository.listLedgerAccountCategories(testOrgId, testLedgerId, 0, 20))
+			);
+			expect(Result.isFailure(result)).toBe(true);
+			if (Result.isFailure(result)) expect(result.failure).toBeInstanceOf(ErrorType);
 		});
 	});
 });

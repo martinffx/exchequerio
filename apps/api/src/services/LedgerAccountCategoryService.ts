@@ -1,4 +1,12 @@
+import { Context, Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
+// oxlint-disable boundaries/element-types -- The approved in-place migration composes Category orchestration with the integrated Ledger service.
+import {
+	type LedgerGetError,
+	LedgerServiceTag,
+	type LedgerService,
+} from "@/domains/ledgers/LedgerService";
+// oxlint-enable boundaries/element-types
 import { LedgerAccountCategoryEntity } from "@/repo/entities";
 import type {
 	LedgerAccountCategoryID,
@@ -6,157 +14,210 @@ import type {
 	LedgerID,
 	OrgID,
 } from "@/repo/entities/types";
-import type { LedgerAccountCategoryRepo } from "@/repo/LedgerAccountCategoryRepo";
+import {
+	type CategoryDeleteRepositoryError,
+	type CategoryGetRepositoryError,
+	type CategoryLinkAccountRepositoryError,
+	type CategoryLinkParentRepositoryError,
+	type CategoryListRepositoryError,
+	type CategoryUnlinkAccountRepositoryError,
+	type CategoryUnlinkParentRepositoryError,
+	type CategoryUpsertRepositoryError,
+	type LedgerAccountCategoryRepo,
+	LedgerAccountCategoryRepoTag,
+} from "@/repo/LedgerAccountCategoryRepo";
+import type { LedgerAccountCategoryRequest } from "@/routes/ledgers/schema";
 
-interface LedgerAccountCategoryRequest {
-	name: string;
-	description?: string;
-	normalBalance: "debit" | "credit";
-	metadata?: Record<string, unknown>;
-}
-
-interface LedgerOwnership {
-	getLedger(organizationId: OrgID, ledgerId: LedgerID): Promise<unknown>;
-}
+type CategoryListError = LedgerGetError | CategoryListRepositoryError;
+type CategoryGetError = LedgerGetError | CategoryGetRepositoryError;
+type CategoryCreateError = LedgerGetError | CategoryUpsertRepositoryError;
+type CategoryUpdateError =
+	| LedgerGetError
+	| CategoryGetRepositoryError
+	| CategoryUpsertRepositoryError;
+type CategoryDeleteError = LedgerGetError | CategoryDeleteRepositoryError;
+type CategoryLinkAccountError = LedgerGetError | CategoryLinkAccountRepositoryError;
+type CategoryUnlinkAccountError = LedgerGetError | CategoryUnlinkAccountRepositoryError;
+type CategoryLinkParentError = LedgerGetError | CategoryLinkParentRepositoryError;
+type CategoryUnlinkParentError = LedgerGetError | CategoryUnlinkParentRepositoryError;
 
 class LedgerAccountCategoryService {
 	constructor(
-		private readonly ledgerAccountCategoryRepo: LedgerAccountCategoryRepo,
-		private readonly ledgerOwnership: LedgerOwnership
+		private readonly repository: LedgerAccountCategoryRepo,
+		private readonly ledgerService: LedgerService
 	) {}
 
-	public async listLedgerAccountCategories(
+	listLedgerAccountCategories(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		offset: number,
 		limit: number
-	): Promise<LedgerAccountCategoryEntity[]> {
-		await this.ledgerOwnership.getLedger(organizationId, ledgerId);
-		return this.ledgerAccountCategoryRepo.listLedgerAccountCategories(
-			organizationId,
-			ledgerId,
-			offset,
-			limit
-		);
+	): Effect.Effect<LedgerAccountCategoryEntity[], CategoryListError> {
+		return this.ledgerService
+			.getLedger(organizationId, ledgerId)
+			.pipe(
+				Effect.flatMap(() =>
+					this.repository.listLedgerAccountCategories(organizationId, ledgerId, offset, limit)
+				)
+			);
 	}
 
-	public async getLedgerAccountCategory(
+	getLedgerAccountCategory(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID
-	): Promise<LedgerAccountCategoryEntity> {
-		await this.ledgerOwnership.getLedger(organizationId, ledgerId);
-		return this.ledgerAccountCategoryRepo.getLedgerAccountCategory(
-			organizationId,
-			ledgerId,
-			categoryId
-		);
+	): Effect.Effect<LedgerAccountCategoryEntity, CategoryGetError> {
+		return this.ledgerService
+			.getLedger(organizationId, ledgerId)
+			.pipe(
+				Effect.flatMap(() =>
+					this.repository.getLedgerAccountCategory(organizationId, ledgerId, categoryId)
+				)
+			);
 	}
 
-	public async createLedgerAccountCategory(
+	createLedgerAccountCategory(
 		organizationId: OrgID,
 		ledgerId: string,
 		request: LedgerAccountCategoryRequest
-	): Promise<LedgerAccountCategoryEntity> {
-		const ledgerIdTyped = TypeID.fromString<"lgr">(ledgerId) as LedgerID;
-		await this.ledgerOwnership.getLedger(organizationId, ledgerIdTyped);
-		return this.ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
-			LedgerAccountCategoryEntity.fromRequest(request, organizationId, ledgerIdTyped)
+	): Effect.Effect<LedgerAccountCategoryEntity, CategoryCreateError> {
+		const typedLedgerId = TypeID.fromString<"lgr">(ledgerId) as LedgerID;
+		return this.ledgerService.getLedger(organizationId, typedLedgerId).pipe(
+			Effect.andThen(
+				Effect.sync(() =>
+					LedgerAccountCategoryEntity.fromRequest(request, organizationId, typedLedgerId)
+				)
+			),
+			Effect.flatMap(entity => this.repository.upsertLedgerAccountCategory(entity))
 		);
 	}
 
-	public async updateLedgerAccountCategory(
+	updateLedgerAccountCategory(
 		organizationId: OrgID,
 		ledgerId: string,
 		categoryId: string,
 		request: LedgerAccountCategoryRequest
-	): Promise<LedgerAccountCategoryEntity> {
-		const ledgerIdTyped = TypeID.fromString<"lgr">(ledgerId) as LedgerID;
-		const categoryIdTyped = TypeID.fromString<"lac">(categoryId) as LedgerAccountCategoryID;
-		await this.ledgerOwnership.getLedger(organizationId, ledgerIdTyped);
-		await this.ledgerAccountCategoryRepo.getLedgerAccountCategory(
-			organizationId,
-			ledgerIdTyped,
-			categoryIdTyped
-		);
-		return this.ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
-			LedgerAccountCategoryEntity.fromRequest(request, organizationId, ledgerIdTyped, categoryId)
+	): Effect.Effect<LedgerAccountCategoryEntity, CategoryUpdateError> {
+		const typedLedgerId = TypeID.fromString<"lgr">(ledgerId) as LedgerID;
+		const typedCategoryId = TypeID.fromString<"lac">(categoryId) as LedgerAccountCategoryID;
+		return this.ledgerService.getLedger(organizationId, typedLedgerId).pipe(
+			Effect.flatMap(() =>
+				this.repository.getLedgerAccountCategory(organizationId, typedLedgerId, typedCategoryId)
+			),
+			Effect.andThen(
+				Effect.sync(() =>
+					LedgerAccountCategoryEntity.fromRequest(request, organizationId, typedLedgerId, categoryId)
+				)
+			),
+			Effect.flatMap(entity => this.repository.upsertLedgerAccountCategory(entity))
 		);
 	}
 
-	public async deleteLedgerAccountCategory(
+	deleteLedgerAccountCategory(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID
-	): Promise<void> {
-		await this.ledgerOwnership.getLedger(organizationId, ledgerId);
-		return this.ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
-			organizationId,
-			ledgerId,
-			categoryId
-		);
+	): Effect.Effect<void, CategoryDeleteError> {
+		return this.ledgerService
+			.getLedger(organizationId, ledgerId)
+			.pipe(
+				Effect.flatMap(() =>
+					this.repository.deleteLedgerAccountCategory(organizationId, ledgerId, categoryId)
+				)
+			);
 	}
 
-	public async linkLedgerAccountToCategory(
+	linkLedgerAccountToCategory(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID,
 		accountId: LedgerAccountID
-	): Promise<void> {
-		await this.ledgerOwnership.getLedger(organizationId, ledgerId);
-		return this.ledgerAccountCategoryRepo.linkAccountToCategory(
-			organizationId,
-			ledgerId,
-			categoryId,
-			accountId
-		);
+	): Effect.Effect<void, CategoryLinkAccountError> {
+		return this.ledgerService
+			.getLedger(organizationId, ledgerId)
+			.pipe(
+				Effect.flatMap(() =>
+					this.repository.linkAccountToCategory(organizationId, ledgerId, categoryId, accountId)
+				)
+			);
 	}
 
-	public async unlinkLedgerAccountToCategory(
+	unlinkLedgerAccountToCategory(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID,
 		accountId: LedgerAccountID
-	): Promise<void> {
-		await this.ledgerOwnership.getLedger(organizationId, ledgerId);
-		return this.ledgerAccountCategoryRepo.unlinkAccountFromCategory(
-			organizationId,
-			ledgerId,
-			categoryId,
-			accountId
-		);
+	): Effect.Effect<void, CategoryUnlinkAccountError> {
+		return this.ledgerService
+			.getLedger(organizationId, ledgerId)
+			.pipe(
+				Effect.flatMap(() =>
+					this.repository.unlinkAccountFromCategory(organizationId, ledgerId, categoryId, accountId)
+				)
+			);
 	}
 
-	public async linkLedgerAccountCategoryToCategory(
+	linkLedgerAccountCategoryToCategory(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID,
 		parentCategoryId: LedgerAccountCategoryID
-	): Promise<void> {
-		await this.ledgerOwnership.getLedger(organizationId, ledgerId);
-		return this.ledgerAccountCategoryRepo.linkCategoryToParent(
-			organizationId,
-			ledgerId,
-			categoryId,
-			parentCategoryId
-		);
+	): Effect.Effect<void, CategoryLinkParentError> {
+		return this.ledgerService
+			.getLedger(organizationId, ledgerId)
+			.pipe(
+				Effect.flatMap(() =>
+					this.repository.linkCategoryToParent(organizationId, ledgerId, categoryId, parentCategoryId)
+				)
+			);
 	}
 
-	public async unlinkLedgerAccountCategoryToCategory(
+	unlinkLedgerAccountCategoryToCategory(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID,
 		parentCategoryId: LedgerAccountCategoryID
-	): Promise<void> {
-		await this.ledgerOwnership.getLedger(organizationId, ledgerId);
-		return this.ledgerAccountCategoryRepo.unlinkCategoryFromParent(
-			organizationId,
-			ledgerId,
-			categoryId,
-			parentCategoryId
-		);
+	): Effect.Effect<void, CategoryUnlinkParentError> {
+		return this.ledgerService
+			.getLedger(organizationId, ledgerId)
+			.pipe(
+				Effect.flatMap(() =>
+					this.repository.unlinkCategoryFromParent(
+						organizationId,
+						ledgerId,
+						categoryId,
+						parentCategoryId
+					)
+				)
+			);
 	}
 }
 
-export type { LedgerOwnership };
-export { LedgerAccountCategoryService };
+const LedgerAccountCategoryServiceTag = Context.Service<LedgerAccountCategoryService>(
+	"LedgerAccountCategoryService"
+);
+const ledgerAccountCategoryServiceLayer = Layer.effect(
+	LedgerAccountCategoryServiceTag,
+	Effect.gen(function* () {
+		const repository = yield* LedgerAccountCategoryRepoTag;
+		const ledgerService = yield* LedgerServiceTag;
+		return new LedgerAccountCategoryService(repository, ledgerService);
+	})
+);
+
+export type {
+	CategoryCreateError,
+	CategoryDeleteError,
+	CategoryGetError,
+	CategoryLinkAccountError,
+	CategoryLinkParentError,
+	CategoryListError,
+	CategoryUnlinkAccountError,
+	CategoryUnlinkParentError,
+	CategoryUpdateError,
+};
+export {
+	LedgerAccountCategoryService,
+	LedgerAccountCategoryServiceTag,
+	ledgerAccountCategoryServiceLayer,
+};

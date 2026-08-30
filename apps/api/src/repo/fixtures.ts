@@ -11,7 +11,6 @@ import { LedgerAccountStatementEntity } from "@/repo/entities/LedgerAccountState
 import type { LedgerEntityOpts } from "@/repo/entities/LedgerEntity";
 import type { OrgEntityOpts } from "@/repo/entities/OrganizationEntity";
 import type { LedgerID } from "@/repo/entities/types";
-import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
 import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import { LedgerRepo } from "./LedgerRepo";
@@ -59,7 +58,6 @@ function getRepos(): TestRepos {
 	};
 	const ledgerRepo = new LedgerRepo(db);
 	const ledgerAccountRepo = new LedgerAccountRepo(db);
-	const ledgerAccountCategoryRepo = new LedgerAccountCategoryRepo(db);
 	const ledgerAccountStatementRepo = new LedgerAccountStatementRepo(db);
 
 	repos = {
@@ -67,7 +65,6 @@ function getRepos(): TestRepos {
 		organizationRepo,
 		ledgerRepo,
 		ledgerAccountRepo,
-		ledgerAccountCategoryRepo,
 		ledgerAccountStatementRepo,
 	};
 
