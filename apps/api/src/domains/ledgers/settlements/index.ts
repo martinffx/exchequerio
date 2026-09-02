@@ -22,6 +22,7 @@ export type {
 	LedgerAccountSettlementEntryError,
 	LedgerAccountSettlementGetError,
 	LedgerAccountSettlementListError,
+	LedgerAccountSettlementTransactionError,
 	LedgerAccountSettlementTransitionError,
 	LedgerAccountSettlementUpdateError,
 } from "./LedgerAccountSettlementService";

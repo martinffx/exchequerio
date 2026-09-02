@@ -155,7 +155,11 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.put<{ Params: TransactionItemParameters; Body: TransactionUpdateRequest }>(
+	server.put<{
+		Params: TransactionItemParameters;
+		Headers: TransactionCreateHeaders;
+		Body: TransactionUpdateRequest;
+	}>(
 		"/:transactionId",
 		{
 			preHandler: [server.hasPermissions(["ledger:transaction:write"])],
@@ -164,6 +168,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 				tags: ["Ledger Transactions"],
 				summary: "Update a Ledger Transaction",
 				params: TransactionItemParameters,
+				headers: TransactionCreateHeaders,
 				body: TransactionUpdateRequest,
 				response: {
 					200: TransactionResponse,
@@ -177,7 +182,13 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 			const effect = parseItemIds(request.params.ledgerId, request.params.transactionId).pipe(
 				Effect.flatMap(([ledgerId, transactionId]) =>
 					TransactionServiceTag.use(service =>
-						service.updateTransaction(request.token.orgId, ledgerId, transactionId, request.body)
+						service.updateTransaction(
+							request.token.orgId,
+							ledgerId,
+							transactionId,
+							request.headers["idempotency-key"],
+							request.body
+						)
 					)
 				)
 			);
@@ -191,7 +202,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.post<{ Params: TransactionItemParameters }>(
+	server.post<{ Params: TransactionItemParameters; Headers: TransactionCreateHeaders }>(
 		"/:transactionId/post",
 		{
 			preHandler: [server.hasPermissions(["ledger:transaction:write"])],
@@ -200,6 +211,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 				tags: ["Ledger Transactions"],
 				summary: "Post a Ledger Transaction",
 				params: TransactionItemParameters,
+				headers: TransactionCreateHeaders,
 				response: {
 					200: TransactionResponse,
 					404: NotFoundProblem,
@@ -212,7 +224,12 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 			const effect = parseItemIds(request.params.ledgerId, request.params.transactionId).pipe(
 				Effect.flatMap(([ledgerId, transactionId]) =>
 					TransactionServiceTag.use(service =>
-						service.postTransaction(request.token.orgId, ledgerId, transactionId)
+						service.postTransaction(
+							request.token.orgId,
+							ledgerId,
+							transactionId,
+							request.headers["idempotency-key"]
+						)
 					)
 				)
 			);
@@ -226,7 +243,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.delete<{ Params: TransactionItemParameters }>(
+	server.delete<{ Params: TransactionItemParameters; Headers: TransactionCreateHeaders }>(
 		"/:transactionId",
 		{
 			preHandler: [server.hasPermissions(["ledger:transaction:delete"])],
@@ -235,6 +252,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 				tags: ["Ledger Transactions"],
 				summary: "Void a Ledger Transaction",
 				params: TransactionItemParameters,
+				headers: TransactionCreateHeaders,
 				response: {
 					204: TransactionDeleteResponse,
 					404: NotFoundProblem,
@@ -247,7 +265,12 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 			const effect = parseItemIds(request.params.ledgerId, request.params.transactionId).pipe(
 				Effect.flatMap(([ledgerId, transactionId]) =>
 					TransactionServiceTag.use(service =>
-						service.voidTransaction(request.token.orgId, ledgerId, transactionId)
+						service.voidTransaction(
+							request.token.orgId,
+							ledgerId,
+							transactionId,
+							request.headers["idempotency-key"]
+						)
 					)
 				)
 			);

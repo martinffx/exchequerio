@@ -1,9 +1,12 @@
 import { Value } from "@sinclair/typebox/value";
+import { Effect, Option } from "effect";
+import { DateTime } from "luxon";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
 	newLedgerAccountID,
 	newLedgerAccountSettlementID,
+	newLedgerID,
 	newLedgerTransactionID,
 	newOrgID,
 } from "@/repo/entities/types";
@@ -88,19 +91,23 @@ describe("LedgerAccountSettlementEntity", () => {
 		const settledAccountId = newLedgerAccountID();
 		const contraAccountId = newLedgerAccountID();
 
-		const entity = LedgerAccountSettlementEntity.fromRequest(
-			{
-				transactionId: "",
-				settledAccountId: settledAccountId.toString(),
-				contraAccountId: contraAccountId.toString(),
-				status: "drafting",
-				effectiveAtUpperBound: "2026-08-28T12:00:00.000Z",
-				metadata: { source: "request" },
-			},
-			newOrgID(),
-			"USD",
-			"credit",
-			id.toString()
+		const entity = Effect.runSync(
+			LedgerAccountSettlementEntity.fromRequest(
+				{
+					transactionId: "",
+					settledAccountId: settledAccountId.toString(),
+					contraAccountId: contraAccountId.toString(),
+					status: "drafting",
+					effectiveAtUpperBound: "2026-08-28T12:00:00.000Z",
+					metadata: { source: "request" },
+				},
+				newOrgID(),
+				"USD",
+				"credit",
+				settledAccountId,
+				contraAccountId,
+				id
+			)
 		);
 
 		expect(entity).toMatchObject({
@@ -111,10 +118,10 @@ describe("LedgerAccountSettlementEntity", () => {
 			amount: 0,
 			normalBalance: "credit",
 			currency: "USD",
-			created: now,
-			updated: now,
+			created: DateTime.fromJSDate(now, { zone: "utc" }),
+			updated: DateTime.fromJSDate(now, { zone: "utc" }),
 		});
-		expect(entity.effectiveAtUpperBound).toEqual(new Date("2026-08-28T12:00:00.000Z"));
+		expect(entity.effectiveAtUpperBound?.toISO()).toBe("2026-08-28T12:00:00.000Z");
 	});
 
 	it("round-trips rows, metadata, nullable fields, TypeIDs, and dates", () => {
@@ -128,14 +135,14 @@ describe("LedgerAccountSettlementEntity", () => {
 			// oxlint-disable-next-line unicorn/no-null -- Drizzle returns SQL NULL.
 			effectiveAtUpperBound: null,
 		});
-		const entity = LedgerAccountSettlementEntity.fromRow(row);
+		const entity = Effect.runSync(LedgerAccountSettlementEntity.fromRow(row));
 
 		expect(entity.id.toString()).toBe(row.id);
 		expect(entity.organizationId.toString()).toBe(row.organizationId);
 		expect(entity.transactionId).toBeUndefined();
 		expect(entity.metadata).toEqual({ source: "test" });
-		expect(entity.created).toBe(created);
-		expect(entity.updated).toBe(updated);
+		expect(entity.created.toJSDate()).toEqual(created);
+		expect(entity.updated.toJSDate()).toEqual(updated);
 		expect(entity.toRow()).toEqual({
 			...row,
 			transactionId: undefined,
@@ -145,16 +152,18 @@ describe("LedgerAccountSettlementEntity", () => {
 		});
 	});
 
-	it("retains invalid metadata as absent", () => {
-		expect(LedgerAccountSettlementEntity.fromRow(settlementRow({ metadata: "{" })).metadata).toBe(
-			undefined
-		);
+	it("rejects invalid persisted metadata", () => {
+		expect(() =>
+			Effect.runSync(LedgerAccountSettlementEntity.fromRow(settlementRow({ metadata: "{" })))
+		).toThrow("Persisted Settlement could not be decoded");
 	});
 
 	it("omits stored-only fields and uses an empty Transaction id in responses", () => {
-		const response = LedgerAccountSettlementEntity.fromRow(
-			// oxlint-disable-next-line unicorn/no-null -- Drizzle returns SQL NULL.
-			settlementRow({ transactionId: null })
+		const response = Effect.runSync(
+			LedgerAccountSettlementEntity.fromRow(
+				// oxlint-disable-next-line unicorn/no-null -- Drizzle returns SQL NULL.
+				settlementRow({ transactionId: null })
+			)
 		).toResponse();
 
 		expect(response.transactionId).toBe("");
@@ -162,42 +171,26 @@ describe("LedgerAccountSettlementEntity", () => {
 		expect(response).not.toHaveProperty("effectiveAtUpperBound");
 	});
 
-	it.each([
-		[
-			"Amount",
-			(entity: LedgerAccountSettlementEntity) => ({
-				changed: entity.withAmount(300),
-				expected: { amount: 300 },
-			}),
-		],
-		[
-			"Status",
-			(entity: LedgerAccountSettlementEntity) => ({
-				changed: entity.withStatus("processing"),
-				expected: { status: "processing" },
-			}),
-		],
-		[
-			"Transaction ID",
-			(entity: LedgerAccountSettlementEntity) => {
-				const transactionId = newLedgerTransactionID();
-				return {
-					changed: entity.withTransactionId(transactionId),
-					expected: { transactionId },
-				};
-			},
-		],
-	] as const)(
-		"updates %s and the Updated Time while preserving every other field",
-		(_name, update) => {
-			const entity = LedgerAccountSettlementEntity.fromRow(settlementRow());
-			const nextTime = new Date("2026-08-30T12:00:00.000Z");
-			vi.useFakeTimers();
-			vi.setSystemTime(nextTime);
+	it("owns valid lifecycle transitions", () => {
+		const settlement = Effect.runSync(LedgerAccountSettlementEntity.fromRow(settlementRow()));
+		const updated = DateTime.fromISO("2026-08-30T12:00:00.000Z", { zone: "utc" });
 
-			const { changed, expected } = update(entity);
+		const transitioned = Effect.runSync(settlement.transitionTo("processing", updated));
 
-			expect(changed).toEqual({ ...entity, ...expected, updated: nextTime });
-		}
-	);
+		expect(transitioned).toEqual({ ...settlement, status: "processing", updated });
+		expect(() => Effect.runSync(settlement.transitionTo("posted", updated))).toThrow(
+			"Invalid Settlement status transition"
+		);
+	});
+
+	it("converts a Settlement into a balanced Posted Transaction entity", () => {
+		const settlement = Effect.runSync(LedgerAccountSettlementEntity.fromRow(settlementRow()));
+		const transaction = Effect.runSync(settlement.toTransaction(newLedgerID(), settlement.created));
+		const entries = Option.getOrThrow(transaction.entries);
+
+		expect(transaction.status).toBe("posted");
+		expect(transaction.metadata).toEqual({ source: "test", settlementId: settlement.id.toString() });
+		expect(entries.map(entry => entry.direction)).toEqual(["credit", "debit"]);
+		expect(entries.map(entry => entry.amount)).toEqual([settlement.amount, settlement.amount]);
+	});
 });

@@ -1,12 +1,14 @@
-import { Clock, Context, Effect, Layer, Result, Schedule } from "effect";
+import { Clock, Context, Effect, Layer, Schedule } from "effect";
 import { DateTime } from "luxon";
 
 import { AccountVersionConflict } from "@/domains/ledgers/accounts";
+import type { InvalidId } from "@/lib/errors";
 import {
 	type LedgerGetError,
 	type LedgerService,
 	LedgerServiceTag,
 } from "@/domains/ledgers/LedgerService";
+import { parseId } from "@/lib/utils";
 import {
 	newLedgerTransactionID,
 	newLedgerTransactionEntryID,
@@ -15,14 +17,15 @@ import {
 	type OrgID,
 } from "@/repo/entities/types";
 
-import type { LedgerTransaction } from "./LedgerTransaction";
+import { LedgerTransaction } from "./LedgerTransaction";
 import {
-	type TransactionIdemService,
-	TransactionIdemServiceTag,
-} from "./LedgerTransactionIdemService";
+	IdempotencyPending,
+	type IdempotencyService,
+	IdempotencyServiceTag,
+	IdempotencyUnavailable,
+} from "@/services/IdempotencyService";
 import {
 	TransactionConcurrencyFailure,
-	TransactionCreationPending,
 	type TransactionInfrastructureError,
 	TransactionNotFound,
 	TransactionPersistenceFailure,
@@ -47,26 +50,29 @@ import type {
 const MAX_DISTINCT_ACCOUNTS = 200;
 const MUTATION_RETRY_DELAY = "50 millis";
 const MUTATION_RETRIES = 40;
-const PENDING_RETRY_DELAY = "125 millis";
-const PENDING_RETRIES = 3;
 
 const mutationRetrySchedule = Schedule.exponential(MUTATION_RETRY_DELAY).pipe(
 	Schedule.jittered,
 	Schedule.upTo({ times: MUTATION_RETRIES, duration: "2 seconds" })
 );
-const pendingRetrySchedule = Schedule.spaced(PENDING_RETRY_DELAY).pipe(
-	Schedule.upTo({ times: PENDING_RETRIES, duration: "500 millis" })
-);
-
 type TransactionListError = LedgerGetError | TransactionInfrastructureError;
 type TransactionGetError = TransactionNotFound | TransactionInfrastructureError;
 type TransactionCreateError =
-	| TransactionCreationPending
+	| IdempotencyPending
+	| IdempotencyUnavailable
 	| TransactionNotFound
 	| LedgerTransactionCreateRepositoryError
 	| TransactionInfrastructureError;
-type TransactionUpdateError = LedgerTransactionUpdateRepositoryError;
-type TransactionTransitionError = LedgerTransactionTransitionRepositoryError;
+type TransactionUpdateError =
+	| IdempotencyPending
+	| IdempotencyUnavailable
+	| TransactionGetError
+	| LedgerTransactionUpdateRepositoryError;
+type TransactionTransitionError =
+	| IdempotencyPending
+	| IdempotencyUnavailable
+	| TransactionGetError
+	| LedgerTransactionTransitionRepositoryError;
 
 const serverTime = Clock.currentTimeMillis.pipe(
 	Effect.map(milliseconds => DateTime.fromMillis(milliseconds, { zone: "utc" }))
@@ -132,6 +138,10 @@ interface TransactionService {
 		idempotencyKey: string,
 		request: TransactionCreateRequest
 	): Effect.Effect<LedgerTransaction, TransactionCreateError>;
+	createTransactionEntity(
+		idempotencyKey: string,
+		transaction: LedgerTransaction
+	): Effect.Effect<LedgerTransaction, TransactionCreateError>;
 	/**
 	 * Replaces a pending Transaction and its Entries.
 	 *
@@ -145,6 +155,7 @@ interface TransactionService {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
+		idempotencyKey: string,
 		request: TransactionUpdateRequest
 	): Effect.Effect<LedgerTransaction, TransactionUpdateError>;
 	/**
@@ -158,7 +169,8 @@ interface TransactionService {
 	postTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID
+		transactionId: LedgerTransactionID,
+		idempotencyKey: string
 	): Effect.Effect<LedgerTransaction, TransactionTransitionError>;
 	/**
 	 * Voids a Transaction using the service clock.
@@ -171,7 +183,8 @@ interface TransactionService {
 	voidTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID
+		transactionId: LedgerTransactionID,
+		idempotencyKey: string
 	): Effect.Effect<LedgerTransaction, TransactionTransitionError>;
 }
 
@@ -185,7 +198,7 @@ class TransactionServiceLive implements TransactionService {
 	 */
 	constructor(
 		private readonly repository: LedgerTransactionRepo,
-		private readonly idempotency: TransactionIdemService,
+		private readonly idempotency: IdempotencyService,
 		private readonly ledgerService: LedgerService
 	) {}
 
@@ -243,26 +256,45 @@ class TransactionServiceLive implements TransactionService {
 		idempotencyKey: string,
 		request: TransactionCreateRequest
 	): Effect.Effect<LedgerTransaction, TransactionCreateError> {
-		return this.idempotency.claimTransactionId(organizationId, idempotencyKey).pipe(
-			Effect.flatMap(claim =>
-				Result.match(claim, {
-					onFailure: transactionId =>
-						this.loadClaimedTransaction(organizationId, ledgerId, idempotencyKey, transactionId),
-					onSuccess: () =>
-						Effect.sync(newLedgerTransactionID).pipe(
-							Effect.flatMap(transactionId =>
-								this.createClaimedTransaction(
-									organizationId,
-									ledgerId,
-									idempotencyKey,
-									transactionId,
-									request
-								)
-							)
-						),
-				})
-			)
+		return this.validateAccountLimit(request.ledgerEntries).pipe(
+			Effect.andThen(serverTime),
+			Effect.flatMap(created => {
+				const entryIds = request.ledgerEntries.map(() => newLedgerTransactionEntryID());
+				return LedgerTransaction.fromCreateRequest(
+					newLedgerTransactionID(),
+					organizationId,
+					ledgerId,
+					request,
+					created as DateTime<true>,
+					entryIds
+				);
+			}),
+			Effect.flatMap(transaction => this.createTransactionEntity(idempotencyKey, transaction))
 		);
+	}
+
+	createTransactionEntity(
+		idempotencyKey: string,
+		transaction: LedgerTransaction
+	): Effect.Effect<LedgerTransaction, TransactionCreateError> {
+		return this.idempotency.run({
+			organizationId: transaction.organizationId,
+			action: "transactions.create",
+			key: idempotencyKey,
+			execute: retryMutation(Effect.suspend(() => this.repository.createTransaction(transaction))),
+			resultId: transaction => transaction.id.toString(),
+			replay: resultId =>
+				parseId<"ltr", LedgerTransactionID>("ltr", resultId).pipe(
+					Effect.flatMap(transactionId =>
+						this.getTransaction(transaction.organizationId, transaction.ledgerId, transactionId)
+					)
+				),
+			releaseOnError: error =>
+				!(
+					error instanceof TransactionPersistenceFailure ||
+					error instanceof TransactionRepositoryUnavailable
+				),
+		});
 	}
 
 	/**
@@ -278,9 +310,10 @@ class TransactionServiceLive implements TransactionService {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
+		idempotencyKey: string,
 		request: TransactionUpdateRequest
 	): Effect.Effect<LedgerTransaction, TransactionUpdateError> {
-		return this.validateAccountLimit(request.ledgerEntries).pipe(
+		const execute = this.validateAccountLimit(request.ledgerEntries).pipe(
 			Effect.andThen(serverTime),
 			Effect.flatMap(updated => {
 				const entryIds = request.ledgerEntries.map(() => newLedgerTransactionEntryID());
@@ -298,6 +331,14 @@ class TransactionServiceLive implements TransactionService {
 				);
 			})
 		);
+		return this.runMutation(
+			organizationId,
+			ledgerId,
+			transactionId,
+			idempotencyKey,
+			"transactions.update",
+			execute
+		);
 	}
 
 	/**
@@ -311,9 +352,10 @@ class TransactionServiceLive implements TransactionService {
 	postTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID
+		transactionId: LedgerTransactionID,
+		idempotencyKey: string
 	): Effect.Effect<LedgerTransaction, TransactionTransitionError> {
-		return serverTime.pipe(
+		const execute = serverTime.pipe(
 			Effect.flatMap(postedAt =>
 				retryMutation(
 					Effect.suspend(() =>
@@ -321,6 +363,14 @@ class TransactionServiceLive implements TransactionService {
 					)
 				)
 			)
+		);
+		return this.runMutation(
+			organizationId,
+			ledgerId,
+			transactionId,
+			idempotencyKey,
+			"transactions.post",
+			execute
 		);
 	}
 
@@ -335,9 +385,10 @@ class TransactionServiceLive implements TransactionService {
 	voidTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID
+		transactionId: LedgerTransactionID,
+		idempotencyKey: string
 	): Effect.Effect<LedgerTransaction, TransactionTransitionError> {
-		return serverTime.pipe(
+		const execute = serverTime.pipe(
 			Effect.flatMap(updated =>
 				retryMutation(
 					Effect.suspend(() =>
@@ -346,6 +397,35 @@ class TransactionServiceLive implements TransactionService {
 				)
 			)
 		);
+		return this.runMutation(
+			organizationId,
+			ledgerId,
+			transactionId,
+			idempotencyKey,
+			"transactions.void",
+			execute
+		);
+	}
+
+	private runMutation<E>(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		transactionId: LedgerTransactionID,
+		idempotencyKey: string,
+		action: string,
+		execute: Effect.Effect<LedgerTransaction, E | InvalidId | TransactionGetError>
+	) {
+		return this.idempotency.run({
+			organizationId,
+			action,
+			key: idempotencyKey,
+			execute,
+			resultId: transaction => transaction.id.toString(),
+			replay: resultId =>
+				parseId<"ltr", LedgerTransactionID>("ltr", resultId).pipe(
+					Effect.flatMap(storedId => this.getTransaction(organizationId, ledgerId, storedId))
+				),
+		});
 	}
 
 	/**
@@ -356,30 +436,6 @@ class TransactionServiceLive implements TransactionService {
 	 * @param transactionId - Committed identifier stored in the claim, when already available.
 	 * @returns An Effect containing the claimed Transaction, or a creation-pending failure after the bounded wait.
 	 */
-	private loadClaimedTransaction(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		idempotencyKey: string,
-		transactionId: LedgerTransactionID | undefined
-	): Effect.Effect<LedgerTransaction, TransactionCreationPending | TransactionGetError> {
-		const loadTransactionId =
-			transactionId === undefined
-				? Effect.suspend(() => this.idempotency.getTransactionId(organizationId, idempotencyKey)).pipe(
-						Effect.flatMap(id =>
-							id === undefined ? Effect.fail(new TransactionCreationPending()) : Effect.succeed(id)
-						),
-						Effect.retry({
-							schedule: pendingRetrySchedule,
-							while: error => error instanceof TransactionCreationPending,
-						})
-					)
-				: Effect.succeed(transactionId);
-
-		return loadTransactionId.pipe(
-			Effect.flatMap(id => this.getTransaction(organizationId, ledgerId, id))
-		);
-	}
-
 	/**
 	 * Creates a Transaction for a winning claim and releases that claim if creation fails.
 	 *
@@ -392,47 +448,6 @@ class TransactionServiceLive implements TransactionService {
 	 * @param request - Validated Transaction creation request.
 	 * @returns An Effect containing the created Transaction.
 	 */
-	private createClaimedTransaction(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		idempotencyKey: string,
-		transactionId: LedgerTransactionID,
-		request: TransactionCreateRequest
-	): Effect.Effect<LedgerTransaction, TransactionCreateError> {
-		const create = this.validateAccountLimit(request.ledgerEntries).pipe(
-			Effect.andThen(serverTime),
-			Effect.flatMap(created => {
-				const entryIds = request.ledgerEntries.map(() => newLedgerTransactionEntryID());
-				return retryMutation(
-					Effect.suspend(() =>
-						this.repository.createTransaction(
-							organizationId,
-							ledgerId,
-							transactionId,
-							request,
-							created,
-							entryIds
-						)
-					)
-				);
-			}),
-			Effect.tapError(error =>
-				error instanceof TransactionPersistenceFailure ||
-				error instanceof TransactionRepositoryUnavailable
-					? Effect.void
-					: this.idempotency.releaseTransactionId(organizationId, idempotencyKey).pipe(Effect.ignore)
-			)
-		);
-
-		return create.pipe(
-			Effect.flatMap(transaction =>
-				this.idempotency
-					.completeTransactionId(organizationId, idempotencyKey, transaction.id)
-					.pipe(Effect.as(transaction))
-			)
-		);
-	}
-
 	/**
 	 * Rejects a Transaction that references more than 200 distinct Accounts.
 	 *
@@ -458,7 +473,7 @@ const transactionServiceLayer = Layer.effect(
 	TransactionServiceTag,
 	LedgerTransactionRepoTag.pipe(
 		Effect.flatMap(repository =>
-			Effect.all([TransactionIdemServiceTag, LedgerServiceTag]).pipe(
+			Effect.all([IdempotencyServiceTag, LedgerServiceTag]).pipe(
 				Effect.map(
 					([idempotency, ledgerService]) =>
 						new TransactionServiceLive(repository, idempotency, ledgerService)

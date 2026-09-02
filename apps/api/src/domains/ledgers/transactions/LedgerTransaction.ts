@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import type {
 	LedgerID,
 	LedgerTransactionEntryID,
@@ -28,15 +28,13 @@ import type {
 import { LedgerTransactionEntry } from "./LedgerTransactionEntry";
 
 type LedgerTransactionStatus = "pending" | "posted" | "voided";
-type LedgerTransactionMetadata = Readonly<Record<string, string>>;
-
 type LedgerTransactionOptions = Readonly<{
 	id: LedgerTransactionID;
 	organizationId: OrgID;
 	ledgerId: LedgerID;
 	status: LedgerTransactionStatus;
 	description?: string;
-	metadata?: LedgerTransactionMetadata;
+	metadata?: Metadata;
 	entries: Option.Option<readonly LedgerTransactionEntry[]>;
 	postedAt?: DateTime;
 	lockVersion: number;
@@ -61,7 +59,7 @@ class LedgerTransaction {
 	readonly ledgerId: LedgerID;
 	readonly status: LedgerTransactionStatus;
 	readonly description?: string;
-	readonly metadata?: LedgerTransactionMetadata;
+	readonly metadata?: Metadata;
 	readonly entries: Option.Option<readonly LedgerTransactionEntry[]>;
 	readonly postedAt?: DateTime;
 	readonly lockVersion: number;
@@ -80,6 +78,15 @@ class LedgerTransaction {
 		this.lockVersion = options.lockVersion;
 		this.created = options.created;
 		this.updated = options.updated;
+	}
+
+	static create(
+		options: LedgerTransactionOptions
+	): Effect.Effect<LedgerTransaction, TransactionValidationFailure> {
+		return LedgerTransaction.validateBalanced(Option.getOrThrow(options.entries)).pipe(
+			// oxlint-disable-next-line unicorn/no-array-callback-reference -- The array is wrapped as an Option value.
+			Effect.map(entries => new LedgerTransaction({ ...options, entries: Option.some(entries) }))
+		);
 	}
 
 	/**
@@ -332,5 +339,5 @@ class LedgerTransaction {
 	}
 }
 
-export type { LedgerTransactionMetadata, LedgerTransactionOptions, LedgerTransactionStatus };
+export type { LedgerTransactionOptions, LedgerTransactionStatus };
 export { LedgerTransaction };

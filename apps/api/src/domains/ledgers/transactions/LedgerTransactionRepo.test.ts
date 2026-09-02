@@ -9,6 +9,7 @@ import { AccountNotFound, LedgerAccountCurrencyMismatch } from "@/domains/ledger
 import {
 	newLedgerAccountID,
 	newLedgerID,
+	newLedgerTransactionEntryID,
 	newLedgerTransactionID,
 	newOrgID,
 	type LedgerID,
@@ -21,6 +22,8 @@ import {
 	LedgersTable,
 	OrganizationsTable,
 } from "@/repo/schema";
+
+import { LedgerTransaction } from "./LedgerTransaction";
 
 import {
 	type LedgerTransactionRepo,
@@ -52,6 +55,22 @@ const request = (
 		currencyCode: "EUR",
 	})),
 });
+
+const persist = (
+	repository: LedgerTransactionRepo,
+	organizationId: OrgID,
+	ledgerId: LedgerID,
+	transactionId: ReturnType<typeof newLedgerTransactionID>,
+	transactionRequest: TransactionCreateRequest
+) =>
+	LedgerTransaction.fromCreateRequest(
+		transactionId,
+		organizationId,
+		ledgerId,
+		transactionRequest,
+		DateTime.utc(),
+		transactionRequest.ledgerEntries.map(() => newLedgerTransactionEntryID())
+	).pipe(Effect.flatMap(transaction => repository.createTransaction(transaction)));
 
 describe("LedgerTransactionRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
@@ -152,7 +171,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 
 		const transaction = await runRepo(repository =>
-			repository.createTransaction(
+			persist(
+				repository,
 				organizationId,
 				ledgerId,
 				newLedgerTransactionID(),
@@ -199,7 +219,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const debit = await createAccount(owner.organizationId, owner.ledgerId, "debit");
 		const credit = await createAccount(owner.organizationId, owner.ledgerId, "credit");
 		const first = await runRepo(repository =>
-			repository.createTransaction(
+			persist(
+				repository,
 				owner.organizationId,
 				owner.ledgerId,
 				newLedgerTransactionID(),
@@ -211,7 +232,8 @@ describe("LedgerTransactionRepoLive", () => {
 		);
 		await new Promise(resolve => setTimeout(resolve, 2));
 		const second = await runRepo(repository =>
-			repository.createTransaction(
+			persist(
+				repository,
 				owner.organizationId,
 				owner.ledgerId,
 				newLedgerTransactionID(),
@@ -254,7 +276,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const missing = newLedgerAccountID();
 		const error = await runRepo(repository =>
 			Effect.flip(
-				repository.createTransaction(
+				persist(
+					repository,
 					organizationId,
 					ledgerId,
 					newLedgerTransactionID(),
@@ -307,7 +330,8 @@ describe("LedgerTransactionRepoLive", () => {
 		try {
 			const error = await runRepo(repository =>
 				Effect.flip(
-					repository.createTransaction(
+					persist(
+						repository,
 						organizationId,
 						ledgerId,
 						transactionId,
@@ -349,7 +373,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const usdCredit = await createAccount(organizationId, ledgerId, "debit", "USD");
 
 		await runRepo(repository =>
-			repository.createTransaction(organizationId, ledgerId, newLedgerTransactionID(), {
+			persist(repository, organizationId, ledgerId, newLedgerTransactionID(), {
 				status: "posted",
 				ledgerEntries: [
 					{ accountId: eurDebit.toString(), direction: "debit", amount: 10, currencyCode: "EUR" },
@@ -372,7 +396,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 		const transaction = await runRepo(repository =>
-			repository.createTransaction(
+			persist(
+				repository,
 				organizationId,
 				ledgerId,
 				newLedgerTransactionID(),
@@ -410,7 +435,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 		const createPending = () =>
 			runRepo(repository =>
-				repository.createTransaction(
+				persist(
+					repository,
 					organizationId,
 					ledgerId,
 					newLedgerTransactionID(),
@@ -477,12 +503,7 @@ describe("LedgerTransactionRepoLive", () => {
 
 		const error = await runRepo(repository =>
 			Effect.flip(
-				repository.createTransaction(
-					organizationId,
-					ledgerId,
-					newLedgerTransactionID(),
-					transactionRequest
-				)
+				persist(repository, organizationId, ledgerId, newLedgerTransactionID(), transactionRequest)
 			)
 		);
 

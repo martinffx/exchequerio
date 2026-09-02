@@ -1,4 +1,5 @@
 import { type Static, Type } from "@sinclair/typebox";
+import { IdempotencyHeaders } from "@/lib/IdempotencySchema";
 import { LedgerIdSchema, LedgerPaginationProperties } from "../LedgerSchema";
 
 const TransactionIdSchema = Type.String({ pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
@@ -16,9 +17,7 @@ const TransactionItemParameters = Type.Object(
 const TransactionListQuery = Type.Object(LedgerPaginationProperties, {
 	additionalProperties: false,
 });
-const TransactionCreateHeaders = Type.Object({
-	"idempotency-key": Type.String({ minLength: 1, maxLength: 255 }),
-});
+const TransactionCreateHeaders = IdempotencyHeaders;
 
 const TransactionMetadataSchema = Type.Record(Type.String(), Type.String());
 const EntryDirectionSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);

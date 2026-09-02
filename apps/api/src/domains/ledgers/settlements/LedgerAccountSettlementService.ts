@@ -1,5 +1,4 @@
 import { Context, Effect, Layer } from "effect";
-import { TypeID } from "typeid-js";
 
 import {
 	type LedgerGetError,
@@ -16,11 +15,23 @@ import {
 	type TransactionService,
 	TransactionServiceTag,
 } from "@/domains/ledgers/transactions/LedgerTransactionService";
-import type { TransactionCreateRequest } from "@/domains/ledgers/transactions/LedgerTransactionSchema";
-import { ConflictError } from "@/lib/errors";
-import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
+import { ConflictError, type InvalidId } from "@/lib/errors";
+import { parseId } from "@/lib/utils";
+import type {
+	LedgerAccountID,
+	LedgerAccountSettlementID,
+	LedgerID,
+	OrgID,
+} from "@/repo/entities/types";
+import {
+	type IdempotencyPending,
+	type IdempotencyService,
+	IdempotencyServiceTag,
+	type IdempotencyUnavailable,
+} from "@/services/IdempotencyService";
 
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
+import type { LedgerAccountSettlementLifecycleConflict } from "./LedgerAccountSettlementErrors";
 import {
 	type LedgerAccountSettlementCreateRepositoryError,
 	type LedgerAccountSettlementDeleteRepositoryError,
@@ -43,28 +54,48 @@ type LedgerAccountSettlementGetError = LedgerAccountSettlementGetRepositoryError
 type LedgerAccountSettlementCreateError =
 	| AccountGetError
 	| ConflictError
+	| IdempotencyPending
+	| IdempotencyUnavailable
+	| InvalidId
 	| LedgerAccountSettlementCreateRepositoryError;
 type LedgerAccountSettlementUpdateError =
 	| AccountGetError
 	| ConflictError
+	| IdempotencyPending
+	| IdempotencyUnavailable
+	| InvalidId
 	| LedgerAccountSettlementGetRepositoryError
 	| LedgerAccountSettlementUpdateRepositoryError;
-type LedgerAccountSettlementDeleteError = LedgerAccountSettlementDeleteRepositoryError;
-type LedgerAccountSettlementEntryError = LedgerAccountSettlementEntryRepositoryError;
+type LedgerAccountSettlementDeleteError =
+	| IdempotencyPending
+	| IdempotencyUnavailable
+	| LedgerAccountSettlementDeleteRepositoryError;
+type LedgerAccountSettlementEntryError =
+	| IdempotencyPending
+	| IdempotencyUnavailable
+	| LedgerAccountSettlementEntryRepositoryError;
+type LedgerAccountSettlementTransactionError =
+	| ConflictError
+	| LedgerAccountSettlementUpdateRepositoryError
+	| TransactionCreateError;
 type LedgerAccountSettlementTransitionError =
 	| ConflictError
+	| IdempotencyPending
+	| IdempotencyUnavailable
+	| InvalidId
+	| LedgerAccountSettlementLifecycleConflict
 	| LedgerAccountSettlementGetRepositoryError
 	| LedgerAccountSettlementReadRepositoryError
 	| LedgerAccountSettlementStatusRepositoryError
-	| LedgerAccountSettlementUpdateRepositoryError
-	| TransactionCreateError;
+	| LedgerAccountSettlementTransactionError;
 
 class LedgerAccountSettlementService {
 	constructor(
 		private readonly repository: LedgerAccountSettlementRepo,
 		private readonly ledgerService: LedgerService,
 		private readonly accountService: AccountService,
-		private readonly transactionService: TransactionService
+		private readonly transactionService: TransactionService,
+		private readonly idempotency: IdempotencyService
 	) {}
 
 	listLedgerAccountSettlements(
@@ -88,97 +119,144 @@ class LedgerAccountSettlementService {
 	createLedgerAccountSettlement(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
+		idempotencyKey: string,
 		request: LedgerAccountSettlementRequest
 	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementCreateError> {
-		return this.getAccounts(organizationId, ledgerId, request).pipe(
-			Effect.flatMap(([settledAccount]) =>
-				Effect.sync(() =>
+		return this.idempotency.run({
+			organizationId,
+			action: "settlements.create",
+			key: idempotencyKey,
+			execute: this.getAccounts(organizationId, ledgerId, request).pipe(
+				Effect.flatMap(([settledAccount, contraAccount]) =>
 					LedgerAccountSettlementEntity.fromRequest(
 						request,
 						organizationId,
 						settledAccount.currency,
-						settledAccount.normalBalance
+						settledAccount.normalBalance,
+						settledAccount.id,
+						contraAccount.id
 					)
-				)
+				),
+				Effect.flatMap(entity => this.repository.createSettlement(entity))
 			),
-			Effect.flatMap(entity => this.repository.createSettlement(entity))
-		);
+			resultId: settlement => settlement.id.toString(),
+			replay: resultId => this.getSettlementByStoredId(organizationId, resultId),
+		});
 	}
 
 	updateLedgerAccountSettlement(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID,
+		idempotencyKey: string,
 		request: LedgerAccountSettlementRequest
 	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateError> {
-		return this.getAccounts(organizationId, ledgerId, request).pipe(
-			Effect.flatMap(([settledAccount]) =>
-				this.repository
-					.getSettlement(organizationId, settlementId)
-					.pipe(
-						Effect.andThen(
-							Effect.sync(() =>
+		return this.idempotency.run({
+			organizationId,
+			action: "settlements.update",
+			key: idempotencyKey,
+			execute: this.getAccounts(organizationId, ledgerId, request).pipe(
+				Effect.flatMap(([settledAccount, contraAccount]) =>
+					this.repository
+						.getSettlement(organizationId, settlementId)
+						.pipe(
+							Effect.andThen(
 								LedgerAccountSettlementEntity.fromRequest(
 									request,
 									organizationId,
 									settledAccount.currency,
 									settledAccount.normalBalance,
-									settlementId.toString()
+									settledAccount.id,
+									contraAccount.id,
+									settlementId
 								)
 							)
 						)
-					)
+				),
+				Effect.flatMap(entity => this.repository.updateSettlement(entity))
 			),
-			Effect.flatMap(entity => this.repository.updateSettlement(entity))
-		);
+			resultId: settlement => settlement.id.toString(),
+			replay: resultId => this.getSettlementByStoredId(organizationId, resultId),
+		});
 	}
 
 	deleteLedgerAccountSettlement(
 		organizationId: OrgID,
-		settlementId: LedgerAccountSettlementID
+		settlementId: LedgerAccountSettlementID,
+		idempotencyKey: string
 	): Effect.Effect<void, LedgerAccountSettlementDeleteError> {
-		return this.repository.deleteSettlement(organizationId, settlementId);
+		return this.idempotency
+			.run({
+				organizationId,
+				action: "settlements.delete",
+				key: idempotencyKey,
+				execute: this.repository
+					.deleteSettlement(organizationId, settlementId)
+					.pipe(Effect.as(settlementId)),
+				resultId: id => id.toString(),
+				replay: () => Effect.succeed(settlementId),
+			})
+			.pipe(Effect.asVoid);
 	}
 
 	addLedgerAccountSettlementEntries(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
+		idempotencyKey: string,
 		entryIds: string[]
 	): Effect.Effect<void, LedgerAccountSettlementEntryError> {
-		return this.repository.addEntriesToSettlement(organizationId, settlementId, entryIds);
+		return this.runEntryMutation(
+			organizationId,
+			settlementId,
+			idempotencyKey,
+			"settlements.entries.add",
+			this.repository.addEntriesToSettlement(organizationId, settlementId, entryIds)
+		);
 	}
 
 	removeLedgerAccountSettlementEntries(
 		organizationId: OrgID,
 		settlementId: LedgerAccountSettlementID,
+		idempotencyKey: string,
 		entryIds: string[]
 	): Effect.Effect<void, LedgerAccountSettlementEntryError> {
-		return this.repository.removeEntriesFromSettlement(organizationId, settlementId, entryIds);
+		return this.runEntryMutation(
+			organizationId,
+			settlementId,
+			idempotencyKey,
+			"settlements.entries.remove",
+			this.repository.removeEntriesFromSettlement(organizationId, settlementId, entryIds)
+		);
 	}
 
 	transitionSettlementStatus(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID,
+		idempotencyKey: string,
 		targetStatus: SettlementStatus
 	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementTransitionError> {
-		return Effect.suspend(() => this.repository.getSettlement(organizationId, settlementId)).pipe(
-			Effect.flatMap(settlement =>
-				this.validateStatusTransition(settlement.status, targetStatus).pipe(
-					Effect.flatMap(() =>
-						targetStatus === "pending" && settlement.status === "processing"
-							? this.updateAmount(settlement)
-							: Effect.void
-					),
-					Effect.flatMap(() =>
-						targetStatus === "posted" && settlement.status === "pending"
-							? this.createTransaction(organizationId, ledgerId, settlement)
-							: Effect.void
-					),
-					Effect.flatMap(() => this.repository.updateStatus(organizationId, settlementId, targetStatus))
-				)
-			)
-		);
+		return this.idempotency.run({
+			organizationId,
+			action: "settlements.transition",
+			key: idempotencyKey,
+			execute: Effect.suspend(() => this.repository.getSettlement(organizationId, settlementId)).pipe(
+				Effect.flatMap(settlement => settlement.transitionTo(targetStatus).pipe(Effect.as(settlement))),
+				Effect.flatMap(settlement =>
+					targetStatus === "pending" && settlement.status === "processing"
+						? this.updateAmount(settlement)
+						: Effect.succeed(settlement)
+				),
+				Effect.flatMap(settlement =>
+					targetStatus === "posted" && settlement.status === "pending"
+						? this.createTransaction(idempotencyKey, ledgerId, settlement)
+						: Effect.succeed(settlement)
+				),
+				Effect.flatMap(() => this.repository.updateStatus(organizationId, settlementId, targetStatus))
+			),
+			resultId: settlement => settlement.id.toString(),
+			replay: resultId => this.getSettlementByStoredId(organizationId, resultId),
+		});
 	}
 
 	private getAccounts(
@@ -186,21 +264,19 @@ class LedgerAccountSettlementService {
 		ledgerId: LedgerID,
 		request: LedgerAccountSettlementRequest
 	) {
-		return Effect.all(
-			[
-				this.accountService.getAccount(
-					organizationId,
-					ledgerId,
-					TypeID.fromString<"lat">(request.settledAccountId)
-				),
-				this.accountService.getAccount(
-					organizationId,
-					ledgerId,
-					TypeID.fromString<"lat">(request.contraAccountId)
-				),
-			],
-			{ concurrency: "unbounded" }
-		).pipe(
+		return Effect.all([
+			parseId<"lat", LedgerAccountID>("lat", request.settledAccountId),
+			parseId<"lat", LedgerAccountID>("lat", request.contraAccountId),
+		]).pipe(
+			Effect.flatMap(([settledAccountId, contraAccountId]) =>
+				Effect.all(
+					[
+						this.accountService.getAccount(organizationId, ledgerId, settledAccountId),
+						this.accountService.getAccount(organizationId, ledgerId, contraAccountId),
+					],
+					{ concurrency: "unbounded" }
+				)
+			),
 			Effect.flatMap(([settledAccount, contraAccount]) =>
 				settledAccount.currency === contraAccount.currency
 					? Effect.succeed([settledAccount, contraAccount] as const)
@@ -212,80 +288,61 @@ class LedgerAccountSettlementService {
 	private updateAmount(
 		settlement: LedgerAccountSettlementEntity
 	): Effect.Effect<
-		void,
+		LedgerAccountSettlementEntity,
 		LedgerAccountSettlementReadRepositoryError | LedgerAccountSettlementUpdateRepositoryError
 	> {
-		return this.repository.calculateAmount(settlement.id).pipe(
-			Effect.flatMap(amount => Effect.sync(() => settlement.withAmount(amount))),
-			Effect.flatMap(updated => this.repository.updateSettlement(updated)),
-			Effect.asVoid
-		);
-	}
-
-	private createTransaction(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		settlement: LedgerAccountSettlementEntity
-	): Effect.Effect<
-		void,
-		ConflictError | LedgerAccountSettlementUpdateRepositoryError | TransactionCreateError
-	> {
-		const request: TransactionCreateRequest = {
-			status: "posted",
-			description: settlement.description ?? `Settlement ${settlement.id.toString()}`,
-			metadata: {
-				...(settlement.metadata as Record<string, string> | undefined),
-				settlementId: settlement.id.toString(),
-			},
-			ledgerEntries: [
-				{
-					accountId: settlement.settledAccountId.toString(),
-					direction: settlement.normalBalance === "debit" ? "credit" : "debit",
-					amount: settlement.amount,
-					currencyCode: settlement.currency,
-					metadata: {},
-				},
-				{
-					accountId: settlement.contraAccountId.toString(),
-					direction: settlement.normalBalance === "debit" ? "debit" : "credit",
-					amount: settlement.amount,
-					currencyCode: settlement.currency,
-					metadata: {},
-				},
-			],
-		};
-
-		return this.transactionService
-			.createTransaction(organizationId, ledgerId, `settlement:${settlement.id.toString()}`, request)
+		return this.repository
+			.calculateAmount(settlement.id)
 			.pipe(
-				Effect.flatMap(transaction =>
-					transaction.status === "posted"
-						? Effect.succeed(transaction)
-						: Effect.fail(new ConflictError("Settlement Transaction must be Posted"))
-				),
-				Effect.flatMap(transaction => Effect.sync(() => settlement.withTransactionId(transaction.id))),
-				Effect.flatMap(updated => this.repository.updateSettlement(updated)),
-				Effect.asVoid
+				Effect.flatMap(amount =>
+					this.repository.updateAmount(settlement.organizationId, settlement.id, amount)
+				)
 			);
 	}
 
-	private validateStatusTransition(
-		currentStatus: SettlementStatus,
-		targetStatus: SettlementStatus
-	): Effect.Effect<void, ConflictError> {
-		const transitions: Record<SettlementStatus, readonly SettlementStatus[]> = {
-			drafting: ["processing"],
-			processing: ["pending", "drafting"],
-			pending: ["posted", "drafting"],
-			posted: ["archiving"],
-			archiving: ["archived"],
-			archived: [],
-		};
-		return transitions[currentStatus].includes(targetStatus)
-			? Effect.void
-			: Effect.fail(
-					new ConflictError(`Invalid status transition from '${currentStatus}' to '${targetStatus}'`)
-				);
+	private createTransaction(
+		idempotencyKey: string,
+		ledgerId: LedgerID,
+		settlement: LedgerAccountSettlementEntity
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementTransactionError> {
+		return settlement.toTransaction(ledgerId).pipe(
+			Effect.flatMap(transaction =>
+				this.transactionService.createTransactionEntity(idempotencyKey, transaction)
+			),
+			Effect.flatMap(transaction =>
+				transaction.status === "posted"
+					? Effect.succeed(transaction)
+					: Effect.fail(new ConflictError("Settlement Transaction must be Posted"))
+			),
+			Effect.flatMap(transaction =>
+				this.repository.linkTransaction(settlement.organizationId, settlement.id, transaction.id)
+			)
+		);
+	}
+
+	private getSettlementByStoredId(organizationId: OrgID, resultId: string) {
+		return parseId<"las", LedgerAccountSettlementID>("las", resultId).pipe(
+			Effect.flatMap(settlementId => this.repository.getSettlement(organizationId, settlementId))
+		);
+	}
+
+	private runEntryMutation(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		idempotencyKey: string,
+		action: string,
+		execute: Effect.Effect<void, LedgerAccountSettlementEntryRepositoryError>
+	): Effect.Effect<void, LedgerAccountSettlementEntryError> {
+		return this.idempotency
+			.run({
+				organizationId,
+				action,
+				key: idempotencyKey,
+				execute: execute.pipe(Effect.as(settlementId)),
+				resultId: id => id.toString(),
+				replay: () => Effect.succeed(settlementId),
+			})
+			.pipe(Effect.asVoid);
 	}
 }
 
@@ -300,11 +357,13 @@ const ledgerAccountSettlementServiceLayer = Layer.effect(
 		const ledgerService = yield* LedgerServiceTag;
 		const accountService = yield* AccountServiceTag;
 		const transactionService = yield* TransactionServiceTag;
+		const idempotency = yield* IdempotencyServiceTag;
 		return new LedgerAccountSettlementService(
 			repository,
 			ledgerService,
 			accountService,
-			transactionService
+			transactionService,
+			idempotency
 		);
 	})
 );
@@ -315,6 +374,7 @@ export type {
 	LedgerAccountSettlementEntryError,
 	LedgerAccountSettlementGetError,
 	LedgerAccountSettlementListError,
+	LedgerAccountSettlementTransactionError,
 	LedgerAccountSettlementTransitionError,
 	LedgerAccountSettlementUpdateError,
 };

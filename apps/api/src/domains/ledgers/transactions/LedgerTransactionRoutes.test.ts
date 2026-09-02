@@ -8,12 +8,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { globalErrorHandler } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
+import { IdempotencyPending, IdempotencyUnavailable } from "@/services/IdempotencyService";
 
 import { LedgerTransaction } from "./LedgerTransaction";
 import {
 	TransactionConcurrencyFailure,
-	TransactionCreationPending,
-	TransactionIdempotencyUnavailable,
 	TransactionLifecycleConflict,
 	TransactionNotFound,
 	TransactionPersistenceDecodingFailure,
@@ -140,9 +139,30 @@ describe("TransactionRoutes", () => {
 		["list", "GET", "", undefined, undefined, 200],
 		["get", "GET", `/${transactionId.toString()}`, undefined, undefined, 200],
 		["create", "POST", "", createBody, { "idempotency-key": "create-42" }, 201],
-		["update", "PUT", `/${transactionId.toString()}`, updateBody, undefined, 200],
-		["post", "POST", `/${transactionId.toString()}/post`, undefined, undefined, 200],
-		["void", "DELETE", `/${transactionId.toString()}`, undefined, undefined, 204],
+		[
+			"update",
+			"PUT",
+			`/${transactionId.toString()}`,
+			updateBody,
+			{ "idempotency-key": "update-42" },
+			200,
+		],
+		[
+			"post",
+			"POST",
+			`/${transactionId.toString()}/post`,
+			undefined,
+			{ "idempotency-key": "post-42" },
+			200,
+		],
+		[
+			"void",
+			"DELETE",
+			`/${transactionId.toString()}`,
+			undefined,
+			{ "idempotency-key": "void-42" },
+			204,
+		],
 	] as const)(
 		"serves %s through the mock Effect service",
 		async (_name, method, suffix, payload, headers, status) => {
@@ -177,6 +197,7 @@ describe("TransactionRoutes", () => {
 		await server.inject({
 			method: "PUT",
 			url: `/api/ledgers/${ledgerId.toString()}/transactions/${transactionId.toString()}`,
+			headers: { "idempotency-key": "update-42" },
 			payload: { ...updateBody, ignored: true },
 		});
 		await server.inject({
@@ -186,10 +207,12 @@ describe("TransactionRoutes", () => {
 		await server.inject({
 			method: "POST",
 			url: `/api/ledgers/${ledgerId.toString()}/transactions/${transactionId.toString()}/post`,
+			headers: { "idempotency-key": "post-42" },
 		});
 		await server.inject({
 			method: "DELETE",
 			url: `/api/ledgers/${ledgerId.toString()}/transactions/${transactionId.toString()}`,
+			headers: { "idempotency-key": "void-42" },
 		});
 
 		expect(implementation.listTransactions).toHaveBeenCalledWith(organizationId, ledgerId, {
@@ -206,6 +229,7 @@ describe("TransactionRoutes", () => {
 			organizationId,
 			ledgerId,
 			transactionId,
+			"update-42",
 			updateBody
 		);
 		expect(implementation.getTransaction).toHaveBeenCalledWith(
@@ -216,12 +240,14 @@ describe("TransactionRoutes", () => {
 		expect(implementation.postTransaction).toHaveBeenCalledWith(
 			organizationId,
 			ledgerId,
-			transactionId
+			transactionId,
+			"post-42"
 		);
 		expect(implementation.voidTransaction).toHaveBeenCalledWith(
 			organizationId,
 			ledgerId,
-			transactionId
+			transactionId,
+			"void-42"
 		);
 	});
 
@@ -296,7 +322,7 @@ describe("TransactionRoutes", () => {
 
 	it.each([
 		["create", "POST", "", { "idempotency-key": "create-42" }],
-		["update", "PUT", `/${transactionId.toString()}`, undefined],
+		["update", "PUT", `/${transactionId.toString()}`, { "idempotency-key": "update-42" }],
 	] as const)("limits %s requests to 200 Entries", async (_name, method, suffix, headers) => {
 		const implementation = service();
 		const { server } = await buildRouteServer(implementation);
@@ -352,7 +378,7 @@ describe("TransactionRoutes", () => {
 			"",
 			createBody,
 			{ "idempotency-key": "create-42" },
-			new TransactionIdempotencyUnavailable(new Error("offline")),
+			new IdempotencyUnavailable(new Error("offline")),
 			503,
 		],
 		[
@@ -362,7 +388,7 @@ describe("TransactionRoutes", () => {
 			"",
 			createBody,
 			{ "idempotency-key": "create-42" },
-			new TransactionCreationPending(),
+			new IdempotencyPending(),
 			409,
 		],
 		[
@@ -371,7 +397,7 @@ describe("TransactionRoutes", () => {
 			"PUT",
 			`/${transactionId.toString()}`,
 			updateBody,
-			undefined,
+			{ "idempotency-key": "update-42" },
 			new TransactionConcurrencyFailure(new Error("race")),
 			409,
 		],
@@ -381,7 +407,7 @@ describe("TransactionRoutes", () => {
 			"POST",
 			`/${transactionId.toString()}/post`,
 			undefined,
-			undefined,
+			{ "idempotency-key": "post-42" },
 			new TransactionLifecycleConflict("voided", "posted"),
 			409,
 		],
@@ -391,7 +417,7 @@ describe("TransactionRoutes", () => {
 			"DELETE",
 			`/${transactionId.toString()}`,
 			undefined,
-			undefined,
+			{ "idempotency-key": "void-42" },
 			new TransactionRepositoryUnavailable(new Error("offline")),
 			503,
 		],
@@ -426,7 +452,7 @@ describe("TransactionRoutes", () => {
 		const implementation = service();
 		vi
 			.mocked(implementation.createTransaction)
-			.mockReturnValue(Effect.fail(new TransactionCreationPending()));
+			.mockReturnValue(Effect.fail(new IdempotencyPending()));
 		const { server } = await buildRouteServer(implementation);
 		const response = await server.inject({
 			method: "POST",

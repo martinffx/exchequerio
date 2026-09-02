@@ -1,13 +1,21 @@
-import { TypeID } from "typeid-js";
+import { Effect, Option } from "effect";
+import { DateTime } from "luxon";
 
+import { LedgerTransaction } from "@/domains/ledgers/transactions/LedgerTransaction";
+import { LedgerTransactionEntry } from "@/domains/ledgers/transactions/LedgerTransactionEntry";
+import type { InvalidId } from "@/lib/errors";
+import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import {
 	newLedgerAccountSettlementID,
+	newLedgerTransactionEntryID,
+	newLedgerTransactionID,
 	type LedgerAccountID,
 	type LedgerAccountSettlementID,
+	type LedgerID,
 	type LedgerTransactionID,
 	type OrgID,
 } from "@/repo/entities/types";
-import { LedgerAccountSettlementsTable, type LedgerAccountSettlementRow } from "@/repo/schema";
+import type { LedgerAccountSettlementInsert, LedgerAccountSettlementRow } from "@/repo/schema";
 
 import type {
 	LedgerAccountSettlementRequest,
@@ -15,8 +23,10 @@ import type {
 	NormalBalance,
 	SettlementStatus,
 } from "./LedgerAccountSettlementSchema";
-
-type LedgerAccountSettlementInsert = typeof LedgerAccountSettlementsTable.$inferInsert;
+import {
+	LedgerAccountSettlementLifecycleConflict,
+	LedgerAccountSettlementPersistenceDecodingFailure,
+} from "./LedgerAccountSettlementErrors";
 
 type LedgerAccountSettlementEntityOptions = Readonly<{
 	id: LedgerAccountSettlementID;
@@ -30,11 +40,17 @@ type LedgerAccountSettlementEntityOptions = Readonly<{
 	status: SettlementStatus;
 	description?: string;
 	externalReference?: string;
-	effectiveAtUpperBound?: Date;
-	metadata?: Record<string, unknown>;
-	created: Date;
-	updated: Date;
+	effectiveAtUpperBound?: DateTime;
+	metadata?: Metadata;
+	created: DateTime;
+	updated: DateTime;
 }>;
+
+const toIso = (value: DateTime): string => {
+	const encoded = value.toISO();
+	if (encoded === null) throw new Error("Settlement contains an invalid timestamp");
+	return encoded;
+};
 
 class LedgerAccountSettlementEntity {
 	readonly id: LedgerAccountSettlementID;
@@ -48,27 +64,27 @@ class LedgerAccountSettlementEntity {
 	readonly status: SettlementStatus;
 	readonly description?: string;
 	readonly externalReference?: string;
-	readonly effectiveAtUpperBound?: Date;
-	readonly metadata?: Record<string, unknown>;
-	readonly created: Date;
-	readonly updated: Date;
+	readonly effectiveAtUpperBound?: DateTime;
+	readonly metadata?: Metadata;
+	readonly created: DateTime;
+	readonly updated: DateTime;
 
-	constructor(options: LedgerAccountSettlementEntityOptions) {
-		this.id = options.id;
-		this.organizationId = options.organizationId;
-		this.transactionId = options.transactionId;
-		this.settledAccountId = options.settledAccountId;
-		this.contraAccountId = options.contraAccountId;
-		this.amount = options.amount;
-		this.normalBalance = options.normalBalance;
-		this.currency = options.currency;
-		this.status = options.status;
-		this.description = options.description;
-		this.externalReference = options.externalReference;
-		this.effectiveAtUpperBound = options.effectiveAtUpperBound;
-		this.metadata = options.metadata;
-		this.created = options.created;
-		this.updated = options.updated;
+	constructor(opts: LedgerAccountSettlementEntityOptions) {
+		this.id = opts.id;
+		this.organizationId = opts.organizationId;
+		this.transactionId = opts.transactionId;
+		this.settledAccountId = opts.settledAccountId;
+		this.contraAccountId = opts.contraAccountId;
+		this.amount = opts.amount;
+		this.normalBalance = opts.normalBalance;
+		this.currency = opts.currency;
+		this.status = opts.status;
+		this.description = opts.description;
+		this.externalReference = opts.externalReference;
+		this.effectiveAtUpperBound = opts.effectiveAtUpperBound;
+		this.metadata = opts.metadata;
+		this.created = opts.created;
+		this.updated = opts.updated;
 	}
 
 	static fromRequest(
@@ -76,59 +92,76 @@ class LedgerAccountSettlementEntity {
 		organizationId: OrgID,
 		currency: string,
 		normalBalance: NormalBalance,
-		id?: string
-	): LedgerAccountSettlementEntity {
-		const now = new Date();
-		return new LedgerAccountSettlementEntity({
-			id: id ? TypeID.fromString<"las">(id) : newLedgerAccountSettlementID(),
-			organizationId,
-			transactionId: request.transactionId
-				? TypeID.fromString<"ltr">(request.transactionId)
-				: undefined,
-			settledAccountId: TypeID.fromString<"lat">(request.settledAccountId),
-			contraAccountId: TypeID.fromString<"lat">(request.contraAccountId),
-			amount: 0,
-			normalBalance,
-			currency,
-			status: request.status,
-			description: request.description,
-			externalReference: request.externalReference,
-			effectiveAtUpperBound: request.effectiveAtUpperBound
-				? new Date(request.effectiveAtUpperBound)
-				: undefined,
-			metadata: request.metadata,
-			created: now,
-			updated: now,
-		});
+		settledAccountId: LedgerAccountID,
+		contraAccountId: LedgerAccountID,
+		id = newLedgerAccountSettlementID()
+	) {
+		const now = DateTime.utc();
+		const transactionId: Effect.Effect<LedgerTransactionID | undefined, InvalidId> =
+			request.transactionId
+				? parseId<"ltr", LedgerTransactionID>("ltr", request.transactionId).pipe(Effect.map(id => id))
+				: Effect.succeed<LedgerTransactionID | undefined>(undefined);
+
+		return transactionId.pipe(
+			Effect.map(
+				transactionId =>
+					new LedgerAccountSettlementEntity({
+						id,
+						organizationId,
+						transactionId,
+						settledAccountId,
+						contraAccountId,
+						amount: 0,
+						normalBalance,
+						currency,
+						status: request.status,
+						description: request.description,
+						externalReference: request.externalReference,
+						effectiveAtUpperBound: request.effectiveAtUpperBound
+							? DateTime.fromISO(request.effectiveAtUpperBound, { zone: "utc" })
+							: undefined,
+						metadata: request.metadata,
+						created: now,
+						updated: now,
+					})
+			)
+		);
 	}
 
-	static fromRow(row: LedgerAccountSettlementRow): LedgerAccountSettlementEntity {
-		let metadata: Record<string, unknown> | undefined;
-		if (row.metadata) {
-			try {
-				metadata = JSON.parse(row.metadata) as Record<string, unknown>;
-			} catch {
-				metadata = undefined;
-			}
-		}
+	static fromRow(row: LedgerAccountSettlementRow) {
+		const transactionId: Effect.Effect<LedgerTransactionID | undefined, InvalidId> = row.transactionId
+			? parseId<"ltr", LedgerTransactionID>("ltr", row.transactionId)
+			: Effect.succeed<LedgerTransactionID | undefined>(undefined);
+		const effectiveAtUpperBound: Effect.Effect<DateTime | undefined, Error> =
+			row.effectiveAtUpperBound
+				? parseDate(row.effectiveAtUpperBound)
+				: Effect.succeed<DateTime | undefined>(undefined);
 
-		return new LedgerAccountSettlementEntity({
-			id: TypeID.fromString<"las">(row.id),
-			organizationId: TypeID.fromString<"org">(row.organizationId),
-			transactionId: row.transactionId ? TypeID.fromString<"ltr">(row.transactionId) : undefined,
-			settledAccountId: TypeID.fromString<"lat">(row.settledAccountId),
-			contraAccountId: TypeID.fromString<"lat">(row.contraAccountId),
-			amount: row.amount,
-			normalBalance: row.normalBalance,
-			currency: row.currency,
-			status: row.status,
-			description: row.description ?? undefined,
-			externalReference: row.externalReference ?? undefined,
-			effectiveAtUpperBound: row.effectiveAtUpperBound ?? undefined,
-			metadata,
-			created: row.created,
-			updated: row.updated,
-		});
+		return Effect.all({
+			id: parseId<"las", LedgerAccountSettlementID>("las", row.id),
+			organizationId: parseId<"org", OrgID>("org", row.organizationId),
+			transactionId,
+			settledAccountId: parseId<"lat", LedgerAccountID>("lat", row.settledAccountId),
+			contraAccountId: parseId<"lat", LedgerAccountID>("lat", row.contraAccountId),
+			effectiveAtUpperBound,
+			metadata: parseMetadata(row.metadata),
+			created: parseDate(row.created),
+			updated: parseDate(row.updated),
+		}).pipe(
+			Effect.map(
+				decoded =>
+					new LedgerAccountSettlementEntity({
+						...decoded,
+						amount: row.amount,
+						normalBalance: row.normalBalance,
+						currency: row.currency,
+						status: row.status,
+						description: row.description ?? undefined,
+						externalReference: row.externalReference ?? undefined,
+					})
+			),
+			Effect.mapError(cause => new LedgerAccountSettlementPersistenceDecodingFailure(cause))
+		);
 	}
 
 	toRow(): LedgerAccountSettlementInsert {
@@ -144,10 +177,10 @@ class LedgerAccountSettlementEntity {
 			status: this.status,
 			description: this.description ?? undefined,
 			externalReference: this.externalReference ?? undefined,
-			effectiveAtUpperBound: this.effectiveAtUpperBound ?? undefined,
-			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
-			created: this.created,
-			updated: this.updated,
+			effectiveAtUpperBound: this.effectiveAtUpperBound?.toJSDate(),
+			metadata: encodeMetadata(this.metadata),
+			created: this.created.toJSDate(),
+			updated: this.updated.toJSDate(),
 		};
 	}
 
@@ -162,22 +195,65 @@ class LedgerAccountSettlementEntity {
 			currency: this.currency,
 			status: this.status,
 			description: this.description,
-			metadata: this.metadata as Record<string, string> | undefined,
-			created: this.created.toISOString(),
-			updated: this.updated.toISOString(),
+			metadata: this.metadata,
+			created: toIso(this.created),
+			updated: toIso(this.updated),
 		};
 	}
 
-	withAmount(amount: number): LedgerAccountSettlementEntity {
-		return new LedgerAccountSettlementEntity({ ...this, amount, updated: new Date() });
+	toTransaction(ledgerId: LedgerID, created: DateTime = DateTime.utc()) {
+		const transactionId = newLedgerTransactionID();
+		const entries = [
+			LedgerTransactionEntry.create({
+				id: newLedgerTransactionEntryID(),
+				accountId: this.settledAccountId,
+				direction: this.normalBalance === "debit" ? "credit" : "debit",
+				amount: this.amount,
+				currency: this.currency,
+				status: "posted",
+				metadata: {},
+				created,
+			}),
+			LedgerTransactionEntry.create({
+				id: newLedgerTransactionEntryID(),
+				accountId: this.contraAccountId,
+				direction: this.normalBalance === "debit" ? "debit" : "credit",
+				amount: this.amount,
+				currency: this.currency,
+				status: "posted",
+				metadata: {},
+				created,
+			}),
+		] as const;
+
+		return LedgerTransaction.create({
+			id: transactionId,
+			organizationId: this.organizationId,
+			ledgerId,
+			status: "posted",
+			description: this.description ?? `Settlement ${this.id.toString()}`,
+			metadata: { ...this.metadata, settlementId: this.id.toString() },
+			// oxlint-disable-next-line unicorn/no-array-callback-reference -- The array is wrapped as an Option value.
+			entries: Option.some(entries),
+			postedAt: created,
+			lockVersion: 1,
+			created,
+			updated: created,
+		});
 	}
 
-	withStatus(status: SettlementStatus): LedgerAccountSettlementEntity {
-		return new LedgerAccountSettlementEntity({ ...this, status, updated: new Date() });
-	}
-
-	withTransactionId(transactionId: LedgerTransactionID): LedgerAccountSettlementEntity {
-		return new LedgerAccountSettlementEntity({ ...this, transactionId, updated: new Date() });
+	transitionTo(targetStatus: SettlementStatus, updated: DateTime = DateTime.utc()) {
+		const transitions: Record<SettlementStatus, readonly SettlementStatus[]> = {
+			drafting: ["processing"],
+			processing: ["pending", "drafting"],
+			pending: ["posted", "drafting"],
+			posted: ["archiving"],
+			archiving: ["archived"],
+			archived: [],
+		};
+		return transitions[this.status].includes(targetStatus)
+			? Effect.succeed(new LedgerAccountSettlementEntity({ ...this, status: targetStatus, updated }))
+			: Effect.fail(new LedgerAccountSettlementLifecycleConflict(this.status, targetStatus));
 	}
 }
 

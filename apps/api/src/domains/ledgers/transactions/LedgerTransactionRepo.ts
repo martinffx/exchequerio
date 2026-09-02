@@ -38,11 +38,7 @@ import {
 	requireTransaction,
 	requireTransactionWrite,
 } from "./LedgerTransactionErrors";
-import type {
-	TransactionCreateRequest,
-	TransactionListQuery,
-	TransactionUpdateRequest,
-} from "./LedgerTransactionSchema";
+import type { TransactionListQuery, TransactionUpdateRequest } from "./LedgerTransactionSchema";
 
 type LedgerTransactionCreateRepositoryError =
 	| AccountNotFound
@@ -107,12 +103,7 @@ interface LedgerTransactionRepo {
 	 * @returns An Effect containing the created Transaction.
 	 */
 	createTransaction(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID,
-		request: TransactionCreateRequest,
-		created?: DateTime,
-		entryIds?: readonly LedgerTransactionEntryID[]
+		transaction: LedgerTransaction
 	): Effect.Effect<LedgerTransaction, LedgerTransactionCreateRepositoryError>;
 	/**
 	 * Replaces a pending Transaction's mutable fields and Entries atomically.
@@ -251,25 +242,16 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	 * @returns An Effect containing the created Transaction.
 	 */
 	createTransaction(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID,
-		request: TransactionCreateRequest,
-		created = DateTime.utc(),
-		entryIds?: readonly LedgerTransactionEntryID[]
+		transaction: LedgerTransaction
 	): Effect.Effect<LedgerTransaction, LedgerTransactionCreateRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
-			const accountIds = [...new Set(request.ledgerEntries.map(entry => entry.accountId))].sort();
-			const accounts = yield* this.readAccounts(organizationId, ledgerId, accountIds);
-			const transaction = yield* LedgerTransaction.fromCreateRequest(
-				transactionId,
-				organizationId,
-				ledgerId,
-				request,
-				created as DateTime<true>,
-				entryIds
-			);
 			const entries = Option.getOrThrow(transaction.entries);
+			const accountIds = [...new Set(entries.map(entry => entry.accountId.toString()))].sort();
+			const accounts = yield* this.readAccounts(
+				transaction.organizationId,
+				transaction.ledgerId,
+				accountIds
+			);
 			const updatedAccounts = yield* this.applyEntriesToAccounts(
 				accounts,
 				entries,
@@ -286,7 +268,15 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 								.insert(LedgerTransactionEntriesTable)
 								.values(entries.map(entry => entry.toRow(transaction)))
 						),
-						Effect.andThen(this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts))
+						Effect.andThen(
+							this.writeAccounts(
+								tx,
+								transaction.organizationId,
+								transaction.ledgerId,
+								accounts,
+								updatedAccounts
+							)
+						)
 					)
 			);
 

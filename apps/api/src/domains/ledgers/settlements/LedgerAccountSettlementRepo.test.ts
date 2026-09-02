@@ -1,5 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { DateTime } from "luxon";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Config } from "@/config";
@@ -66,8 +67,8 @@ const settlement = (
 		normalBalance: "debit",
 		currency: "USD",
 		status: "drafting",
-		created: new Date(),
-		updated: new Date(),
+		created: DateTime.utc(),
+		updated: DateTime.utc(),
 		...overrides,
 	});
 
@@ -177,7 +178,7 @@ describe("LedgerAccountSettlementRepoLive", () => {
 		const record = settlement(context, {
 			description: "Settlement",
 			externalReference: "external-1",
-			effectiveAtUpperBound: new Date("2026-08-01T00:00:00.000Z"),
+			effectiveAtUpperBound: DateTime.fromISO("2026-08-01T00:00:00.000Z", { zone: "utc" }),
 			metadata: { source: "test" },
 		});
 		const created = await runRepo(repository => repository.createSettlement(record));
@@ -191,7 +192,7 @@ describe("LedgerAccountSettlementRepoLive", () => {
 			externalReference: "external-1",
 			metadata: { source: "test" },
 		});
-		expect(loaded.effectiveAtUpperBound).toEqual(new Date("2026-08-01T00:00:00.000Z"));
+		expect(loaded.effectiveAtUpperBound?.toISO()).toBe("2026-08-01T00:00:00.000Z");
 		expect(otherLedger.ledgerId).not.toEqual(context.ledgerId);
 	});
 
@@ -220,8 +221,12 @@ describe("LedgerAccountSettlementRepoLive", () => {
 	it("lists only the requested Organization and Ledger in descending Created Time order", async () => {
 		const listContext = await createContext();
 		const listOtherLedger = await createContext(listContext.organizationId, false);
-		const older = settlement(listContext, { created: new Date("2026-01-01T00:00:00.000Z") });
-		const newer = settlement(listContext, { created: new Date("2026-02-01T00:00:00.000Z") });
+		const older = settlement(listContext, {
+			created: DateTime.fromISO("2026-01-01T00:00:00.000Z", { zone: "utc" }),
+		});
+		const newer = settlement(listContext, {
+			created: DateTime.fromISO("2026-02-01T00:00:00.000Z", { zone: "utc" }),
+		});
 		await runRepo(repository =>
 			Effect.all([
 				repository.createSettlement(older),
@@ -246,7 +251,7 @@ describe("LedgerAccountSettlementRepoLive", () => {
 		const original = await runRepo(repository =>
 			repository.createSettlement(settlement(context, { description: "Original" }))
 		);
-		const replacementCreated = new Date("2025-01-01T00:00:00.000Z");
+		const replacementCreated = DateTime.fromISO("2025-01-01T00:00:00.000Z", { zone: "utc" });
 		const updated = await runRepo(repository =>
 			repository.updateSettlement(
 				new LedgerAccountSettlementEntity({
@@ -283,11 +288,11 @@ describe("LedgerAccountSettlementRepoLive", () => {
 		vi.setSystemTime(constructionTime);
 		const update = repository.updateSettlement(original);
 		vi.setSystemTime(updateTime);
-		expect((await runtime.runPromise(update)).updated).toEqual(updateTime);
+		expect((await runtime.runPromise(update)).updated.toJSDate()).toEqual(updateTime);
 
 		const statusUpdate = repository.updateStatus(context.organizationId, original.id, "processing");
 		vi.setSystemTime(statusTime);
-		expect((await runtime.runPromise(statusUpdate)).updated).toEqual(statusTime);
+		expect((await runtime.runPromise(statusUpdate)).updated.toJSDate()).toEqual(statusTime);
 	});
 
 	it("validates Entry eligibility and retains links during Pending rollback", async () => {

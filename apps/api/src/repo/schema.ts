@@ -367,6 +367,7 @@ const LedgerAccountSettlementsTable = pgTable(
 	})
 );
 type LedgerAccountSettlementRow = typeof LedgerAccountSettlementsTable.$inferSelect;
+type LedgerAccountSettlementInsert = typeof LedgerAccountSettlementsTable.$inferInsert;
 type LedgerAccountSettlementInsertRow = Required<typeof LedgerAccountSettlementsTable.$inferInsert>;
 
 // Junction table for settlement entries
@@ -573,6 +574,7 @@ export type {
 	LedgerAccountCategoryRow,
 	LedgerAccountSettlementEntryInsertRow,
 	LedgerAccountSettlementEntryRow,
+	LedgerAccountSettlementInsert,
 	LedgerAccountSettlementInsertRow,
 	LedgerAccountSettlementRow,
 	LedgerAccountStatementInsertRow,

@@ -2,18 +2,16 @@ import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
 import type { LedgerInsertRow, LedgerRow, LedgerUpdateRow } from "@/repo/schema";
-import { parseId } from "@/lib/utils";
+import { type Metadata, parseId } from "@/lib/utils";
 import type { LedgerCreateRequest, LedgerResponse, LedgerUpdateRequest } from "./LedgerSchema";
 import { LedgerPersistenceDecodingFailure } from "./LedgerErrors";
-
-type LedgerMetadata = Readonly<Record<string, string>>;
 
 type LedgerOptions = {
 	readonly id: LedgerID;
 	readonly organizationId: OrgID;
 	readonly name: string;
 	readonly description?: string;
-	readonly metadata?: LedgerMetadata;
+	readonly metadata?: Metadata;
 	readonly created: DateTime;
 	readonly updated: DateTime;
 };
@@ -24,7 +22,7 @@ const decodeDate = (value: Date): DateTime => {
 	return date;
 };
 
-const decodeMetadata = (value: string | null): LedgerMetadata | undefined => {
+const decodeMetadata = (value: string | null): Metadata | undefined => {
 	if (value === null) return undefined;
 	const decoded: unknown = JSON.parse(value);
 	if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
@@ -47,7 +45,7 @@ class Ledger {
 	readonly organizationId: OrgID;
 	readonly name: string;
 	readonly description?: string;
-	readonly metadata?: LedgerMetadata;
+	readonly metadata?: Metadata;
 	readonly created: DateTime;
 	readonly updated: DateTime;
 
@@ -137,5 +135,5 @@ class Ledger {
 	}
 }
 
-export type { LedgerMetadata, LedgerOptions };
+export type { LedgerOptions };
 export { Ledger };

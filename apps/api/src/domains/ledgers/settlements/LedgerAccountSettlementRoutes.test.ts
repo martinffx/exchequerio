@@ -1,5 +1,6 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, InjectOptions } from "fastify";
 import { Effect, Layer } from "effect";
+import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -52,7 +53,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 	const ledgerIdStr = ledgerId.toString();
 	const differentLedgerIdStr = new TypeID("lgr").toString();
 	const settlementIdStr = settlementId.toString();
-	const fixedDate = new Date("2025-01-01T00:00:00.000Z");
+	const fixedDate = DateTime.fromISO("2025-01-01T00:00:00.000Z", { zone: "utc" });
 	const mockSettlement = new LedgerAccountSettlementEntity({
 		id: settlementId,
 		organizationId: orgId,
@@ -85,6 +86,19 @@ describe("LedgerAccountSettlementRoutes", () => {
 				makeDatabaseLive(config.databaseUrl),
 				Layer.succeed(LedgerAccountSettlementServiceTag, mockLedgerAccountSettlementService)
 			) as ServerRuntimeLayer,
+		});
+		const inject = server.inject.bind(server);
+		Object.defineProperty(server, "inject", {
+			value: (options: InjectOptions) =>
+				inject({
+					...options,
+					headers: {
+						...options.headers,
+						...(["POST", "PUT", "PATCH", "DELETE"].includes(options.method ?? "GET")
+							? { "idempotency-key": "settlement-test" }
+							: {}),
+					},
+				}),
 		});
 	});
 
@@ -313,6 +327,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(mockLedgerAccountSettlementService.createLedgerAccountSettlement).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
+				"settlement-test",
 				expect.objectContaining({
 					settledAccountId: settledAccountId.toString(),
 					contraAccountId: contraAccountId.toString(),
@@ -588,7 +603,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(mockLedgerAccountSettlementService.deleteLedgerAccountSettlement).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
-				expect.objectContaining({ prefix: "las" })
+				expect.objectContaining({ prefix: "las" }),
+				"settlement-test"
 			);
 		});
 
@@ -604,7 +620,8 @@ describe("LedgerAccountSettlementRoutes", () => {
 			expect(rs.statusCode).toBe(200);
 			expect(mockLedgerAccountSettlementService.deleteLedgerAccountSettlement).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
-				expect.objectContaining({ prefix: "las" })
+				expect.objectContaining({ prefix: "las" }),
+				"settlement-test"
 			);
 		});
 
@@ -686,6 +703,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" }),
+				"settlement-test",
 				expect.any(Array)
 			);
 		});
@@ -709,6 +727,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" }),
+				"settlement-test",
 				[entryId]
 			);
 		});
@@ -835,6 +854,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" }),
+				"settlement-test",
 				expect.any(Array)
 			);
 		});
@@ -858,6 +878,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 			).toHaveBeenCalledWith(
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "las" }),
+				"settlement-test",
 				[entryId]
 			);
 		});
@@ -985,6 +1006,7 @@ describe("LedgerAccountSettlementRoutes", () => {
 				expect.objectContaining({ prefix: "org" }),
 				expect.objectContaining({ prefix: "lgr" }),
 				expect.objectContaining({ prefix: "las" }),
+				"settlement-test",
 				"processing"
 			);
 		});

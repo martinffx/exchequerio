@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { DateTime } from "luxon";
 
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import {
 	newLedgerTransactionEntryID,
 	type LedgerAccountID,
@@ -20,8 +20,6 @@ import type {
 
 type LedgerTransactionEntryDirection = "debit" | "credit";
 type LedgerTransactionEntryStatus = "pending" | "posted" | "voided";
-type LedgerTransactionEntryMetadata = Readonly<Record<string, string>>;
-
 type LedgerTransactionEntryOptions = Readonly<{
 	id: LedgerTransactionEntryID;
 	accountId: LedgerAccountID;
@@ -29,7 +27,7 @@ type LedgerTransactionEntryOptions = Readonly<{
 	amount: number;
 	currency: string;
 	status: LedgerTransactionEntryStatus;
-	metadata?: LedgerTransactionEntryMetadata;
+	metadata?: Metadata;
 	created: DateTime;
 }>;
 
@@ -51,7 +49,7 @@ class LedgerTransactionEntry {
 	readonly amount: number;
 	readonly currency: string;
 	readonly status: LedgerTransactionEntryStatus;
-	readonly metadata?: LedgerTransactionEntryMetadata;
+	readonly metadata?: Metadata;
 	readonly created: DateTime;
 
 	private constructor(options: LedgerTransactionEntryOptions) {
@@ -63,6 +61,10 @@ class LedgerTransactionEntry {
 		this.status = options.status;
 		this.metadata = options.metadata;
 		this.created = options.created;
+	}
+
+	static create(options: LedgerTransactionEntryOptions): LedgerTransactionEntry {
+		return new LedgerTransactionEntry(options);
 	}
 
 	/**
@@ -171,7 +173,6 @@ class LedgerTransactionEntry {
 
 export type {
 	LedgerTransactionEntryDirection,
-	LedgerTransactionEntryMetadata,
 	LedgerTransactionEntryOptions,
 	LedgerTransactionEntryStatus,
 };

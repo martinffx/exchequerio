@@ -1,4 +1,5 @@
 import { Effect, Layer } from "effect";
+import { DateTime } from "luxon";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Ledger } from "@/domains/ledgers/Ledger";
@@ -16,6 +17,7 @@ import {
 	type LedgerAccountID,
 	type LedgerAccountSettlementID,
 	type LedgerID,
+	type LedgerTransactionID,
 	type OrgID,
 	newLedgerAccountID,
 	newLedgerAccountSettlementID,
@@ -23,6 +25,11 @@ import {
 	newLedgerTransactionID,
 	newOrgID,
 } from "@/repo/entities/types";
+import {
+	type IdempotencyService,
+	IdempotencyServiceTag,
+	type IdempotentOperation,
+} from "@/services/IdempotencyService";
 
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import {
@@ -44,6 +51,7 @@ const ledgerId = newLedgerID();
 const settlementId = newLedgerAccountSettlementID();
 const settledAccountId = newLedgerAccountID();
 const contraAccountId = newLedgerAccountID();
+const idempotencyKey = "settlement-test";
 
 const request = (overrides: Partial<LedgerAccountSettlementRequest> = {}) => ({
 	transactionId: newLedgerTransactionID().toString(),
@@ -69,8 +77,8 @@ const entity = (
 		status: "drafting",
 		description: "Monthly settlement",
 		metadata: { caller: "value", settlementId: "caller-value" },
-		created: new Date("2026-08-01T00:00:00.000Z"),
-		updated: new Date("2026-08-01T00:00:00.000Z"),
+		created: DateTime.fromISO("2026-08-01T00:00:00.000Z", { zone: "utc" }),
+		updated: DateTime.fromISO("2026-08-01T00:00:00.000Z", { zone: "utc" }),
 		...overrides,
 	});
 
@@ -93,6 +101,7 @@ const makeTest = (
 		ledger?: Partial<LedgerService>;
 		account?: Partial<AccountService>;
 		transaction?: Partial<TransactionService>;
+		idempotency?: Partial<IdempotencyService>;
 	} = {}
 ) => {
 	const repository: LedgerAccountSettlementRepo = {
@@ -100,6 +109,13 @@ const makeTest = (
 		getSettlement: vi.fn(() => Effect.succeed(entity())),
 		createSettlement: vi.fn(record => Effect.succeed(record)),
 		updateSettlement: vi.fn(record => Effect.succeed(record)),
+		updateAmount: vi.fn((_organizationId, _settlementId, amount: number) =>
+			Effect.succeed(entity({ amount }))
+		),
+		linkTransaction: vi.fn(
+			(_organizationId, _settlementId, transactionId: ReturnType<typeof newLedgerTransactionID>) =>
+				Effect.succeed(entity({ transactionId }))
+		),
 		deleteSettlement: vi.fn(() => Effect.void),
 		addEntriesToSettlement: vi.fn(() => Effect.void),
 		removeEntriesFromSettlement: vi.fn(() => Effect.void),
@@ -141,18 +157,27 @@ const makeTest = (
 		createTransaction: vi.fn(() =>
 			Effect.succeed({ id: newLedgerTransactionID(), status: "posted" } as LedgerTransaction)
 		),
+		createTransactionEntity: vi.fn((_key, created) => Effect.succeed(created)),
 		updateTransaction: unexpected,
 		postTransaction: unexpected,
 		voidTransaction: unexpected,
 		...overrides.transaction,
 	};
+	const idempotency: IdempotencyService = overrides.idempotency?.run
+		? ({ run: overrides.idempotency.run } satisfies IdempotencyService)
+		: {
+				run<A, E, R>(operation: IdempotentOperation<A, E, R>) {
+					return operation.execute;
+				},
+			};
 	const layer = ledgerAccountSettlementServiceLayer.pipe(
 		Layer.provide(
 			Layer.mergeAll(
 				Layer.succeed(LedgerAccountSettlementRepoTag, repository),
 				Layer.succeed(LedgerServiceTag, ledger),
 				Layer.succeed(AccountServiceTag, accounts),
-				Layer.succeed(TransactionServiceTag, transaction)
+				Layer.succeed(TransactionServiceTag, transaction),
+				Layer.succeed(IdempotencyServiceTag, idempotency)
 			)
 		)
 	);
@@ -160,7 +185,7 @@ const makeTest = (
 		Effect.runPromise(
 			LedgerAccountSettlementServiceTag.pipe(Effect.flatMap(use), Effect.provide(layer))
 		);
-	return { accounts, ledger, repository, run, transaction };
+	return { accounts, idempotency, ledger, repository, run, transaction };
 };
 
 afterEach(() => {
@@ -198,7 +223,7 @@ describe("LedgerAccountSettlementService", () => {
 	it("loads both Accounts and creates with the settled Account currency and Normal Balance", async () => {
 		const test = makeTest();
 		const result = await test.run(service =>
-			service.createLedgerAccountSettlement(organizationId, ledgerId, request())
+			service.createLedgerAccountSettlement(organizationId, ledgerId, idempotencyKey, request())
 		);
 
 		expect(test.accounts.getAccount).toHaveBeenCalledTimes(2);
@@ -227,7 +252,7 @@ describe("LedgerAccountSettlementService", () => {
 		});
 
 		const result = test.run(service =>
-			service.createLedgerAccountSettlement(organizationId, ledgerId, request())
+			service.createLedgerAccountSettlement(organizationId, ledgerId, idempotencyKey, request())
 		);
 		try {
 			await vi.waitFor(() => expect(started).toHaveLength(2));
@@ -251,7 +276,9 @@ describe("LedgerAccountSettlementService", () => {
 		});
 
 		await expect(
-			test.run(service => service.createLedgerAccountSettlement(organizationId, ledgerId, request()))
+			test.run(service =>
+				service.createLedgerAccountSettlement(organizationId, ledgerId, idempotencyKey, request())
+			)
 		).rejects.toThrow(ConflictError);
 		expect(test.repository.createSettlement).not.toHaveBeenCalled();
 	});
@@ -283,11 +310,17 @@ describe("LedgerAccountSettlementService", () => {
 		});
 
 		const result = await test.run(service =>
-			service.updateLedgerAccountSettlement(organizationId, ledgerId, settlementId, request())
+			service.updateLedgerAccountSettlement(
+				organizationId,
+				ledgerId,
+				settlementId,
+				idempotencyKey,
+				request()
+			)
 		);
 		expect(calls).toEqual(["account", "account", "settlement"]);
-		expect(result.created).toEqual(now);
-		expect(result.updated).toEqual(now);
+		expect(result.created.toJSDate()).toEqual(now);
+		expect(result.updated.toJSDate()).toEqual(now);
 	});
 
 	it.each([
@@ -303,7 +336,13 @@ describe("LedgerAccountSettlementService", () => {
 
 		expect(
 			await test.run(service =>
-				service.transitionSettlementStatus(organizationId, ledgerId, settlementId, target)
+				service.transitionSettlementStatus(
+					organizationId,
+					ledgerId,
+					settlementId,
+					idempotencyKey,
+					target
+				)
 			)
 		).toMatchObject({ status: target });
 	});
@@ -312,7 +351,13 @@ describe("LedgerAccountSettlementService", () => {
 		const test = makeTest();
 		await expect(
 			test.run(service =>
-				service.transitionSettlementStatus(organizationId, ledgerId, settlementId, "posted")
+				service.transitionSettlementStatus(
+					organizationId,
+					ledgerId,
+					settlementId,
+					idempotencyKey,
+					"posted"
+				)
 			)
 		).rejects.toThrow(ConflictError);
 		expect(test.repository.updateStatus).not.toHaveBeenCalled();
@@ -322,13 +367,19 @@ describe("LedgerAccountSettlementService", () => {
 		const test = makeTest({
 			repository: {
 				getSettlement: vi.fn(() => Effect.succeed(entity({ status: "processing" }))),
-				updateSettlement: vi.fn(() => Effect.fail(new ConflictError("drafting only"))),
+				updateAmount: vi.fn(() => Effect.fail(new ConflictError("drafting only"))),
 			},
 		});
 
 		await expect(
 			test.run(service =>
-				service.transitionSettlementStatus(organizationId, ledgerId, settlementId, "pending")
+				service.transitionSettlementStatus(
+					organizationId,
+					ledgerId,
+					settlementId,
+					idempotencyKey,
+					"pending"
+				)
 			)
 		).rejects.toThrow(ConflictError);
 		expect(test.repository.calculateAmount).toHaveBeenCalledWith(settlementId);
@@ -337,15 +388,15 @@ describe("LedgerAccountSettlementService", () => {
 
 	it("creates the Posted Transaction before linking and preserves posting fields", async () => {
 		const calls: string[] = [];
-		const transactionId = newLedgerTransactionID();
 		const test = makeTest({
 			repository: {
 				getSettlement: vi.fn(() => Effect.succeed(entity({ status: "pending" }))),
-				updateSettlement: vi.fn((record: LedgerAccountSettlementEntity) =>
-					Effect.sync(() => {
-						calls.push("link");
-						return record;
-					})
+				linkTransaction: vi.fn(
+					(_organizationId, _settlementId, linkedTransactionId: LedgerTransactionID) =>
+						Effect.sync(() => {
+							calls.push("link");
+							return entity({ transactionId: linkedTransactionId });
+						})
 				),
 				updateStatus: vi.fn(
 					(_organizationId: OrgID, _id: LedgerAccountSettlementID, status: SettlementStatus) =>
@@ -356,41 +407,31 @@ describe("LedgerAccountSettlementService", () => {
 				),
 			},
 			transaction: {
-				createTransaction: vi.fn((_organizationId, _ledgerId, _key, _request) =>
+				createTransactionEntity: vi.fn((_key, transaction: LedgerTransaction) =>
 					Effect.sync(() => {
 						calls.push("transaction");
-						return { id: transactionId, status: "posted" } as LedgerTransaction;
+						return transaction;
 					})
 				),
 			},
 		});
 
 		await test.run(service =>
-			service.transitionSettlementStatus(organizationId, ledgerId, settlementId, "posted")
+			service.transitionSettlementStatus(
+				organizationId,
+				ledgerId,
+				settlementId,
+				idempotencyKey,
+				"posted"
+			)
 		);
 		expect(calls).toEqual(["transaction", "link", "status"]);
-		expect(test.transaction.createTransaction).toHaveBeenCalledWith(
-			organizationId,
-			ledgerId,
-			`settlement:${settlementId.toString()}`,
+		expect(test.transaction.createTransactionEntity).toHaveBeenCalledWith(
+			idempotencyKey,
 			expect.objectContaining({
 				status: "posted",
 				description: "Monthly settlement",
 				metadata: { caller: "value", settlementId: settlementId.toString() },
-				ledgerEntries: [
-					expect.objectContaining({
-						accountId: settledAccountId.toString(),
-						direction: "credit",
-						amount: 125,
-						currencyCode: "USD",
-					}),
-					expect.objectContaining({
-						accountId: contraAccountId.toString(),
-						direction: "debit",
-						amount: 125,
-						currencyCode: "USD",
-					}),
-				],
 			})
 		);
 	});
@@ -399,20 +440,26 @@ describe("LedgerAccountSettlementService", () => {
 		const test = makeTest({
 			repository: {
 				getSettlement: vi.fn(() => Effect.succeed(entity({ status: "pending" }))),
-				updateSettlement: vi.fn(() => Effect.fail(new ConflictError("drafting only"))),
+				linkTransaction: vi.fn(() => Effect.fail(new ConflictError("link failed"))),
 			},
 		});
 		await expect(
 			test.run(service =>
-				service.transitionSettlementStatus(organizationId, ledgerId, settlementId, "posted")
+				service.transitionSettlementStatus(
+					organizationId,
+					ledgerId,
+					settlementId,
+					idempotencyKey,
+					"posted"
+				)
 			)
 		).rejects.toThrow(ConflictError);
-		expect(test.transaction.createTransaction).toHaveBeenCalledOnce();
+		expect(test.transaction.createTransactionEntity).toHaveBeenCalledOnce();
 		expect(test.repository.updateStatus).not.toHaveBeenCalled();
 	});
 
 	it("does not link or change status when Transaction creation fails or is not Posted", async () => {
-		for (const createTransaction of [
+		for (const createTransactionEntity of [
 			vi.fn(() => Effect.fail(new TransactionValidationFailure("transaction failed"))),
 			vi.fn(() =>
 				Effect.succeed({ id: newLedgerTransactionID(), status: "pending" } as LedgerTransaction)
@@ -422,14 +469,20 @@ describe("LedgerAccountSettlementService", () => {
 				repository: {
 					getSettlement: vi.fn(() => Effect.succeed(entity({ status: "pending" }))),
 				},
-				transaction: { createTransaction },
+				transaction: { createTransactionEntity },
 			});
 			await expect(
 				test.run(service =>
-					service.transitionSettlementStatus(organizationId, ledgerId, settlementId, "posted")
+					service.transitionSettlementStatus(
+						organizationId,
+						ledgerId,
+						settlementId,
+						idempotencyKey,
+						"posted"
+					)
 				)
 			).rejects.toThrow();
-			expect(test.repository.updateSettlement).not.toHaveBeenCalled();
+			expect(test.repository.linkTransaction).not.toHaveBeenCalled();
 			expect(test.repository.updateStatus).not.toHaveBeenCalled();
 		}
 	});
@@ -439,7 +492,13 @@ describe("LedgerAccountSettlementService", () => {
 			repository: { getSettlement: vi.fn(() => Effect.succeed(entity({ status: "pending" }))) },
 		});
 		await test.run(service =>
-			service.transitionSettlementStatus(organizationId, ledgerId, settlementId, "drafting")
+			service.transitionSettlementStatus(
+				organizationId,
+				ledgerId,
+				settlementId,
+				idempotencyKey,
+				"drafting"
+			)
 		);
 		expect(test.repository.updateStatus).toHaveBeenCalledOnce();
 		expect(test.repository.removeEntriesFromSettlement).not.toHaveBeenCalled();

@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { Effect, Result } from "effect";
 import type { FastifyPluginAsync } from "fastify";
-import { TypeID } from "typeid-js";
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -12,6 +11,9 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
+import { IdempotencyHeaders } from "@/lib/IdempotencySchema";
+import { parseId } from "@/lib/utils";
+import type { LedgerAccountSettlementID, LedgerID } from "@/repo/entities/types";
 import {
 	LedgerAccountSettlementCollectionParameters as LedgerIdParams,
 	LedgerAccountSettlementEntriesRequest,
@@ -49,14 +51,14 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async rq => {
 			const orgId = rq.token.orgId;
-			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const result = await rq.server.runtime.runPromise(
-				Effect.result(
+			const effect = parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId).pipe(
+				Effect.flatMap(ledgerId =>
 					LedgerAccountSettlementServiceTag.use(service =>
 						service.listLedgerAccountSettlements(orgId, ledgerId, rq.query.offset, rq.query.limit)
 					)
 				)
 			);
+			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
 				onSuccess: settlements => settlements.map(settlement => settlement.toResponse()),
 				onFailure: error => {
@@ -92,14 +94,14 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async rq => {
 			const orgId = rq.token.orgId;
-			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
-			const result = await rq.server.runtime.runPromise(
-				Effect.result(
+			const effect = parseId<"las", LedgerAccountSettlementID>("las", rq.params.settlementId).pipe(
+				Effect.flatMap(settlementId =>
 					LedgerAccountSettlementServiceTag.use(service =>
 						service.getLedgerAccountSettlement(orgId, settlementId)
 					)
 				)
 			);
+			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
 				onSuccess: settlement => settlement.toResponse(),
 				onFailure: error => {
@@ -111,6 +113,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 
 	server.post<{
 		Params: LedgerIdParams;
+		Headers: IdempotencyHeaders;
 		Body: LedgerAccountSettlementRequest;
 	}>(
 		"/",
@@ -121,6 +124,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				summary: "Create Ledger Account Settlement",
 				description: "Create a new settlement in drafting status",
 				params: LedgerIdParams,
+				headers: IdempotencyHeaders,
 				body: LedgerAccountSettlementRequest,
 				response: {
 					200: LedgerAccountSettlementResponse,
@@ -137,14 +141,14 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async rq => {
 			const orgId = rq.token.orgId;
-			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const result = await rq.server.runtime.runPromise(
-				Effect.result(
+			const effect = parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId).pipe(
+				Effect.flatMap(ledgerId =>
 					LedgerAccountSettlementServiceTag.use(service =>
-						service.createLedgerAccountSettlement(orgId, ledgerId, rq.body)
+						service.createLedgerAccountSettlement(orgId, ledgerId, rq.headers["idempotency-key"], rq.body)
 					)
 				)
 			);
+			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
 				onSuccess: settlement => settlement.toResponse(),
 				onFailure: error => {
@@ -156,6 +160,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 
 	server.put<{
 		Params: LedgerIdParams & LedgerAccountSettlementIdParams;
+		Headers: IdempotencyHeaders;
 		Body: LedgerAccountSettlementRequest;
 	}>(
 		"/:settlementId",
@@ -166,6 +171,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				summary: "Update Ledger Account Settlement",
 				description: "Update a settlement (only in drafting status)",
 				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
+				headers: IdempotencyHeaders,
 				body: LedgerAccountSettlementRequest,
 				response: {
 					200: LedgerAccountSettlementResponse,
@@ -183,15 +189,23 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async rq => {
 			const orgId = rq.token.orgId;
-			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
-			const result = await rq.server.runtime.runPromise(
-				Effect.result(
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"las", LedgerAccountSettlementID>("las", rq.params.settlementId),
+			]).pipe(
+				Effect.flatMap(([ledgerId, settlementId]) =>
 					LedgerAccountSettlementServiceTag.use(service =>
-						service.updateLedgerAccountSettlement(orgId, ledgerId, settlementId, rq.body)
+						service.updateLedgerAccountSettlement(
+							orgId,
+							ledgerId,
+							settlementId,
+							rq.headers["idempotency-key"],
+							rq.body
+						)
 					)
 				)
 			);
+			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
 				onSuccess: settlement => settlement.toResponse(),
 				onFailure: error => {
@@ -203,6 +217,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 
 	server.delete<{
 		Params: LedgerIdParams & LedgerAccountSettlementIdParams;
+		Headers: IdempotencyHeaders;
 	}>(
 		"/:settlementId",
 		{
@@ -212,6 +227,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				summary: "Delete Ledger Account Settlement",
 				description: "Delete a settlement (only in drafting status)",
 				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
+				headers: IdempotencyHeaders,
 				response: {
 					200: {},
 					400: BadRequestErrorResponse,
@@ -228,14 +244,14 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async rq => {
 			const orgId = rq.token.orgId;
-			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
-			const result = await rq.server.runtime.runPromise(
-				Effect.result(
+			const effect = parseId<"las", LedgerAccountSettlementID>("las", rq.params.settlementId).pipe(
+				Effect.flatMap(settlementId =>
 					LedgerAccountSettlementServiceTag.use(service =>
-						service.deleteLedgerAccountSettlement(orgId, settlementId)
+						service.deleteLedgerAccountSettlement(orgId, settlementId, rq.headers["idempotency-key"])
 					)
 				)
 			);
+			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
 				onSuccess: () => undefined,
 				onFailure: error => {
@@ -247,6 +263,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 
 	server.patch<{
 		Params: LedgerIdParams & LedgerAccountSettlementIdParams;
+		Headers: IdempotencyHeaders;
 		Body: LedgerAccountSettlementEntriesRequest;
 	}>(
 		"/:settlementId/entries",
@@ -258,6 +275,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				description:
 					"Attach ledger entries to a drafting settlement. Only entries from the settled account that are posted can be attached.",
 				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
+				headers: IdempotencyHeaders,
 				body: LedgerAccountSettlementEntriesRequest,
 				response: {
 					200: {},
@@ -275,14 +293,19 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async rq => {
 			const orgId = rq.token.orgId;
-			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
-			const result = await rq.server.runtime.runPromise(
-				Effect.result(
+			const effect = parseId<"las", LedgerAccountSettlementID>("las", rq.params.settlementId).pipe(
+				Effect.flatMap(settlementId =>
 					LedgerAccountSettlementServiceTag.use(service =>
-						service.addLedgerAccountSettlementEntries(orgId, settlementId, rq.body.entries)
+						service.addLedgerAccountSettlementEntries(
+							orgId,
+							settlementId,
+							rq.headers["idempotency-key"],
+							rq.body.entries
+						)
 					)
 				)
 			);
+			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
 				onSuccess: () => undefined,
 				onFailure: error => {
@@ -294,6 +317,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 
 	server.delete<{
 		Params: LedgerIdParams & LedgerAccountSettlementIdParams;
+		Headers: IdempotencyHeaders;
 		Body: LedgerAccountSettlementEntriesRequest;
 	}>(
 		"/:settlementId/entries",
@@ -304,6 +328,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 				summary: "Remove Ledger Account Settlement Entries",
 				description: "Remove ledger entries from a drafting settlement.",
 				params: Type.Composite([LedgerIdParams, LedgerAccountSettlementIdParams]),
+				headers: IdempotencyHeaders,
 				body: LedgerAccountSettlementEntriesRequest,
 				response: {
 					200: {},
@@ -321,14 +346,19 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async rq => {
 			const orgId = rq.token.orgId;
-			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
-			const result = await rq.server.runtime.runPromise(
-				Effect.result(
+			const effect = parseId<"las", LedgerAccountSettlementID>("las", rq.params.settlementId).pipe(
+				Effect.flatMap(settlementId =>
 					LedgerAccountSettlementServiceTag.use(service =>
-						service.removeLedgerAccountSettlementEntries(orgId, settlementId, rq.body.entries)
+						service.removeLedgerAccountSettlementEntries(
+							orgId,
+							settlementId,
+							rq.headers["idempotency-key"],
+							rq.body.entries
+						)
 					)
 				)
 			);
+			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
 				onSuccess: () => undefined,
 				onFailure: error => {
@@ -340,6 +370,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 
 	server.post<{
 		Params: LedgerIdParams & LedgerAccountSettlementIdParams & { status: SettlementStatus };
+		Headers: IdempotencyHeaders;
 	}>(
 		"/:settlementId/:status",
 		{
@@ -353,6 +384,7 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 					LedgerAccountSettlementIdParams,
 					Type.Object({ status: SettlementStatus }),
 				]),
+				headers: IdempotencyHeaders,
 				response: {
 					200: LedgerAccountSettlementResponse,
 					400: BadRequestErrorResponse,
@@ -369,17 +401,25 @@ const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 		},
 		async rq => {
 			const orgId = rq.token.orgId;
-			const ledgerId = TypeID.fromString<"lgr">(rq.params.ledgerId);
-			const settlementId = TypeID.fromString<"las">(rq.params.settlementId);
 			const targetStatus = rq.params.status;
-
-			const result = await rq.server.runtime.runPromise(
-				Effect.result(
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"las", LedgerAccountSettlementID>("las", rq.params.settlementId),
+			]).pipe(
+				Effect.flatMap(([ledgerId, settlementId]) =>
 					LedgerAccountSettlementServiceTag.use(service =>
-						service.transitionSettlementStatus(orgId, ledgerId, settlementId, targetStatus)
+						service.transitionSettlementStatus(
+							orgId,
+							ledgerId,
+							settlementId,
+							rq.headers["idempotency-key"],
+							targetStatus
+						)
 					)
 				)
 			);
+
+			const result = await rq.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
 				onSuccess: settlement => settlement.toResponse(),
 				onFailure: error => {

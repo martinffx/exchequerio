@@ -1,8 +1,48 @@
 {
 	"feature": "settlements-effect",
 	"spec": "docs/specs/2026-08-29-settlements-effect/design.md",
-	"goal": "Migrate the Ledger Account Settlement slice to the shared Effect runtime without changing its observable behavior.",
+	"goal": "Migrate the Ledger Account Settlement slice to the shared Effect runtime and introduce service-layer idempotency for its mutating actions and nested Transaction creation.",
 	"phases": [
+		{
+			"id": "P0",
+			"name": "Shared idempotency capability",
+			"tasks": [
+				{
+					"id": "T0",
+					"name": "Replace Transaction-only claims with a shared service",
+					"depends_on": [],
+					"inputs": [
+						"Existing Valkey Transaction idempotency protocol",
+						"Organization-scoped client Idempotency-Key",
+						"Effect runtime and shared error conventions"
+					],
+					"description": "Add one Effect IdempotencyService used by domain services. Scope claims by Organization, action, and the unchanged client key; nested mutating service calls acquire distinct action-scoped claims with that same client key. Store only the completed resource ID and let the caller reload its source entity on replay. Keep header validation and forwarding in routes, with claim ownership in services.",
+					"files": {
+						"create": [
+							"apps/api/src/services/IdempotencyService.ts",
+							"apps/api/src/services/IdempotencyService.test.ts",
+							"apps/api/src/lib/IdempotencySchema.ts"
+						],
+						"modify": [
+							"apps/api/src/runtime.ts",
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionService.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"A completed claim contains only its resource ID",
+							"The same client key is independent across actions",
+							"Replay reloads the resource through the calling service"
+						],
+						"acceptance": [
+							"No Transaction-specific idempotency service remains",
+							"Idempotency is acquired by services rather than HTTP middleware",
+							"Nested Settlement posting and Transaction creation both acquire claims"
+						]
+					}
+				}
+			]
+		},
 		{
 			"id": "P1",
 			"name": "Domain contracts",
@@ -18,7 +58,7 @@
 						"Settlement row types in apps/api/src/repo/schema.ts",
 						"Existing TypeID helpers in apps/api/src/repo/entities/types.ts"
 					],
-					"description": "Create exact local TypeBox contracts and a relocated Settlement entity without changing validation or transformations. Keep ID and timestamp creation lazy at mutation time. Preserve metadata parsing, the empty Transaction ID response fallback, response omissions, full-record writes, Created Time replacement, and each immutable helper's timestamp behavior. Add narrow entity characterization tests before completing the relocation.",
+					"description": "Create exact local TypeBox contracts and a relocated Settlement entity. Use the shared Metadata type, Luxon DateTime, Effect-based request and row decoding, parseId, and schema-owned Drizzle insert type. The entity owns lifecycle transition validation and conversion to a balanced Posted LedgerTransaction entity. Do not add clone helpers for repository-owned amount or Transaction-link updates.",
 					"files": {
 						"create": [
 							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementSchema.ts",
@@ -34,7 +74,8 @@
 							"toResponse omits externalReference and effectiveAtUpperBound and returns an empty string when no Transaction is linked",
 							"Request conversion creates a fresh ID and timestamps or reuses the supplied Settlement ID while replacing Created and Updated Time",
 							"Row conversion and serialization preserve metadata, null handling, TypeIDs, and dates",
-							"withAmount, withStatus, and withTransactionId preserve all other fields and create a new Updated Time"
+							"transitionTo accepts every valid lifecycle edge and rejects invalid edges",
+							"toTransaction returns a balanced Posted LedgerTransaction entity with the correct directions and metadata precedence"
 						],
 						"acceptance": [
 							"The Settlement schema imports no legacy Ledger route schema",
@@ -93,7 +134,7 @@
 				{
 					"id": "T3",
 					"name": "Add the Effect Settlement service",
-					"depends_on": ["T1", "T2"],
+					"depends_on": ["T0", "T1", "T2"],
 					"inputs": [
 						"Current promise Settlement service and tests",
 						"LedgerServiceTag and AccountServiceTag",
@@ -101,7 +142,7 @@
 						"LedgerAccountSettlementRepoTag",
 						"Approved Settlement lifecycle and posting behavior"
 					],
-					"description": "Add the Effect Settlement service, Context.Service tag, and Layer. Move existing Ledger and Account orchestration from routes into the service. List verifies the Ledger before querying. Create and update explicitly load both Accounts concurrently and compare currencies; this is an approved deviation from the baseline's sequential Effect.all default. Update completes Account validation before checking whether the Settlement exists. Preserve the lifecycle table, amount calculation, Transaction request, metadata precedence, idempotency key, Entry directions, and all other partial-failure ordering.",
+					"description": "Add the Effect Settlement service, Context.Service tag, and Layer. Move Ledger and Account orchestration from routes into the service. Every mutating Settlement action acquires its own action-scoped idempotency claim. Posting asks the entity for a LedgerTransaction and calls TransactionService with the same client key, producing a second Transaction-scoped claim. Use focused repository operations for calculated amount and Transaction linkage; lifecycle validation remains on the entity.",
 					"files": {
 						"create": [
 							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementService.ts",
@@ -120,14 +161,14 @@
 							"Every lifecycle edge and invalid transition remains unchanged",
 							"processing to pending attempts the drafting-only full update and skips the status update when that write fails",
 							"pending to posted creates the Posted Transaction before linking it and skips the final status write when linking fails",
-							"Posting preserves the idempotency key, Entry directions, description fallback, and Settlement metadata precedence",
+							"Posting preserves the client idempotency key across distinct Settlement and Transaction action claims, Entry directions, description fallback, and Settlement metadata precedence",
 							"pending to drafting performs only the existing status update and does not release Entries",
 							"Transaction creation failure or a non-Posted result prevents linking and status mutation"
 						],
 						"acceptance": [
 							"All service methods return Effects",
 							"The service depends directly on existing Effect services without a promise bridge",
-							"No retry, transaction, clock, new error policy, or concurrency policy beyond the approved concurrent Account lookups is introduced",
+							"No transaction wrapper, clock policy, or concurrency policy beyond the approved concurrent Account lookups is introduced",
 							"Focused service tests pass"
 						]
 					}
@@ -147,7 +188,7 @@
 						"makeServerRuntimeLayer",
 						"Existing Ledger, Account, Transaction, database, and runtime services"
 					],
-					"description": "Export one Settlement Layer and add it to the server runtime. Supply it with the existing database and Ledger service Layers. Do not create another runtime, database client, executor, lifecycle hook, or Settlement-specific override.",
+					"description": "Export one Settlement Layer and add it to the server runtime. Supply it with the existing database, Ledger, Account, Transaction, and shared Idempotency Layers. Do not create another runtime, database client, executor, lifecycle hook, or Settlement-specific override.",
 					"files": {
 						"create": [],
 						"modify": [
@@ -178,7 +219,7 @@
 						"LedgerAccountSettlementServiceTag",
 						"Organization and Transaction route execution patterns"
 					],
-					"description": "Relocate all eight handlers and switch the Ledger router to the new slice. Preserve route paths, metadata, permissions, schemas, status codes, response serialization, and existing error advertisements. Each handler executes one Settlement program through the managed runtime. Keep item and Entry operations independent of the path Ledger where the baseline ignores it. Adapt the existing route suite to a mock Settlement service Layer without adding a reusable route harness or asserting runtime call counts.",
+					"description": "Relocate all eight handlers and switch the Ledger router to the new slice. Preserve route paths, permissions, status codes, and response serialization. Require and forward the shared Idempotency-Key header on every mutating action while leaving claim handling in the service. Each handler executes one Settlement program through the managed runtime.",
 					"files": {
 						"create": [
 							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRoutes.ts",
@@ -258,7 +299,7 @@
 						"acceptance": [
 							"No legacy Settlement repository, service decoration, promise bridge, or old Settlement schema import remains",
 							"Categories, Statements, and Balance Monitors retain their existing plugin and fixture wiring",
-							"The final diff contains no database migration, schema snapshot change, dependency update, new error hierarchy, retry, transaction wrapper, concurrency policy beyond the approved concurrent Account lookups, shared abstraction, or unrelated cleanup",
+							"The final diff contains no database migration, schema snapshot change, dependency update, transaction wrapper, concurrency policy beyond the approved concurrent Account lookups, or unrelated cleanup beyond the approved shared idempotency capability",
 							"Focused tests, the full API suite, build, types, repository checks, and full local CI pass"
 						]
 					}

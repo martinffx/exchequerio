@@ -4,7 +4,12 @@ import { Context, Effect, Layer } from "effect";
 
 import { DatabaseTag, type EffectDrizzleDatabase, postgresErrorCode } from "@/db";
 import { ConflictError, NotFoundError } from "@/lib/errors";
-import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
+import type {
+	LedgerAccountSettlementID,
+	LedgerID,
+	LedgerTransactionID,
+	OrgID,
+} from "@/repo/entities/types";
 import {
 	LedgerAccountSettlementEntriesTable,
 	LedgerAccountSettlementsTable,
@@ -14,22 +19,36 @@ import {
 } from "@/repo/schema";
 
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
+import { LedgerAccountSettlementPersistenceDecodingFailure } from "./LedgerAccountSettlementErrors";
 import type { SettlementStatus } from "./LedgerAccountSettlementSchema";
 
-type LedgerAccountSettlementListRepositoryError = EffectDrizzleQueryError;
-type LedgerAccountSettlementGetRepositoryError = EffectDrizzleQueryError | NotFoundError;
+type LedgerAccountSettlementListRepositoryError =
+	| EffectDrizzleQueryError
+	| LedgerAccountSettlementPersistenceDecodingFailure;
+type LedgerAccountSettlementGetRepositoryError =
+	| EffectDrizzleQueryError
+	| LedgerAccountSettlementPersistenceDecodingFailure
+	| NotFoundError;
 type LedgerAccountSettlementCreateRepositoryError =
 	| ConflictError
 	| EffectDrizzleQueryError
+	| LedgerAccountSettlementPersistenceDecodingFailure
 	| NotFoundError;
-type LedgerAccountSettlementUpdateRepositoryError = ConflictError | EffectDrizzleQueryError;
+type LedgerAccountSettlementUpdateRepositoryError =
+	| ConflictError
+	| EffectDrizzleQueryError
+	| LedgerAccountSettlementPersistenceDecodingFailure;
 type LedgerAccountSettlementDeleteRepositoryError = ConflictError | EffectDrizzleQueryError;
 type LedgerAccountSettlementEntryRepositoryError =
 	| ConflictError
 	| EffectDrizzleQueryError
+	| LedgerAccountSettlementPersistenceDecodingFailure
 	| NotFoundError;
 type LedgerAccountSettlementReadRepositoryError = EffectDrizzleQueryError;
-type LedgerAccountSettlementStatusRepositoryError = EffectDrizzleQueryError | NotFoundError;
+type LedgerAccountSettlementStatusRepositoryError =
+	| EffectDrizzleQueryError
+	| LedgerAccountSettlementPersistenceDecodingFailure
+	| NotFoundError;
 
 interface LedgerAccountSettlementRepo {
 	listSettlements(
@@ -47,6 +66,16 @@ interface LedgerAccountSettlementRepo {
 	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementCreateRepositoryError>;
 	updateSettlement(
 		entity: LedgerAccountSettlementEntity
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateRepositoryError>;
+	updateAmount(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		amount: number
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateRepositoryError>;
+	linkTransaction(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		transactionId: LedgerTransactionID
 	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateRepositoryError>;
 	deleteSettlement(
 		organizationId: OrgID,
@@ -104,7 +133,9 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 			.orderBy(desc(LedgerAccountSettlementsTable.created))
 			.limit(limit)
 			.offset(offset)
-			.pipe(Effect.map(rows => rows.map(row => LedgerAccountSettlementEntity.fromRow(row))));
+			.pipe(
+				Effect.flatMap(rows => Effect.all(rows.map(row => LedgerAccountSettlementEntity.fromRow(row))))
+			);
 	}
 
 	getSettlement(
@@ -123,9 +154,15 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 			.limit(1)
 			.pipe(
 				Effect.flatMap(rows =>
-					rows[0] === undefined
-						? Effect.fail(new NotFoundError(`Settlement not found: ${settlementId.toString()}`))
-						: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+					Effect.gen(function* () {
+						const row = rows[0];
+						if (row === undefined) {
+							return yield* Effect.fail(
+								new NotFoundError(`Settlement not found: ${settlementId.toString()}`)
+							);
+						}
+						return yield* LedgerAccountSettlementEntity.fromRow(row);
+					})
 				)
 			);
 	}
@@ -138,7 +175,7 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 			.values(entity.toRow())
 			.returning()
 			.pipe(
-				Effect.map(rows => LedgerAccountSettlementEntity.fromRow(rows[0])),
+				Effect.flatMap(rows => LedgerAccountSettlementEntity.fromRow(rows[0])),
 				Effect.mapError(error => {
 					const code = postgresErrorCode(error);
 					if (code === "23503") {
@@ -166,9 +203,75 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 				.returning()
 				.pipe(
 					Effect.flatMap(rows =>
-						rows[0] === undefined
-							? Effect.fail(new ConflictError("Settlement not found or not in drafting status"))
-							: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+						Effect.gen(function* () {
+							const row = rows[0];
+							if (row === undefined) {
+								return yield* Effect.fail(
+									new ConflictError("Settlement not found or not in drafting status")
+								);
+							}
+							return yield* LedgerAccountSettlementEntity.fromRow(row);
+						})
+					)
+				)
+		);
+	}
+
+	updateAmount(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		amount: number
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateRepositoryError> {
+		return Effect.suspend(() =>
+			this.db
+				.update(LedgerAccountSettlementsTable)
+				.set({ amount, updated: new Date() })
+				.where(
+					and(
+						eq(LedgerAccountSettlementsTable.id, settlementId.toString()),
+						eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString())
+					)
+				)
+				.returning()
+				.pipe(
+					Effect.flatMap(rows =>
+						Effect.gen(function* () {
+							const row = rows[0];
+							if (row === undefined) {
+								return yield* Effect.fail(new ConflictError("Settlement not found"));
+							}
+							return yield* LedgerAccountSettlementEntity.fromRow(row);
+						})
+					)
+				)
+		);
+	}
+
+	linkTransaction(
+		organizationId: OrgID,
+		settlementId: LedgerAccountSettlementID,
+		transactionId: LedgerTransactionID
+	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementUpdateRepositoryError> {
+		return Effect.suspend(() =>
+			this.db
+				.update(LedgerAccountSettlementsTable)
+				.set({ transactionId: transactionId.toString(), updated: new Date() })
+				.where(
+					and(
+						eq(LedgerAccountSettlementsTable.id, settlementId.toString()),
+						eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString())
+					)
+				)
+				.returning()
+				.pipe(
+					Effect.flatMap(rows =>
+						Effect.gen(function* () {
+							const row = rows[0];
+							if (row === undefined) {
+								return yield* Effect.fail(new ConflictError("Settlement not found"));
+							}
+							return yield* LedgerAccountSettlementEntity.fromRow(row);
+						})
 					)
 				)
 		);
@@ -340,9 +443,15 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 				.returning()
 				.pipe(
 					Effect.flatMap(rows =>
-						rows[0] === undefined
-							? Effect.fail(new NotFoundError(`Settlement not found: ${settlementId.toString()}`))
-							: Effect.succeed(LedgerAccountSettlementEntity.fromRow(rows[0]))
+						Effect.gen(function* () {
+							const row = rows[0];
+							if (row === undefined) {
+								return yield* Effect.fail(
+									new NotFoundError(`Settlement not found: ${settlementId.toString()}`)
+								);
+							}
+							return yield* LedgerAccountSettlementEntity.fromRow(row);
+						})
 					)
 				)
 		);

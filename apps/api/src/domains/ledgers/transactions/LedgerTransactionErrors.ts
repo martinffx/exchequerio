@@ -51,21 +51,6 @@ class TransactionRepositoryUnavailable extends ServiceUnavailableError {
 	}
 }
 
-class TransactionIdempotencyUnavailable extends ServiceUnavailableError {
-	constructor(cause: unknown) {
-		super("Transaction idempotency store unavailable", { cause });
-	}
-}
-
-class TransactionCreationPending extends ConflictError {
-	constructor() {
-		super("Transaction creation is still in progress", {
-			retryable: true,
-			retryAfterSeconds: 1,
-		});
-	}
-}
-
 class TransactionPersistenceDecodingFailure extends InternalServerError {
 	constructor(cause: unknown) {
 		super("Persisted Transaction could not be decoded", { cause });
@@ -79,7 +64,6 @@ class TransactionPersistenceFailure extends InternalServerError {
 }
 
 type TransactionInfrastructureError =
-	| TransactionIdempotencyUnavailable
 	| TransactionPersistenceDecodingFailure
 	| TransactionPersistenceFailure
 	| TransactionRepositoryUnavailable;
@@ -141,8 +125,6 @@ const requireTransactionWrite = (written: boolean) =>
 export type { TransactionInfrastructureError };
 export {
 	TransactionConcurrencyFailure,
-	TransactionCreationPending,
-	TransactionIdempotencyUnavailable,
 	TransactionLifecycleConflict,
 	TransactionNotFound,
 	TransactionPersistenceDecodingFailure,
