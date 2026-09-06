@@ -1,14 +1,11 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import { TransactionServiceTag } from "@/domains/ledgers/transactions";
 import { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonitorService";
 import { LedgerAccountCategoryService } from "./LedgerAccountCategoryService";
-import { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
 import { LedgerAccountStatementService } from "./LedgerAccountStatementService";
 
 type Services = {
 	ledgerAccountCategoryService: LedgerAccountCategoryService;
-	ledgerAccountSettlementService: LedgerAccountSettlementService;
 	ledgerAccountStatementService: LedgerAccountStatementService;
 	ledgerAccountBalanceMonitorService: LedgerAccountBalanceMonitorService;
 };
@@ -28,16 +25,6 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 		const ledgerAccountCategoryService =
 			opts.services?.ledgerAccountCategoryService ??
 			new LedgerAccountCategoryService(server.repo.ledgerAccountCategoryRepo);
-		const ledgerAccountSettlementService =
-			opts.services?.ledgerAccountSettlementService ??
-			new LedgerAccountSettlementService(server.repo.ledgerAccountSettlementRepo, {
-				createTransaction: (orgId, ledgerId, idempotencyKey, request) =>
-					server.runtime.runPromise(
-						TransactionServiceTag.use(service =>
-							service.createTransaction(orgId, ledgerId, idempotencyKey, request)
-						)
-					),
-			});
 		const ledgerAccountStatementService =
 			opts.services?.ledgerAccountStatementService ??
 			new LedgerAccountStatementService(server.repo.ledgerAccountStatementRepo);
@@ -46,7 +33,6 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 			new LedgerAccountBalanceMonitorService(server.repo.ledgerAccountBalanceMonitorRepo);
 		server.decorate("services", {
 			ledgerAccountCategoryService,
-			ledgerAccountSettlementService,
 			ledgerAccountStatementService,
 			ledgerAccountBalanceMonitorService,
 		});
@@ -56,6 +42,5 @@ const ServicePlugin: FastifyPluginAsync<ServicePluginOpts> = fp(
 export * from "@/repo/entities";
 export { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonitorService";
 export { LedgerAccountCategoryService } from "./LedgerAccountCategoryService";
-export { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
 export { LedgerAccountStatementService } from "./LedgerAccountStatementService";
 export { ServicePlugin, type ServicePluginOpts };

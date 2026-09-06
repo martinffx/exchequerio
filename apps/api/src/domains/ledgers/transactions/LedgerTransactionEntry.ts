@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { DateTime } from "luxon";
 
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import {
 	newLedgerTransactionEntryID,
 	type LedgerAccountID,
@@ -20,8 +20,6 @@ import type {
 
 type LedgerTransactionEntryDirection = "debit" | "credit";
 type LedgerTransactionEntryStatus = "pending" | "posted" | "voided";
-type LedgerTransactionEntryMetadata = Readonly<Record<string, string>>;
-
 type LedgerTransactionEntryOptions = Readonly<{
 	id: LedgerTransactionEntryID;
 	accountId: LedgerAccountID;
@@ -29,7 +27,7 @@ type LedgerTransactionEntryOptions = Readonly<{
 	amount: number;
 	currency: string;
 	status: LedgerTransactionEntryStatus;
-	metadata?: LedgerTransactionEntryMetadata;
+	metadata?: Metadata;
 	created: DateTime;
 }>;
 
@@ -51,7 +49,7 @@ class LedgerTransactionEntry {
 	readonly amount: number;
 	readonly currency: string;
 	readonly status: LedgerTransactionEntryStatus;
-	readonly metadata?: LedgerTransactionEntryMetadata;
+	readonly metadata?: Metadata;
 	readonly created: DateTime;
 
 	private constructor(options: LedgerTransactionEntryOptions) {
@@ -65,6 +63,10 @@ class LedgerTransactionEntry {
 		this.created = options.created;
 	}
 
+	static create(options: LedgerTransactionEntryOptions): LedgerTransactionEntry {
+		return new LedgerTransactionEntry(options);
+	}
+
 	/**
 	 * Creates an Entry from a validated API request and its parent Transaction state.
 	 *
@@ -76,7 +78,7 @@ class LedgerTransactionEntry {
 	static fromRequest(
 		request: LedgerTransactionEntryRequest,
 		status: LedgerTransactionEntryStatus,
-		created = DateTime.utc(),
+		created: DateTime = DateTime.utc(),
 		id = newLedgerTransactionEntryID()
 	): Effect.Effect<LedgerTransactionEntry, TransactionValidationFailure> {
 		return parseId<"lat", LedgerAccountID>("lat", request.accountId).pipe(
@@ -171,7 +173,6 @@ class LedgerTransactionEntry {
 
 export type {
 	LedgerTransactionEntryDirection,
-	LedgerTransactionEntryMetadata,
 	LedgerTransactionEntryOptions,
 	LedgerTransactionEntryStatus,
 };

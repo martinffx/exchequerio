@@ -1,6 +1,6 @@
 ---
 name: typescript-functional-patterns
-description: Selective use of functional TypeScript patterns. Use when a task explicitly involves an existing state machine or discriminated union, an Option/Result/Either/Effect API, a branded or opaque type, or deciding whether one is warranted. Do not use for ordinary validation or domain modeling that existing schemas and types already cover.
+description: Selective use of functional TypeScript patterns and domain-model responsibilities. Use when a task involves a state machine, discriminated union, Option/Result/Either/Effect API, branded or opaque type, typed domain decoding, or deciding which layer should own construction and transformation. Do not use to add a domain model when existing schemas and types already cover the requirement.
 user-invocable: false
 ---
 
@@ -39,11 +39,34 @@ requirement safely.
 - Existing nullable, throwing, promise-based, generated, and plain TypeScript
   contracts remain canonical when the project already uses them.
 
+## Keep responsibilities with their owner
+
+- Domain models own construction, invariant-preserving transformations, and
+  typed decoding. Established models may expose `fromRequest`, Drizzle
+  `fromRow`/`toRow`, or DynamoDB `fromItem`/`toItem` methods.
+- Repositories own I/O: queries, transactions, tenant and optimistic-write
+  predicates, and database or driver error classification.
+- Services own use-case orchestration, including sequencing repositories and
+  deciding whether to retry a failed operation.
+- Routes own HTTP validation and response serialization.
+
+Keep pure invariant functions pure. Do not impose an import-purity rule on an
+entire `domain/` directory. A domain model may import request, Drizzle row, or
+DynamoDB Toolbox item types when type-only imports prevent duplicate mirror
+types. It may also construct an Effect value to represent typed success,
+failure, or absence when doing so does not execute the Effect or reach external
+state.
+
+Domain models must not import Fastify handlers, database clients, DynamoDB
+commands, SQL builders, Layers, runtime execution, configuration, or environment
+access. Those dependencies belong at the application or repository boundary.
+
 ## Do not add a middle model
 
 Do not place a handwritten tagged, branded, or class-based model between an API
 schema and a persistence schema merely to rename fields or repeat validation.
-Convert directly between the two boundary-owned shapes.
+When no domain model is justified, convert at the active boundary without
+inventing one.
 
 Different boundaries may legitimately have different types. A TypeBox request,
 a Drizzle row, and a DynamoDB item do not need a third universal domain type to
@@ -90,8 +113,8 @@ do not by themselves justify a custom type.
    contracts, and immediate callers.
 2. Name the specific unsafe state or operation required by the task.
 3. Reuse or extend the highest existing owner that can prevent it.
-4. Keep conversions at active boundaries and preserve public behavior unless the
-   task explicitly changes it.
+4. Put construction and persistence transformations on an established domain
+   model; otherwise keep conversion at the active boundary.
 5. Test the changed behavior using the package's existing test utilities.
 
 ## References
@@ -111,6 +134,7 @@ Read only the reference needed for the active problem:
 
 - The owning schema, library, or project type was identified first.
 - Schema-derived and generated types remain canonical at their boundaries.
+- Domain, repository, service, and route responsibilities remain separate.
 - No unnecessary middle model or generic functional helper was added.
 - Every new custom type passes the hard gate.
 - The change fixes the named problem without spreading a second representation.

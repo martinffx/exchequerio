@@ -48,16 +48,32 @@ erDiagram
 
     LEDGER_TRANSACTION {
         text id PK
+        text settlement_id FK
         text organization_id FK
         text ledger_id FK
         text description
         enum status
         timestamptz posted_at
+        timestamptz effective_at
         integer lock_version
         text metadata
         timestamptz created
         timestamptz updated
     }
+
+    LEDGER_ACCOUNT_SETTLEMENT {
+        text id PK
+        text organization_id FK
+        text ledger_id FK
+        text settled_account_id FK
+        text contra_account_id FK
+        enum status
+        enum target_status
+        boolean allow_either_direction
+        timestamptz effective_at_upper_bound
+    }
+
+    LEDGER_ACCOUNT_SETTLEMENT ||--o| LEDGER_TRANSACTION : generates
 
     LEDGER_TRANSACTION_ENTRY {
         text id PK
@@ -96,7 +112,7 @@ erDiagram
 - An Entry repeats `organization_id` and `ledger_id` so composite foreign keys require its
   Transaction and Account to share both owners.
 - Transaction status is `pending`, `posted`, or `voided`. `posted_at` exists only for Posted
-  Transactions. Transactions have no Effective Time.
+  Transactions. Entries inherit their Transaction's `effective_at`; live balances depend on status.
 - Entries store the Transaction status and the request Currency Code alongside the Amount. Currency
   exponent handling is deferred until the Asset model exists.
 - Entry Amounts are positive integer Minor Units no greater than JavaScript's maximum safe integer.
@@ -105,6 +121,14 @@ erDiagram
 - Transaction lists use `(ledger_id, created DESC, id DESC)`. Ownership and lookup indexes cover
   Organization, status, Transaction, and Account access paths.
 
-Create idempotency uses Valkey only. The Organization-scoped key maps to the server-owned
-Transaction ID for 15 minutes. A losing caller waits up to two seconds for that Transaction to
-appear and receives a retryable `503` if the winning request is still unresolved.
+Settlement Transactions carry a nullable, unique `settlement_id`. Its composite foreign key requires
+matching Organization and Ledger ownership. Settlement responses derive Amount and direction from
+the generated Entry; Settlements store neither an Amount nor a Transaction reference. Processing
+records the intended target while accounting and finalization commit in separate repository-owned
+transactions. Source membership is frozen during Processing and released when voiding is finalized.
+
+Mutation idempotency uses Valkey, scoped by Organization, action and client key. Use a fresh UUID
+for each new action and reuse it only for retries. Claims store resource IDs for 15 minutes. Pending
+claims receive a bounded wait followed by retryable 409; unavailable storage returns 503. Domain
+services explicitly claim, execute or replay, and complete or release; the idempotency service does
+not execute business operations.

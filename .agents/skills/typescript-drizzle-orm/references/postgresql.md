@@ -186,7 +186,7 @@ async update(entity: UserEntity): Promise<UserEntity> {
   const result = await this.db
     .update(users)
     .set({
-      ...entity.toRecord(),
+      ...entity.toRow(),
       lockVersion: sql`${users.lockVersion} + 1`,
     })
     .where(and(
@@ -201,6 +201,6 @@ async update(entity: UserEntity): Promise<UserEntity> {
       retryable: true,
     })
   }
-  return UserEntity.fromRecord(result[0])
+  return UserEntity.fromRow(result[0])
 }
 ```

@@ -1,11 +1,11 @@
 import { type Static, Type } from "@sinclair/typebox";
+import { ListQuery } from "@/lib/ListQuery";
 
+/** Canonical Ledger TypeID used by Ledger-scoped routes. */
 const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const LedgerIdParameters = Type.Object({ ledgerId: LedgerIdSchema });
-const LedgerListQuery = Type.Object({
-	offset: Type.Integer({ default: 0, minimum: 0, maximum: 10_000 }),
-	limit: Type.Integer({ default: 20, minimum: 1, maximum: 100 }),
-});
+/** Shared pagination for Ledger collections. */
+const LedgerListQuery = ListQuery;
 const LedgerMetadataSchema = Type.Record(Type.String(), Type.String());
 const LedgerCreateRequest = Type.Object(
 	{

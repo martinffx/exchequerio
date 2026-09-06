@@ -14,8 +14,9 @@ a reason to replace working schemas or introduce a parallel type layer.
 4. Name the concrete invalid state, unsafe interchange, absence, or failure that
    motivates the work.
 
-Do not begin with `domain/`, `option.ts`, `result.ts`, `brand.ts`, or `errors.ts`.
-Reuse or improve the highest existing owner that can solve the problem.
+Reuse or improve the highest existing owner that can solve the problem. Do not
+create generic `option.ts`, `result.ts`, `brand.ts`, or `errors.ts` modules before
+identifying a concrete need.
 
 ## Choose the smallest change
 
@@ -30,15 +31,24 @@ Prefer a literal union before tagged objects. Replace related booleans with a
 discriminated union only when the current shape permits invalid combinations.
 Keep established nullable and failure contracts unless the task changes them.
 
-## Map boundaries directly
+## Preserve responsibility boundaries
 
-An API request and a persistence record may have different shapes. Map directly
-between their schema-derived types. Do not add a third universal model merely to
-connect them.
+Routes validate and serialize HTTP data. Services orchestrate use cases.
+Repositories own queries, transactions, write predicates, and driver error
+classification. Domain models own construction, invariant-preserving
+transformations, and typed request or persistence decoding.
 
 Reuse a behavior-rich domain entity when it already owns business behavior. Do
 not create an entity class solely to wrap a TypeBox value, Drizzle row, or
-DynamoDB Toolbox item.
+DynamoDB Toolbox item. When an entity is justified, let it accept type-only
+boundary imports and own `fromRequest`, Drizzle `fromRow`/`toRow`, or DynamoDB
+`fromItem`/`toItem` transformations rather than adding mirror types.
+
+Keep individual invariant functions pure. A whole `domain/` directory does not
+need an import-purity oath. Domain code may construct Effect values for typed
+success, failure, or absence, but it must not execute effects or access Fastify,
+database clients, DynamoDB commands, SQL builders, Layers, configuration, or the
+environment.
 
 ## Migration order
 

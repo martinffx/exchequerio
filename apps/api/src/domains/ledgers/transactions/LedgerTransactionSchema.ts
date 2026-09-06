@@ -1,6 +1,8 @@
 import { type Static, Type } from "@sinclair/typebox";
+import { IdempotencyHeaders } from "@/lib/IdempotencySchema";
+import { ListQuery } from "@/lib/ListQuery";
+import { LedgerIdSchema } from "../LedgerSchema";
 
-const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const TransactionIdSchema = Type.String({ pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const AccountIdSchema = Type.String({ pattern: "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const EntryIdSchema = Type.String({ pattern: "^lte_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
@@ -13,21 +15,20 @@ const TransactionItemParameters = Type.Object(
 	{ ledgerId: LedgerIdSchema, transactionId: TransactionIdSchema },
 	{ additionalProperties: false }
 );
-const TransactionListQuery = Type.Object(
-	{
-		offset: Type.Integer({ default: 0, minimum: 0, maximum: 10_000 }),
-		limit: Type.Integer({ default: 20, minimum: 1, maximum: 100 }),
-	},
-	{ additionalProperties: false }
-);
-const TransactionCreateHeaders = Type.Object({
-	"idempotency-key": Type.String({ minLength: 1, maxLength: 255 }),
+const TransactionListQuery = Type.Object(ListQuery.properties, {
+	additionalProperties: false,
 });
+const TransactionCreateHeaders = IdempotencyHeaders;
 
 const TransactionMetadataSchema = Type.Record(Type.String(), Type.String());
 const EntryDirectionSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 const AmountSchema = Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
 const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });
+const EffectiveAtSchema = Type.String({
+	format: "date-time",
+	// RFC 3339 also permits space separators and leap seconds, which Luxon cannot parse.
+	pattern: "[Tt][0-9]{2}:[0-9]{2}:[0-5][0-9]",
+});
 const TransactionRequestEntry = Type.Object(
 	{
 		accountId: AccountIdSchema,
@@ -41,6 +42,7 @@ const TransactionRequestEntry = Type.Object(
 const TransactionCreateRequest = Type.Object(
 	{
 		status: Type.Union([Type.Literal("pending"), Type.Literal("posted")]),
+		effectiveAt: Type.Optional(EffectiveAtSchema),
 		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(TransactionMetadataSchema),
 		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2, maxItems: 200 }),
@@ -49,6 +51,7 @@ const TransactionCreateRequest = Type.Object(
 );
 const TransactionUpdateRequest = Type.Object(
 	{
+		effectiveAt: Type.Optional(EffectiveAtSchema),
 		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(TransactionMetadataSchema),
 		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2, maxItems: 200 }),
@@ -76,6 +79,7 @@ const TransactionResponse = Type.Object(
 		metadata: Type.Optional(TransactionMetadataSchema),
 		ledgerEntries: Type.Array(TransactionResponseEntry, { minItems: 2 }),
 		postedAt: Type.Optional(Type.String({ format: "date-time" })),
+		effectiveAt: Type.String({ format: "date-time" }),
 		created: Type.String({ format: "date-time" }),
 		updated: Type.String({ format: "date-time" }),
 	},
@@ -102,7 +106,6 @@ export {
 	AccountIdSchema,
 	AmountSchema,
 	EntryIdSchema,
-	LedgerIdSchema,
 	TransactionCollectionParameters,
 	TransactionCreateHeaders,
 	TransactionCreateRequest,

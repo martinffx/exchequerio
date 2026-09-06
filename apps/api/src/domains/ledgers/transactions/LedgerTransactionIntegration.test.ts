@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Effect, Layer, Result } from "effect";
+import { Effect, Layer, Option } from "effect";
 import type { FastifyInstance, InjectOptions } from "fastify";
 import { Pool } from "pg";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -8,7 +8,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { signJWT } from "@/auth";
 import { Config } from "@/config";
 import {
-	type LedgerTransactionID,
 	newLedgerAccountID,
 	newLedgerID,
 	newLedgerTransactionID,
@@ -24,11 +23,11 @@ import {
 } from "@/repo/schema";
 import { makeServerRuntimeLayer } from "@/runtime";
 import { buildServer } from "@/server";
-
 import {
-	type TransactionIdemService,
-	TransactionIdemServiceTag,
-} from "./LedgerTransactionIdemService";
+	IdempotencyPending,
+	type IdempotencyService,
+	IdempotencyServiceTag,
+} from "@/services/IdempotencyService";
 
 type JsonObject = Record<string, unknown>;
 
@@ -37,42 +36,37 @@ const pool = new Pool({ connectionString: config.databaseUrl, max: 2 });
 const db = drizzle({ client: pool });
 const organizationIds = new Set<string>();
 const PENDING = Symbol("pending");
-const idempotencyValues = new Map<string, LedgerTransactionID | typeof PENDING>();
+const idempotencyValues = new Map<string, string | typeof PENDING>();
 
-const cacheKey = (organizationId: OrgID, key: string) => `${organizationId.toString()}:${key}`;
+const cacheKey = (organizationId: OrgID, action: string, key: string) =>
+	`${organizationId.toString()}:${action}:${key}`;
 
-const idempotencyService = {
-	claimTransactionId: (organizationId, key) =>
-		Effect.sync(() => {
-			const scopedKey = cacheKey(organizationId, key);
-			if (idempotencyValues.has(scopedKey)) {
-				const existing = idempotencyValues.get(scopedKey);
-				return Result.fail(existing === PENDING ? undefined : existing);
-			}
+const idempotencyService: IdempotencyService = {
+	claim(organizationId, action, key) {
+		return Effect.suspend(() => {
+			const scopedKey = cacheKey(organizationId, action, key);
+			const existing = idempotencyValues.get(scopedKey);
+			if (existing === PENDING) return Effect.fail(new IdempotencyPending());
+			if (existing !== undefined) return Effect.succeed(Option.fromUndefinedOr(existing));
 			idempotencyValues.set(scopedKey, PENDING);
-			return Result.succeed(undefined);
-		}),
-	getTransactionId: (organizationId, key) =>
-		Effect.sync(() => {
-			const existing = idempotencyValues.get(cacheKey(organizationId, key));
-			return existing === PENDING ? undefined : existing;
-		}),
-	completeTransactionId: (organizationId, key, transactionId) =>
-		Effect.sync(() => {
-			const scopedKey = cacheKey(organizationId, key);
-			if (idempotencyValues.get(scopedKey) === PENDING) {
-				idempotencyValues.set(scopedKey, transactionId);
-			}
-		}),
-	releaseTransactionId: (organizationId, key) =>
-		Effect.sync(() => {
-			const scopedKey = cacheKey(organizationId, key);
-			if (idempotencyValues.get(scopedKey) === PENDING) idempotencyValues.delete(scopedKey);
-		}),
-} satisfies TransactionIdemService;
+			return Effect.succeed(Option.none());
+		});
+	},
+	complete(organizationId, action, key, resourceId) {
+		return Effect.sync(() => {
+			idempotencyValues.set(cacheKey(organizationId, action, key), resourceId);
+		});
+	},
+	release(organizationId, action, key) {
+		return Effect.sync(() => {
+			idempotencyValues.delete(cacheKey(organizationId, action, key));
+		});
+	},
+};
 
 const auth = (organizationId: string) => ({
 	Authorization: `Bearer ${signJWT({ sub: organizationId, scope: ["org_admin"] })}`,
+	"idempotency-key": newLedgerTransactionID().toString(),
 });
 
 const expectIsoTimestamp = (value: unknown) => {
@@ -91,7 +85,7 @@ describe("Transaction assembled journeys", () => {
 	beforeAll(async () => {
 		server = await buildServer({
 			runtimeLayer: makeServerRuntimeLayer(config, {
-				transactionIdempotency: Layer.succeed(TransactionIdemServiceTag, idempotencyService),
+				idempotency: Layer.succeed(IdempotencyServiceTag, idempotencyService),
 			}),
 		});
 	});

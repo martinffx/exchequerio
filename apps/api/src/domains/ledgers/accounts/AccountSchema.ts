@@ -1,13 +1,13 @@
 import { type Static, Type } from "@sinclair/typebox";
+import { ListQuery } from "@/lib/ListQuery";
+import { LedgerIdSchema } from "../LedgerSchema";
 
-const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
+/** Canonical Account TypeID used by Account and Settlement routes. */
 const AccountIdSchema = Type.String({ pattern: "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const AccountCollectionParameters = Type.Object({ ledgerId: LedgerIdSchema });
 const AccountItemParameters = Type.Object({ ledgerId: LedgerIdSchema, accountId: AccountIdSchema });
-const AccountListQuery = Type.Object({
-	offset: Type.Integer({ default: 0, minimum: 0, maximum: 10_000 }),
-	limit: Type.Integer({ default: 20, minimum: 1, maximum: 100 }),
-});
+/** Shared pagination for Account collections. */
+const AccountListQuery = ListQuery;
 const AccountMetadataSchema = Type.Record(Type.String(), Type.String());
 const NormalBalanceSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });

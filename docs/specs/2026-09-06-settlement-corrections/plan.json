@@ -1,0 +1,149 @@
+{
+	"feature": "settlement-corrections",
+	"spec": "docs/specs/2026-09-06-settlement-corrections/design.md",
+	"approval": "Approved in conversation, revised for repository-owned commits and explicit idempotency",
+	"tasks": [
+		{
+			"id": "T1",
+			"name": "Restore Transaction effective time",
+			"depends_on": [],
+			"status": "completed",
+			"files": [
+				"apps/api/src/domains/ledgers/transactions",
+				"apps/api/src/repo/schema.ts",
+				"apps/api/migrations",
+				"CONTEXT.md",
+				"apps/api/docs/product/erd.md"
+			],
+			"validation": [
+				"Create defaults, explicit past/future dates, pending edits, omission preservation, immutable posting",
+				"Persistence and detail/list response round trips",
+				"Backfill created without fabricating historical dates",
+				"Live balances remain status-based",
+				"Transaction regression suite, types, lint and build"
+			]
+		},
+		{
+			"id": "T2",
+			"name": "Replace Settlement schema, codecs and domain lifecycle",
+			"depends_on": [
+				"T1"
+			],
+			"status": "completed",
+			"files": [
+				"apps/api/src/repo/schema.ts",
+				"apps/api/migrations",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementEntity.ts",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementSchema.ts",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementErrors.ts"
+			],
+			"validation": [
+				"Scoped ownership and unique Transaction settlementId; no stored Settlement amount or Transaction reference",
+				"Processing target and derived accounting via route/repository tests",
+				"Separate migration with empty-table preflight"
+			]
+		},
+		{
+			"id": "T3",
+			"name": "Implement repository-owned Settlement accounting",
+			"depends_on": [
+				"T2"
+			],
+			"status": "completed",
+			"files": [
+				"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts",
+				"apps/api/src/domains/ledgers/transactions/LedgerTransactionErrors.ts"
+			],
+			"validation": [
+				"TransactionRepo owns accounting DB transaction; no cross-repository transaction passing",
+				"Unique Settlement reference and retry-safe creation/posting/voiding",
+				"Generic Transaction mutations reject generated accounting"
+			]
+		},
+		{
+			"id": "T4",
+			"name": "Implement resumable Settlement preparation, accounting and finalization",
+			"depends_on": [
+				"T2",
+				"T3"
+			],
+			"status": "completed",
+			"files": [
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRepo.ts",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementService.ts",
+				"apps/api/src/domains/ledgers/settlements/index.ts"
+			],
+			"validation": [
+				"Three commits with frozen Processing recovery and guarded target",
+				"Source selection/netting/limits/exclusivity and Organization/Ledger scope",
+				"Old replay cannot execute later transition; one action claim stores prepared ID"
+			]
+		},
+		{
+			"id": "T5",
+			"name": "Expose corrected Settlement API and complete verification",
+			"depends_on": [
+				"T4",
+				"T6"
+			],
+			"status": "completed",
+			"files": [
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRoutes.ts",
+				"apps/api/src/domains/ledgers/settlements",
+				"apps/api/docs/product/erd.md",
+				"CONTEXT.md"
+			],
+			"validation": [
+				"PATCH lifecycle/metadata semantics; removed resource PUT, DELETE and status POST",
+				"Paginated auditable source GET and membership 204 responses",
+				"Create 201 Location, existing permissions, delete permission on void",
+				"Focused and full regression suites; types, build, lint, format; final diff inspection",
+				"Statement snapshot gap recorded separately"
+			]
+		},
+		{
+			"id": "T6",
+			"name": "Replace idempotency effect runner with explicit claim/complete/release",
+			"depends_on": [],
+			"status": "completed",
+			"files": [
+				"apps/api/src/services/IdempotencyService.ts",
+				"apps/api/src/services/IdempotencyService.test.ts",
+				"apps/api/src/domains/ledgers/transactions/LedgerTransactionService.ts",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementService.ts"
+			],
+			"validation": [
+				"Claim grants execution or returns stored resource ID; pending/infrastructure errors stay typed",
+				"No business effects or callbacks in idempotency API",
+				"Both caller slices own execution/replay/error handling; preserve uncertain claims",
+				"Valkey TTL/scoping/release/complete and direct caller mocks tested"
+			]
+		},
+		{
+			"id": "T7",
+			"name": "Use existing test database with scoped repository fixture cleanup",
+			"depends_on": [
+				"T5"
+			],
+			"status": "completed",
+			"files": [
+				"apps/api/src/domains/ledgers/LedgerRepo.ts",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRepo.test.ts"
+			],
+			"validation": [
+				"Scoped atomic dependency cleanup and repeat calls",
+				"Preserve other Ledgers and Organizations; rollback if cleanup fails",
+				"Settlement suite twice on existing database; full API tests, types, lint and format"
+			]
+		}
+	],
+	"verification": {
+		"apiTests": "481 passed in 33 files",
+		"types": "passed",
+		"build": "passed",
+		"lint": "passed",
+		"format": "passed",
+		"review": "Approved, including scoped repository cleanup and rollback",
+		"settlementRepeatability": "68 tests passed twice on configured test database"
+	}
+}

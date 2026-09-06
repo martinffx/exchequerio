@@ -43,6 +43,7 @@ const repository = (overrides: Partial<LedgerRepo> = {}): LedgerRepo =>
 		createLedger: vi.fn((record: Ledger) => Effect.succeed(record)),
 		updateLedger: vi.fn(() => Effect.succeed(someLedger)),
 		deleteLedger: vi.fn(() => Effect.succeed(someLedger)),
+		deleteLedgerFixtures: vi.fn(() => Effect.void),
 		...overrides,
 	});
 

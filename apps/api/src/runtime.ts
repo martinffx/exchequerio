@@ -3,12 +3,13 @@ import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
 import { ledgerLayer, type LedgerService } from "@/domains/ledgers";
 import { accountLayer, type AccountService } from "@/domains/ledgers/accounts";
-import { transactionLayer, type TransactionService } from "@/domains/ledgers/transactions";
 import {
-	makeTransactionIdemService,
-	type TransactionIdemService,
-} from "@/domains/ledgers/transactions/LedgerTransactionIdemService";
+	settlementLayer,
+	type LedgerAccountSettlementService,
+} from "@/domains/ledgers/settlements";
+import { transactionLayer, type TransactionService } from "@/domains/ledgers/transactions";
 import { organizationLayer, type OrganizationService } from "@/domains/organizations";
+import { makeIdempotencyService, type IdempotencyService } from "@/services/IdempotencyService";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
 
@@ -18,15 +19,16 @@ type ServerRuntimeServices =
 	| Valkey
 	| LedgerService
 	| AccountService
+	| LedgerAccountSettlementService
 	| TransactionService
-	| TransactionIdemService
+	| IdempotencyService
 	| OrganizationService;
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
 interface ServerRuntimeLayerOverrides {
 	readonly database?: Layer.Layer<Database, never, never>;
-	readonly transactionIdempotency?: Layer.Layer<TransactionIdemService, never, never>;
+	readonly idempotency?: Layer.Layer<IdempotencyService, never, never>;
 }
 
 const makeServerRuntimeLayer = (
@@ -34,22 +36,26 @@ const makeServerRuntimeLayer = (
 	overrides: ServerRuntimeLayerOverrides = {}
 ): ServerRuntimeLayer => {
 	const valkey = makeValkeyLive(config.valkeyUrl);
-	const transactionIdempotency =
-		overrides.transactionIdempotency ??
-		Layer.unwrap(
-			ValkeyTag.pipe(Effect.map(valkey => makeTransactionIdemService(valkey.client)))
-		).pipe(Layer.provide(valkey));
+	const idempotency =
+		overrides.idempotency ??
+		Layer.unwrap(ValkeyTag.pipe(Effect.map(valkey => makeIdempotencyService(valkey.client)))).pipe(
+			Layer.provide(valkey)
+		);
 	const infrastructure = Layer.mergeAll(
 		Layer.succeed(ServerConfigTag, config),
 		overrides.database ?? makeDatabaseLive(config.databaseUrl),
 		valkey,
-		transactionIdempotency
+		idempotency
 	);
 	const accountWithLedger = accountLayer.pipe(Layer.provide(ledgerLayer));
 	const transactionWithLedger = transactionLayer.pipe(Layer.provide(ledgerLayer));
+	const settlementWithServices = settlementLayer.pipe(
+		Layer.provide(Layer.mergeAll(ledgerLayer, accountWithLedger, transactionWithLedger))
+	);
 	return Layer.mergeAll(
 		ledgerLayer,
 		accountWithLedger,
+		settlementWithServices,
 		transactionWithLedger,
 		organizationLayer
 	).pipe(Layer.provideMerge(infrastructure));

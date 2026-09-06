@@ -1,8 +1,9 @@
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import type {
+	LedgerAccountSettlementID,
 	LedgerID,
 	LedgerTransactionEntryID,
 	LedgerTransactionID,
@@ -28,17 +29,18 @@ import type {
 import { LedgerTransactionEntry } from "./LedgerTransactionEntry";
 
 type LedgerTransactionStatus = "pending" | "posted" | "voided";
-type LedgerTransactionMetadata = Readonly<Record<string, string>>;
-
 type LedgerTransactionOptions = Readonly<{
 	id: LedgerTransactionID;
 	organizationId: OrgID;
 	ledgerId: LedgerID;
+	/** Owning Settlement for generated accounting; absent for ordinary Transactions. */
+	settlementId?: LedgerAccountSettlementID;
 	status: LedgerTransactionStatus;
 	description?: string;
-	metadata?: LedgerTransactionMetadata;
+	metadata?: Metadata;
 	entries: Option.Option<readonly LedgerTransactionEntry[]>;
 	postedAt?: DateTime;
+	effectiveAt: DateTime;
 	lockVersion: number;
 	created: DateTime;
 	updated: DateTime;
@@ -59,11 +61,14 @@ class LedgerTransaction {
 	readonly id: LedgerTransactionID;
 	readonly organizationId: OrgID;
 	readonly ledgerId: LedgerID;
+	/** Owning Settlement, whose lifecycle controls mutations of this accounting. */
+	readonly settlementId?: LedgerAccountSettlementID;
 	readonly status: LedgerTransactionStatus;
 	readonly description?: string;
-	readonly metadata?: LedgerTransactionMetadata;
+	readonly metadata?: Metadata;
 	readonly entries: Option.Option<readonly LedgerTransactionEntry[]>;
 	readonly postedAt?: DateTime;
+	readonly effectiveAt: DateTime;
 	readonly lockVersion: number;
 	readonly created: DateTime;
 	readonly updated: DateTime;
@@ -72,14 +77,25 @@ class LedgerTransaction {
 		this.id = options.id;
 		this.organizationId = options.organizationId;
 		this.ledgerId = options.ledgerId;
+		this.settlementId = options.settlementId;
 		this.status = options.status;
 		this.description = options.description;
 		this.metadata = options.metadata;
 		this.entries = options.entries;
 		this.postedAt = options.postedAt;
+		this.effectiveAt = options.effectiveAt;
 		this.lockVersion = options.lockVersion;
 		this.created = options.created;
 		this.updated = options.updated;
+	}
+
+	static create(
+		options: LedgerTransactionOptions
+	): Effect.Effect<LedgerTransaction, TransactionValidationFailure> {
+		return LedgerTransaction.validateBalanced(Option.getOrThrow(options.entries)).pipe(
+			// oxlint-disable-next-line unicorn/no-array-callback-reference -- The array is wrapped as an Option value.
+			Effect.map(entries => new LedgerTransaction({ ...options, entries: Option.some(entries) }))
+		);
 	}
 
 	/**
@@ -97,7 +113,7 @@ class LedgerTransaction {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		request: LedgerTransactionCreateRequest,
-		created = DateTime.utc(),
+		created: DateTime = DateTime.utc(),
 		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, TransactionValidationFailure> {
 		return Effect.all(
@@ -118,6 +134,10 @@ class LedgerTransaction {
 						// oxlint-disable-next-line unicorn/no-array-callback-reference
 						entries: Option.some(entries),
 						postedAt: request.status === "posted" ? created : undefined,
+						effectiveAt:
+							request.effectiveAt === undefined
+								? created
+								: DateTime.fromISO(request.effectiveAt, { zone: "utc" }),
 						lockVersion: 1,
 						created,
 						updated: created,
@@ -135,7 +155,7 @@ class LedgerTransaction {
 	 */
 	fromUpdateRequest(
 		request: LedgerTransactionUpdateRequest,
-		updated = DateTime.utc(),
+		updated: DateTime = DateTime.utc(),
 		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict | TransactionValidationFailure> {
 		if (this.status !== "pending") {
@@ -152,6 +172,10 @@ class LedgerTransaction {
 				entries =>
 					new LedgerTransaction({
 						...this,
+						effectiveAt:
+							request.effectiveAt === undefined
+								? this.effectiveAt
+								: DateTime.fromISO(request.effectiveAt, { zone: "utc" }),
 						description: request.description,
 						metadata: request.metadata,
 						// oxlint-disable-next-line unicorn/no-array-callback-reference
@@ -207,12 +231,15 @@ class LedgerTransaction {
 			id: this.id.toString(),
 			organizationId: this.organizationId.toString(),
 			ledgerId: this.ledgerId.toString(),
+			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			settlementId: this.settlementId?.toString() ?? null,
 			status: this.status,
 			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			description: this.description ?? null,
 			metadata: encodeMetadata(this.metadata),
 			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			postedAt: this.postedAt?.toJSDate() ?? null,
+			effectiveAt: this.effectiveAt.toJSDate(),
 			lockVersion: this.lockVersion,
 			created: this.created.toJSDate(),
 			updated: this.updated.toJSDate(),
@@ -227,6 +254,7 @@ class LedgerTransaction {
 			status: this.status,
 			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
 			...(this.postedAt === undefined ? {} : { postedAt: toIso(this.postedAt) }),
+			effectiveAt: toIso(this.effectiveAt),
 			created: toIso(this.created),
 			updated: toIso(this.updated),
 		};
@@ -246,7 +274,7 @@ class LedgerTransaction {
 	 * @returns An Effect containing the posted Transaction or a lifecycle conflict.
 	 */
 	toPosted(
-		postedAt = DateTime.utc()
+		postedAt: DateTime = DateTime.utc()
 	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
 		if (this.status === "posted") return Effect.succeed(this);
 		if (this.status !== "pending") {
@@ -273,7 +301,7 @@ class LedgerTransaction {
 	 * @returns An Effect containing the voided Transaction or a lifecycle conflict.
 	 */
 	toVoided(
-		updated = DateTime.utc()
+		updated: DateTime = DateTime.utc()
 	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
 		if (this.status === "voided") return Effect.succeed(this);
 		if (this.status !== "pending") {
@@ -300,8 +328,13 @@ class LedgerTransaction {
 			id: parseId<"ltr", LedgerTransactionID>("ltr", row.id),
 			organizationId: parseId<"org", OrgID>("org", row.organizationId),
 			ledgerId: parseId<"lgr", LedgerID>("lgr", row.ledgerId),
+			settlementId:
+				row.settlementId === null
+					? Effect.succeed(undefined)
+					: parseId<"las", LedgerAccountSettlementID>("las", row.settlementId),
 			metadata: parseMetadata(row.metadata),
 			postedAt: row.postedAt === null ? Effect.succeed(undefined) : parseDate(row.postedAt),
+			effectiveAt: parseDate(row.effectiveAt),
 			created: parseDate(row.created),
 			updated: parseDate(row.updated),
 		}).pipe(
@@ -332,5 +365,5 @@ class LedgerTransaction {
 	}
 }
 
-export type { LedgerTransactionMetadata, LedgerTransactionOptions, LedgerTransactionStatus };
+export type { LedgerTransactionOptions, LedgerTransactionStatus };
 export { LedgerTransaction };

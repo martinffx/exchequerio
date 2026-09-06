@@ -33,6 +33,16 @@ class TransactionLifecycleConflict extends ConflictError {
 	}
 }
 
+/** An ordinary Transaction mutation attempted to change Settlement-owned accounting. */
+class TransactionSettlementConflict extends ConflictError {
+	/** Directs accounting mutations through the owning Settlement lifecycle. */
+	constructor() {
+		super("Use the Settlement resource to mutate Settlement-generated accounting", {
+			retryable: false,
+		});
+	}
+}
+
 class TransactionConcurrencyFailure extends ConflictError {
 	constructor(cause: unknown) {
 		super("Transaction was modified by another operation", { cause, retryable: true });
@@ -51,21 +61,6 @@ class TransactionRepositoryUnavailable extends ServiceUnavailableError {
 	}
 }
 
-class TransactionIdempotencyUnavailable extends ServiceUnavailableError {
-	constructor(cause: unknown) {
-		super("Transaction idempotency store unavailable", { cause });
-	}
-}
-
-class TransactionCreationPending extends ConflictError {
-	constructor() {
-		super("Transaction creation is still in progress", {
-			retryable: true,
-			retryAfterSeconds: 1,
-		});
-	}
-}
-
 class TransactionPersistenceDecodingFailure extends InternalServerError {
 	constructor(cause: unknown) {
 		super("Persisted Transaction could not be decoded", { cause });
@@ -79,7 +74,6 @@ class TransactionPersistenceFailure extends InternalServerError {
 }
 
 type TransactionInfrastructureError =
-	| TransactionIdempotencyUnavailable
 	| TransactionPersistenceDecodingFailure
 	| TransactionPersistenceFailure
 	| TransactionRepositoryUnavailable;
@@ -111,6 +105,7 @@ const mapTransactionCreateError = (cause: unknown) =>
 	cause instanceof AccountNotFound ||
 	cause instanceof AccountVersionConflict ||
 	cause instanceof LedgerAccountCurrencyMismatch ||
+	cause instanceof TransactionSettlementConflict ||
 	cause instanceof TransactionValidationFailure
 		? cause
 		: mapTransactionConcurrentError(cause);
@@ -119,6 +114,7 @@ const mapTransactionMutationError = (cause: unknown) =>
 	cause instanceof AccountNotFound ||
 	cause instanceof AccountVersionConflict ||
 	cause instanceof LedgerAccountCurrencyMismatch ||
+	cause instanceof TransactionSettlementConflict ||
 	cause instanceof TransactionLifecycleConflict ||
 	cause instanceof TransactionNotFound ||
 	cause instanceof TransactionPersistenceDecodingFailure ||
@@ -140,9 +136,8 @@ const requireTransactionWrite = (written: boolean) =>
 
 export type { TransactionInfrastructureError };
 export {
+	TransactionSettlementConflict,
 	TransactionConcurrencyFailure,
-	TransactionCreationPending,
-	TransactionIdempotencyUnavailable,
 	TransactionLifecycleConflict,
 	TransactionNotFound,
 	TransactionPersistenceDecodingFailure,

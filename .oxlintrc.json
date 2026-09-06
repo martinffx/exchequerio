@@ -119,6 +119,11 @@
 				"mode": "full"
 			},
 			{
+				"type": "idempotency-capability",
+				"pattern": "src/services/IdempotencyService.ts",
+				"mode": "full"
+			},
+			{
 				"type": "transaction-domain",
 				"pattern": [
 					"src/domains/ledgers/transactions/LedgerTransaction.ts",
@@ -397,7 +402,7 @@
 					},
 					{
 						"from": ["account-transport"],
-						"allow": ["account-domain", "ledger-domain"]
+						"allow": ["account-domain", "ledger-domain", "ledger-transport"]
 					},
 					{
 						"from": ["account-routes"],
@@ -445,11 +450,16 @@
 						"allow": ["transaction-domain", "http", "legacy-entities"]
 					},
 					{
+						"from": ["idempotency-capability"],
+						"allow": ["http", "legacy-entities"]
+					},
+					{
 						"from": ["transaction-service"],
 						"allow": [
 							"transaction-domain",
 							"transaction-repo",
 							"transaction-capability",
+							"idempotency-capability",
 							"transaction-transport",
 							"account-composition",
 							"account-domain",
@@ -461,7 +471,7 @@
 					},
 					{
 						"from": ["transaction-transport"],
-						"allow": ["transaction-domain"]
+						"allow": ["ledger-transport", "transaction-domain"]
 					},
 					{
 						"from": ["transaction-routes"],
@@ -543,6 +553,7 @@
 							"account-composition",
 							"transaction-composition",
 							"transaction-capability",
+							"idempotency-capability",
 							"organization-composition",
 							"runtime"
 						]

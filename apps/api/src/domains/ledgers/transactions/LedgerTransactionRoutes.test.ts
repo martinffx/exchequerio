@@ -8,12 +8,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { globalErrorHandler } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
+import { IdempotencyPending, IdempotencyUnavailable } from "@/services/IdempotencyService";
 
 import { LedgerTransaction } from "./LedgerTransaction";
 import {
 	TransactionConcurrencyFailure,
-	TransactionCreationPending,
-	TransactionIdempotencyUnavailable,
 	TransactionLifecycleConflict,
 	TransactionNotFound,
 	TransactionPersistenceDecodingFailure,
@@ -32,6 +31,7 @@ const creditAccountId = new TypeID("lat") as LedgerAccountID;
 
 const createBody = {
 	status: "pending" as const,
+	effectiveAt: "2026-08-01T09:00:00.000Z",
 	description: "Transfer",
 	ledgerEntries: [
 		{
@@ -62,6 +62,7 @@ const transaction = (() => {
 })();
 
 const updateBody = {
+	effectiveAt: "2026-08-02T09:00:00.000Z",
 	description: "Updated",
 	ledgerEntries: createBody.ledgerEntries,
 };
@@ -134,15 +135,37 @@ describe("TransactionRoutes", () => {
 		expect(response.statusCode).toBe(200);
 		const [item] = response.json<Array<Record<string, unknown>>>();
 		expect(item).not.toHaveProperty("ledgerEntries");
+		expect(item).toHaveProperty("effectiveAt", createBody.effectiveAt);
 	});
 
 	it.each([
 		["list", "GET", "", undefined, undefined, 200],
 		["get", "GET", `/${transactionId.toString()}`, undefined, undefined, 200],
 		["create", "POST", "", createBody, { "idempotency-key": "create-42" }, 201],
-		["update", "PUT", `/${transactionId.toString()}`, updateBody, undefined, 200],
-		["post", "POST", `/${transactionId.toString()}/post`, undefined, undefined, 200],
-		["void", "DELETE", `/${transactionId.toString()}`, undefined, undefined, 204],
+		[
+			"update",
+			"PUT",
+			`/${transactionId.toString()}`,
+			updateBody,
+			{ "idempotency-key": "update-42" },
+			200,
+		],
+		[
+			"post",
+			"POST",
+			`/${transactionId.toString()}/post`,
+			undefined,
+			{ "idempotency-key": "post-42" },
+			200,
+		],
+		[
+			"void",
+			"DELETE",
+			`/${transactionId.toString()}`,
+			undefined,
+			{ "idempotency-key": "void-42" },
+			204,
+		],
 	] as const)(
 		"serves %s through the mock Effect service",
 		async (_name, method, suffix, payload, headers, status) => {
@@ -177,6 +200,7 @@ describe("TransactionRoutes", () => {
 		await server.inject({
 			method: "PUT",
 			url: `/api/ledgers/${ledgerId.toString()}/transactions/${transactionId.toString()}`,
+			headers: { "idempotency-key": "update-42" },
 			payload: { ...updateBody, ignored: true },
 		});
 		await server.inject({
@@ -186,10 +210,12 @@ describe("TransactionRoutes", () => {
 		await server.inject({
 			method: "POST",
 			url: `/api/ledgers/${ledgerId.toString()}/transactions/${transactionId.toString()}/post`,
+			headers: { "idempotency-key": "post-42" },
 		});
 		await server.inject({
 			method: "DELETE",
 			url: `/api/ledgers/${ledgerId.toString()}/transactions/${transactionId.toString()}`,
+			headers: { "idempotency-key": "void-42" },
 		});
 
 		expect(implementation.listTransactions).toHaveBeenCalledWith(organizationId, ledgerId, {
@@ -206,6 +232,7 @@ describe("TransactionRoutes", () => {
 			organizationId,
 			ledgerId,
 			transactionId,
+			"update-42",
 			updateBody
 		);
 		expect(implementation.getTransaction).toHaveBeenCalledWith(
@@ -216,12 +243,14 @@ describe("TransactionRoutes", () => {
 		expect(implementation.postTransaction).toHaveBeenCalledWith(
 			organizationId,
 			ledgerId,
-			transactionId
+			transactionId,
+			"post-42"
 		);
 		expect(implementation.voidTransaction).toHaveBeenCalledWith(
 			organizationId,
 			ledgerId,
-			transactionId
+			transactionId,
+			"void-42"
 		);
 	});
 
@@ -280,6 +309,13 @@ describe("TransactionRoutes", () => {
 			{ ...createBody, ledgerEntries: [] },
 			{ "idempotency-key": "create-42" },
 		],
+		[
+			"invalid effective time",
+			"POST",
+			`/api/ledgers/${ledgerId.toString()}/transactions`,
+			{ ...createBody, effectiveAt: "not-a-date" },
+			{ "idempotency-key": "create-42" },
+		],
 	] as const)("rejects %s before the service", async (_name, method, url, payload, headers) => {
 		const implementation = service();
 		const { server } = await buildRouteServer(implementation);
@@ -295,8 +331,69 @@ describe("TransactionRoutes", () => {
 	});
 
 	it.each([
+		["create", "POST", "", createBody],
+		["update", "PUT", `/${transactionId.toString()}`, updateBody],
+	] as const)(
+		"rejects unsupported effective times on %s before the service",
+		async (_name, method, suffix, body) => {
+			const implementation = service();
+			const { server } = await buildRouteServer(implementation);
+			for (const effectiveAt of ["2026-09-06 12:00:00Z", "2026-12-31T23:59:60Z"]) {
+				const response = await server.inject({
+					method,
+					url: `/api/ledgers/${ledgerId.toString()}/transactions${suffix}`,
+					headers: { "idempotency-key": crypto.randomUUID() },
+					payload: { ...body, effectiveAt },
+				});
+				expect(response.statusCode).toBe(400);
+			}
+			expect(implementation.createTransaction).not.toHaveBeenCalled();
+			expect(implementation.updateTransaction).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each([
+		["create", "POST", "", createBody],
+		["update", "PUT", `/${transactionId.toString()}`, updateBody],
+	] as const)("accepts supported effective times on %s", async (_name, method, suffix, body) => {
+		const implementation = service();
+		const { server } = await buildRouteServer(implementation);
+		for (const effectiveAt of [
+			"2026-09-06T12:00:00+02:00",
+			"2026-09-06T12:00:00.123456Z",
+			"2026-09-06t12:00:00z",
+		]) {
+			const key = crypto.randomUUID();
+			const payload = { ...body, effectiveAt };
+			const response = await server.inject({
+				method,
+				url: `/api/ledgers/${ledgerId.toString()}/transactions${suffix}`,
+				headers: { "idempotency-key": key },
+				payload,
+			});
+			expect(response.statusCode).toBe(method === "POST" ? 201 : 200);
+			if (method === "POST") {
+				expect(implementation.createTransaction).toHaveBeenLastCalledWith(
+					organizationId,
+					ledgerId,
+					key,
+					payload
+				);
+			} else {
+				expect(implementation.updateTransaction).toHaveBeenLastCalledWith(
+					organizationId,
+					ledgerId,
+					transactionId,
+					key,
+					payload
+				);
+			}
+		}
+	});
+
+	it.each([
 		["create", "POST", "", { "idempotency-key": "create-42" }],
-		["update", "PUT", `/${transactionId.toString()}`, undefined],
+		["update", "PUT", `/${transactionId.toString()}`, { "idempotency-key": "update-42" }],
 	] as const)("limits %s requests to 200 Entries", async (_name, method, suffix, headers) => {
 		const implementation = service();
 		const { server } = await buildRouteServer(implementation);
@@ -352,7 +449,7 @@ describe("TransactionRoutes", () => {
 			"",
 			createBody,
 			{ "idempotency-key": "create-42" },
-			new TransactionIdempotencyUnavailable(new Error("offline")),
+			new IdempotencyUnavailable(new Error("offline")),
 			503,
 		],
 		[
@@ -362,7 +459,7 @@ describe("TransactionRoutes", () => {
 			"",
 			createBody,
 			{ "idempotency-key": "create-42" },
-			new TransactionCreationPending(),
+			new IdempotencyPending(),
 			409,
 		],
 		[
@@ -371,7 +468,7 @@ describe("TransactionRoutes", () => {
 			"PUT",
 			`/${transactionId.toString()}`,
 			updateBody,
-			undefined,
+			{ "idempotency-key": "update-42" },
 			new TransactionConcurrencyFailure(new Error("race")),
 			409,
 		],
@@ -381,7 +478,7 @@ describe("TransactionRoutes", () => {
 			"POST",
 			`/${transactionId.toString()}/post`,
 			undefined,
-			undefined,
+			{ "idempotency-key": "post-42" },
 			new TransactionLifecycleConflict("voided", "posted"),
 			409,
 		],
@@ -391,7 +488,7 @@ describe("TransactionRoutes", () => {
 			"DELETE",
 			`/${transactionId.toString()}`,
 			undefined,
-			undefined,
+			{ "idempotency-key": "void-42" },
 			new TransactionRepositoryUnavailable(new Error("offline")),
 			503,
 		],
@@ -426,7 +523,7 @@ describe("TransactionRoutes", () => {
 		const implementation = service();
 		vi
 			.mocked(implementation.createTransaction)
-			.mockReturnValue(Effect.fail(new TransactionCreationPending()));
+			.mockReturnValue(Effect.fail(new IdempotencyPending()));
 		const { server } = await buildRouteServer(implementation);
 		const response = await server.inject({
 			method: "POST",

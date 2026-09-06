@@ -90,6 +90,11 @@ The server-recorded time at which a Transaction became Posted. For a Transaction
 **Created Time**:
 The server-recorded time at which a Ledger resource was first created.
 
+**Effective Time**:
+The accounting time assigned to a Transaction and inherited by all its Entries. It may precede or
+follow Created Time and becomes immutable when the Transaction is Posted. It does not schedule
+posting or delay live balance effects.
+
 **Updated Time**:
 The server-recorded time at which a mutable Ledger resource was most recently changed. It equals Created Time until the resource changes.
 _Avoid_: Recorded time

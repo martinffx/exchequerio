@@ -83,6 +83,26 @@ const seedLegacyTransaction = async (client: PoolClient, withEntry: boolean) => 
 };
 
 describe("transaction Effect migration", () => {
+	it("backfills restored effective time from creation time without inventing historical dates", async () => {
+		await withLegacyDatabase(async client => {
+			await applyTransactionMigration(client);
+			await client.query(`
+				INSERT INTO organizations_table (id, name) VALUES ('org-time', 'Time');
+				INSERT INTO ledgers (id, organization_id, name) VALUES ('ledger-time', 'org-time', 'Time');
+				INSERT INTO ledger_transactions (id, ledger_id, organization_id, status, created)
+				VALUES ('transaction-time', 'ledger-time', 'org-time', 'pending', '2026-08-01T12:00:00Z');
+			`);
+			await executeMigration(client, "20260906074715_transaction-effective-time");
+			const result = await client.query<{ matches: boolean }>(
+				"SELECT effective_at = created AS matches FROM ledger_transactions WHERE id = 'transaction-time'"
+			);
+			expect(result.rows).toEqual([{ matches: true }]);
+			await expect(
+				client.query("UPDATE ledger_transactions SET effective_at = NULL")
+			).rejects.toMatchObject({ code: "23502" });
+		});
+	}, 30_000);
+
 	it("migrates an empty Transaction schema", async () => {
 		await withLegacyDatabase(async client => {
 			await applyTransactionMigration(client);

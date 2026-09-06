@@ -8,7 +8,9 @@ import { DatabaseTag, makeDatabaseLive } from "@/db";
 import { AccountNotFound, LedgerAccountCurrencyMismatch } from "@/domains/ledgers/accounts";
 import {
 	newLedgerAccountID,
+	newLedgerAccountSettlementID,
 	newLedgerID,
+	newLedgerTransactionEntryID,
 	newLedgerTransactionID,
 	newOrgID,
 	type LedgerID,
@@ -22,12 +24,15 @@ import {
 	OrganizationsTable,
 } from "@/repo/schema";
 
+import { LedgerTransaction } from "./LedgerTransaction";
+
 import {
 	type LedgerTransactionRepo,
 	LedgerTransactionRepoTag,
 	ledgerTransactionRepoLayer,
 } from "./LedgerTransactionRepo";
 import {
+	TransactionSettlementConflict,
 	TransactionLifecycleConflict,
 	TransactionPersistenceFailure,
 } from "./LedgerTransactionErrors";
@@ -52,6 +57,22 @@ const request = (
 		currencyCode: "EUR",
 	})),
 });
+
+const persist = (
+	repository: LedgerTransactionRepo,
+	organizationId: OrgID,
+	ledgerId: LedgerID,
+	transactionId: ReturnType<typeof newLedgerTransactionID>,
+	transactionRequest: TransactionCreateRequest
+) =>
+	LedgerTransaction.fromCreateRequest(
+		transactionId,
+		organizationId,
+		ledgerId,
+		transactionRequest,
+		DateTime.utc(),
+		transactionRequest.ledgerEntries.map(() => newLedgerTransactionEntryID())
+	).pipe(Effect.flatMap(transaction => repository.createTransaction(transaction)));
 
 describe("LedgerTransactionRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
@@ -143,6 +164,55 @@ describe("LedgerTransactionRepoLive", () => {
 		await runtime.dispose();
 	});
 
+	it("rejects generated accounting through generic creation before any database writes", async () => {
+		const ordinary = Effect.runSync(
+			LedgerTransaction.fromCreateRequest(
+				newLedgerTransactionID(),
+				newOrgID(),
+				newLedgerID(),
+				request("pending", [
+					{ accountId: newLedgerAccountID(), direction: "debit", amount: 10 },
+					{ accountId: newLedgerAccountID(), direction: "credit", amount: 10 },
+				])
+			)
+		);
+		const generated = Effect.runSync(
+			LedgerTransaction.create({
+				...ordinary,
+				settlementId: newLedgerAccountSettlementID(),
+			})
+		);
+		const failure = await runRepo(repo => repo.createTransaction(generated).pipe(Effect.flip));
+		expect(failure).toBeInstanceOf(TransactionSettlementConflict);
+	});
+
+	it("persists pending effective-time edits and preserves them through posting", async () => {
+		const { organizationId, ledgerId } = await createLedger();
+		const debit = await createAccount(organizationId, ledgerId, "debit");
+		const credit = await createAccount(organizationId, ledgerId, "credit");
+		const body = request("pending", [
+			{ accountId: debit, direction: "debit", amount: 100 },
+			{ accountId: credit, direction: "credit", amount: 100 },
+		]);
+		const id = newLedgerTransactionID();
+		await runRepo(repo => persist(repo, organizationId, ledgerId, id, body));
+		const effectiveAt = "2027-01-01T00:00:00.000Z";
+		await runRepo(repo =>
+			repo.updateTransaction(organizationId, ledgerId, id, { ...body, effectiveAt })
+		);
+		await runRepo(repo => repo.updateTransaction(organizationId, ledgerId, id, body));
+		await runRepo(repo => repo.postTransaction(organizationId, ledgerId, id, DateTime.utc()));
+		const loaded = Option.getOrThrow(
+			await runRepo(repo => repo.getTransaction(organizationId, ledgerId, id))
+		);
+		expect(loaded.toResponse().effectiveAt).toBe(effectiveAt);
+		const balances = await accounts(organizationId, ledgerId, [debit]);
+		expect(balances.get(debit.toString())?.postedAmount).toBe(100);
+		await expect(
+			runRepo(repo => repo.updateTransaction(organizationId, ledgerId, id, body))
+		).rejects.toBeInstanceOf(TransactionLifecycleConflict);
+	});
+
 	it.each([
 		{ status: "pending" as const, posted: false },
 		{ status: "posted" as const, posted: true },
@@ -152,7 +222,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 
 		const transaction = await runRepo(repository =>
-			repository.createTransaction(
+			persist(
+				repository,
 				organizationId,
 				ledgerId,
 				newLedgerTransactionID(),
@@ -199,7 +270,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const debit = await createAccount(owner.organizationId, owner.ledgerId, "debit");
 		const credit = await createAccount(owner.organizationId, owner.ledgerId, "credit");
 		const first = await runRepo(repository =>
-			repository.createTransaction(
+			persist(
+				repository,
 				owner.organizationId,
 				owner.ledgerId,
 				newLedgerTransactionID(),
@@ -211,7 +283,8 @@ describe("LedgerTransactionRepoLive", () => {
 		);
 		await new Promise(resolve => setTimeout(resolve, 2));
 		const second = await runRepo(repository =>
-			repository.createTransaction(
+			persist(
+				repository,
 				owner.organizationId,
 				owner.ledgerId,
 				newLedgerTransactionID(),
@@ -254,7 +327,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const missing = newLedgerAccountID();
 		const error = await runRepo(repository =>
 			Effect.flip(
-				repository.createTransaction(
+				persist(
+					repository,
 					organizationId,
 					ledgerId,
 					newLedgerTransactionID(),
@@ -307,7 +381,8 @@ describe("LedgerTransactionRepoLive", () => {
 		try {
 			const error = await runRepo(repository =>
 				Effect.flip(
-					repository.createTransaction(
+					persist(
+						repository,
 						organizationId,
 						ledgerId,
 						transactionId,
@@ -349,7 +424,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const usdCredit = await createAccount(organizationId, ledgerId, "debit", "USD");
 
 		await runRepo(repository =>
-			repository.createTransaction(organizationId, ledgerId, newLedgerTransactionID(), {
+			persist(repository, organizationId, ledgerId, newLedgerTransactionID(), {
 				status: "posted",
 				ledgerEntries: [
 					{ accountId: eurDebit.toString(), direction: "debit", amount: 10, currencyCode: "EUR" },
@@ -372,7 +447,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 		const transaction = await runRepo(repository =>
-			repository.createTransaction(
+			persist(
+				repository,
 				organizationId,
 				ledgerId,
 				newLedgerTransactionID(),
@@ -410,7 +486,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 		const createPending = () =>
 			runRepo(repository =>
-				repository.createTransaction(
+				persist(
+					repository,
 					organizationId,
 					ledgerId,
 					newLedgerTransactionID(),
@@ -477,12 +554,7 @@ describe("LedgerTransactionRepoLive", () => {
 
 		const error = await runRepo(repository =>
 			Effect.flip(
-				repository.createTransaction(
-					organizationId,
-					ledgerId,
-					newLedgerTransactionID(),
-					transactionRequest
-				)
+				persist(repository, organizationId, ledgerId, newLedgerTransactionID(), transactionRequest)
 			)
 		);
 

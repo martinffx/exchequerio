@@ -5,11 +5,7 @@ import { accountServiceLayer } from "./AccountService";
 const accountLayer = accountServiceLayer.pipe(Layer.provide(ledgerAccountRepoLayer));
 
 export { LedgerAccount, LedgerAccountCurrencyMismatch } from "./LedgerAccount";
-export type {
-	LedgerAccountBalance,
-	LedgerAccountMetadata,
-	LedgerAccountOptions,
-} from "./LedgerAccount";
+export type { LedgerAccountBalance, LedgerAccountOptions } from "./LedgerAccount";
 export {
 	AccountHasDependents,
 	AccountNameConflict,

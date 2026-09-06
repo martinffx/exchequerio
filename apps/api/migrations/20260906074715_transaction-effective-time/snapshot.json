@@ -1,0 +1,2502 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "543246a5-2790-4641-9b41-4c3374519e2f",
+  "prevIds": [
+    "d2374a0e-8f71-463a-8936-cd7d132e206d"
+  ],
+  "ddl": [
+    {
+      "values": [
+        "debit",
+        "credit"
+      ],
+      "name": "ledger_entry_direction",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "debit",
+        "credit"
+      ],
+      "name": "ledger_normal_balance",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "drafting",
+        "processing",
+        "pending",
+        "posted",
+        "archiving",
+        "archived"
+      ],
+      "name": "ledger_settlement_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "pending",
+        "posted",
+        "voided"
+      ],
+      "name": "ledger_transaction_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_account_balance_monitors",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_account_categories",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_account_category_accounts",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_account_category_parents",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_account_settlement_entries",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_account_settlements",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_account_statements",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_accounts",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_transaction_entries",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledger_transactions",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ledgers",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "organizations_table",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "account_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "type": "numeric(20,4)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'0'",
+      "generated": null,
+      "identity": null,
+      "name": "alert_threshold",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "1",
+      "generated": null,
+      "identity": null,
+      "name": "is_active",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ledger_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "type": "ledger_normal_balance",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "normal_balance",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "parent_category_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "category_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_category_accounts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "account_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_category_accounts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_category_accounts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "category_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_category_parents"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "parent_category_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_category_parents"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_category_parents"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "settlement_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlement_entries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "entry_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlement_entries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlement_entries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "transaction_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "settled_account_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "contra_account_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "amount",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "ledger_normal_balance",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "normal_balance",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "currency",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "ledger_settlement_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'drafting'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "external_reference",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "effective_at_upper_bound",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ledger_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "account_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "statement_date",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "numeric(20,4)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'0'",
+      "generated": null,
+      "identity": null,
+      "name": "opening_balance",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "numeric(20,4)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'0'",
+      "generated": null,
+      "identity": null,
+      "name": "closing_balance",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "numeric(20,4)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'0'",
+      "generated": null,
+      "identity": null,
+      "name": "total_credits",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "numeric(20,4)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'0'",
+      "generated": null,
+      "identity": null,
+      "name": "total_debits",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "transaction_count",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ledger_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "ledger_normal_balance",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "normal_balance",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "currency_code",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "pending_amount",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "posted_amount",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "available_amount",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "pending_credits",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "pending_debits",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "posted_credits",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "posted_debits",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "available_credits",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "available_debits",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "1",
+      "generated": null,
+      "identity": null,
+      "name": "lock_version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "transaction_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "account_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ledger_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "ledger_entry_direction",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "direction",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "amount",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "currency",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "ledger_transaction_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ledger_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "ledger_transaction_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'pending'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "posted_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "effective_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "1",
+      "generated": null,
+      "identity": null,
+      "name": "lock_version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations_table"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations_table"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations_table"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations_table"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations_table"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "account_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_category_accounts_account",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_account_category_accounts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "parent_category_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_category_parents_parent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_account_category_parents"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "entry_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_settlement_entries_entry",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_account_settlement_entries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_settlements_org",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_settlements_status",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "settled_account_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_settlements_settled_account",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledger_accounts_organization",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "ledger_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "unique_account_name_per_ledger",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "ledger_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "posted_amount",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledger_accounts_posted_balance",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "ledger_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "available_amount",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledger_accounts_available_balance",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledger_transaction_entries_organization",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "account_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledger_transaction_entries_account",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "transaction_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledger_transaction_entries_transaction",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledger_transactions_organization",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledger_transactions_status",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "ledger_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledger_transactions_ledger_created_id",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_ledgers_organization",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "account_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_accounts",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_account_balance_monitors_account_id_ledger_accounts_id_f",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "ledger_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledgers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_account_categories_ledger_id_ledgers_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_categories"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "category_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_account_categories",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "ledger_account_category_accounts_category_id_ledger_account_cat",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_category_accounts"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "account_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_accounts",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "ledger_account_category_accounts_account_id_ledger_accounts_id_",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_category_accounts"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "category_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_account_categories",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "ledger_account_category_parents_category_id_ledger_account_cate",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_category_parents"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "parent_category_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_account_categories",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "ledger_account_category_parents_parent_category_id_ledger_accou",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_category_parents"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "settlement_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_account_settlements",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "ledger_account_settlement_entries_settlement_id_ledger_account_",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_settlement_entries"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "entry_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_transaction_entries",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "ledger_account_settlement_entries_entry_id_ledger_transaction_e",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_settlement_entries"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations_table",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_account_settlements_organization_id_organizations_table_",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "transaction_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_transactions",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_account_settlements_transaction_id_ledger_transactions_i",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "settled_account_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_accounts",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_account_settlements_settled_account_id_ledger_accounts_i",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "contra_account_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_accounts",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_account_settlements_contra_account_id_ledger_accounts_id",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "ledger_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledgers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_account_statements_ledger_id_ledgers_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "account_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_accounts",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_account_statements_account_id_ledger_accounts_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_account_statements"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations_table",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_accounts_organization_id_organizations_table_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "organization_id",
+        "ledger_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledgers",
+      "columnsTo": [
+        "organization_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_accounts_organization_ledger_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations_table",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_transaction_entries_organization_id_organizations_table_",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "organization_id",
+        "ledger_id",
+        "transaction_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_transactions",
+      "columnsTo": [
+        "organization_id",
+        "ledger_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_transaction_entries_transaction_ownership_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "organization_id",
+        "ledger_id",
+        "account_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledger_accounts",
+      "columnsTo": [
+        "organization_id",
+        "ledger_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_transaction_entries_account_ownership_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations_table",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_transactions_organization_id_organizations_table_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "organization_id",
+        "ledger_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ledgers",
+      "columnsTo": [
+        "organization_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledger_transactions_organization_ledger_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations_table",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "ledgers_organization_id_organizations_table_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "columns": [
+        "category_id",
+        "account_id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_account_category_accounts_category_id_account_id_pk",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "ledger_account_category_accounts"
+    },
+    {
+      "columns": [
+        "category_id",
+        "parent_category_id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_account_category_parents_category_id_parent_category_id_pk",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "ledger_account_category_parents"
+    },
+    {
+      "columns": [
+        "settlement_id",
+        "entry_id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_account_settlement_entries_settlement_id_entry_id_pk",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "ledger_account_settlement_entries"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_account_balance_monitors_pkey",
+      "schema": "public",
+      "table": "ledger_account_balance_monitors",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_account_categories_pkey",
+      "schema": "public",
+      "table": "ledger_account_categories",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_account_settlements_pkey",
+      "schema": "public",
+      "table": "ledger_account_settlements",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_account_statements_pkey",
+      "schema": "public",
+      "table": "ledger_account_statements",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_accounts_pkey",
+      "schema": "public",
+      "table": "ledger_accounts",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_transaction_entries_pkey",
+      "schema": "public",
+      "table": "ledger_transaction_entries",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ledger_transactions_pkey",
+      "schema": "public",
+      "table": "ledger_transactions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ledgers_pkey",
+      "schema": "public",
+      "table": "ledgers",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "organizations_table_pkey",
+      "schema": "public",
+      "table": "organizations_table",
+      "entityType": "pks"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "organization_id",
+        "ledger_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "unique_ledger_accounts_organization_ledger_id",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "organization_id",
+        "ledger_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "unique_ledger_transactions_organization_ledger_id",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "ledger_transactions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "organization_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "unique_ledgers_organization_id_id",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "ledgers"
+    },
+    {
+      "value": "\"category_id\" <> \"parent_category_id\"",
+      "name": "no_self_reference",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ledger_account_category_parents"
+    },
+    {
+      "value": "\"settled_account_id\" <> \"contra_account_id\"",
+      "name": "no_self_settle",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ledger_account_settlements"
+    },
+    {
+      "value": "btrim(\"currency_code\") <> ''",
+      "name": "ledger_accounts_currency_code_not_blank",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "value": "\"pending_amount\" BETWEEN -9007199254740991 AND 9007199254740991\n\t\t\t\tAND \"posted_amount\" BETWEEN -9007199254740991 AND 9007199254740991\n\t\t\t\tAND \"available_amount\" BETWEEN -9007199254740991 AND 9007199254740991\n\t\t\t\tAND \"pending_credits\" BETWEEN -9007199254740991 AND 9007199254740991\n\t\t\t\tAND \"pending_debits\" BETWEEN -9007199254740991 AND 9007199254740991\n\t\t\t\tAND \"posted_credits\" BETWEEN -9007199254740991 AND 9007199254740991\n\t\t\t\tAND \"posted_debits\" BETWEEN -9007199254740991 AND 9007199254740991\n\t\t\t\tAND \"available_credits\" BETWEEN -9007199254740991 AND 9007199254740991\n\t\t\t\tAND \"available_debits\" BETWEEN -9007199254740991 AND 9007199254740991",
+      "name": "ledger_accounts_balances_safe_integers",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ledger_accounts"
+    },
+    {
+      "value": "\"amount\" > 0 AND \"amount\" <= 9007199254740991",
+      "name": "ledger_transaction_entries_amount_positive_and_safe",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ledger_transaction_entries"
+    }
+  ],
+  "renames": []
+}

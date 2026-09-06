@@ -2,7 +2,7 @@ import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 
 import { BadRequestError } from "@/lib/errors";
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import type {
 	LedgerAccountInsertRow,
@@ -17,7 +17,6 @@ import type {
 	AccountUpdateRequest as LedgerAccountUpdateRequest,
 } from "./AccountSchema";
 
-type LedgerAccountMetadata = Readonly<Record<string, string>>;
 type LedgerAccountEntry = Pick<
 	LedgerTransactionEntryRow,
 	"amount" | "currency" | "direction" | "status"
@@ -41,7 +40,7 @@ type LedgerAccountOptions = Readonly<{
 	availableCredits: number;
 	availableDebits: number;
 	lockVersion: number;
-	metadata?: LedgerAccountMetadata;
+	metadata?: Metadata;
 	created: DateTime;
 	updated: DateTime;
 }>;
@@ -88,7 +87,7 @@ class LedgerAccount {
 	readonly availableCredits: number;
 	readonly availableDebits: number;
 	readonly lockVersion: number;
-	readonly metadata?: LedgerAccountMetadata;
+	readonly metadata?: Metadata;
 	readonly created: DateTime;
 	readonly updated: DateTime;
 
@@ -346,5 +345,5 @@ class LedgerAccount {
 	}
 }
 
-export type { LedgerAccountBalance, LedgerAccountMetadata, LedgerAccountOptions };
+export type { LedgerAccountBalance, LedgerAccountOptions };
 export { LedgerAccount, LedgerAccountCurrencyMismatch };
