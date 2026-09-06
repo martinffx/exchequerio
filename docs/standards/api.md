@@ -71,5 +71,5 @@ pnpm --filter=@exchequerio/api build
 pnpm --filter=@exchequerio/api types
 ```
 
-Read the relevant [API specification](../../apps/api/docs/spec/) for resource behavior and the
+Read the owning routes, schemas, services, and tests for current resource behavior, and the
 [entity relationship diagram](../../apps/api/docs/product/erd.md) for persistence work.

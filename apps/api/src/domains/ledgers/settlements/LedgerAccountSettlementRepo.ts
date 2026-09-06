@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Context, Effect, Layer } from "effect";
 
@@ -118,7 +118,7 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 		limit: number
 	): Effect.Effect<LedgerAccountSettlementEntity[], LedgerAccountSettlementListRepositoryError> {
 		return this.db
-			.select(getTableColumns(LedgerAccountSettlementsTable))
+			.select({ settlement: LedgerAccountSettlementsTable })
 			.from(LedgerAccountSettlementsTable)
 			.innerJoin(
 				LedgerAccountsTable,
@@ -134,7 +134,9 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 			.limit(limit)
 			.offset(offset)
 			.pipe(
-				Effect.flatMap(rows => Effect.all(rows.map(row => LedgerAccountSettlementEntity.fromRow(row))))
+				Effect.flatMap(rows =>
+					Effect.all(rows.map(row => LedgerAccountSettlementEntity.fromRow(row.settlement)))
+				)
 			);
 	}
 
@@ -143,7 +145,7 @@ class LedgerAccountSettlementRepoLive implements LedgerAccountSettlementRepo {
 		settlementId: LedgerAccountSettlementID
 	): Effect.Effect<LedgerAccountSettlementEntity, LedgerAccountSettlementGetRepositoryError> {
 		return this.db
-			.select(getTableColumns(LedgerAccountSettlementsTable))
+			.select()
 			.from(LedgerAccountSettlementsTable)
 			.where(
 				and(

@@ -15,7 +15,7 @@ Read only the documents relevant to the work:
 
 | Scope              | Source       | Required references                                                                                                                                                                                           |
 | ------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ledger API         | `apps/api/`  | [Shared standards](./docs/standards/README.md), [API addendum](./docs/standards/api.md), [ERD](./apps/api/docs/product/erd.md), and the relevant document under [`apps/api/docs/spec`](./apps/api/docs/spec/) |
+| Ledger API         | `apps/api/`  | [Shared standards](./docs/standards/README.md), [API addendum](./docs/standards/api.md), and [ERD](./apps/api/docs/product/erd.md) |
 | Customer portal    | `apps/web/`  | [Shared standards](./docs/standards/README.md) and [web addendum](./docs/standards/web.md)                                                                                                                    |
 | Documentation site | `apps/docs/` | [Shared standards](./docs/standards/README.md), [documentation addendum](./docs/standards/documentation.md), and [CONTEXT.md](./CONTEXT.md) for all Ledger terminology                                        |
 

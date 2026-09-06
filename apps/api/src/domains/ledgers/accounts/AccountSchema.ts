@@ -1,10 +1,11 @@
 import { type Static, Type } from "@sinclair/typebox";
-import { LedgerIdSchema, LedgerPaginationProperties } from "../LedgerSchema";
+import { ListQuery } from "@/lib/ListQuery";
+import { LedgerIdSchema } from "../LedgerSchema";
 
 const AccountIdSchema = Type.String({ pattern: "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
 const AccountCollectionParameters = Type.Object({ ledgerId: LedgerIdSchema });
 const AccountItemParameters = Type.Object({ ledgerId: LedgerIdSchema, accountId: AccountIdSchema });
-const AccountListQuery = Type.Object(LedgerPaginationProperties);
+const AccountListQuery = ListQuery;
 const AccountMetadataSchema = Type.Record(Type.String(), Type.String());
 const NormalBalanceSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });

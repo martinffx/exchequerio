@@ -12,8 +12,7 @@ For any change, read:
    - [Customer portal](./web.md)
    - [Documentation site](./documentation.md)
 
-Read only the relevant addendum. For API work, also read the relevant document under
-[`apps/api/docs/spec`](../../apps/api/docs/spec/) and the
+Read only the relevant addendum. For API work, also read the
 [entity relationship diagram](../../apps/api/docs/product/erd.md) when persistence is involved.
 
 `CONTEXT.md` defines domain language and business invariants. `AGENTS.md` routes repository work.

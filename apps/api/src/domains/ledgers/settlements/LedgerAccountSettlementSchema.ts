@@ -1,5 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
-import { LedgerIdSchema, LedgerPaginationProperties } from "../LedgerSchema";
+import { ListQuery } from "@/lib/ListQuery";
+import { LedgerIdSchema } from "../LedgerSchema";
 
 const Metadata = Type.Mapped(Type.KeyOf(Type.String()), () => Type.String(), {
 	description:
@@ -31,7 +32,7 @@ const LedgerAccountSettlementIdParams = Type.Object({
 	settlementId: LedgerAccountSettlementId,
 });
 const LedgerAccountSettlementCollectionParameters = Type.Object({ ledgerId: LedgerIdSchema });
-const LedgerAccountSettlementListQuery = Type.Object(LedgerPaginationProperties);
+const LedgerAccountSettlementListQuery = ListQuery;
 
 const LedgerAccountSettlementResponse = Type.Object(
 	{

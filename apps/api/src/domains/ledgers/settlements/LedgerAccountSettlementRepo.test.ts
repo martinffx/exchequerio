@@ -13,6 +13,12 @@ import {
 	ledgerAccountRepoLayer,
 } from "@/domains/ledgers/accounts/LedgerAccountRepo";
 import { LedgerAccount } from "@/domains/ledgers/accounts/LedgerAccount";
+import { LedgerTransaction } from "@/domains/ledgers/transactions/LedgerTransaction";
+import {
+	type LedgerTransactionRepo,
+	LedgerTransactionRepoTag,
+	ledgerTransactionRepoLayer,
+} from "@/domains/ledgers/transactions/LedgerTransactionRepo";
 import { Organization } from "@/domains/organizations/Organization";
 import {
 	type OrganizationRepo,
@@ -75,12 +81,14 @@ const settlement = (
 describe("LedgerAccountSettlementRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
 	const reposLayer = Layer.mergeAll(
+		ledgerTransactionRepoLayer,
 		ledgerAccountSettlementRepoLayer,
 		ledgerAccountRepoLayer,
 		ledgerRepoLayer,
 		organizationRepoLayer
 	).pipe(Layer.provideMerge(databaseLayer));
 	type TestServices =
+		| LedgerTransactionRepo
 		| LedgerAccountSettlementRepo
 		| LedgerAccountRepo
 		| LedgerRepo
@@ -101,6 +109,9 @@ describe("LedgerAccountSettlementRepoLive", () => {
 		runtime.runPromise(LedgerRepoTag.pipe(Effect.flatMap(use)));
 	const runOrganizationRepo = <A, E>(use: (repository: OrganizationRepo) => Effect.Effect<A, E>) =>
 		runtime.runPromise(OrganizationRepoTag.pipe(Effect.flatMap(use)));
+	const runTransactionRepo = <A, E>(
+		use: (repository: LedgerTransactionRepo) => Effect.Effect<A, E>
+	) => runtime.runPromise(LedgerTransactionRepoTag.pipe(Effect.flatMap(use)));
 	const database = () => runtime.runPromise(DatabaseTag);
 
 	const createContext = async (
@@ -296,43 +307,36 @@ describe("LedgerAccountSettlementRepoLive", () => {
 	});
 
 	it("validates Entry eligibility and retains links during Pending rollback", async () => {
-		const db = (await database()).db;
 		const record = await runRepo(repository => repository.createSettlement(settlement(context)));
 		const transactionId = newLedgerTransactionID();
 		const eligibleId = newLedgerTransactionEntryID();
 		const wrongAccountId = newLedgerTransactionEntryID();
-		await db.insert(LedgerTransactionsTable).values({
-			id: transactionId.toString(),
-			organizationId: context.organizationId.toString(),
-			ledgerId: context.ledgerId.toString(),
-			status: "posted",
-			postedAt: new Date(),
-			effectiveAt: new Date(),
-		});
-		await db.insert(LedgerTransactionEntriesTable).values([
-			{
-				id: eligibleId.toString(),
-				transactionId: transactionId.toString(),
-				accountId: context.settledAccountId.toString(),
-				organizationId: context.organizationId.toString(),
-				ledgerId: context.ledgerId.toString(),
-				direction: "debit",
-				amount: 125,
-				currency: "USD",
-				status: "posted",
-			},
-			{
-				id: wrongAccountId.toString(),
-				transactionId: transactionId.toString(),
-				accountId: context.contraAccountId.toString(),
-				organizationId: context.organizationId.toString(),
-				ledgerId: context.ledgerId.toString(),
-				direction: "credit",
-				amount: 125,
-				currency: "USD",
-				status: "posted",
-			},
-		]);
+		await runTransactionRepo(repository =>
+			LedgerTransaction.fromCreateRequest(
+				transactionId,
+				context.organizationId,
+				context.ledgerId,
+				{
+					status: "pending",
+					ledgerEntries: [
+						{
+							accountId: context.settledAccountId.toString(),
+							direction: "debit",
+							amount: 125,
+							currencyCode: "USD",
+						},
+						{
+							accountId: context.contraAccountId.toString(),
+							direction: "credit",
+							amount: 125,
+							currencyCode: "USD",
+						},
+					],
+				},
+				DateTime.utc(),
+				[eligibleId, wrongAccountId]
+			).pipe(Effect.flatMap(transaction => repository.createTransaction(transaction)))
+		);
 
 		await expect(
 			runRepo(repository =>
@@ -349,22 +353,19 @@ describe("LedgerAccountSettlementRepoLive", () => {
 			)
 		).rejects.toThrow(NotFoundError);
 
-		await db
-			.update(LedgerTransactionsTable)
-			.set({ status: "pending" })
-			.where(inArray(LedgerTransactionsTable.id, [transactionId.toString()]));
-		try {
-			await expect(
-				runRepo(repository =>
-					repository.addEntriesToSettlement(context.organizationId, record.id, [eligibleId.toString()])
-				)
-			).rejects.toThrow(ConflictError);
-		} finally {
-			await db
-				.update(LedgerTransactionsTable)
-				.set({ status: "posted", postedAt: new Date() })
-				.where(inArray(LedgerTransactionsTable.id, [transactionId.toString()]));
-		}
+		await expect(
+			runRepo(repository =>
+				repository.addEntriesToSettlement(context.organizationId, record.id, [eligibleId.toString()])
+			)
+		).rejects.toThrow(ConflictError);
+		await runTransactionRepo(repository =>
+			repository.postTransaction(
+				context.organizationId,
+				context.ledgerId,
+				transactionId,
+				DateTime.utc()
+			)
+		);
 
 		await runRepo(repository =>
 			repository.addEntriesToSettlement(context.organizationId, record.id, [eligibleId.toString()])
