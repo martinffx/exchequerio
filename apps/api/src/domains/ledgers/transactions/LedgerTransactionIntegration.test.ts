@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import type { FastifyInstance, InjectOptions } from "fastify";
 import { Pool } from "pg";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -27,8 +27,6 @@ import {
 	IdempotencyPending,
 	type IdempotencyService,
 	IdempotencyServiceTag,
-	type IdempotencyUnavailable,
-	type IdempotentOperation,
 } from "@/services/IdempotencyService";
 
 type JsonObject = Record<string, unknown>;
@@ -43,31 +41,28 @@ const idempotencyValues = new Map<string, string | typeof PENDING>();
 const cacheKey = (organizationId: OrgID, action: string, key: string) =>
 	`${organizationId.toString()}:${action}:${key}`;
 
-const idempotencyService = {
-	run<A, E, R>(
-		operation: IdempotentOperation<A, E, R>
-	): Effect.Effect<A, E | IdempotencyPending | IdempotencyUnavailable, R> {
-		return Effect.suspend(
-			(): Effect.Effect<A, E | IdempotencyPending | IdempotencyUnavailable, R> => {
-				const scopedKey = cacheKey(operation.organizationId, operation.action, operation.key);
-				const existing = idempotencyValues.get(scopedKey);
-				if (existing === PENDING) return Effect.fail(new IdempotencyPending());
-				if (existing !== undefined) return operation.replay(existing);
-				idempotencyValues.set(scopedKey, PENDING);
-				return operation.execute.pipe(
-					Effect.tap(result =>
-						Effect.sync(() => idempotencyValues.set(scopedKey, operation.resultId(result)))
-					),
-					Effect.tapError(error =>
-						operation.releaseOnError?.(error) === false
-							? Effect.void
-							: Effect.sync(() => idempotencyValues.delete(scopedKey)).pipe(Effect.asVoid)
-					)
-				);
-			}
-		);
+const idempotencyService: IdempotencyService = {
+	claim(organizationId, action, key) {
+		return Effect.suspend(() => {
+			const scopedKey = cacheKey(organizationId, action, key);
+			const existing = idempotencyValues.get(scopedKey);
+			if (existing === PENDING) return Effect.fail(new IdempotencyPending());
+			if (existing !== undefined) return Effect.succeed(Option.fromUndefinedOr(existing));
+			idempotencyValues.set(scopedKey, PENDING);
+			return Effect.succeed(Option.none());
+		});
 	},
-} satisfies IdempotencyService;
+	complete(organizationId, action, key, resourceId) {
+		return Effect.sync(() => {
+			idempotencyValues.set(cacheKey(organizationId, action, key), resourceId);
+		});
+	},
+	release(organizationId, action, key) {
+		return Effect.sync(() => {
+			idempotencyValues.delete(cacheKey(organizationId, action, key));
+		});
+	},
+};
 
 const auth = (organizationId: string) => ({
 	Authorization: `Bearer ${signJWT({ sub: organizationId, scope: ["org_admin"] })}`,

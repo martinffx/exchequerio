@@ -16,6 +16,9 @@ import {
 import { LedgerTransaction } from "./LedgerTransaction";
 import {
 	TransactionConcurrencyFailure,
+	TransactionPersistenceFailure,
+	TransactionPersistenceDecodingFailure,
+	TransactionRepositoryUnavailable,
 	TransactionValidationFailure,
 	TransactionVersionConflict,
 } from "./LedgerTransactionErrors";
@@ -24,7 +27,6 @@ import {
 	type IdempotencyService,
 	IdempotencyServiceTag,
 	IdempotencyUnavailable,
-	type IdempotentOperation,
 } from "@/services/IdempotencyService";
 import { type LedgerTransactionRepo, LedgerTransactionRepoTag } from "./LedgerTransactionRepo";
 import type { TransactionCreateRequest, TransactionUpdateRequest } from "./LedgerTransactionSchema";
@@ -73,6 +75,18 @@ afterEach(() => vi.restoreAllMocks());
 
 const harness = () => {
 	const repository = {
+		getSettlementTransaction: vi.fn<LedgerTransactionRepo["getSettlementTransaction"]>(() =>
+			Effect.succeed(foundTransaction)
+		),
+		createSettlementTransaction: vi.fn<LedgerTransactionRepo["createSettlementTransaction"]>(() =>
+			Effect.succeed(transaction)
+		),
+		postSettlementTransaction: vi.fn<LedgerTransactionRepo["postSettlementTransaction"]>(() =>
+			Effect.succeed(transaction)
+		),
+		voidSettlementTransaction: vi.fn<LedgerTransactionRepo["voidSettlementTransaction"]>(() =>
+			Effect.succeed(transaction)
+		),
 		listTransactions: vi.fn<LedgerTransactionRepo["listTransactions"]>(() =>
 			Effect.succeed([transaction])
 		),
@@ -92,16 +106,11 @@ const harness = () => {
 			Effect.succeed(transaction)
 		),
 	} satisfies LedgerTransactionRepo;
-	const idempotencyRun = vi.fn(
-		(operation: IdempotentOperation<unknown, unknown, unknown>) => operation.execute
-	);
-	const idempotency: IdempotencyService = {
-		run<A, E, R>(operation: IdempotentOperation<A, E, R>) {
-			return idempotencyRun(
-				operation as unknown as IdempotentOperation<unknown, unknown, unknown>
-			) as Effect.Effect<A, E | IdempotencyPending | IdempotencyUnavailable, R>;
-		},
-	};
+	const idempotency = {
+		claim: vi.fn<IdempotencyService["claim"]>(() => Effect.succeed(Option.none())),
+		complete: vi.fn<IdempotencyService["complete"]>(() => Effect.void),
+		release: vi.fn<IdempotencyService["release"]>(() => Effect.void),
+	} satisfies IdempotencyService;
 	const ledgerService = {
 		getLedger: vi.fn<LedgerService["getLedger"]>(() => Effect.succeed({} as never)),
 	} as unknown as LedgerService;
@@ -113,7 +122,7 @@ const harness = () => {
 	const layer = transactionServiceLayer.pipe(Layer.provide(dependencies));
 	const run = <A, E>(use: (service: TransactionService) => Effect.Effect<A, E>) =>
 		Effect.runPromise(TransactionServiceTag.use(use).pipe(Effect.provide(layer)));
-	return { idempotencyRun, ledgerService, repository, run };
+	return { idempotency, ledgerService, repository, run };
 };
 
 describe("TransactionService", () => {
@@ -124,19 +133,19 @@ describe("TransactionService", () => {
 			service.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest)
 		);
 
-		expect(h.idempotencyRun).toHaveBeenCalledWith(
-			expect.objectContaining({
-				organizationId,
-				action: "transactions.create",
-				key: idempotencyKey,
-			})
+		expect(h.idempotency.claim).toHaveBeenCalledWith(
+			organizationId,
+			"transactions.create",
+			idempotencyKey
 		);
 		expect(h.repository.createTransaction).toHaveBeenCalledWith(expect.any(LedgerTransaction));
 	});
 
-	it("lets the shared idempotency service replay a Transaction by stored ID", async () => {
+	it("reloads a Transaction using the stored idempotency ID", async () => {
 		const h = harness();
-		h.idempotencyRun.mockImplementation(operation => operation.replay(transactionId.toString()));
+		h.idempotency.claim.mockReturnValue(
+			Effect.succeed(Option.fromUndefinedOr(transactionId.toString()))
+		);
 
 		const found = await h.run(service =>
 			service.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest)
@@ -153,13 +162,70 @@ describe("TransactionService", () => {
 			new IdempotencyPending(),
 			new IdempotencyUnavailable(new Error("offline")),
 		]) {
-			h.idempotencyRun.mockReturnValueOnce(Effect.fail(failure));
+			h.idempotency.claim.mockReturnValueOnce(Effect.fail(failure));
 			await expect(
 				h.run(service =>
 					service.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest)
 				)
 			).rejects.toBe(failure);
 		}
+	});
+
+	it("completes the claim only after creation and preserves it if completion fails", async () => {
+		const h = harness();
+		const failure = new IdempotencyUnavailable(new Error("offline"));
+		h.idempotency.complete.mockReturnValueOnce(Effect.fail(failure));
+		await expect(
+			h.run(s => s.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest))
+		).rejects.toBe(failure);
+		expect(h.idempotency.complete).toHaveBeenCalledWith(
+			organizationId,
+			"transactions.create",
+			idempotencyKey,
+			transaction.id.toString()
+		);
+		expect(h.idempotency.release).not.toHaveBeenCalled();
+	});
+	it("releases a rejected write without hiding its error when release fails", async () => {
+		const h = harness();
+		const failure = new TransactionValidationFailure("invalid accounts");
+		h.repository.createTransaction.mockReturnValueOnce(Effect.fail(failure));
+		h.idempotency.release.mockReturnValueOnce(
+			Effect.fail(new IdempotencyUnavailable(new Error("offline")))
+		);
+		await expect(
+			h.run(s => s.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest))
+		).rejects.toBe(failure);
+		expect(h.idempotency.release).toHaveBeenCalledWith(
+			organizationId,
+			"transactions.create",
+			idempotencyKey
+		);
+		expect(h.idempotency.complete).not.toHaveBeenCalled();
+	});
+	it.each([
+		new TransactionPersistenceFailure(new Error("commit outcome unknown")),
+		new TransactionPersistenceDecodingFailure(new Error("unreadable result")),
+		new TransactionRepositoryUnavailable(new Error("disconnected")),
+	])("retains claims on uncertain writes: %s", async failure => {
+		const h = harness();
+		h.repository.createTransaction.mockReturnValueOnce(Effect.fail(failure));
+		h.repository.updateTransaction.mockReturnValueOnce(Effect.fail(failure));
+		h.repository.postTransaction.mockReturnValueOnce(Effect.fail(failure));
+		h.repository.voidTransaction.mockReturnValueOnce(Effect.fail(failure));
+		for (const use of [
+			(s: TransactionService) =>
+				s.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest),
+			(s: TransactionService) =>
+				s.updateTransaction(organizationId, ledgerId, transactionId, idempotencyKey, updateRequest),
+			(s: TransactionService) =>
+				s.postTransaction(organizationId, ledgerId, transactionId, idempotencyKey),
+			(s: TransactionService) =>
+				s.voidTransaction(organizationId, ledgerId, transactionId, idempotencyKey),
+		])
+			await expect(h.run(use)).rejects.toBe(failure);
+		expect(h.idempotency.release).not.toHaveBeenCalled();
+		expect(h.idempotency.complete).not.toHaveBeenCalled();
 	});
 
 	it("retries hot-Account OCC conflicts", async () => {
@@ -194,7 +260,7 @@ describe("TransactionService", () => {
 		expect(h.repository.createTransaction).toHaveBeenCalledTimes(2);
 	});
 
-	it("rejects more than 200 distinct Accounts and releases the claim", async () => {
+	it("rejects more than 200 distinct Accounts before claiming", async () => {
 		const h = harness();
 		const ledgerEntries = Array.from({ length: 201 }, (_, index) => ({
 			accountId: newLedgerAccountID().toString(),
@@ -212,7 +278,7 @@ describe("TransactionService", () => {
 			)
 		).rejects.toBeInstanceOf(TransactionValidationFailure);
 		expect(h.repository.createTransaction).not.toHaveBeenCalled();
-		expect(h.idempotencyRun).not.toHaveBeenCalled();
+		expect(h.idempotency.claim).not.toHaveBeenCalled();
 	});
 
 	it("updates through an action-scoped idempotency claim", async () => {
@@ -230,8 +296,10 @@ describe("TransactionService", () => {
 			expect.anything(),
 			expect.any(Array)
 		);
-		expect(h.idempotencyRun).toHaveBeenCalledWith(
-			expect.objectContaining({ action: "transactions.update", key: idempotencyKey })
+		expect(h.idempotency.claim).toHaveBeenCalledWith(
+			organizationId,
+			"transactions.update",
+			idempotencyKey
 		);
 	});
 
@@ -272,6 +340,6 @@ describe("TransactionService", () => {
 		});
 		expect(h.ledgerService.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
 		expect(h.repository.getTransaction).toHaveBeenCalledWith(organizationId, ledgerId, transactionId);
-		expect(h.idempotencyRun).not.toHaveBeenCalled();
+		expect(h.idempotency.claim).not.toHaveBeenCalled();
 	});
 });

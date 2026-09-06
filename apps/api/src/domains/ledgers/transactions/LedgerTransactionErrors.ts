@@ -33,6 +33,14 @@ class TransactionLifecycleConflict extends ConflictError {
 	}
 }
 
+class TransactionSettlementConflict extends ConflictError {
+	constructor() {
+		super("Use the Settlement resource to mutate Settlement-generated accounting", {
+			retryable: false,
+		});
+	}
+}
+
 class TransactionConcurrencyFailure extends ConflictError {
 	constructor(cause: unknown) {
 		super("Transaction was modified by another operation", { cause, retryable: true });
@@ -95,6 +103,7 @@ const mapTransactionCreateError = (cause: unknown) =>
 	cause instanceof AccountNotFound ||
 	cause instanceof AccountVersionConflict ||
 	cause instanceof LedgerAccountCurrencyMismatch ||
+	cause instanceof TransactionSettlementConflict ||
 	cause instanceof TransactionValidationFailure
 		? cause
 		: mapTransactionConcurrentError(cause);
@@ -103,6 +112,7 @@ const mapTransactionMutationError = (cause: unknown) =>
 	cause instanceof AccountNotFound ||
 	cause instanceof AccountVersionConflict ||
 	cause instanceof LedgerAccountCurrencyMismatch ||
+	cause instanceof TransactionSettlementConflict ||
 	cause instanceof TransactionLifecycleConflict ||
 	cause instanceof TransactionNotFound ||
 	cause instanceof TransactionPersistenceDecodingFailure ||
@@ -124,6 +134,7 @@ const requireTransactionWrite = (written: boolean) =>
 
 export type { TransactionInfrastructureError };
 export {
+	TransactionSettlementConflict,
 	TransactionConcurrencyFailure,
 	TransactionLifecycleConflict,
 	TransactionNotFound,

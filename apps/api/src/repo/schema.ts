@@ -1,6 +1,7 @@
 import { type BuildQueryResult, defineRelations, sql } from "drizzle-orm";
 import {
 	bigint,
+	boolean,
 	check,
 	foreignKey,
 	index,
@@ -28,8 +29,7 @@ const ledgerSettlementStatus = pgEnum("ledger_settlement_status", [
 	"processing",
 	"pending",
 	"posted",
-	"archiving",
-	"archived",
+	"voided",
 ]);
 
 const OrganizationsTable = pgTable("organizations_table", {
@@ -144,6 +144,7 @@ const LedgerTransactionsTable = pgTable(
 	"ledger_transactions",
 	{
 		id: text("id").primaryKey(),
+		settlementId: text("settlement_id"),
 		ledgerId: text("ledger_id").notNull(),
 		organizationId: text("organization_id")
 			.notNull()
@@ -158,6 +159,15 @@ const LedgerTransactionsTable = pgTable(
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
+		settlementUnique: unique("unique_transaction_settlement").on(table.settlementId),
+		settlementFk: foreignKey({
+			columns: [table.organizationId, table.ledgerId, table.settlementId],
+			foreignColumns: [
+				LedgerAccountSettlementsTable.organizationId,
+				LedgerAccountSettlementsTable.ledgerId,
+				LedgerAccountSettlementsTable.id,
+			],
+		}),
 		organizationIdx: index("idx_ledger_transactions_organization").on(table.organizationId),
 		statusIdx: index("idx_ledger_transactions_status").on(table.status),
 		organizationLedgerFk: foreignKey({
@@ -341,15 +351,15 @@ const LedgerAccountSettlementsTable = pgTable(
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		transactionId: text("transaction_id").references(() => LedgerTransactionsTable.id),
+		ledgerId: text("ledger_id").notNull(),
+		allowEitherDirection: boolean("allow_either_direction").notNull().default(false),
+		targetStatus: ledgerTransactionStatus("target_status"),
 		settledAccountId: text("settled_account_id")
 			.notNull()
 			.references(() => LedgerAccountsTable.id),
 		contraAccountId: text("contra_account_id")
 			.notNull()
 			.references(() => LedgerAccountsTable.id),
-		amount: bigint("amount", { mode: "number" }).notNull().default(0),
-		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
 		currency: text("currency").notNull(),
 		status: ledgerSettlementStatus("status").notNull().default("drafting"),
 		description: text("description"),
@@ -361,6 +371,35 @@ const LedgerAccountSettlementsTable = pgTable(
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
+		organizationLedgerIdUnique: unique("unique_settlements_organization_ledger_id").on(
+			table.organizationId,
+			table.ledgerId,
+			table.id
+		),
+		ledgerFk: foreignKey({
+			columns: [table.organizationId, table.ledgerId],
+			foreignColumns: [LedgersTable.organizationId, LedgersTable.id],
+		}),
+		settledAccountFk: foreignKey({
+			columns: [table.organizationId, table.ledgerId, table.settledAccountId],
+			foreignColumns: [
+				LedgerAccountsTable.organizationId,
+				LedgerAccountsTable.ledgerId,
+				LedgerAccountsTable.id,
+			],
+		}),
+		contraAccountFk: foreignKey({
+			columns: [table.organizationId, table.ledgerId, table.contraAccountId],
+			foreignColumns: [
+				LedgerAccountsTable.organizationId,
+				LedgerAccountsTable.ledgerId,
+				LedgerAccountsTable.id,
+			],
+		}),
+		processingTarget: check(
+			"settlement_processing_target",
+			sql`(${table.status} = 'processing') = (${table.targetStatus} IS NOT NULL)`
+		),
 		orgIdx: index("idx_settlements_org").on(table.organizationId),
 		statusIdx: index("idx_settlements_status").on(table.status),
 		settledAccountIdx: index("idx_settlements_settled_account").on(table.settledAccountId),
@@ -385,7 +424,7 @@ const LedgerAccountSettlementEntriesTable = pgTable(
 	},
 	table => ({
 		pk: primaryKey({ columns: [table.settlementId, table.entryId] }),
-		entryIdx: index("idx_settlement_entries_entry").on(table.entryId),
+		entryIdx: uniqueIndex("idx_settlement_entries_entry").on(table.entryId),
 	})
 );
 type LedgerAccountSettlementEntryRow = typeof LedgerAccountSettlementEntriesTable.$inferSelect;
@@ -441,7 +480,10 @@ const schemaRelations = defineRelations(
 				to: r.LedgersTable.id,
 			}),
 			entries: r.many.LedgerTransactionEntriesTable(),
-			settlements: r.many.LedgerAccountSettlementsTable(),
+			settlement: r.one.LedgerAccountSettlementsTable({
+				from: r.LedgerTransactionsTable.settlementId,
+				to: r.LedgerAccountSettlementsTable.id,
+			}),
 		},
 		LedgerTransactionEntriesTable: {
 			transaction: r.one.LedgerTransactionsTable({
@@ -517,8 +559,8 @@ const schemaRelations = defineRelations(
 				alias: "contraAccount",
 			}),
 			transaction: r.one.LedgerTransactionsTable({
-				from: r.LedgerAccountSettlementsTable.transactionId,
-				to: r.LedgerTransactionsTable.id,
+				from: r.LedgerAccountSettlementsTable.id,
+				to: r.LedgerTransactionsTable.settlementId,
 			}),
 			settlementEntries: r.many.LedgerAccountSettlementEntriesTable(),
 		},

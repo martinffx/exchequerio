@@ -1,111 +1,114 @@
 # Settlement corrections
 
-This is the product correction approved after reviewing the Settlement Effect migration. It
-supersedes the behavior in `../2026-08-29-settlements-effect` without rewriting that migration's history.
+This approved correction follows the Settlement Effect migration. The review decisions below
+supersede the earlier proposal to share a database transaction between repositories.
 
-## Transaction effective time
+## Ownership and processing
 
-Transactions store `effectiveAt` as a timestamp and expose it as a Luxon DateTime in the entity.
-Create accepts an optional effective time, defaulting to server creation time. Pending updates may
-replace it; omission preserves it. Posting makes it immutable. Entries inherit their Transaction's
-effective time. Detail and list responses return it. Created and Posted Time remain server-owned.
-Live balances depend on status, including when effective time is in the future; no scheduler is added.
+SettlementService orchestrates SettlementRepo and TransactionRepo directly. Each repository owns
+its database transactions. No database transaction crosses a service or repository boundary.
 
-A separate migration backfills existing Transactions from `created`. It cannot recover historical
-effective dates discarded by the earlier migration.
+Processing has three commits:
 
-## Settlement lifecycle
+1. SettlementRepo validates and freezes source membership, checks netting, and records Processing
+   with the intended target status. Creation may create and prepare together.
+2. TransactionRepo atomically creates or transitions the accounting Transaction, Entries and Account
+   projections. The Transaction carries a unique, immutable Settlement ID.
+3. SettlementRepo finalizes its separately stored status and clears the target. Voiding releases
+   source membership in this same finalization transaction.
 
-| State    | Source membership | Generated accounting                                  |
-| -------- | ----------------- | ----------------------------------------------------- |
-| drafting | Manually mutable  | Amount, direction and Transaction ID are null         |
-| pending  | Frozen            | One Pending offset Transaction and Entry pair         |
-| posted   | Frozen            | The same Transaction and Entry pair become Posted     |
-| voided   | Released          | Any Pending offset Transaction and pair become Voided |
+A failure after preparation leaves Processing and frozen sources. Retries reuse existing accounting
+and resume the intended transition. Competing transitions and membership edits are rejected during
+Processing. A replay must not resume a later transition belonging to another action.
 
-Drafting may become Pending, Posted or Voided. Pending may become Posted or Voided. Posted and
-Voided are terminal. Repeating the current status is a no-op. Voiding retains derived Amount,
-direction and Transaction ID for audit; a voided draft retains null values.
+SettlementRepo locks existing Settlement rows for preparation, membership changes and finalization.
+TransactionRepo locks the associated Settlement within its own accounting transaction. It verifies
+the Processing target and uses the unique Settlement reference to prevent duplicate accounting.
 
-Both Accounts belong to the Settlement's Organization and Ledger, are distinct and use the same
-Currency Code. The Asset migration is out of scope. Sources must be Posted Entries on the settled
-Account with no current Settlement link. Net their mixed directions relative to the Account's
-Normal Balance using exact integer accumulation. Store the absolute net and actual
-`settlementEntryDirection`. Reject empty, zero and unsafe final nets. A negative net requires
-`allowEitherDirection: true`, default false.
+## Lifecycle and derived accounting
 
-The generated Transaction has effective time equal to Settlement creation time. Generic Transaction
-mutations reject it with a typed conflict directing callers to the Settlement resource; normal reads
-remain available. The Transaction repository checks ownership. TransactionService does not branch
-on Settlement ownership.
+Drafting uses manual source selection. Drafting can become Pending, Posted or Voided. Pending can
+become Posted or Voided. Processing is the intermediate state for accounting operations; it records
+Pending, Posted or Voided as its target. Posted and Voided are terminal. Repeating a completed state
+is a no-op. A draft can be voided directly without creating accounting.
 
-## Selection and HTTP
+Pending has one Pending offset Transaction. Posting preserves its Transaction and Entry identities.
+Voiding retains the accounting and removes its balance effects before releasing source membership.
+Generic Transaction mutations reject Settlement-generated accounting; callers use the Settlement API.
 
-Create accepts Drafting, Pending or Posted and defaults to Pending. Drafting rejects
-`effectiveAtUpperBound` and uses manual selection. Direct Pending or Posted creation selects all
-eligible sources whose parent effective time is at or before the cutoff, default Settlement creation
-time. There is no lower bound, so later backdated Entries remain eligible. Exclude earlier generated
-offset Entries on their own settled Account; contra-side Entries remain eligible on their Account.
+Transactions carry nullable `settlementId`, unique and constrained to the same Organization and Ledger.
+Settlements do not store Transaction ID, Amount or direction. Responses resolve the Transaction through
+that relationship and derive Amount and direction from its Entry on the settled Account. Accounting
+fields are null until accounting exists; they remain readable after voiding.
 
-Limit a Settlement to 10,000 sources and each add/remove request to 500 IDs. Automatic selection
-probes 10,001 and rejects overflow without truncation. A unique junction `entry_id` prevents
-concurrent attachment to different Settlements; conflicts roll back the whole operation.
+Entities own codecs, netting and construction of accounting entities. Services own clocks, use-case
+orchestration, idempotency and recovery. Repositories own persistence, locks and error translation.
+There are no separate amount-update or Transaction-link operations.
 
-Replace resource PUT and status POST with `PATCH /:settlementId`. PATCH accepts description,
-metadata and status. Drafting and Pending permit description and metadata edits; terminal states
-permit metadata only. Omitted fields are preserved. Supplied metadata replaces the map and `{}`
-clears it. Configuration is immutable. Descriptive edits do not synchronize the generated
-Transaction's copied description or metadata. Remove resource DELETE; void through PATCH.
+## Source selection
 
-Keep PATCH and DELETE `/:settlementId/entries` for adding and removing sources, returning 204.
-Add paginated GET at that path, returning Entry ID, Transaction ID, parent effective time, Account ID,
-direction, Amount, Currency Code, status, metadata and creation time. Use offset 0..10,000 and limit
-1..100, default 0/20, with deterministic `created DESC, id DESC` order.
+Both Accounts belong to the Settlement's Organization and Ledger, are distinct and have the same
+Currency Code. Eligible sources are Posted Entries on the settled Account without current Settlement
+membership. Exclude generated offset Entries on their own settled Account; their contra-side Entries
+remain eligible on the contra Account.
 
-Remove request `transactionId` and response `normalBalance`. Return nullable Amount, direction and
-Transaction ID, plus Ledger ID, cutoff, direction policy and External Reference. Retain `created`
-and `updated`. Create returns 201 with Location; resource PATCH returns the Settlement. Preserve
-read/write permissions and require the existing delete permission for voiding.
+Net mixed directions relative to the settled Account's Normal Balance with exact integer accumulation.
+Reject empty, zero and unsafe final nets. A negative net requires `allowEitherDirection: true`, default
+false. The offset uses the absolute net and opposite direction. Its effective time is Settlement creation
+time. Live balances remain status-based.
 
-## Ownership and atomicity
+Direct Pending or Posted creation selects all eligible sources at or before `effectiveAtUpperBound`,
+defaulting to Settlement creation time. There is no lower bound. Drafting rejects a cutoff and permits
+manual membership edits. Limit membership to 10,000 sources and each mutation to 500 distinct IDs.
+Automatic selection probes 10,001 and rejects overflow. A unique source Entry constraint prevents
+concurrent attachment to different Settlements.
 
-Entities own codecs, netting, lifecycle rules and conversion to a Transaction entity. Services own
-clocks, idempotency and retries. Repositories own SQL, transactions, locks and error translation.
-Public repository operations are complete create, patch and membership operations. Remove
-`updateAmount`, `linkTransaction`, `calculateAmount`, `getEntryIds` and piecemeal `updateStatus`.
+## HTTP
 
-Processing commits source links, Settlement state, generated Transaction and Entries, and Account
-projections in one PostgreSQL transaction. Posting and voiding do the same. Existing Settlement
-mutations and membership edits lock its row. Shared low-level Transaction persistence functions
-accept the current database transaction; there is no public bypass flag or duplicated accounting.
+Create accepts Drafting, Pending or Posted and defaults to Pending. Return 201 with Location.
+PATCH the resource to edit description, metadata or status. Drafting and Pending permit description
+and metadata edits; terminal states permit metadata only. Omitted fields are preserved; supplied
+metadata replaces the map and `{}` clears it. Configuration is immutable. Description and metadata
+edits do not rewrite copied accounting fields.
 
-Add Ledger ownership and composite foreign keys to Ledger, Accounts and generated Transaction.
-The generated Transaction reference is unique and immutable. `fromRow(row | undefined)` returns
-an Effect of Option; repository helpers translate missing values. Reuse shared ID parsers, Metadata,
-Luxon and schema-inferred row types. Settlement-local infrastructure and operation mappers reuse
-database error helpers, preserve domain errors, and map conflicts to 409, availability to 503 and
-unexpected failures to 500.
+Remove resource PUT, DELETE and status POST. Keep PATCH and DELETE `/:settlementId/entries` for
+membership changes with 204 responses. Add paginated GET there returning Entry ID, Transaction ID,
+effective time, Account ID, direction, Amount, Currency Code, status, metadata and creation time.
+Use shared offset 0..10,000 and limit 1..100 (default 0/20), ordered by creation and ID descending.
 
-Each mutating service operation claims Organization/action/client-key idempotency. Store only the
-Settlement ID and reload on replay. A composite Settlement operation has one claim and does not
-call TransactionService. Preserve Valkey TTL and bounded waiting; retain claims on uncertain
-database outcomes. The existing crash gap remains outside this correction's scope.
+Remove request Transaction ID and response Normal Balance. Return Ledger ID, nullable derived Amount,
+direction and Transaction ID, cutoff, direction policy and External Reference, plus Created and Updated.
+All reads and writes filter Organization and Ledger. Lists query directly without a Ledger existence
+lookup. Preserve read/write permissions; voiding additionally requires delete permission.
 
-## Migration and exclusions
+## Explicit idempotency
 
-Generate a separate Settlement migration, then review its SQL. Before changing either table, require
-both Settlement tables to be empty. Do not invent accounting migrations for legacy rows. Retain
-applied migrations. Replace the status enum, normal balance and non-null amount with the new
-lifecycle, nullable derived facts, ownership, policy, indexes and constraints.
+IdempotencyService exposes claim, complete and release. A claim returns permission to continue,
+a stored resource ID to reload, or an Effect error for pending/unavailable state. The service owns
+Valkey claims, expiry and bounded waiting; it never receives business Effects or replay callbacks.
+SettlementService and TransactionService own execution, replay and failure handling explicitly.
 
-Statements remain a separate follow-up: their domain definition promises a complete immutable
-snapshot, but the current implementation is a stub. This correction does not implement Statements.
+Each new client action uses a fresh UUID; retries reuse its key. Claims remain scoped to Organization
+and service action with a 15-minute TTL. Store resource IDs only. Settlement preparation records its ID
+before accounting so retries can resume. Release only known rejected writes; retain uncertain outcomes.
+The existing gap between PostgreSQL commit and Valkey completion remains outside this correction.
 
-## Verification
+## Migration and verification
 
-Test domain netting, lifecycle, timestamps and codecs at the entity boundary. Use PostgreSQL tests
-for rollback at each write stage, concurrent source exclusivity, membership versus processing,
-Account updates, ownership scope, identity across posting, void release and generic mutation
-blocking. Cover cutoff equality, backdating, generated-offset exclusion and both limits. Test HTTP
-routes, permissions and replay, and migration preflight/backfill. Run focused suites, typechecking,
-build, lint, formatting and full regression tests. Do not weaken unrelated Category assertions.
+Add a separate migration that refuses nonempty Settlement or membership tables before changing them.
+Keep applied migrations. Existing ordinary Transactions receive a null Settlement reference. Add scoped
+ownership constraints, the new lifecycle and processing target, and unique source/accounting references.
+Do not invent a historical accounting migration.
+
+Use direct service construction and focused typed dependency mocks, without override factories or
+call-order bookkeeping. Test through routes, services and repositories; do not restore standalone
+entity/runtime suites. Database fixtures use the configured test database. Fixture creation and mutations use repositories.
+Teardown calls LedgerRepo.deleteLedgerFixtures for each owned Ledger, then OrganizationRepo.deleteOrganization.
+Fixture cleanup deletes dependent accounting and Settlement rows in one scoped database transaction;
+ordinary Ledger deletion behavior is unchanged. No disposable databases are created.
+Test preparation/accounting/finalization failure recovery, concurrent retries and source exclusivity,
+netting, cutoff boundaries, ownership, metadata, limits, permissions, migration preflight and balances.
+Run focused and full API tests, types, build, lint and formatting checks.
+
+Statements and Asset migration remain separate work. Statements promise immutable snapshots in the
+domain glossary, but their current implementation remains a stub.

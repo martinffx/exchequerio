@@ -1,8 +1,7 @@
-import { Clock, Context, Effect, Layer, Schedule } from "effect";
+import { Clock, Context, Effect, Layer, Option, Schedule } from "effect";
 import { DateTime } from "luxon";
 
 import { AccountVersionConflict } from "@/domains/ledgers/accounts";
-import type { InvalidId } from "@/lib/errors";
 import {
 	type LedgerGetError,
 	type LedgerService,
@@ -29,6 +28,7 @@ import {
 	type TransactionInfrastructureError,
 	TransactionNotFound,
 	TransactionPersistenceFailure,
+	TransactionPersistenceDecodingFailure,
 	TransactionRepositoryUnavailable,
 	TransactionValidationFailure,
 	TransactionVersionConflict,
@@ -277,23 +277,23 @@ class TransactionServiceLive implements TransactionService {
 		idempotencyKey: string,
 		transaction: LedgerTransaction
 	): Effect.Effect<LedgerTransaction, TransactionCreateError> {
-		return this.idempotency.run({
-			organizationId: transaction.organizationId,
-			action: "transactions.create",
-			key: idempotencyKey,
-			execute: retryMutation(Effect.suspend(() => this.repository.createTransaction(transaction))),
-			resultId: transaction => transaction.id.toString(),
-			replay: resultId =>
-				parseId<"ltr", LedgerTransactionID>("ltr", resultId).pipe(
-					Effect.flatMap(transactionId =>
-						this.getTransaction(transaction.organizationId, transaction.ledgerId, transactionId)
-					)
-				),
-			releaseOnError: error =>
-				!(
-					error instanceof TransactionPersistenceFailure ||
-					error instanceof TransactionRepositoryUnavailable
-				),
+		return Effect.gen({ self: this }, function* () {
+			const organizationId = transaction.organizationId;
+			const action = "transactions.create";
+			const claim = yield* this.idempotency.claim(organizationId, action, idempotencyKey);
+			if (Option.isSome(claim)) {
+				const storedId = yield* parseId<"ltr", LedgerTransactionID>("ltr", claim.value);
+				return yield* this.getTransaction(organizationId, transaction.ledgerId, storedId);
+			}
+			const result = yield* retryMutation(
+				Effect.suspend(() => this.repository.createTransaction(transaction))
+			).pipe(
+				Effect.tapError(error =>
+					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
+				)
+			);
+			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
+			return result;
 		});
 	}
 
@@ -313,32 +313,40 @@ class TransactionServiceLive implements TransactionService {
 		idempotencyKey: string,
 		request: TransactionUpdateRequest
 	): Effect.Effect<LedgerTransaction, TransactionUpdateError> {
-		const execute = this.validateAccountLimit(request.ledgerEntries).pipe(
-			Effect.andThen(serverTime),
-			Effect.flatMap(updated => {
-				const entryIds = request.ledgerEntries.map(() => newLedgerTransactionEntryID());
-				return retryMutation(
-					Effect.suspend(() =>
-						this.repository.updateTransaction(
-							organizationId,
-							ledgerId,
-							transactionId,
-							request,
-							updated,
-							entryIds
+		return Effect.gen({ self: this }, function* () {
+			const action = "transactions.update";
+			const claim = yield* this.idempotency.claim(organizationId, action, idempotencyKey);
+			if (Option.isSome(claim)) {
+				const storedId = yield* parseId<"ltr", LedgerTransactionID>("ltr", claim.value);
+				return yield* this.getTransaction(organizationId, ledgerId, storedId);
+			}
+
+			const execute = this.validateAccountLimit(request.ledgerEntries).pipe(
+				Effect.andThen(serverTime),
+				Effect.flatMap(updated => {
+					const entryIds = request.ledgerEntries.map(() => newLedgerTransactionEntryID());
+					return retryMutation(
+						Effect.suspend(() =>
+							this.repository.updateTransaction(
+								organizationId,
+								ledgerId,
+								transactionId,
+								request,
+								updated,
+								entryIds
+							)
 						)
-					)
-				);
-			})
-		);
-		return this.runMutation(
-			organizationId,
-			ledgerId,
-			transactionId,
-			idempotencyKey,
-			"transactions.update",
-			execute
-		);
+					);
+				})
+			);
+			const result = yield* execute.pipe(
+				Effect.tapError(error =>
+					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
+				)
+			);
+			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
+			return result;
+		});
 	}
 
 	/**
@@ -355,23 +363,31 @@ class TransactionServiceLive implements TransactionService {
 		transactionId: LedgerTransactionID,
 		idempotencyKey: string
 	): Effect.Effect<LedgerTransaction, TransactionTransitionError> {
-		const execute = serverTime.pipe(
-			Effect.flatMap(postedAt =>
-				retryMutation(
-					Effect.suspend(() =>
-						this.repository.postTransaction(organizationId, ledgerId, transactionId, postedAt)
+		return Effect.gen({ self: this }, function* () {
+			const action = "transactions.post";
+			const claim = yield* this.idempotency.claim(organizationId, action, idempotencyKey);
+			if (Option.isSome(claim)) {
+				const storedId = yield* parseId<"ltr", LedgerTransactionID>("ltr", claim.value);
+				return yield* this.getTransaction(organizationId, ledgerId, storedId);
+			}
+
+			const execute = serverTime.pipe(
+				Effect.flatMap(postedAt =>
+					retryMutation(
+						Effect.suspend(() =>
+							this.repository.postTransaction(organizationId, ledgerId, transactionId, postedAt)
+						)
 					)
 				)
-			)
-		);
-		return this.runMutation(
-			organizationId,
-			ledgerId,
-			transactionId,
-			idempotencyKey,
-			"transactions.post",
-			execute
-		);
+			);
+			const result = yield* execute.pipe(
+				Effect.tapError(error =>
+					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
+				)
+			);
+			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
+			return result;
+		});
 	}
 
 	/**
@@ -388,66 +404,41 @@ class TransactionServiceLive implements TransactionService {
 		transactionId: LedgerTransactionID,
 		idempotencyKey: string
 	): Effect.Effect<LedgerTransaction, TransactionTransitionError> {
-		const execute = serverTime.pipe(
-			Effect.flatMap(updated =>
-				retryMutation(
-					Effect.suspend(() =>
-						this.repository.voidTransaction(organizationId, ledgerId, transactionId, updated)
+		return Effect.gen({ self: this }, function* () {
+			const action = "transactions.void";
+			const claim = yield* this.idempotency.claim(organizationId, action, idempotencyKey);
+			if (Option.isSome(claim)) {
+				const storedId = yield* parseId<"ltr", LedgerTransactionID>("ltr", claim.value);
+				return yield* this.getTransaction(organizationId, ledgerId, storedId);
+			}
+
+			const execute = serverTime.pipe(
+				Effect.flatMap(updated =>
+					retryMutation(
+						Effect.suspend(() =>
+							this.repository.voidTransaction(organizationId, ledgerId, transactionId, updated)
+						)
 					)
 				)
-			)
-		);
-		return this.runMutation(
-			organizationId,
-			ledgerId,
-			transactionId,
-			idempotencyKey,
-			"transactions.void",
-			execute
-		);
-	}
-
-	private runMutation<E>(
-		organizationId: OrgID,
-		ledgerId: LedgerID,
-		transactionId: LedgerTransactionID,
-		idempotencyKey: string,
-		action: string,
-		execute: Effect.Effect<LedgerTransaction, E | InvalidId | TransactionGetError>
-	) {
-		return this.idempotency.run({
-			organizationId,
-			action,
-			key: idempotencyKey,
-			execute,
-			resultId: transaction => transaction.id.toString(),
-			replay: resultId =>
-				parseId<"ltr", LedgerTransactionID>("ltr", resultId).pipe(
-					Effect.flatMap(storedId => this.getTransaction(organizationId, ledgerId, storedId))
-				),
+			);
+			const result = yield* execute.pipe(
+				Effect.tapError(error =>
+					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
+				)
+			);
+			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
+			return result;
 		});
 	}
 
-	/**
-	 * Waits for the winner of an idempotency claim to store its committed Transaction ID.
-	 *
-	 * @param organizationId - Organization that owns the claimed Transaction.
-	 * @param ledgerId - Ledger that contains the claimed Transaction.
-	 * @param transactionId - Committed identifier stored in the claim, when already available.
-	 * @returns An Effect containing the claimed Transaction, or a creation-pending failure after the bounded wait.
-	 */
-	/**
-	 * Creates a Transaction for a winning claim and releases that claim if creation fails.
-	 *
-	 * Claim release is best effort so a Valkey failure does not replace the creation failure.
-	 *
-	 * @param organizationId - Organization that owns the Transaction.
-	 * @param ledgerId - Ledger that will contain the Transaction.
-	 * @param idempotencyKey - Client key whose claim is released after a failed creation.
-	 * @param transactionId - Identifier allocated by the winning claim.
-	 * @param request - Validated Transaction creation request.
-	 * @returns An Effect containing the created Transaction.
-	 */
+	private releaseFailedMutation(organizationId: OrgID, action: string, key: string, error: unknown) {
+		return error instanceof TransactionPersistenceDecodingFailure ||
+			error instanceof TransactionPersistenceFailure ||
+			error instanceof TransactionRepositoryUnavailable
+			? Effect.void
+			: this.idempotency.release(organizationId, action, key).pipe(Effect.ignore);
+	}
+
 	/**
 	 * Rejects a Transaction that references more than 200 distinct Accounts.
 	 *

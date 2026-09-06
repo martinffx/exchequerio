@@ -1,262 +1,236 @@
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
-
-import { LedgerTransaction } from "@/domains/ledgers/transactions/LedgerTransaction";
-import { LedgerTransactionEntry } from "@/domains/ledgers/transactions/LedgerTransactionEntry";
-import type { InvalidId } from "@/lib/errors";
+import { LedgerTransaction } from "../transactions/LedgerTransaction";
+import { BadRequestError, ConflictError } from "@/lib/errors";
 import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import {
 	newLedgerAccountSettlementID,
-	newLedgerTransactionEntryID,
 	newLedgerTransactionID,
 	type LedgerAccountID,
 	type LedgerAccountSettlementID,
 	type LedgerID,
-	type LedgerTransactionID,
 	type OrgID,
 } from "@/repo/entities/types";
 import type { LedgerAccountSettlementInsert, LedgerAccountSettlementRow } from "@/repo/schema";
-
 import type {
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
 	NormalBalance,
 	SettlementStatus,
+	SettlementTargetStatus,
 } from "./LedgerAccountSettlementSchema";
-import {
-	LedgerAccountSettlementLifecycleConflict,
-	LedgerAccountSettlementPersistenceDecodingFailure,
-} from "./LedgerAccountSettlementErrors";
+import { LedgerAccountSettlementPersistenceDecodingFailure } from "./LedgerAccountSettlementErrors";
 
 type LedgerAccountSettlementEntityOptions = Readonly<{
 	id: LedgerAccountSettlementID;
 	organizationId: OrgID;
-	transactionId?: LedgerTransactionID;
+	ledgerId: LedgerID;
 	settledAccountId: LedgerAccountID;
 	contraAccountId: LedgerAccountID;
-	amount: number;
-	normalBalance: NormalBalance;
 	currency: string;
 	status: SettlementStatus;
+	targetStatus?: SettlementTargetStatus;
 	description?: string;
 	externalReference?: string;
 	effectiveAtUpperBound?: DateTime;
+	allowEitherDirection: boolean;
 	metadata?: Metadata;
 	created: DateTime;
 	updated: DateTime;
+	transaction?: LedgerTransaction;
 }>;
-
-const toIso = (value: DateTime): string => {
-	const encoded = value.toISO();
-	if (encoded === null) throw new Error("Settlement contains an invalid timestamp");
-	return encoded;
+const toIso = (date: DateTime): string => {
+	const value = date.toISO();
+	if (value === null) throw new Error("Settlement contains an invalid timestamp");
+	return value;
 };
-
 class LedgerAccountSettlementEntity {
-	readonly id: LedgerAccountSettlementID;
-	readonly organizationId: OrgID;
-	readonly transactionId?: LedgerTransactionID;
-	readonly settledAccountId: LedgerAccountID;
-	readonly contraAccountId: LedgerAccountID;
-	readonly amount: number;
-	readonly normalBalance: NormalBalance;
-	readonly currency: string;
-	readonly status: SettlementStatus;
-	readonly description?: string;
-	readonly externalReference?: string;
-	readonly effectiveAtUpperBound?: DateTime;
-	readonly metadata?: Metadata;
-	readonly created: DateTime;
-	readonly updated: DateTime;
-
-	constructor(opts: LedgerAccountSettlementEntityOptions) {
-		this.id = opts.id;
-		this.organizationId = opts.organizationId;
-		this.transactionId = opts.transactionId;
-		this.settledAccountId = opts.settledAccountId;
-		this.contraAccountId = opts.contraAccountId;
-		this.amount = opts.amount;
-		this.normalBalance = opts.normalBalance;
-		this.currency = opts.currency;
-		this.status = opts.status;
-		this.description = opts.description;
-		this.externalReference = opts.externalReference;
-		this.effectiveAtUpperBound = opts.effectiveAtUpperBound;
-		this.metadata = opts.metadata;
-		this.created = opts.created;
-		this.updated = opts.updated;
+	constructor(readonly data: LedgerAccountSettlementEntityOptions) {}
+	get id() {
+		return this.data.id;
 	}
-
+	get organizationId() {
+		return this.data.organizationId;
+	}
+	get ledgerId() {
+		return this.data.ledgerId;
+	}
+	get status() {
+		return this.data.status;
+	}
+	get targetStatus() {
+		return this.data.targetStatus;
+	}
+	get transaction() {
+		return this.data.transaction;
+	}
 	static fromRequest(
-		request: LedgerAccountSettlementRequest,
 		organizationId: OrgID,
+		ledgerId: LedgerID,
+		request: LedgerAccountSettlementRequest,
 		currency: string,
-		normalBalance: NormalBalance,
-		settledAccountId: LedgerAccountID,
-		contraAccountId: LedgerAccountID,
+		now: DateTime,
 		id = newLedgerAccountSettlementID()
 	) {
-		const now = DateTime.utc();
-		const transactionId: Effect.Effect<LedgerTransactionID | undefined, InvalidId> =
-			request.transactionId
-				? parseId<"ltr", LedgerTransactionID>("ltr", request.transactionId).pipe(Effect.map(id => id))
-				: Effect.succeed<LedgerTransactionID | undefined>(undefined);
-
-		return transactionId.pipe(
-			Effect.map(
-				transactionId =>
-					new LedgerAccountSettlementEntity({
-						id,
-						organizationId,
-						transactionId,
-						settledAccountId,
-						contraAccountId,
-						amount: 0,
-						normalBalance,
-						currency,
-						status: request.status,
-						description: request.description,
-						externalReference: request.externalReference,
-						effectiveAtUpperBound: request.effectiveAtUpperBound
+		return Effect.gen(function* () {
+			if (request.status === "drafting" && request.effectiveAtUpperBound !== undefined)
+				return yield* Effect.fail(
+					new BadRequestError("Drafting Settlements use manual source selection")
+				);
+			return new LedgerAccountSettlementEntity({
+				id,
+				organizationId,
+				ledgerId,
+				settledAccountId: yield* parseId<"lat", LedgerAccountID>("lat", request.settledAccountId),
+				contraAccountId: yield* parseId<"lat", LedgerAccountID>("lat", request.contraAccountId),
+				currency,
+				status: "drafting",
+				allowEitherDirection: request.allowEitherDirection ?? false,
+				description: request.description,
+				metadata: request.metadata,
+				externalReference: request.externalReference,
+				effectiveAtUpperBound:
+					request.status === "drafting"
+						? undefined
+						: request.effectiveAtUpperBound
 							? DateTime.fromISO(request.effectiveAtUpperBound, { zone: "utc" })
-							: undefined,
-						metadata: request.metadata,
-						created: now,
-						updated: now,
-					})
-			)
-		);
-	}
-
-	static fromRow(row: LedgerAccountSettlementRow) {
-		const transactionId: Effect.Effect<LedgerTransactionID | undefined, InvalidId> = row.transactionId
-			? parseId<"ltr", LedgerTransactionID>("ltr", row.transactionId)
-			: Effect.succeed<LedgerTransactionID | undefined>(undefined);
-		const effectiveAtUpperBound: Effect.Effect<DateTime | undefined, Error> =
-			row.effectiveAtUpperBound
-				? parseDate(row.effectiveAtUpperBound)
-				: Effect.succeed<DateTime | undefined>(undefined);
-
-		return Effect.all({
-			id: parseId<"las", LedgerAccountSettlementID>("las", row.id),
-			organizationId: parseId<"org", OrgID>("org", row.organizationId),
-			transactionId,
-			settledAccountId: parseId<"lat", LedgerAccountID>("lat", row.settledAccountId),
-			contraAccountId: parseId<"lat", LedgerAccountID>("lat", row.contraAccountId),
-			effectiveAtUpperBound,
-			metadata: parseMetadata(row.metadata),
-			created: parseDate(row.created),
-			updated: parseDate(row.updated),
-		}).pipe(
-			Effect.map(
-				decoded =>
-					new LedgerAccountSettlementEntity({
-						...decoded,
-						amount: row.amount,
-						normalBalance: row.normalBalance,
-						currency: row.currency,
-						status: row.status,
-						description: row.description ?? undefined,
-						externalReference: row.externalReference ?? undefined,
-					})
-			),
-			Effect.mapError(cause => new LedgerAccountSettlementPersistenceDecodingFailure(cause))
-		);
-	}
-
-	toRow(): LedgerAccountSettlementInsert {
-		return {
-			id: this.id.toString(),
-			organizationId: this.organizationId.toString(),
-			transactionId: this.transactionId?.toString() ?? undefined,
-			settledAccountId: this.settledAccountId.toString(),
-			contraAccountId: this.contraAccountId.toString(),
-			amount: this.amount,
-			normalBalance: this.normalBalance,
-			currency: this.currency,
-			status: this.status,
-			description: this.description ?? undefined,
-			externalReference: this.externalReference ?? undefined,
-			effectiveAtUpperBound: this.effectiveAtUpperBound?.toJSDate(),
-			metadata: encodeMetadata(this.metadata),
-			created: this.created.toJSDate(),
-			updated: this.updated.toJSDate(),
-		};
-	}
-
-	toResponse(): LedgerAccountSettlementResponse {
-		return {
-			id: this.id.toString(),
-			transactionId: this.transactionId?.toString() ?? "",
-			settledAccountId: this.settledAccountId.toString(),
-			contraAccountId: this.contraAccountId.toString(),
-			amount: this.amount,
-			normalBalance: this.normalBalance,
-			currency: this.currency,
-			status: this.status,
-			description: this.description,
-			metadata: this.metadata,
-			created: toIso(this.created),
-			updated: toIso(this.updated),
-		};
-	}
-
-	toTransaction(ledgerId: LedgerID, created: DateTime = DateTime.utc()) {
-		const transactionId = newLedgerTransactionID();
-		const entries = [
-			LedgerTransactionEntry.create({
-				id: newLedgerTransactionEntryID(),
-				accountId: this.settledAccountId,
-				direction: this.normalBalance === "debit" ? "credit" : "debit",
-				amount: this.amount,
-				currency: this.currency,
-				status: "posted",
-				metadata: {},
-				created,
-			}),
-			LedgerTransactionEntry.create({
-				id: newLedgerTransactionEntryID(),
-				accountId: this.contraAccountId,
-				direction: this.normalBalance === "debit" ? "debit" : "credit",
-				amount: this.amount,
-				currency: this.currency,
-				status: "posted",
-				metadata: {},
-				created,
-			}),
-		] as const;
-
-		return LedgerTransaction.create({
-			id: transactionId,
-			organizationId: this.organizationId,
-			ledgerId,
-			status: "posted",
-			description: this.description ?? `Settlement ${this.id.toString()}`,
-			metadata: { ...this.metadata, settlementId: this.id.toString() },
-			// oxlint-disable-next-line unicorn/no-array-callback-reference -- The array is wrapped as an Option value.
-			entries: Option.some(entries),
-			postedAt: created,
-			effectiveAt: this.created,
-			lockVersion: 1,
-			created,
-			updated: created,
+							: now,
+				created: now,
+				updated: now,
+			});
 		});
 	}
-
-	transitionTo(targetStatus: SettlementStatus, updated: DateTime = DateTime.utc()) {
-		const transitions: Record<SettlementStatus, readonly SettlementStatus[]> = {
-			drafting: ["processing"],
-			processing: ["pending", "drafting"],
-			pending: ["posted", "drafting"],
-			posted: ["archiving"],
-			archiving: ["archived"],
-			archived: [],
+	static fromRow(row: LedgerAccountSettlementRow | undefined, transaction?: LedgerTransaction) {
+		if (row === undefined) return Effect.succeed(Option.none<LedgerAccountSettlementEntity>());
+		return Effect.gen(function* () {
+			return Option.some(
+				// oxlint-disable-next-line unicorn/no-array-callback-reference -- Wrap the decoded entity in an Option.
+				new LedgerAccountSettlementEntity({
+					id: yield* parseId<"las", LedgerAccountSettlementID>("las", row.id),
+					organizationId: yield* parseId<"org", OrgID>("org", row.organizationId),
+					ledgerId: yield* parseId<"lgr", LedgerID>("lgr", row.ledgerId),
+					settledAccountId: yield* parseId<"lat", LedgerAccountID>("lat", row.settledAccountId),
+					contraAccountId: yield* parseId<"lat", LedgerAccountID>("lat", row.contraAccountId),
+					status: row.status,
+					targetStatus: row.targetStatus ?? undefined,
+					currency: row.currency,
+					allowEitherDirection: row.allowEitherDirection,
+					description: row.description ?? undefined,
+					externalReference: row.externalReference ?? undefined,
+					metadata: yield* parseMetadata(row.metadata),
+					effectiveAtUpperBound: row.effectiveAtUpperBound
+						? yield* parseDate(row.effectiveAtUpperBound)
+						: undefined,
+					created: yield* parseDate(row.created),
+					updated: yield* parseDate(row.updated),
+					transaction,
+				})
+			);
+		}).pipe(Effect.mapError(cause => new LedgerAccountSettlementPersistenceDecodingFailure(cause)));
+	}
+	toRow(): LedgerAccountSettlementInsert {
+		const d = this.data;
+		return {
+			id: d.id.toString(),
+			organizationId: d.organizationId.toString(),
+			ledgerId: d.ledgerId.toString(),
+			settledAccountId: d.settledAccountId.toString(),
+			contraAccountId: d.contraAccountId.toString(),
+			currency: d.currency,
+			status: d.status,
+			targetStatus: d.targetStatus,
+			allowEitherDirection: d.allowEitherDirection,
+			description: d.description,
+			metadata: encodeMetadata(d.metadata),
+			externalReference: d.externalReference,
+			effectiveAtUpperBound: d.effectiveAtUpperBound?.toJSDate(),
+			created: d.created.toJSDate(),
+			updated: d.updated.toJSDate(),
 		};
-		return transitions[this.status].includes(targetStatus)
-			? Effect.succeed(new LedgerAccountSettlementEntity({ ...this, status: targetStatus, updated }))
-			: Effect.fail(new LedgerAccountSettlementLifecycleConflict(this.status, targetStatus));
+	}
+	toResponse(): LedgerAccountSettlementResponse {
+		const d = this.data;
+		const entry =
+			d.transaction &&
+			Option.getOrUndefined(d.transaction.entries)?.find(
+				e => e.accountId.toString() === d.settledAccountId.toString()
+			);
+		return {
+			id: d.id.toString(),
+			ledgerId: d.ledgerId.toString(),
+			// oxlint-disable-next-line unicorn/no-null -- Nullable accounting reference.
+			transactionId: d.transaction?.id.toString() ?? null,
+			// oxlint-disable-next-line unicorn/no-null -- Drafts have no accounting.
+			amount: entry?.amount ?? null,
+			// oxlint-disable-next-line unicorn/no-null -- Drafts have no accounting.
+			settlementEntryDirection: entry?.direction ?? null,
+			status: d.status,
+			settledAccountId: d.settledAccountId.toString(),
+			contraAccountId: d.contraAccountId.toString(),
+			currency: d.currency,
+			allowEitherDirection: d.allowEitherDirection,
+			// oxlint-disable-next-line unicorn/no-null -- Manual selection has no cutoff.
+			effectiveAtUpperBound: d.effectiveAtUpperBound ? toIso(d.effectiveAtUpperBound) : null,
+			description: d.description,
+			metadata: d.metadata,
+			externalReference: d.externalReference,
+			created: toIso(d.created),
+			updated: toIso(d.updated),
+		};
+	}
+	toTransaction(
+		entries: readonly { amount: number; direction: NormalBalance }[],
+		normalBalance: NormalBalance,
+		status: "pending" | "posted",
+		now: DateTime
+	) {
+		const d = this.data;
+		return Effect.gen(function* () {
+			if (entries.length === 0)
+				return yield* Effect.fail(new ConflictError("Settlement requires source Entries"));
+			const net = entries.reduce(
+				(sum, entry) =>
+					sum + (entry.direction === normalBalance ? BigInt(entry.amount) : -BigInt(entry.amount)),
+				0n
+			);
+			if (
+				net === 0n ||
+				net > BigInt(Number.MAX_SAFE_INTEGER) ||
+				net < -BigInt(Number.MAX_SAFE_INTEGER)
+			)
+				return yield* Effect.fail(
+					new ConflictError("Settlement net must be nonzero and safely representable")
+				);
+			if (net < 0n && !d.allowEitherDirection)
+				return yield* Effect.fail(
+					new ConflictError("Negative Settlement net requires allowEitherDirection")
+				);
+			const amount = Number(net < 0n ? -net : net);
+			const direction = net > 0n ? (normalBalance === "debit" ? "credit" : "debit") : normalBalance;
+			const transaction = yield* LedgerTransaction.fromCreateRequest(
+				newLedgerTransactionID(),
+				d.organizationId,
+				d.ledgerId,
+				{
+					status,
+					description: d.description,
+					metadata: { ...d.metadata, settlementId: d.id.toString() },
+					effectiveAt: toIso(d.created),
+					ledgerEntries: [
+						{ accountId: d.settledAccountId.toString(), direction, amount, currencyCode: d.currency },
+						{
+							accountId: d.contraAccountId.toString(),
+							direction: direction === "debit" ? "credit" : "debit",
+							amount,
+							currencyCode: d.currency,
+						},
+					],
+				},
+				now
+			);
+			return yield* LedgerTransaction.create({ ...transaction, settlementId: d.id });
+		});
 	}
 }
-
 export type { LedgerAccountSettlementEntityOptions };
 export { LedgerAccountSettlementEntity };

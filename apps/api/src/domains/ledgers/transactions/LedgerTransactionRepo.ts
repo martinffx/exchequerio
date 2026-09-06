@@ -12,12 +12,14 @@ import {
 	requireAccountWrite,
 } from "@/domains/ledgers/accounts";
 import type {
+	LedgerAccountSettlementID,
 	LedgerID,
 	LedgerTransactionEntryID,
 	LedgerTransactionID,
 	OrgID,
 } from "@/repo/entities/types";
 import {
+	LedgerAccountSettlementsTable,
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
 	LedgerTransactionsTable,
@@ -26,6 +28,7 @@ import {
 import { LedgerTransaction } from "./LedgerTransaction";
 import type { LedgerTransactionEntry } from "./LedgerTransactionEntry";
 import {
+	TransactionSettlementConflict,
 	TransactionConcurrencyFailure,
 	type TransactionInfrastructureError,
 	TransactionLifecycleConflict,
@@ -41,6 +44,7 @@ import {
 import type { TransactionListQuery, TransactionUpdateRequest } from "./LedgerTransactionSchema";
 
 type LedgerTransactionCreateRepositoryError =
+	| TransactionSettlementConflict
 	| AccountNotFound
 	| AccountVersionConflict
 	| LedgerAccountCurrencyMismatch
@@ -49,6 +53,7 @@ type LedgerTransactionCreateRepositoryError =
 	| TransactionValidationFailure;
 
 type LedgerTransactionUpdateRepositoryError =
+	| TransactionSettlementConflict
 	| AccountNotFound
 	| AccountVersionConflict
 	| LedgerAccountCurrencyMismatch
@@ -67,6 +72,27 @@ type LedgerTransactionTransitionRepositoryError = LedgerTransactionUpdateReposit
  * Expected failures are returned through each operation's Effect error channel.
  */
 interface LedgerTransactionRepo {
+	getSettlementTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		settlementId: LedgerAccountSettlementID
+	): Effect.Effect<Option.Option<LedgerTransaction>, TransactionInfrastructureError>;
+	createSettlementTransaction(
+		transaction: LedgerTransaction
+	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+	postSettlementTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		settlementId: LedgerAccountSettlementID,
+		now: DateTime
+	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+	voidSettlementTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		settlementId: LedgerAccountSettlementID,
+		now: DateTime
+	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+
 	/**
 	 * Lists Transactions for one Organization and Ledger in reverse creation order.
 	 *
@@ -244,44 +270,180 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	createTransaction(
 		transaction: LedgerTransaction
 	): Effect.Effect<LedgerTransaction, LedgerTransactionCreateRepositoryError> {
+		if (transaction.settlementId !== undefined)
+			return Effect.fail(new TransactionSettlementConflict());
+		return this.db
+			.transaction(tx => this.insertAccounting(tx, transaction))
+			.pipe(Effect.mapError(mapTransactionCreateError));
+	}
+
+	private insertAccounting(tx: DatabaseTransaction, transaction: LedgerTransaction) {
 		return Effect.gen({ self: this }, function* () {
 			const entries = Option.getOrThrow(transaction.entries);
-			const accountIds = [...new Set(entries.map(entry => entry.accountId.toString()))].sort();
+			const ids = [...new Set(entries.map(entry => entry.accountId.toString()))].sort();
 			const accounts = yield* this.readAccounts(
 				transaction.organizationId,
 				transaction.ledgerId,
-				accountIds
-			);
-			const updatedAccounts = yield* this.applyEntriesToAccounts(
-				accounts,
-				entries,
-				transaction.updated
-			);
-
-			yield* this.db.transaction(tx =>
+				ids,
 				tx
-					.insert(LedgerTransactionsTable)
-					.values(transaction.toRow())
-					.pipe(
-						Effect.andThen(
-							tx
-								.insert(LedgerTransactionEntriesTable)
-								.values(entries.map(entry => entry.toRow(transaction)))
-						),
-						Effect.andThen(
-							this.writeAccounts(
-								tx,
-								transaction.organizationId,
-								transaction.ledgerId,
-								accounts,
-								updatedAccounts
-							)
-						)
-					)
 			);
-
+			const updated = yield* this.applyEntriesToAccounts(accounts, entries, transaction.updated);
+			yield* tx.insert(LedgerTransactionsTable).values(transaction.toRow());
+			yield* tx
+				.insert(LedgerTransactionEntriesTable)
+				.values(entries.map(entry => entry.toRow(transaction)));
+			yield* this.writeAccounts(
+				tx,
+				transaction.organizationId,
+				transaction.ledgerId,
+				accounts,
+				updated
+			);
 			return transaction;
-		}).pipe(Effect.mapError(mapTransactionCreateError));
+		});
+	}
+
+	getSettlementTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		settlementId: LedgerAccountSettlementID
+	) {
+		return this.readSettlementAccounting(this.db, organizationId, ledgerId, settlementId).pipe(
+			Effect.mapError(mapTransactionInfrastructureError)
+		);
+	}
+
+	private readSettlementAccounting(
+		db: EffectDrizzleDatabase | DatabaseTransaction,
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		settlementId: LedgerAccountSettlementID
+	) {
+		return db.query.LedgerTransactionsTable.findMany({
+			where: {
+				organizationId: organizationId.toString(),
+				ledgerId: ledgerId.toString(),
+				settlementId: settlementId.toString(),
+			},
+			with: { entries: { orderBy: { created: "asc", id: "asc" } } },
+		}).pipe(Effect.flatMap(rows => LedgerTransaction.fromRows(rows)));
+	}
+
+	private lockSettlement(
+		tx: DatabaseTransaction,
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		settlementId: LedgerAccountSettlementID
+	) {
+		return tx
+			.select()
+			.from(LedgerAccountSettlementsTable)
+			.where(
+				and(
+					eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString()),
+					eq(LedgerAccountSettlementsTable.ledgerId, ledgerId.toString()),
+					eq(LedgerAccountSettlementsTable.id, settlementId.toString())
+				)
+			)
+			.for("update")
+			.pipe(
+				Effect.flatMap(rows =>
+					rows[0] === undefined ? Effect.fail(new TransactionNotFound()) : Effect.succeed(rows[0])
+				)
+			);
+	}
+
+	createSettlementTransaction(
+		transaction: LedgerTransaction
+	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
+		const settlementId = transaction.settlementId;
+		if (settlementId === undefined) return Effect.fail(new TransactionSettlementConflict());
+		return this.db
+			.transaction(tx =>
+				Effect.gen({ self: this }, function* () {
+					const settlement = yield* this.lockSettlement(
+						tx,
+						transaction.organizationId,
+						transaction.ledgerId,
+						settlementId
+					);
+					const existing = yield* this.readSettlementAccounting(
+						tx,
+						transaction.organizationId,
+						transaction.ledgerId,
+						settlementId
+					);
+					if (Option.isSome(existing)) return existing.value;
+					if (
+						settlement.status !== "processing" ||
+						settlement.targetStatus !== transaction.status ||
+						transaction.status === "voided"
+					) {
+						return yield* Effect.fail(
+							new TransactionLifecycleConflict(settlement.status, transaction.status)
+						);
+					}
+					return yield* this.insertAccounting(tx, transaction);
+				})
+			)
+			.pipe(Effect.mapError(mapTransactionMutationError));
+	}
+
+	postSettlementTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		settlementId: LedgerAccountSettlementID,
+		now: DateTime
+	) {
+		return this.transitionSettlementAccounting(organizationId, ledgerId, settlementId, "posted", now);
+	}
+
+	voidSettlementTransaction(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		settlementId: LedgerAccountSettlementID,
+		now: DateTime
+	) {
+		return this.transitionSettlementAccounting(organizationId, ledgerId, settlementId, "voided", now);
+	}
+
+	private transitionSettlementAccounting(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		settlementId: LedgerAccountSettlementID,
+		target: "posted" | "voided",
+		now: DateTime
+	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
+		return this.db
+			.transaction(tx =>
+				Effect.gen({ self: this }, function* () {
+					const settlement = yield* this.lockSettlement(tx, organizationId, ledgerId, settlementId);
+					const current = yield* this.readSettlementAccounting(
+						tx,
+						organizationId,
+						ledgerId,
+						settlementId
+					).pipe(Effect.flatMap(requireTransaction));
+					if (current.status === target) return current;
+					if (settlement.status !== "processing" || settlement.targetStatus !== target)
+						return yield* Effect.fail(new TransactionLifecycleConflict(settlement.status, target));
+					const next = yield* target === "posted" ? current.toPosted(now) : current.toVoided(now);
+					const entries = Option.getOrThrow(current.entries);
+					const ids = [...new Set(entries.map(entry => entry.accountId.toString()))].sort();
+					const accounts = yield* this.readAccounts(organizationId, ledgerId, ids, tx);
+					const without = this.removeEntriesFromAccounts(accounts, entries, now);
+					const updated = yield* this.applyEntriesToAccounts(
+						without,
+						Option.getOrThrow(next.entries),
+						now
+					);
+					yield* this.writeTransaction(tx, current, next);
+					yield* this.writeEntryStatus(tx, next);
+					yield* this.writeAccounts(tx, organizationId, ledgerId, accounts, updated);
+					return next;
+				})
+			)
+			.pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
 	/**
@@ -303,6 +465,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
+			if (current.settlementId !== undefined)
+				return yield* Effect.fail(new TransactionSettlementConflict());
 			const currentEntries = Option.getOrThrow(current.entries);
 			const accountIds = [
 				...new Set([
@@ -358,6 +522,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
+			if (current.settlementId !== undefined)
+				return yield* Effect.fail(new TransactionSettlementConflict());
 			if (current.status === "posted") return current;
 
 			const currentEntries = Option.getOrThrow(current.entries);
@@ -406,6 +572,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
+			if (current.settlementId !== undefined)
+				return yield* Effect.fail(new TransactionSettlementConflict());
 			if (current.status === "voided") return current;
 
 			const currentEntries = Option.getOrThrow(current.entries);
@@ -461,8 +629,13 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	 * @param accountIds - Distinct Account identifiers required by the mutation.
 	 * @returns An Effect containing Accounts indexed by identifier, or an Account-not-found failure.
 	 */
-	private readAccounts(organizationId: OrgID, ledgerId: LedgerID, accountIds: readonly string[]) {
-		return this.db
+	private readAccounts(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountIds: readonly string[],
+		db: EffectDrizzleDatabase | DatabaseTransaction = this.db
+	) {
+		return db
 			.select()
 			.from(LedgerAccountsTable)
 			.where(

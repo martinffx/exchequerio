@@ -1,109 +1,98 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { ListQuery } from "@/lib/ListQuery";
 import { LedgerIdSchema } from "../LedgerSchema";
-
-const Metadata = Type.Mapped(Type.KeyOf(Type.String()), () => Type.String(), {
-	description:
-		"Additional data represented as key-value pairs. Both the key and value must be strings.",
-});
+import { AccountIdSchema } from "../accounts/AccountSchema";
 
 const NormalBalance = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
-
 const SettlementStatus = Type.Union([
 	Type.Literal("drafting"),
 	Type.Literal("processing"),
 	Type.Literal("pending"),
 	Type.Literal("posted"),
-	Type.Literal("archiving"),
-	Type.Literal("archived"),
+	Type.Literal("voided"),
 ]);
-
-const LedgerAccountSettlementTransactionId = Type.String({
-	description: "Transaction created by the Ledger Account Settlement.",
-	pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-});
-
-const LedgerAccountSettlementId = Type.String({
-	description: "Unique identifier for the ledger account settlement.",
-	pattern: "^las_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-});
-
-const LedgerAccountSettlementIdParams = Type.Object({
-	settlementId: LedgerAccountSettlementId,
-});
+const SettlementTargetStatus = Type.Union([
+	Type.Literal("pending"),
+	Type.Literal("posted"),
+	Type.Literal("voided"),
+]);
+const LedgerAccountSettlementId = Type.String({ pattern: "^las_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
+const LedgerAccountSettlementIdParams = Type.Object({ settlementId: LedgerAccountSettlementId });
 const LedgerAccountSettlementCollectionParameters = Type.Object({ ledgerId: LedgerIdSchema });
 const LedgerAccountSettlementListQuery = ListQuery;
-
+const Metadata = Type.Record(Type.String(), Type.String());
+const Timestamp = Type.String({ format: "date-time", pattern: "[Tt][0-9]{2}:[0-9]{2}:[0-5][0-9]" });
+const LedgerAccountSettlementRequest = Type.Object(
+	{
+		settledAccountId: AccountIdSchema,
+		contraAccountId: AccountIdSchema,
+		status: Type.Optional(
+			Type.Union([Type.Literal("drafting"), Type.Literal("pending"), Type.Literal("posted")], {
+				default: "pending",
+			})
+		),
+		description: Type.Optional(Type.String()),
+		metadata: Type.Optional(Metadata),
+		externalReference: Type.Optional(Type.String()),
+		effectiveAtUpperBound: Type.Optional(Timestamp),
+		allowEitherDirection: Type.Optional(Type.Boolean({ default: false })),
+	},
+	{ additionalProperties: false, $id: "LedgerAccountSettlementRequest" }
+);
+const LedgerAccountSettlementPatchRequest = Type.Object(
+	{
+		status: Type.Optional(SettlementTargetStatus),
+		description: Type.Optional(Type.String()),
+		metadata: Type.Optional(Metadata),
+	},
+	{ additionalProperties: false }
+);
 const LedgerAccountSettlementResponse = Type.Object(
 	{
 		id: LedgerAccountSettlementId,
-		transactionId: LedgerAccountSettlementTransactionId,
-		description: Type.Optional(
-			Type.String({ description: "An optional free-form description for internal use." })
-		),
+		ledgerId: LedgerIdSchema,
+		transactionId: Type.Union([
+			Type.String({ pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$" }),
+			Type.Null(),
+		]),
 		status: SettlementStatus,
-		normalBalance: NormalBalance,
-		settledAccountId: Type.String({
-			description:
-				"The Ledger Account that we will query the Entries against, and its balance is reduced as a result. The settled ledger account and the contra ledger account must belong to the same ledger.",
-		}),
-		contraAccountId: Type.String({
-			description:
-				"The Ledger Account that sends to or receives funds from the settled ledger account. The settled ledger account and the contra ledger account must belong to the same ledger.",
-		}),
-		amount: Type.Number({ description: "The amount of the settlement." }),
-		currency: Type.String({ description: "The currency of the ledger account settlement." }),
-		externalReference: Type.Optional(
-			Type.String({ description: "External reference for reconciliation with external systems." })
-		),
+		settledAccountId: AccountIdSchema,
+		contraAccountId: AccountIdSchema,
+		amount: Type.Union([Type.Integer(), Type.Null()]),
+		settlementEntryDirection: Type.Union([NormalBalance, Type.Null()]),
+		currency: Type.String(),
+		allowEitherDirection: Type.Boolean(),
+		effectiveAtUpperBound: Type.Union([Timestamp, Type.Null()]),
+		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(Metadata),
-		created: Type.String({
-			description: "Timestamp of when the ledger account category was created.",
-		}),
-		updated: Type.String({
-			description: "Timestamp of when the ledger account category was last updated.",
+		externalReference: Type.Optional(Type.String()),
+		created: Timestamp,
+		updated: Timestamp,
+	},
+	{ $id: "LedgerAccountSettlementResponse" }
+);
+const LedgerAccountSettlementEntriesRequest = Type.Object(
+	{
+		entries: Type.Array(Type.String({ pattern: "^lte_[0-7][0-9a-hjkmnp-tv-z]{25}$" }), {
+			minItems: 1,
+			maxItems: 500,
+			uniqueItems: true,
 		}),
 	},
-	{
-		$id: "LedgerAccountSettlementResponse",
-		description:
-			"A ledger account settlement is an object that creates a ledger transaction to safely offset the posted balance of a ledger account. ",
-	}
+	{ additionalProperties: false }
 );
-
-const LedgerAccountSettlementRequest = Type.Object(
-	{
-		transactionId: LedgerAccountSettlementTransactionId,
-		description: Type.Optional(
-			Type.String({ description: "An optional free-form description for internal use." })
-		),
-		status: SettlementStatus,
-		settledAccountId: Type.String({
-			description:
-				"The Ledger Account that we will query the Entries against, and its balance is reduced as a result. The settled ledger account and the contra ledger account must belong to the same ledger.",
-		}),
-		contraAccountId: Type.String({
-			description:
-				"The Ledger Account that sends to or receives funds from the settled ledger account. The settled ledger account and the contra ledger account must belong to the same ledger.",
-		}),
-		effectiveAtUpperBound: Type.Optional(
-			Type.String({
-				description:
-					"Upper bound for auto-gathering entries by effective date. When status is pending/posted, entries with effective_at <= this bound will be automatically gathered. Optional - defaults to current time if not specified.",
-			})
-		),
-		externalReference: Type.Optional(
-			Type.String({ description: "External reference for reconciliation with external systems." })
-		),
-		metadata: Type.Optional(Metadata),
-	},
-	{ $id: "LedgerAccountSettlementRequest" }
-);
-
-const LedgerAccountSettlementEntriesRequest = Type.Object({
-	entries: Type.Array(Type.String({ description: "The ID of the Ledger Transaction Entry." })),
+const LedgerAccountSettlementEntryResponse = Type.Object({
+	id: Type.String(),
+	transactionId: Type.String(),
+	effectiveAt: Timestamp,
+	accountId: AccountIdSchema,
+	direction: NormalBalance,
+	amount: Type.Integer(),
+	currencyCode: Type.String(),
+	status: Type.Literal("posted"),
+	metadata: Type.Optional(Metadata),
+	created: Timestamp,
 });
-
 type LedgerAccountSettlementId = Static<typeof LedgerAccountSettlementId>;
 type LedgerAccountSettlementIdParams = Static<typeof LedgerAccountSettlementIdParams>;
 type LedgerAccountSettlementCollectionParameters = Static<
@@ -111,11 +100,13 @@ type LedgerAccountSettlementCollectionParameters = Static<
 >;
 type LedgerAccountSettlementListQuery = Static<typeof LedgerAccountSettlementListQuery>;
 type LedgerAccountSettlementRequest = Static<typeof LedgerAccountSettlementRequest>;
+type LedgerAccountSettlementPatchRequest = Static<typeof LedgerAccountSettlementPatchRequest>;
 type LedgerAccountSettlementResponse = Static<typeof LedgerAccountSettlementResponse>;
 type LedgerAccountSettlementEntriesRequest = Static<typeof LedgerAccountSettlementEntriesRequest>;
+type LedgerAccountSettlementEntryResponse = Static<typeof LedgerAccountSettlementEntryResponse>;
 type NormalBalance = Static<typeof NormalBalance>;
 type SettlementStatus = Static<typeof SettlementStatus>;
-
+type SettlementTargetStatus = Static<typeof SettlementTargetStatus>;
 export {
 	LedgerAccountSettlementEntriesRequest,
 	LedgerAccountSettlementCollectionParameters,
@@ -123,7 +114,10 @@ export {
 	LedgerAccountSettlementIdParams,
 	LedgerAccountSettlementListQuery,
 	LedgerAccountSettlementRequest,
+	LedgerAccountSettlementPatchRequest,
 	LedgerAccountSettlementResponse,
+	LedgerAccountSettlementEntryResponse,
 	NormalBalance,
 	SettlementStatus,
+	SettlementTargetStatus,
 };

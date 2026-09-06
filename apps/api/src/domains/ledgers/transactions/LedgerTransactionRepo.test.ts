@@ -8,6 +8,7 @@ import { DatabaseTag, makeDatabaseLive } from "@/db";
 import { AccountNotFound, LedgerAccountCurrencyMismatch } from "@/domains/ledgers/accounts";
 import {
 	newLedgerAccountID,
+	newLedgerAccountSettlementID,
 	newLedgerID,
 	newLedgerTransactionEntryID,
 	newLedgerTransactionID,
@@ -31,6 +32,7 @@ import {
 	ledgerTransactionRepoLayer,
 } from "./LedgerTransactionRepo";
 import {
+	TransactionSettlementConflict,
 	TransactionLifecycleConflict,
 	TransactionPersistenceFailure,
 } from "./LedgerTransactionErrors";
@@ -160,6 +162,28 @@ describe("LedgerTransactionRepoLive", () => {
 			await db.delete(OrganizationsTable).where(inArray(OrganizationsTable.id, organizationIds));
 		}
 		await runtime.dispose();
+	});
+
+	it("rejects generated accounting through generic creation before any database writes", async () => {
+		const ordinary = Effect.runSync(
+			LedgerTransaction.fromCreateRequest(
+				newLedgerTransactionID(),
+				newOrgID(),
+				newLedgerID(),
+				request("pending", [
+					{ accountId: newLedgerAccountID(), direction: "debit", amount: 10 },
+					{ accountId: newLedgerAccountID(), direction: "credit", amount: 10 },
+				])
+			)
+		);
+		const generated = Effect.runSync(
+			LedgerTransaction.create({
+				...ordinary,
+				settlementId: newLedgerAccountSettlementID(),
+			})
+		);
+		const failure = await runRepo(repo => repo.createTransaction(generated).pipe(Effect.flip));
+		expect(failure).toBeInstanceOf(TransactionSettlementConflict);
 	});
 
 	it("persists pending effective-time edits and preserves them through posting", async () => {

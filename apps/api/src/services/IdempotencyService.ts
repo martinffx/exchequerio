@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Result, Schedule } from "effect";
+import { Context, Effect, Layer, Option, Result, Schedule } from "effect";
 import type Redis from "ioredis";
 
 import { ConflictError, ServiceUnavailableError } from "@/lib/errors";
@@ -44,20 +44,24 @@ class IdempotencyPending extends ConflictError {
 
 type IdempotencyClaim = Result.Result<void, string | undefined>;
 
-type IdempotentOperation<A, E, R> = Readonly<{
-	organizationId: OrgID;
-	action: string;
-	key: string;
-	execute: Effect.Effect<A, E, R>;
-	resultId: (result: A) => string;
-	replay: (resultId: string) => Effect.Effect<A, E, R>;
-	releaseOnError?: (error: E) => boolean;
-}>;
-
 interface IdempotencyService {
-	run<A, E, R>(
-		operation: IdempotentOperation<A, E, R>
-	): Effect.Effect<A, E | IdempotencyPending | IdempotencyUnavailable, R>;
+	/** None grants execution; Some contains the resource ID for the caller to reload. */
+	claim(
+		organizationId: OrgID,
+		action: string,
+		key: string
+	): Effect.Effect<Option.Option<string>, IdempotencyPending | IdempotencyUnavailable>;
+	complete(
+		organizationId: OrgID,
+		action: string,
+		key: string,
+		resourceId: string
+	): Effect.Effect<void, IdempotencyUnavailable>;
+	release(
+		organizationId: OrgID,
+		action: string,
+		key: string
+	): Effect.Effect<void, IdempotencyUnavailable>;
 }
 
 const IdempotencyServiceTag = Context.Service<IdempotencyService>("IdempotencyService");
@@ -83,32 +87,26 @@ const parseClaim = (value: unknown): IdempotencyClaim => {
 class IdempotencyServiceRedis implements IdempotencyService {
 	constructor(private readonly client: Redis) {}
 
-	run<A, E, R>(
-		operation: IdempotentOperation<A, E, R>
-	): Effect.Effect<A, E | IdempotencyPending | IdempotencyUnavailable, R> {
-		const key = redisKey(operation.organizationId, operation.action, operation.key);
-		return this.claim(key).pipe(
+	claim(
+		organizationId: OrgID,
+		action: string,
+		clientKey: string
+	): Effect.Effect<Option.Option<string>, IdempotencyPending | IdempotencyUnavailable> {
+		const key = redisKey(organizationId, action, clientKey);
+		return this.acquire(key).pipe(
 			Effect.flatMap(claim =>
 				Result.match(claim, {
+					onSuccess: () => Effect.succeed(Option.none<string>()),
 					onFailure: resultId =>
 						resultId === undefined
-							? this.awaitResultId(key).pipe(Effect.flatMap(operation.replay))
-							: operation.replay(resultId),
-					onSuccess: () =>
-						operation.execute.pipe(
-							Effect.tapError(error =>
-								operation.releaseOnError?.(error) === false
-									? Effect.void
-									: this.release(key).pipe(Effect.ignore)
-							),
-							Effect.tap(result => this.complete(key, operation.resultId(result)))
-						),
+							? this.awaitResultId(key).pipe(Effect.map(Option.some))
+							: Effect.succeed(Option.fromUndefinedOr(resultId)),
 				})
 			)
 		);
 	}
 
-	private claim(key: string): Effect.Effect<IdempotencyClaim, IdempotencyUnavailable> {
+	private acquire(key: string): Effect.Effect<IdempotencyClaim, IdempotencyUnavailable> {
 		return Effect.tryPromise({
 			try: async () => parseClaim(await this.client.eval(CLAIM_SCRIPT, 1, key, PENDING, TTL_SECONDS)),
 			catch: cause => new IdempotencyUnavailable(cause),
@@ -136,7 +134,13 @@ class IdempotencyServiceRedis implements IdempotencyService {
 		);
 	}
 
-	private complete(key: string, resultId: string): Effect.Effect<void, IdempotencyUnavailable> {
+	complete(
+		organizationId: OrgID,
+		action: string,
+		clientKey: string,
+		resultId: string
+	): Effect.Effect<void, IdempotencyUnavailable> {
+		const key = redisKey(organizationId, action, clientKey);
 		return Effect.tryPromise({
 			try: async () => {
 				const completed = await this.client.eval(COMPLETE_SCRIPT, 1, key, PENDING, resultId);
@@ -146,7 +150,12 @@ class IdempotencyServiceRedis implements IdempotencyService {
 		});
 	}
 
-	private release(key: string): Effect.Effect<void, IdempotencyUnavailable> {
+	release(
+		organizationId: OrgID,
+		action: string,
+		clientKey: string
+	): Effect.Effect<void, IdempotencyUnavailable> {
+		const key = redisKey(organizationId, action, clientKey);
 		return Effect.tryPromise({
 			try: () => this.client.eval(RELEASE_SCRIPT, 1, key, PENDING),
 			catch: cause => new IdempotencyUnavailable(cause),
@@ -157,7 +166,7 @@ class IdempotencyServiceRedis implements IdempotencyService {
 const makeIdempotencyService = (client: Redis) =>
 	Layer.succeed(IdempotencyServiceTag, new IdempotencyServiceRedis(client));
 
-export type { IdempotencyService, IdempotentOperation };
+export type { IdempotencyService };
 export {
 	IdempotencyPending,
 	IdempotencyServiceTag,

@@ -1,9 +1,16 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type DrizzleDatabase } from "@/db";
 import { OrganizationNotFound } from "@/domains/organizations";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
-import { LedgersTable } from "@/repo/schema";
+import {
+	LedgersTable,
+	LedgerAccountsTable,
+	LedgerAccountSettlementsTable,
+	LedgerAccountSettlementEntriesTable,
+	LedgerTransactionsTable,
+	LedgerTransactionEntriesTable,
+} from "@/repo/schema";
 import { Ledger } from "./Ledger";
 import {
 	LedgerHasDependents,
@@ -74,6 +81,11 @@ interface LedgerRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID
 	): Effect.Effect<Option.Option<Ledger>, LedgerDeleteRepositoryError>;
+	/** Deletes a test fixture Ledger and its accounting records atomically; not used by LedgerService. */
+	deleteLedgerFixtures(
+		organizationId: OrgID,
+		ledgerId: LedgerID
+	): Effect.Effect<void, LedgerDeleteRepositoryError>;
 }
 
 type LedgerCreateRepositoryError = LedgerInfrastructureError | OrganizationNotFound;
@@ -217,6 +229,80 @@ class LedgerRepoLive implements LedgerRepo {
 					.returning(publicColumns),
 			catch: mapLedgerDeleteError,
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
+	}
+	deleteLedgerFixtures(
+		organizationId: OrgID,
+		ledgerId: LedgerID
+	): Effect.Effect<void, LedgerDeleteRepositoryError> {
+		return Effect.tryPromise({
+			try: () =>
+				this.db.transaction(async tx => {
+					const ledger = await tx
+						.select({ id: LedgersTable.id })
+						.from(LedgersTable)
+						.where(
+							and(
+								eq(LedgersTable.organizationId, organizationId.toString()),
+								eq(LedgersTable.id, ledgerId.toString())
+							)
+						)
+						.for("update");
+					if (ledger.length === 0) return;
+					const settlements = tx
+						.select({ id: LedgerAccountSettlementsTable.id })
+						.from(LedgerAccountSettlementsTable)
+						.where(
+							and(
+								eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString()),
+								eq(LedgerAccountSettlementsTable.ledgerId, ledgerId.toString())
+							)
+						);
+					await tx
+						.delete(LedgerAccountSettlementEntriesTable)
+						.where(inArray(LedgerAccountSettlementEntriesTable.settlementId, settlements));
+					await tx
+						.delete(LedgerTransactionEntriesTable)
+						.where(
+							and(
+								eq(LedgerTransactionEntriesTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionEntriesTable.ledgerId, ledgerId.toString())
+							)
+						);
+					await tx
+						.delete(LedgerTransactionsTable)
+						.where(
+							and(
+								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
+								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString())
+							)
+						);
+					await tx
+						.delete(LedgerAccountSettlementsTable)
+						.where(
+							and(
+								eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString()),
+								eq(LedgerAccountSettlementsTable.ledgerId, ledgerId.toString())
+							)
+						);
+					await tx
+						.delete(LedgerAccountsTable)
+						.where(
+							and(
+								eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+								eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+							)
+						);
+					await tx
+						.delete(LedgersTable)
+						.where(
+							and(
+								eq(LedgersTable.organizationId, organizationId.toString()),
+								eq(LedgersTable.id, ledgerId.toString())
+							)
+						);
+				}),
+			catch: mapLedgerDeleteError,
+		});
 	}
 }
 

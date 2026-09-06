@@ -64,6 +64,8 @@ describe("Transaction effective time", () => {
 		const decoded = Effect.runSync(
 			LedgerTransaction.fromRow({
 				...updated.toRow(),
+				// oxlint-disable-next-line unicorn/no-null -- PostgreSQL nullable columns decode from null.
+				settlementId: null,
 				created: updated.created.toJSDate(),
 				updated: updated.updated.toJSDate(),
 				status: updated.status,

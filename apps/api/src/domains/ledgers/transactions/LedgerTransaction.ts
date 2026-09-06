@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 
 import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import type {
+	LedgerAccountSettlementID,
 	LedgerID,
 	LedgerTransactionEntryID,
 	LedgerTransactionID,
@@ -32,6 +33,7 @@ type LedgerTransactionOptions = Readonly<{
 	id: LedgerTransactionID;
 	organizationId: OrgID;
 	ledgerId: LedgerID;
+	settlementId?: LedgerAccountSettlementID;
 	status: LedgerTransactionStatus;
 	description?: string;
 	metadata?: Metadata;
@@ -58,6 +60,7 @@ class LedgerTransaction {
 	readonly id: LedgerTransactionID;
 	readonly organizationId: OrgID;
 	readonly ledgerId: LedgerID;
+	readonly settlementId?: LedgerAccountSettlementID;
 	readonly status: LedgerTransactionStatus;
 	readonly description?: string;
 	readonly metadata?: Metadata;
@@ -72,6 +75,7 @@ class LedgerTransaction {
 		this.id = options.id;
 		this.organizationId = options.organizationId;
 		this.ledgerId = options.ledgerId;
+		this.settlementId = options.settlementId;
 		this.status = options.status;
 		this.description = options.description;
 		this.metadata = options.metadata;
@@ -225,6 +229,8 @@ class LedgerTransaction {
 			id: this.id.toString(),
 			organizationId: this.organizationId.toString(),
 			ledgerId: this.ledgerId.toString(),
+			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			settlementId: this.settlementId?.toString() ?? null,
 			status: this.status,
 			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			description: this.description ?? null,
@@ -320,6 +326,10 @@ class LedgerTransaction {
 			id: parseId<"ltr", LedgerTransactionID>("ltr", row.id),
 			organizationId: parseId<"org", OrgID>("org", row.organizationId),
 			ledgerId: parseId<"lgr", LedgerID>("lgr", row.ledgerId),
+			settlementId:
+				row.settlementId === null
+					? Effect.succeed(undefined)
+					: parseId<"las", LedgerAccountSettlementID>("las", row.settlementId),
 			metadata: parseMetadata(row.metadata),
 			postedAt: row.postedAt === null ? Effect.succeed(undefined) : parseDate(row.postedAt),
 			effectiveAt: parseDate(row.effectiveAt),
