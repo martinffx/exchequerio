@@ -8,11 +8,13 @@ that already satisfies the active boundary.
 ## Core Concept
 
 Repositories:
-- Encapsulate all database operations for an entity
-- Transform between records and entities using entity methods
-- Handle database errors and convert to domain errors
-- Enforce multi-tenancy and authorization boundaries
-- Manage optimistic locking and retries
+- Execute queries and transactions
+- Apply tenant and optimistic-write predicates
+- Classify database and driver errors at the I/O boundary
+- Convert rows with entity `fromRow` and `toRow` methods
+
+Services orchestrate use cases and decide whether to retry. Routes validate and
+serialize HTTP data. Repositories do not absorb either responsibility.
 
 ## Basic Repository
 
@@ -35,7 +37,7 @@ export class UserRepo {
       throw new NotFoundError('User not found', { userId: id })
     }
 
-    return UserEntity.fromRecord(record)
+    return UserEntity.fromRow(record)
   }
 
   async list(): Promise<UserEntity[]> {
@@ -43,22 +45,22 @@ export class UserRepo {
       orderBy: desc(users.createdAt),
     })
 
-    return records.map(UserEntity.fromRecord)
+    return records.map(UserEntity.fromRow)
   }
 
   async create(entity: UserEntity): Promise<UserEntity> {
     const [record] = await this.db
       .insert(users)
-      .values(entity.toRecord())
+      .values(entity.toRow())
       .returning()
 
-    return UserEntity.fromRecord(record)
+    return UserEntity.fromRow(record)
   }
 
   async update(entity: UserEntity): Promise<UserEntity> {
     const [record] = await this.db
       .update(users)
-      .set(entity.toRecord())
+      .set(entity.toRow())
       .where(eq(users.id, entity.id))
       .returning()
 
@@ -66,7 +68,7 @@ export class UserRepo {
       throw new NotFoundError('User not found', { userId: entity.id })
     }
 
-    return UserEntity.fromRecord(record)
+    return UserEntity.fromRow(record)
   }
 
   async delete(id: string): Promise<void> {
@@ -84,7 +86,7 @@ export class UserRepo {
 
 ## Repository with Error Handling
 
-Convert database errors to domain errors:
+Classify PostgreSQL and driver errors at the repository boundary:
 
 ```typescript
 import { eq } from 'drizzle-orm'
@@ -100,10 +102,10 @@ export class UserRepo {
     try {
       const [record] = await this.db
         .insert(users)
-        .values(entity.toRecord())
+        .values(entity.toRow())
         .returning()
 
-      return UserEntity.fromRecord(record)
+      return UserEntity.fromRow(record)
     } catch (error) {
       // Maps DB errors (23505, 23503, etc) to domain errors
       throw handleDBError(error, { userId: entity.id })
@@ -114,7 +116,7 @@ export class UserRepo {
     try {
       const [record] = await this.db
         .update(users)
-        .set(entity.toRecord())
+        .set(entity.toRow())
         .where(eq(users.id, entity.id))
         .returning()
 
@@ -122,14 +124,14 @@ export class UserRepo {
         throw new NotFoundError('User not found', { userId: entity.id })
       }
 
-      return UserEntity.fromRecord(record)
+      return UserEntity.fromRow(record)
     } catch (error) {
       throw handleDBError(error, { userId: entity.id })
     }
   }
 }
 
-// Error handler in errors.ts
+// Repository-owned driver error classifier
 type ErrorContext = {
   userId?: string
   resourceId?: string
@@ -194,7 +196,7 @@ export class LedgerRepo {
       })
     }
 
-    return LedgerEntity.fromRecord(record)
+    return LedgerEntity.fromRow(record)
   }
 
   async list(orgId: OrgID): Promise<LedgerEntity[]> {
@@ -203,17 +205,17 @@ export class LedgerRepo {
       orderBy: desc(ledgers.created),
     })
 
-    return records.map(LedgerEntity.fromRecord)
+    return records.map(LedgerEntity.fromRow)
   }
 
   async create(entity: LedgerEntity): Promise<LedgerEntity> {
     try {
       const [record] = await this.db
         .insert(ledgers)
-        .values(entity.toRecord())
+        .values(entity.toRow())
         .returning()
 
-      return LedgerEntity.fromRecord(record)
+      return LedgerEntity.fromRow(record)
     } catch (error) {
       throw handleDBError(error, {
         organizationId: entity.organizationId.toString(),
@@ -226,7 +228,7 @@ export class LedgerRepo {
     try {
       const [record] = await this.db
         .update(ledgers)
-        .set(entity.toRecord())
+        .set(entity.toRow())
         .where(and(
           eq(ledgers.id, entity.id.toString()),
           eq(ledgers.organizationId, orgId.toString())  // Multi-tenancy check
@@ -240,7 +242,7 @@ export class LedgerRepo {
         })
       }
 
-      return LedgerEntity.fromRecord(record)
+      return LedgerEntity.fromRow(record)
     } catch (error) {
       throw handleDBError(error, {
         organizationId: orgId.toString(),
@@ -287,7 +289,7 @@ export class UserRepo {
       const result = await this.db
         .update(users)
         .set({
-          ...entity.toRecord(),
+          ...entity.toRow(),
           lockVersion: sql`${users.lockVersion} + 1`,  // Increment version
         })
         .where(and(
@@ -319,7 +321,7 @@ export class UserRepo {
         })
       }
 
-      return UserEntity.fromRecord(result[0])
+      return UserEntity.fromRow(result[0])
     } catch (error) {
       throw handleDBError(error, { userId: entity.id })
     }
@@ -329,11 +331,11 @@ export class UserRepo {
 
 ## Repository with Transactions
 
-Complex operations across multiple tables:
+Repositories own the atomic write. The service supplies entities after applying
+the use-case's domain transformations.
 
 ```typescript
-import { TypeID } from 'typeid-js'
-import { eq, and, inArray, sql } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import type { DrizzleDB } from '../db'
 import {
   ledgerTransactions,
@@ -341,45 +343,22 @@ import {
   ledgerAccounts,
 } from '../schema'
 import { LedgerTransactionEntity } from '../entities/LedgerTransactionEntity'
-import { LedgerAccountEntity } from '../entities/LedgerAccountEntity'
+import type { LedgerAccountEntity } from '../entities/LedgerAccountEntity'
 import { ConflictError } from '../errors'
-
-type OrgID = TypeID<'org'>
-type LedgerTransactionID = TypeID<'ltr'>
 
 export class LedgerTransactionRepo {
   constructor(private db: DrizzleDB) {}
 
-  async createTransaction(
-    transaction: LedgerTransactionEntity
+  async save(
+    transaction: LedgerTransactionEntity,
+    updatedAccounts: ReadonlyArray<LedgerAccountEntity>
   ): Promise<LedgerTransactionEntity> {
-    // 1. Fetch all affected accounts OUTSIDE transaction
-    const accountIds = transaction.entries.map(e => e.accountId.toString())
-    const accountRecords = await this.db.select().from(ledgerAccounts)
-      .where(inArray(ledgerAccounts.id, accountIds))
-
-    const accountsById = new Map(
-      accountRecords.map(r => [r.id, LedgerAccountEntity.fromRecord(r)])
-    )
-
-    // 2. Calculate balance updates in-memory using entity business logic
-    const updatedAccounts = transaction.entries.map(entry => {
-      const account = accountsById.get(entry.accountId.toString())
-      if (!account) {
-        throw new NotFoundError('Account not found', {
-          accountId: entry.accountId.toString(),
-        })
-      }
-      // Entity contains the double-entry accounting logic
-      return account.applyEntry(entry)
-    })
-
-    // 3. Write atomically in single DB transaction
+    // Write the service-prepared entities atomically.
     return await this.db.transaction(async tx => {
       // Insert transaction record (with upsert for idempotency)
       const [txRecord] = await tx
         .insert(ledgerTransactions)
-        .values(transaction.toRecord())
+        .values(transaction.toRow())
         .onConflictDoUpdate({
           target: ledgerTransactions.idempotencyKey,
           set: { updated: new Date() },
@@ -388,7 +367,7 @@ export class LedgerTransactionRepo {
 
       // Insert transaction entries
       await tx.insert(ledgerTransactionEntries).values(
-        transaction.entries.map(e => e.toRecord())
+        transaction.entries.map(e => e.toRow())
       )
 
       // Update account balances with optimistic locking
@@ -396,7 +375,7 @@ export class LedgerTransactionRepo {
         const result = await tx
           .update(ledgerAccounts)
           .set({
-            ...account.toRecord(),
+            ...account.toRow(),
             lockVersion: sql`${ledgerAccounts.lockVersion} + 1`,
           })
           .where(and(
@@ -418,7 +397,7 @@ export class LedgerTransactionRepo {
         }
       }
 
-      return LedgerTransactionEntity.fromRecord(txRecord)
+      return LedgerTransactionEntity.fromRow(txRecord)
     })
   }
 }
@@ -456,7 +435,7 @@ export class PostRepo {
     })
 
     const hasMore = records.length > limit
-    const items = records.slice(0, limit).map(PostEntity.fromRecord)
+    const items = records.slice(0, limit).map(PostEntity.fromRow)
     const nextCursor = hasMore ? records[limit - 1].id : undefined
 
     return {
@@ -473,6 +452,7 @@ export class PostRepo {
 1. Reuse the existing repository shape, database service, entities, and errors.
 2. Preserve tenant filters and return contracts already owned by the boundary.
 3. Use transactions and constraints for the current multi-step integrity need.
-4. Add optimistic locking, idempotency, pagination, or retries only when the active
-   query or operational contract requires them.
-5. Preserve native driver errors unless an existing boundary translates them.
+4. Add optimistic locking, idempotency, or pagination only when the active query
+   or operational contract requires them.
+5. Classify driver errors in the repository. Let the service decide whether a
+   retry fits the use case.

@@ -17,13 +17,13 @@
       "source": "martinffx/typescript-skills",
       "sourceType": "github",
       "skillPath": "skills/typescript-drizzle-orm/SKILL.md",
-      "computedHash": "f1d1bafdd0bc17edd751198af60cbec8c2083298776e2e464d85fcb789a0d533"
+      "computedHash": "622cb8a8af513cce1637d312a5b52ec068105e5a9162add801d42cd560b7f41e"
     },
     "typescript-effect-ts": {
       "source": "martinffx/typescript-skills",
       "sourceType": "github",
       "skillPath": "skills/typescript-effect-ts/SKILL.md",
-      "computedHash": "4d4e4e3a4d7ece4e99e9f23c5a378388884817932f40e03f5b7e9a6f9a01e251"
+      "computedHash": "bf862d719a777d3ead8d1e3d7706d723532bd59da85f019df2e67b26e4aee387"
     },
     "typescript-fastify": {
       "source": "martinffx/typescript-skills",
@@ -35,7 +35,7 @@
       "source": "martinffx/typescript-skills",
       "sourceType": "github",
       "skillPath": "skills/typescript-functional-patterns/SKILL.md",
-      "computedHash": "0a4972465447628cec45577be95880b7e6a45cc1788d1e6e2ee815c71470b3bc"
+      "computedHash": "009a0fe4bd0ec8178b3a95b26b4ce2209a1116ee8b66965a162f4d88285a450c"
     },
     "typescript-testing": {
       "source": "martinffx/typescript-skills",

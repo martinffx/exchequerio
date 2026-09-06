@@ -4,27 +4,31 @@ Use this reference only when the owning package already uses entities or the
 current task needs domain behavior that inferred Drizzle records cannot express.
 Reuse canonical IDs, parsers, errors, and transformation helpers.
 
-Domain entities encapsulate business logic and data transformations between API, domain, and database layers.
+Domain entities encapsulate construction, business invariants, and typed
+transformations between request, domain, and persistence shapes. Routes still
+own HTTP validation and response serialization; repositories own database I/O.
 
 ## Core Concept
 
-Entities have **four transformation methods**:
+Established entities may expose three transformation methods:
 
 1. `fromRequest(rq)` - API request → Entity
-2. `fromRecord(record)` - Database record → Entity
-3. `toRecord()` - Entity → Database insert/update
-4. `toResponse()` - Entity → API response
+2. `fromRow(row)` - Database row → Entity
+3. `toRow()` - Entity → Database insert/update row
 
-This creates clear boundaries between layers and centralizes data transformation logic.
+Use type-only imports for the request and inferred Drizzle types. This keeps the
+boundary types canonical without moving Fastify or database dependencies into
+the domain model.
 
 ## Basic Entity
 
 ```typescript
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm'
 import type { users } from '../schema'
+import type { CreateUserRequest } from '../routes/users/schema'
 
 // Infer types from schema
-type UserRecord = InferSelectModel<typeof users>
+type UserRow = InferSelectModel<typeof users>
 type UserInsert = InferInsertModel<typeof users>
 
 interface UserEntityData {
@@ -63,19 +67,19 @@ export class UserEntity {
     })
   }
 
-  // 2. DB record → Entity
-  static fromRecord(record: UserRecord): UserEntity {
+  // 2. DB row → Entity
+  static fromRow(row: UserRow): UserEntity {
     return new UserEntity({
-      id: record.id,
-      name: record.name,
-      email: record.email,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     })
   }
 
-  // 3. Entity → DB record
-  toRecord(): UserInsert {
+  // 3. Entity → DB row
+  toRow(): UserInsert {
     return {
       id: this.id,
       name: this.name,
@@ -84,19 +88,11 @@ export class UserEntity {
       updatedAt: this.updatedAt,
     }
   }
-
-  // 4. Entity → API response
-  toResponse(): UserResponse {
-    return {
-      id: this.id,
-      name: this.name,
-      email: this.email,
-      createdAt: this.createdAt.toISOString(),
-      updatedAt: this.updatedAt.toISOString(),
-    }
-  }
 }
 ```
+
+The route maps `UserEntity` to its declared response schema and formats dates for
+HTTP.
 
 ## Entity with TypeID
 
@@ -106,9 +102,10 @@ Using TypeID for type-safe prefixed identifiers:
 import { TypeID } from 'typeid-js'
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm'
 import type { users } from '../schema'
+import type { CreateUserRequest } from '../routes/users/schema'
 
 type UserID = TypeID<'usr'>
-type UserRecord = InferSelectModel<typeof users>
+type UserRow = InferSelectModel<typeof users>
 type UserInsert = InferInsertModel<typeof users>
 
 export class UserEntity {
@@ -134,25 +131,17 @@ export class UserEntity {
     })
   }
 
-  static fromRecord(record: UserRecord): UserEntity {
+  static fromRow(row: UserRow): UserEntity {
     return new UserEntity({
-      id: TypeID.fromString<'usr'>(record.id),
-      name: record.name,
-      email: record.email,
+      id: TypeID.fromString<'usr'>(row.id),
+      name: row.name,
+      email: row.email,
     })
   }
 
-  toRecord(): UserInsert {
+  toRow(): UserInsert {
     return {
       id: this.id.toString(),  // TypeID → string for DB
-      name: this.name,
-      email: this.email,
-    }
-  }
-
-  toResponse(): UserResponse {
-    return {
-      id: this.id.toString(),  // TypeID → string for API
       name: this.name,
       email: this.email,
     }
@@ -167,13 +156,14 @@ Handle JSON serialization/deserialization:
 ```typescript
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm'
 import type { users } from '../schema'
+import type { CreateUserRequest } from '../routes/users/schema'
 
 type UserMetadata = {
   theme: 'light' | 'dark'
   notifications: boolean
 }
 
-type UserRecord = InferSelectModel<typeof users>
+type UserRow = InferSelectModel<typeof users>
 type UserInsert = InferInsertModel<typeof users>
 
 export class UserEntity {
@@ -199,34 +189,26 @@ export class UserEntity {
     })
   }
 
-  static fromRecord(record: UserRecord): UserEntity {
+  static fromRow(row: UserRow): UserEntity {
     // Parse JSON string from TEXT column
     let metadata: UserMetadata | undefined
-    if (record.metadata) {
-      metadata = JSON.parse(record.metadata)
+    if (row.metadata) {
+      metadata = JSON.parse(row.metadata)
     }
 
     return new UserEntity({
-      id: record.id,
-      name: record.name,
+      id: row.id,
+      name: row.name,
       metadata,
     })
   }
 
-  toRecord(): UserInsert {
+  toRow(): UserInsert {
     return {
       id: this.id,
       name: this.name,
       // Serialize to JSON string for TEXT column
       metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
-    }
-  }
-
-  toResponse(): UserResponse {
-    return {
-      id: this.id,
-      name: this.name,
-      metadata: this.metadata,  // Send as object
     }
   }
 }
@@ -242,7 +224,7 @@ import type { InferInsertModel, InferSelectModel } from 'drizzle-orm'
 import type { ledgerAccounts } from '../schema'
 
 type LedgerAccountID = TypeID<'lat'>
-type LedgerAccountRecord = InferSelectModel<typeof ledgerAccounts>
+type LedgerAccountRow = InferSelectModel<typeof ledgerAccounts>
 type LedgerAccountInsert = InferInsertModel<typeof ledgerAccounts>
 
 export class LedgerAccountEntity {
@@ -264,14 +246,14 @@ export class LedgerAccountEntity {
     Object.assign(this, data)
   }
 
-  static fromRecord(record: LedgerAccountRecord): LedgerAccountEntity {
+  static fromRow(row: LedgerAccountRow): LedgerAccountEntity {
     return new LedgerAccountEntity({
-      id: TypeID.fromString<'lat'>(record.id),
-      name: record.name,
-      normalBalance: record.normalBalance as 'debit' | 'credit',
-      postedAmount: record.postedAmount,
-      lockVersion: record.lockVersion,
-      updated: record.updated,
+      id: TypeID.fromString<'lat'>(row.id),
+      name: row.name,
+      normalBalance: row.normalBalance as 'debit' | 'credit',
+      postedAmount: row.postedAmount,
+      lockVersion: row.lockVersion,
+      updated: row.updated,
     })
   }
 
@@ -308,7 +290,7 @@ export class LedgerAccountEntity {
     })
   }
 
-  toRecord(): LedgerAccountInsert {
+  toRow(): LedgerAccountInsert {
     return {
       id: this.id.toString(),
       name: this.name,
@@ -316,16 +298,6 @@ export class LedgerAccountEntity {
       postedAmount: this.postedAmount,
       lockVersion: this.lockVersion,
       updated: this.updated,
-    }
-  }
-
-  toResponse(): LedgerAccountResponse {
-    return {
-      id: this.id.toString(),
-      name: this.name,
-      normalBalance: this.normalBalance,
-      postedAmount: this.postedAmount,
-      updated: this.updated.toISOString(),
     }
   }
 }
@@ -336,6 +308,8 @@ export class LedgerAccountEntity {
 Handle default values consistently:
 
 ```typescript
+import type { LedgerRequest } from '../routes/ledgers/schema'
+
 export class LedgerEntity {
   public readonly id: LedgerID
   public readonly organizationId: OrgID
@@ -363,23 +337,23 @@ export class LedgerEntity {
     })
   }
 
-  static fromRecord(record: LedgerRecord): LedgerEntity {
+  static fromRow(row: LedgerRow): LedgerEntity {
     let metadata: Record<string, unknown> | undefined
-    if (record.metadata) {
-      metadata = JSON.parse(record.metadata)
+    if (row.metadata) {
+      metadata = JSON.parse(row.metadata)
     }
 
     return new LedgerEntity({
-      id: TypeID.fromString<'lgr'>(record.id),
-      organizationId: TypeID.fromString<'org'>(record.organizationId),
-      name: record.name,
-      currency: record.currency,
-      currencyExponent: record.currencyExponent,
+      id: TypeID.fromString<'lgr'>(row.id),
+      organizationId: TypeID.fromString<'org'>(row.organizationId),
+      name: row.name,
+      currency: row.currency,
+      currencyExponent: row.currencyExponent,
       metadata,
     })
   }
 
-  toRecord(): LedgerInsert {
+  toRow(): LedgerInsert {
     return {
       id: this.id.toString(),
       organizationId: this.organizationId.toString(),
@@ -389,22 +363,14 @@ export class LedgerEntity {
       metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
     }
   }
-
-  toResponse(): LedgerResponse {
-    return {
-      id: this.id.toString(),
-      name: this.name,
-      currency: this.currency,
-      currencyExponent: this.currencyExponent,
-      metadata: this.metadata,
-    }
-  }
 }
 ```
 
 ## Guidelines
 
 1. Follow the owning package's current entity shape and transformation boundaries.
-2. Add only the parsing, formatting, defaults, or behavior required by the current entity.
+2. Keep construction, invariant-preserving changes, and typed request or row
+   decoding on the entity.
 3. Reuse canonical IDs and constructors; do not introduce TypeID beside an existing ID system.
-4. Prefer inferred records when no domain behavior justifies an Entity class.
+4. Prefer inferred rows when no domain behavior justifies an Entity class.
+5. Keep HTTP serialization in routes and all Drizzle I/O in repositories.
