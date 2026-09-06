@@ -46,7 +46,9 @@ const parseAccountId = (
 	value: string
 ): Effect.Effect<LedgerAccountID, LedgerAccountBalanceMonitorPersistenceFailure> =>
 	parseId<"lat", LedgerAccountID>("lat", value).pipe(
-		Effect.mapError(cause => new LedgerAccountBalanceMonitorPersistenceFailure(cause))
+		Effect.mapError(
+			() => new LedgerAccountBalanceMonitorPersistenceFailure(new Error("Invalid Ledger Account ID"))
+		)
 	);
 
 class LedgerAccountBalanceMonitorService {

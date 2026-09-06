@@ -3,7 +3,10 @@ import { Context, Effect, Layer, Option } from "effect";
 
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import type { LedgerAccountBalanceMonitorID } from "@/repo/entities/types";
-import { LedgerAccountBalanceMonitorsTable } from "@/repo/schema";
+import {
+	type LedgerAccountBalanceMonitorRow,
+	LedgerAccountBalanceMonitorsTable,
+} from "@/repo/schema";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import {
@@ -47,9 +50,16 @@ const LedgerAccountBalanceMonitorRepoTag = Context.Service<LedgerAccountBalanceM
 );
 
 const mapInfrastructureError = (cause: unknown): LedgerAccountBalanceMonitorInfrastructureError =>
-	cause instanceof LedgerAccountBalanceMonitorPersistenceDecodingFailure
+	cause instanceof LedgerAccountBalanceMonitorPersistenceDecodingFailure ||
+	cause instanceof LedgerAccountBalanceMonitorPersistenceFailure
 		? cause
 		: new LedgerAccountBalanceMonitorPersistenceFailure(cause);
+
+const decodeOptionalRow = (row: LedgerAccountBalanceMonitorRow | undefined) =>
+	row === undefined
+		? Effect.succeed(Option.none<LedgerAccountBalanceMonitor>())
+		: // oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the decoded monitor.
+			LedgerAccountBalanceMonitor.fromRow(row).pipe(Effect.map(monitor => Option.some(monitor)));
 
 class LedgerAccountBalanceMonitorRepoLive implements LedgerAccountBalanceMonitorRepo {
 	constructor(private readonly db: EffectDrizzleDatabase) {}
@@ -65,7 +75,6 @@ class LedgerAccountBalanceMonitorRepoLive implements LedgerAccountBalanceMonitor
 			.offset(query.offset)
 			.pipe(
 				Effect.flatMap(rows => Effect.all(rows.map(row => LedgerAccountBalanceMonitor.fromRow(row)))),
-				Effect.map(monitors => monitors.flatMap(value => Option.toArray(value))),
 				Effect.mapError(mapInfrastructureError)
 			);
 	}
@@ -82,7 +91,7 @@ class LedgerAccountBalanceMonitorRepoLive implements LedgerAccountBalanceMonitor
 			.where(eq(LedgerAccountBalanceMonitorsTable.id, id.toString()))
 			.limit(1)
 			.pipe(
-				Effect.flatMap(rows => LedgerAccountBalanceMonitor.fromRow(rows[0])),
+				Effect.flatMap(rows => decodeOptionalRow(rows[0])),
 				Effect.mapError(mapInfrastructureError)
 			);
 	}
@@ -95,15 +104,12 @@ class LedgerAccountBalanceMonitorRepoLive implements LedgerAccountBalanceMonitor
 			.values(record.toCreateRow())
 			.returning()
 			.pipe(
-				Effect.flatMap(rows => LedgerAccountBalanceMonitor.fromRow(rows[0])),
-				Effect.flatMap(
-					Option.match({
-						onNone: () =>
-							Effect.fail(
+				Effect.flatMap(rows =>
+					rows[0] === undefined
+						? Effect.fail(
 								new LedgerAccountBalanceMonitorPersistenceFailure(new Error("INSERT returned no row"))
-							),
-						onSome: Effect.succeed,
-					})
+							)
+						: LedgerAccountBalanceMonitor.fromRow(rows[0])
 				),
 				Effect.mapError(mapInfrastructureError)
 			);
@@ -122,7 +128,7 @@ class LedgerAccountBalanceMonitorRepoLive implements LedgerAccountBalanceMonitor
 			.where(eq(LedgerAccountBalanceMonitorsTable.id, id.toString()))
 			.returning()
 			.pipe(
-				Effect.flatMap(rows => LedgerAccountBalanceMonitor.fromRow(rows[0])),
+				Effect.flatMap(rows => decodeOptionalRow(rows[0])),
 				Effect.mapError(mapInfrastructureError)
 			);
 	}

@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { describe, expect, it } from "vitest";
@@ -37,7 +37,7 @@ const row = (overrides: Partial<LedgerAccountBalanceMonitorRow> = {}) =>
 	}) satisfies LedgerAccountBalanceMonitorRow;
 
 const decode = (record: LedgerAccountBalanceMonitorRow) =>
-	Effect.runSync(LedgerAccountBalanceMonitor.fromRow(record)).pipe(Option.getOrThrow);
+	Effect.runSync(LedgerAccountBalanceMonitor.fromRow(record));
 
 describe("LedgerAccountBalanceMonitor", () => {
 	it("constructs the current domain defaults from a request and supplied application values", () => {

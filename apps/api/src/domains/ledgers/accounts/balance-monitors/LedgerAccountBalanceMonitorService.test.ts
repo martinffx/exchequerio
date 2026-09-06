@@ -203,6 +203,7 @@ describe("LedgerAccountBalanceMonitorService", () => {
 
 			expect(error).toBeInstanceOf(InternalServerError);
 			expect(error.message).toBe("Internal Server Error");
+			expect(error.cause).toMatchObject({ message: "Invalid Ledger Account ID" });
 			expect(repo.createMonitor).not.toHaveBeenCalled();
 			expect(repo.updateMonitor).not.toHaveBeenCalled();
 		}

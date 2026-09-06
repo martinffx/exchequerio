@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { DateTime } from "luxon";
 
 import { parseDate, parseId } from "@/lib/utils";
@@ -91,22 +91,19 @@ class LedgerAccountBalanceMonitor {
 	}
 
 	static fromRow(
-		row: LedgerAccountBalanceMonitorRow | undefined
+		row: LedgerAccountBalanceMonitorRow
 	): Effect.Effect<
-		Option.Option<LedgerAccountBalanceMonitor>,
+		LedgerAccountBalanceMonitor,
 		LedgerAccountBalanceMonitorPersistenceDecodingFailure
 	> {
-		if (row === undefined) return Effect.succeed(Option.none());
-
 		return Effect.all({
 			id: parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", row.id),
 			accountId: parseId<"lat", LedgerAccountID>("lat", row.accountId),
 			created: parseDate(row.created),
 			updated: parseDate(row.updated),
 		}).pipe(
-			Effect.map(decoded =>
-				Option.some(
-					// oxlint-disable-next-line unicorn/no-array-callback-reference -- Constructor receives decoded values.
+			Effect.map(
+				decoded =>
 					new LedgerAccountBalanceMonitor({
 						...decoded,
 						name: row.name,
@@ -115,7 +112,6 @@ class LedgerAccountBalanceMonitor {
 						isActive: row.isActive === 1,
 						metadata: decodeMetadata(row.metadata),
 					})
-				)
 			),
 			Effect.mapError(cause => new LedgerAccountBalanceMonitorPersistenceDecodingFailure(cause))
 		);
