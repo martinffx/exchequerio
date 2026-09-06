@@ -331,6 +331,67 @@ describe("TransactionRoutes", () => {
 	});
 
 	it.each([
+		["create", "POST", "", createBody],
+		["update", "PUT", `/${transactionId.toString()}`, updateBody],
+	] as const)(
+		"rejects unsupported effective times on %s before the service",
+		async (_name, method, suffix, body) => {
+			const implementation = service();
+			const { server } = await buildRouteServer(implementation);
+			for (const effectiveAt of ["2026-09-06 12:00:00Z", "2026-12-31T23:59:60Z"]) {
+				const response = await server.inject({
+					method,
+					url: `/api/ledgers/${ledgerId.toString()}/transactions${suffix}`,
+					headers: { "idempotency-key": crypto.randomUUID() },
+					payload: { ...body, effectiveAt },
+				});
+				expect(response.statusCode).toBe(400);
+			}
+			expect(implementation.createTransaction).not.toHaveBeenCalled();
+			expect(implementation.updateTransaction).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each([
+		["create", "POST", "", createBody],
+		["update", "PUT", `/${transactionId.toString()}`, updateBody],
+	] as const)("accepts supported effective times on %s", async (_name, method, suffix, body) => {
+		const implementation = service();
+		const { server } = await buildRouteServer(implementation);
+		for (const effectiveAt of [
+			"2026-09-06T12:00:00+02:00",
+			"2026-09-06T12:00:00.123456Z",
+			"2026-09-06t12:00:00z",
+		]) {
+			const key = crypto.randomUUID();
+			const payload = { ...body, effectiveAt };
+			const response = await server.inject({
+				method,
+				url: `/api/ledgers/${ledgerId.toString()}/transactions${suffix}`,
+				headers: { "idempotency-key": key },
+				payload,
+			});
+			expect(response.statusCode).toBe(method === "POST" ? 201 : 200);
+			if (method === "POST") {
+				expect(implementation.createTransaction).toHaveBeenLastCalledWith(
+					organizationId,
+					ledgerId,
+					key,
+					payload
+				);
+			} else {
+				expect(implementation.updateTransaction).toHaveBeenLastCalledWith(
+					organizationId,
+					ledgerId,
+					transactionId,
+					key,
+					payload
+				);
+			}
+		}
+	});
+
+	it.each([
 		["create", "POST", "", { "idempotency-key": "create-42" }],
 		["update", "PUT", `/${transactionId.toString()}`, { "idempotency-key": "update-42" }],
 	] as const)("limits %s requests to 200 Entries", async (_name, method, suffix, headers) => {

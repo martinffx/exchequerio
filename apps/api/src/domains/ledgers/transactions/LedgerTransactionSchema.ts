@@ -23,6 +23,11 @@ const TransactionMetadataSchema = Type.Record(Type.String(), Type.String());
 const EntryDirectionSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 const AmountSchema = Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
 const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });
+const EffectiveAtSchema = Type.String({
+	format: "date-time",
+	// RFC 3339 also permits space separators and leap seconds, which Luxon cannot parse.
+	pattern: "[Tt][0-9]{2}:[0-9]{2}:[0-5][0-9]",
+});
 const TransactionRequestEntry = Type.Object(
 	{
 		accountId: AccountIdSchema,
@@ -36,7 +41,7 @@ const TransactionRequestEntry = Type.Object(
 const TransactionCreateRequest = Type.Object(
 	{
 		status: Type.Union([Type.Literal("pending"), Type.Literal("posted")]),
-		effectiveAt: Type.Optional(Type.String({ format: "date-time" })),
+		effectiveAt: Type.Optional(EffectiveAtSchema),
 		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(TransactionMetadataSchema),
 		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2, maxItems: 200 }),
@@ -45,7 +50,7 @@ const TransactionCreateRequest = Type.Object(
 );
 const TransactionUpdateRequest = Type.Object(
 	{
-		effectiveAt: Type.Optional(Type.String({ format: "date-time" })),
+		effectiveAt: Type.Optional(EffectiveAtSchema),
 		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(TransactionMetadataSchema),
 		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2, maxItems: 200 }),

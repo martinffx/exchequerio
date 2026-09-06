@@ -38,6 +38,8 @@ are allowed and do not delay live balance effects, which depend only on status.
 - Every Amount is a positive integer Minor Unit no greater than `Number.MAX_SAFE_INTEGER`.
 - Debit and Credit totals match exactly for each Currency Code.
 - Transaction and Entry metadata map strings to strings.
+- `effectiveAt` requires a `T` or `t` separator and seconds from `00` to `59`. Timezone offsets,
+  fractional seconds, and lowercase `z` are accepted. Space separators and leap seconds return `400`.
 - A Transaction may contain several Entries for the same Account. Balance effects aggregate by
   Account before the write.
 
@@ -71,9 +73,24 @@ Accounts store Pending, Posted, and Available Amounts plus their Credit and Debi
 
 Negative balances are valid.
 
-## Create idempotency
+## Idempotency
 
-`Idempotency-Key` is required and scoped by Organization. The create flow is:
+`Idempotency-Key` is required for every mutating Transaction and Settlement action. Generate a
+fresh UUID for every new client action. Reuse that UUID only when retrying the same action.
+Separate actions must use different UUIDs, including actions on different endpoints or the same
+resource. Internal calls belonging to one action carry its original key.
+
+```ts
+const transactionKey = crypto.randomUUID();
+const settlementKey = crypto.randomUUID();
+// Retry either action using its original key.
+```
+
+The header remains an opaque string of 1 to 255 characters; UUID generation is the client
+convention. Claims are scoped by Organization and service action. This internal scoping does not
+permit clients to reuse a key for a different action.
+
+The Transaction create flow is:
 
 1. Atomically lock the Organization-scoped Valkey key with a pending marker for 15 minutes.
 2. If the key contains a Transaction ID, load and return that Transaction. If it remains pending
