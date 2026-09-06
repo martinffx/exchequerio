@@ -11,6 +11,7 @@ import {
 	makeIdempotencyService,
 } from "./IdempotencyService";
 
+/** Creates unique action identifiers and their expected Valkey key. */
 const fixture = () => {
 	const organizationId = newOrgID();
 	const key = crypto.randomUUID();

@@ -33,6 +33,7 @@ type LedgerTransactionOptions = Readonly<{
 	id: LedgerTransactionID;
 	organizationId: OrgID;
 	ledgerId: LedgerID;
+	/** Owning Settlement for generated accounting; absent for ordinary Transactions. */
 	settlementId?: LedgerAccountSettlementID;
 	status: LedgerTransactionStatus;
 	description?: string;
@@ -60,6 +61,7 @@ class LedgerTransaction {
 	readonly id: LedgerTransactionID;
 	readonly organizationId: OrgID;
 	readonly ledgerId: LedgerID;
+	/** Owning Settlement, whose lifecycle controls mutations of this accounting. */
 	readonly settlementId?: LedgerAccountSettlementID;
 	readonly status: LedgerTransactionStatus;
 	readonly description?: string;

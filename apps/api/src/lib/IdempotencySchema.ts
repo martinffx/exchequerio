@@ -1,5 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
 
+/** Required client action key; clients generate a fresh UUID for each new action. */
 const IdempotencyHeaders = Type.Object({
 	"idempotency-key": Type.String({
 		minLength: 1,
@@ -9,6 +10,7 @@ const IdempotencyHeaders = Type.Object({
 	}),
 });
 
+/** Validated values derived from the IdempotencyHeaders transport schema. */
 type IdempotencyHeaders = Static<typeof IdempotencyHeaders>;
 
 export { IdempotencyHeaders };

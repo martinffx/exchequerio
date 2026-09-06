@@ -32,13 +32,16 @@ import type {
 	SettlementTargetStatus,
 } from "./LedgerAccountSettlementSchema";
 
+/** Operations used by repository helpers with a database or its current transaction. */
 type Connection = Pick<EffectDrizzleDatabase, "select" | "insert" | "update" | "delete" | "query">;
+/** Builds the Organization, Ledger, and Settlement ownership predicate. */
 const scope = (organizationId: OrgID, ledgerId: LedgerID, id: LedgerAccountSettlementID) =>
 	and(
 		eq(Settlements.organizationId, organizationId.toString()),
 		eq(Settlements.ledgerId, ledgerId.toString()),
 		eq(Settlements.id, id.toString())
 	);
+/** Preserves HTTP failures and translates PostgreSQL failures at the repository boundary. */
 const mapError = (cause: unknown): HttpError => {
 	if (cause instanceof HttpError) return cause;
 	const code = postgresErrorCode(cause);
@@ -50,8 +53,30 @@ const mapError = (cause: unknown): HttpError => {
 		? new ServiceUnavailableError("Settlement repository unavailable", { cause })
 		: new InternalServerError("Settlement persistence failed", { cause });
 };
+/**
+ * Persists Settlement state and source membership.
+ *
+ * @remarks
+ * Mutations own their database transactions. Accounting commits separately through
+ * the Transaction repository; processing state preserves the target for retries.
+ */
 class LedgerAccountSettlementRepoLive {
+	/**
+	 * Creates a Settlement repository.
+	 *
+	 * @param db - Effect-enabled database for Settlement persistence.
+	 */
 	constructor(private readonly db: EffectDrizzleDatabase) {}
+	/**
+	 * Loads scoped Settlement state and its generated accounting.
+	 *
+	 * @param db - Repository connection or current transaction.
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param id - Settlement identifier.
+	 * @param lock - Whether to lock the Settlement row for update.
+	 * @returns An Effect containing the Settlement, or a missing-row/persistence failure.
+	 */
 	private read(
 		db: Connection,
 		organizationId: OrgID,
@@ -84,9 +109,26 @@ class LedgerAccountSettlementRepoLive {
 			return Option.getOrThrow(entity);
 		}).pipe(Effect.mapError(mapError));
 	}
+	/**
+	 * Gets a Settlement with its accounting.
+	 *
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param id - Settlement identifier.
+	 * @returns An Effect containing the Settlement, or a missing-row/persistence failure.
+	 */
 	getSettlement(organizationId: OrgID, ledgerId: LedgerID, id: LedgerAccountSettlementID) {
 		return this.read(this.db, organizationId, ledgerId, id);
 	}
+	/**
+	 * Lists scoped Settlements with accounting in descending creation and ID order.
+	 *
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param offset - Rows to skip.
+	 * @param limit - Maximum rows to return.
+	 * @returns An Effect containing the decoded page, or a persistence failure.
+	 */
 	listSettlements(organizationId: OrgID, ledgerId: LedgerID, offset: number, limit: number) {
 		return this.db.query.LedgerAccountSettlementsTable.findMany({
 			where: { organizationId: organizationId.toString(), ledgerId: ledgerId.toString() },
@@ -108,6 +150,13 @@ class LedgerAccountSettlementRepoLive {
 			Effect.mapError(mapError)
 		);
 	}
+	/**
+	 * Queries assigned source Entries in descending creation and ID order.
+	 *
+	 * @param db - Repository connection or current transaction.
+	 * @param settlement - Scoped Settlement whose sources are read.
+	 * @returns The source query, including parent Transaction effective times.
+	 */
 	private sources(db: Connection, settlement: LedgerAccountSettlementEntity) {
 		return db
 			.select({ entry: Entries, effectiveAt: Transactions.effectiveAt })
@@ -117,6 +166,18 @@ class LedgerAccountSettlementRepoLive {
 			.where(eq(Links.settlementId, settlement.id.toString()))
 			.orderBy(desc(Entries.created), desc(Entries.id));
 	}
+	/**
+	 * Selects unassigned posted Entries from the settled Account.
+	 *
+	 * @remarks
+	 * Excludes generated offsets on their own settled Account. Generated contra Entries
+	 * remain eligible for later Settlements.
+	 *
+	 * @param db - Repository connection or current transaction.
+	 * @param settlement - Scoped Settlement defining eligibility.
+	 * @param ids - Explicit selection; omission uses the automatic cutoff.
+	 * @returns A query capped at 10,001 rows so callers can detect the 10,000-source limit.
+	 */
 	private eligible(db: Connection, settlement: LedgerAccountSettlementEntity, ids?: string[]) {
 		const d = settlement.data;
 		return db
@@ -141,6 +202,14 @@ class LedgerAccountSettlementRepoLive {
 			.orderBy(desc(Entries.created), desc(Entries.id))
 			.limit(10_001);
 	}
+	/**
+	 * Builds accounting from assigned sources and the settled Account normal balance.
+	 *
+	 * @param db - Repository connection or current transaction.
+	 * @param settlement - Settlement supplying the intended target.
+	 * @param now - Accounting creation time.
+	 * @returns An Effect containing accounting, or an Account/net/persistence failure.
+	 */
 	private accounting(db: Connection, settlement: LedgerAccountSettlementEntity, now: DateTime) {
 		return Effect.gen({ self: this }, function* () {
 			const accounts = yield* db
@@ -163,12 +232,34 @@ class LedgerAccountSettlementRepoLive {
 			);
 		});
 	}
+	/**
+	 * Constructs accounting for a prepared Settlement without persisting it.
+	 *
+	 * @param org - Owning Organization.
+	 * @param ledger - Containing Ledger.
+	 * @param id - Settlement identifier.
+	 * @param now - Accounting creation time.
+	 * @returns An Effect containing the generated Transaction, or a validation/persistence failure.
+	 */
 	buildTransaction(org: OrgID, ledger: LedgerID, id: LedgerAccountSettlementID, now: DateTime) {
 		return this.getSettlement(org, ledger, id).pipe(
 			Effect.flatMap(settlement => this.accounting(this.db, settlement, now)),
 			Effect.mapError(mapError)
 		);
 	}
+	/**
+	 * Freezes sources and records an intended transition in the caller’s transaction.
+	 *
+	 * @remarks
+	 * Repeated targets are safe. Voiding a draft releases membership immediately; other
+	 * transitions retain membership in processing until accounting is finalized.
+	 *
+	 * @param db - Current repository transaction.
+	 * @param settlement - Locked or newly inserted Settlement.
+	 * @param target - Intended accounting status.
+	 * @param now - Transition time.
+	 * @returns An Effect containing prepared state, or a lifecycle/source/persistence failure.
+	 */
 	private prepare(
 		db: Connection,
 		settlement: LedgerAccountSettlementEntity,
@@ -227,6 +318,14 @@ class LedgerAccountSettlementRepoLive {
 			});
 		}).pipe(Effect.mapError(mapError));
 	}
+	/**
+	 * Creates a Settlement and optionally prepares accounting in one database transaction.
+	 *
+	 * @param entity - Draft to persist.
+	 * @param target - Initial accounting target; undefined retains drafting.
+	 * @param now - Preparation time.
+	 * @returns An Effect containing persisted state, or an Account/source/persistence failure.
+	 */
 	createSettlement(
 		entity: LedgerAccountSettlementEntity,
 		target: "pending" | "posted" | undefined,
@@ -262,6 +361,20 @@ class LedgerAccountSettlementRepoLive {
 			)
 			.pipe(Effect.mapError(mapError));
 	}
+	/**
+	 * Applies edits and prepares the requested transition under a Settlement row lock.
+	 *
+	 * @remarks
+	 * Omitted metadata is preserved; supplied metadata replaces it. A retry of the
+	 * current processing target returns frozen state without applying new edits.
+	 *
+	 * @param org - Owning Organization.
+	 * @param ledger - Containing Ledger.
+	 * @param id - Settlement identifier.
+	 * @param patch - Supplied edits and optional target status.
+	 * @param now - Edit and preparation time.
+	 * @returns An Effect containing prepared state, or a lifecycle/persistence failure.
+	 */
 	prepareSettlement(
 		org: OrgID,
 		ledger: LedgerID,
@@ -304,6 +417,20 @@ class LedgerAccountSettlementRepoLive {
 			)
 			.pipe(Effect.mapError(mapError));
 	}
+	/**
+	 * Commits a prepared target after its accounting reaches the same status.
+	 *
+	 * @remarks
+	 * Owns a separate database transaction. Voiding releases source membership; successful
+	 * finalization clears the processing target. Repeating a completed target is safe.
+	 *
+	 * @param org - Owning Organization.
+	 * @param ledger - Containing Ledger.
+	 * @param id - Settlement identifier.
+	 * @param target - Expected processing target.
+	 * @param now - Finalization time.
+	 * @returns An Effect containing finalized state, or an accounting-state/persistence failure.
+	 */
 	finalizeSettlement(
 		org: OrgID,
 		ledger: LedgerID,
@@ -340,6 +467,16 @@ class LedgerAccountSettlementRepoLive {
 			)
 			.pipe(Effect.mapError(mapError));
 	}
+	/**
+	 * Changes manual draft membership in one database transaction.
+	 *
+	 * @param org - Owning Organization.
+	 * @param ledger - Containing Ledger.
+	 * @param id - Settlement identifier.
+	 * @param entryIds - One to 500 source Entry identifiers.
+	 * @param add - True to add eligible sources; false to remove membership.
+	 * @returns An Effect completing the edit, or a membership/lifecycle/persistence failure.
+	 */
 	changeEntries(
 		org: OrgID,
 		ledger: LedgerID,
@@ -375,6 +512,16 @@ class LedgerAccountSettlementRepoLive {
 			)
 			.pipe(Effect.mapError(mapError));
 	}
+	/**
+	 * Lists a scoped Settlement’s sources in descending creation and ID order.
+	 *
+	 * @param org - Owning Organization.
+	 * @param ledger - Containing Ledger.
+	 * @param id - Settlement identifier.
+	 * @param offset - Rows to skip.
+	 * @param limit - Maximum rows to return.
+	 * @returns An Effect containing source responses, or a missing-row/persistence failure.
+	 */
 	listEntries(
 		org: OrgID,
 		ledger: LedgerID,
@@ -404,6 +551,7 @@ class LedgerAccountSettlementRepoLive {
 		}).pipe(Effect.mapError(mapError));
 	}
 }
+/** Public Settlement persistence operations, excluding connection-level helpers. */
 type LedgerAccountSettlementRepo = Pick<
 	LedgerAccountSettlementRepoLive,
 	| "getSettlement"
@@ -415,9 +563,11 @@ type LedgerAccountSettlementRepo = Pick<
 	| "changeEntries"
 	| "listEntries"
 >;
+/** Effect service key for Settlement persistence. */
 const LedgerAccountSettlementRepoTag = Context.Service<LedgerAccountSettlementRepo>(
 	"LedgerAccountSettlementRepo"
 );
+/** Constructs Settlement persistence from the application database. */
 const ledgerAccountSettlementRepoLayer = Layer.effect(
 	LedgerAccountSettlementRepoTag,
 	DatabaseTag.pipe(Effect.map(database => new LedgerAccountSettlementRepoLive(database.effectDb)))

@@ -2,6 +2,7 @@ import { Layer } from "effect";
 import { ledgerTransactionRepoLayer } from "../transactions/LedgerTransactionRepo";
 import { ledgerAccountSettlementRepoLayer } from "./LedgerAccountSettlementRepo";
 import { ledgerAccountSettlementServiceLayer } from "./LedgerAccountSettlementService";
+/** Provides Settlement and Transaction persistence to the Settlement service. */
 const settlementLayer = ledgerAccountSettlementServiceLayer.pipe(
 	Layer.provide(Layer.mergeAll(ledgerAccountSettlementRepoLayer, ledgerTransactionRepoLayer))
 );

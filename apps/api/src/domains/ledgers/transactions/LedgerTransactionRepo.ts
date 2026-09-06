@@ -43,6 +43,7 @@ import {
 } from "./LedgerTransactionErrors";
 import type { TransactionListQuery, TransactionUpdateRequest } from "./LedgerTransactionSchema";
 
+/** Failures returned while creating ordinary Transaction accounting. */
 type LedgerTransactionCreateRepositoryError =
 	| TransactionSettlementConflict
 	| AccountNotFound
@@ -52,6 +53,7 @@ type LedgerTransactionCreateRepositoryError =
 	| TransactionInfrastructureError
 	| TransactionValidationFailure;
 
+/** Failures returned while changing Transaction accounting. */
 type LedgerTransactionUpdateRepositoryError =
 	| TransactionSettlementConflict
 	| AccountNotFound
@@ -64,6 +66,7 @@ type LedgerTransactionUpdateRepositoryError =
 	| TransactionValidationFailure
 	| TransactionVersionConflict;
 
+/** Failures returned by accounting lifecycle transitions. */
 type LedgerTransactionTransitionRepositoryError = LedgerTransactionUpdateRepositoryError;
 
 /**
@@ -72,20 +75,62 @@ type LedgerTransactionTransitionRepositoryError = LedgerTransactionUpdateReposit
  * Expected failures are returned through each operation's Effect error channel.
  */
 interface LedgerTransactionRepo {
+	/**
+	 * Loads a Settlement’s scoped accounting and ordered Entries.
+	 *
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param settlementId - Settlement owning the accounting.
+	 * @returns An Effect containing optional accounting, or an infrastructure failure.
+	 */
 	getSettlementTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID
 	): Effect.Effect<Option.Option<LedgerTransaction>, TransactionInfrastructureError>;
+	/**
+	 * Creates Settlement accounting, Entries, and Account projections atomically.
+	 *
+	 * @remarks
+	 * Locks the Settlement before checking for existing accounting. The Settlement must
+	 * be processing the requested initial status; finalization is a separate repository commit.
+	 *
+	 * @param transaction - Generated Transaction carrying its Settlement ID.
+	 * @returns An Effect containing new or existing accounting, or a lifecycle/persistence failure.
+	 */
 	createSettlementTransaction(
 		transaction: LedgerTransaction
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+	/**
+	 * Posts accounting for a Settlement prepared for posting.
+	 *
+	 * @remarks
+	 * Owns the database transaction and returns existing posted accounting on retry.
+	 *
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param settlementId - Settlement owning the accounting.
+	 * @param now - Posting time.
+	 * @returns An Effect containing posted accounting, or a lifecycle/persistence failure.
+	 */
 	postSettlementTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID,
 		now: DateTime
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+	/**
+	 * Voids accounting for a Settlement prepared for voiding.
+	 *
+	 * @remarks
+	 * Owns the database transaction. Source membership is released during Settlement finalization.
+	 *
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param settlementId - Settlement owning the accounting.
+	 * @param now - Voiding time.
+	 * @returns An Effect containing voided accounting, or a lifecycle/persistence failure.
+	 */
 	voidSettlementTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -122,10 +167,7 @@ interface LedgerTransactionRepo {
 	/**
 	 * Creates a Transaction and updates every affected Account atomically.
 	 *
-	 * @param organizationId - Organization that owns the Transaction.
-	 * @param ledgerId - Ledger that will contain the Transaction.
-	 * @param transactionId - Server-generated identifier for the Transaction.
-	 * @param request - Validated Transaction creation request.
+	 * @param transaction - Validated ordinary Transaction with its Entries loaded.
 	 * @returns An Effect containing the created Transaction.
 	 */
 	createTransaction(
@@ -180,9 +222,12 @@ interface LedgerTransactionRepo {
 	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError>;
 }
 
+/** Effect service key for Transaction persistence. */
 const LedgerTransactionRepoTag = Context.Service<LedgerTransactionRepo>("LedgerTransactionRepo");
 
+/** Database transaction owned by a Transaction repository mutation. */
 type DatabaseTransaction = Parameters<Parameters<EffectDrizzleDatabase["transaction"]>[0]>[0];
+/** Decoded Account projections indexed by Account ID. */
 type AccountsById = Map<string, LedgerAccount>;
 
 /** PostgreSQL implementation of the Transaction repository contract. */
@@ -261,10 +306,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	/**
 	 * Creates a Transaction, its Entries, and updated Account projections in one database transaction.
 	 *
-	 * @param organizationId - Organization that owns the Transaction.
-	 * @param ledgerId - Ledger that will contain the Transaction.
-	 * @param transactionId - Server-generated identifier for the Transaction.
-	 * @param request - Validated Transaction creation request.
+	 * @param transaction - Validated ordinary Transaction with its Entries loaded.
 	 * @returns An Effect containing the created Transaction.
 	 */
 	createTransaction(
@@ -277,6 +319,13 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.pipe(Effect.mapError(mapTransactionCreateError));
 	}
 
+	/**
+	 * Writes accounting and Account projections inside the current repository transaction.
+	 *
+	 * @param tx - Transaction owned by this repository.
+	 * @param transaction - Validated Transaction with Entries loaded.
+	 * @returns An Effect containing the Transaction, or an Account/persistence failure.
+	 */
 	private insertAccounting(tx: DatabaseTransaction, transaction: LedgerTransaction) {
 		return Effect.gen({ self: this }, function* () {
 			const entries = Option.getOrThrow(transaction.entries);
@@ -303,6 +352,14 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		});
 	}
 
+	/**
+	 * Loads a Settlement’s scoped accounting and ordered Entries.
+	 *
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param settlementId - Settlement owning the accounting.
+	 * @returns An Effect containing optional accounting, or an infrastructure failure.
+	 */
 	getSettlementTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -313,6 +370,15 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		);
 	}
 
+	/**
+	 * Queries and decodes scoped accounting with ordered Entries.
+	 *
+	 * @param db - Database or current repository transaction.
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param settlementId - Settlement owning the accounting.
+	 * @returns An Effect containing optional accounting, or a query/decoding failure.
+	 */
 	private readSettlementAccounting(
 		db: EffectDrizzleDatabase | DatabaseTransaction,
 		organizationId: OrgID,
@@ -329,6 +395,15 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		}).pipe(Effect.flatMap(rows => LedgerTransaction.fromRows(rows)));
 	}
 
+	/**
+	 * Locks the scoped Settlement before an accounting mutation.
+	 *
+	 * @param tx - Current repository transaction.
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param settlementId - Settlement owning the accounting.
+	 * @returns An Effect containing the locked row, or a missing-row/query failure.
+	 */
 	private lockSettlement(
 		tx: DatabaseTransaction,
 		organizationId: OrgID,
@@ -353,6 +428,16 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 	}
 
+	/**
+	 * Creates Settlement accounting, Entries, and Account projections atomically.
+	 *
+	 * @remarks
+	 * Locks the Settlement before checking for existing accounting. The Settlement must
+	 * be processing the requested initial status; finalization is a separate repository commit.
+	 *
+	 * @param transaction - Generated Transaction carrying its Settlement ID.
+	 * @returns An Effect containing new or existing accounting, or a lifecycle/persistence failure.
+	 */
 	createSettlementTransaction(
 		transaction: LedgerTransaction
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
@@ -389,6 +474,18 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
+	/**
+	 * Posts accounting for a Settlement prepared for posting.
+	 *
+	 * @remarks
+	 * Owns the database transaction and returns existing posted accounting on retry.
+	 *
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param settlementId - Settlement owning the accounting.
+	 * @param now - Posting time.
+	 * @returns An Effect containing posted accounting, or a lifecycle/persistence failure.
+	 */
 	postSettlementTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -398,6 +495,18 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		return this.transitionSettlementAccounting(organizationId, ledgerId, settlementId, "posted", now);
 	}
 
+	/**
+	 * Voids accounting for a Settlement prepared for voiding.
+	 *
+	 * @remarks
+	 * Owns the database transaction. Source membership is released during Settlement finalization.
+	 *
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param settlementId - Settlement owning the accounting.
+	 * @param now - Voiding time.
+	 * @returns An Effect containing voided accounting, or a lifecycle/persistence failure.
+	 */
 	voidSettlementTransaction(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -407,6 +516,20 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		return this.transitionSettlementAccounting(organizationId, ledgerId, settlementId, "voided", now);
 	}
 
+	/**
+	 * Changes accounting status and Account projections in one database transaction.
+	 *
+	 * @remarks
+	 * Locks the Settlement, requires its matching processing target, and preserves
+	 * optimistic concurrency checks on Transaction and Account writes.
+	 *
+	 * @param organizationId - Owning Organization.
+	 * @param ledgerId - Containing Ledger.
+	 * @param settlementId - Settlement owning the accounting.
+	 * @param target - Posted or voided accounting state.
+	 * @param now - Transition time.
+	 * @returns An Effect containing transitioned accounting, or a lifecycle/persistence failure.
+	 */
 	private transitionSettlementAccounting(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -861,6 +984,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	}
 }
 
+/** Constructs Transaction persistence from the application’s Effect-enabled database. */
 const ledgerTransactionRepoLayer = Layer.effect(
 	LedgerTransactionRepoTag,
 	DatabaseTag.pipe(Effect.map(database => new LedgerTransactionRepoLive(database.effectDb)))

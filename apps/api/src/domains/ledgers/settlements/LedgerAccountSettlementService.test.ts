@@ -116,8 +116,10 @@ beforeEach(() => {
 	);
 });
 
+/** Runs creation with this test’s action key and shared request fixture. */
 const create = () =>
 	Effect.runPromise(service.createLedgerAccountSettlement(organizationId, ledgerId, key, request));
+/** Runs the pending transition with this test’s action key. */
 const patch = () =>
 	Effect.runPromise(
 		service.patchLedgerAccountSettlement(organizationId, ledgerId, settlementId, key, {

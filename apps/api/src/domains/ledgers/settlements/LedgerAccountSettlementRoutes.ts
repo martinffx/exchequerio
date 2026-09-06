@@ -26,7 +26,18 @@ import {
 } from "./LedgerAccountSettlementSchema";
 import { LedgerAccountSettlementServiceTag } from "./LedgerAccountSettlementService";
 
+/** OpenAPI group for Settlement endpoints. */
 const TAGS = ["Ledger Account Settlements"];
+/**
+ * Registers scoped Settlement reads, lifecycle edits, and source membership routes.
+ *
+ * @remarks
+ * Routes own transport validation and permissions. Mutation keys pass to the service;
+ * void requests require both write and delete permissions.
+ *
+ * @param server - Fastify instance with authentication and the Effect runtime.
+ * @returns Registration of the Settlement HTTP routes.
+ */
 const LedgerAccountSettlementRoutes: FastifyPluginAsync = async server => {
 	server.get<{ Params: LedgerIdParams; Querystring: PaginationQuery }>(
 		"/",

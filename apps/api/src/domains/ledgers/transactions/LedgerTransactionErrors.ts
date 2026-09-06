@@ -33,7 +33,9 @@ class TransactionLifecycleConflict extends ConflictError {
 	}
 }
 
+/** An ordinary Transaction mutation attempted to change Settlement-owned accounting. */
 class TransactionSettlementConflict extends ConflictError {
+	/** Directs accounting mutations through the owning Settlement lifecycle. */
 	constructor() {
 		super("Use the Settlement resource to mutate Settlement-generated accounting", {
 			retryable: false,

@@ -32,6 +32,7 @@ import {
 	LedgerAccountSettlementRepoTag,
 } from "./LedgerAccountSettlementRepo";
 
+/** Repository dependencies for fixtures and Settlement persistence tests. */
 const layers = Layer.mergeAll(
 	organizationRepoLayer,
 	ledgerRepoLayer,
@@ -39,16 +40,27 @@ const layers = Layer.mergeAll(
 	ledgerTransactionRepoLayer,
 	ledgerAccountSettlementRepoLayer
 );
+/** Services required by repository fixture Effects. */
 type Services = Layer.Success<typeof layers>;
 let runtime: ManagedRuntime.ManagedRuntime<Services, never>;
 const config = new Config();
+/** Tracks scoped Ledger fixtures before creation so partial setup can be cleaned up. */
 const fixtureLedgers: Array<{
 	organizationId: ReturnType<typeof newOrgID>;
 	ledgerId: ReturnType<typeof newLedgerID>;
 }> = [];
+/** Tracks Organizations created by this suite for repository-owned cleanup. */
 const fixtureOrganizations = new Set<ReturnType<typeof newOrgID>>();
+/** Runs repository Effects against the configured test database runtime. */
 const run = <A, E>(effect: Effect.Effect<A, E, Services>) => runtime.runPromise(effect);
 const now = () => DateTime.utc();
+/**
+ * Creates a Ledger and opposing USD Accounts through repositories.
+ *
+ * @param organizationId - Organization to create or reuse.
+ * @param createOrganization - False when adding a sibling Ledger to an existing fixture.
+ * @returns An Effect containing tracked fixture identifiers.
+ */
 const context = (organizationId = newOrgID(), createOrganization = true) =>
 	Effect.gen(function* () {
 		const organizations = yield* OrganizationRepoTag,
@@ -78,7 +90,18 @@ const context = (organizationId = newOrgID(), createOrganization = true) =>
 			);
 		return { organizationId, ledgerId, settledAccountId, contraAccountId };
 	});
+/** Organization, Ledger, and Account identifiers created by the fixture. */
 type Owner = Effect.Success<ReturnType<typeof context>>;
+/**
+ * Persists a balanced source Transaction through the Transaction repository.
+ *
+ * @param owner - Fixture Ledger and Accounts.
+ * @param amount - Positive Entry amount.
+ * @param direction - Settled Account Entry direction.
+ * @param effectiveAt - Parent Transaction effective time.
+ * @param status - Source Transaction status.
+ * @returns An Effect containing the Transaction and its settled Account Entry.
+ */
 const source = (
 	owner: Owner,
 	amount = 125,
@@ -111,6 +134,13 @@ const source = (
 		const created = yield* repo.createTransaction(transaction);
 		return { transaction: created, entry: Option.getOrThrow(created.entries)[0] };
 	});
+/**
+ * Persists an empty manual Settlement through its repository.
+ *
+ * @param owner - Fixture Ledger and Accounts.
+ * @param allowEitherDirection - Whether negative source nets are allowed.
+ * @returns An Effect containing the draft.
+ */
 const draft = (owner: Owner, allowEitherDirection = false) =>
 	Effect.gen(function* () {
 		const repo = yield* LedgerAccountSettlementRepoTag;

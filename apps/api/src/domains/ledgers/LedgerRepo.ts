@@ -81,7 +81,17 @@ interface LedgerRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID
 	): Effect.Effect<Option.Option<Ledger>, LedgerDeleteRepositoryError>;
-	/** Deletes a test fixture Ledger and its accounting records atomically; not used by LedgerService. */
+	/**
+	 * Deletes a scoped test Ledger and all its accounting fixtures atomically.
+	 *
+	 * @remarks
+	 * Repository-only fixture cleanup; ordinary Ledger deletion still rejects dependents.
+	 * Locks the Ledger and deletes dependents in foreign-key order within one transaction.
+	 *
+	 * @param organizationId - Organization owning the fixture.
+	 * @param ledgerId - Fixture Ledger to delete.
+	 * @returns An Effect completing cleanup, including when absent, or a persistence failure.
+	 */
 	deleteLedgerFixtures(
 		organizationId: OrgID,
 		ledgerId: LedgerID
@@ -230,6 +240,17 @@ class LedgerRepoLive implements LedgerRepo {
 			catch: mapLedgerDeleteError,
 		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
 	}
+	/**
+	 * Deletes a scoped test Ledger and all its accounting fixtures atomically.
+	 *
+	 * @remarks
+	 * Repository-only fixture cleanup; ordinary Ledger deletion still rejects dependents.
+	 * Locks the Ledger and deletes dependents in foreign-key order within one transaction.
+	 *
+	 * @param organizationId - Organization owning the fixture.
+	 * @param ledgerId - Fixture Ledger to delete.
+	 * @returns An Effect completing cleanup, including when absent, or a persistence failure.
+	 */
 	deleteLedgerFixtures(
 		organizationId: OrgID,
 		ledgerId: LedgerID
