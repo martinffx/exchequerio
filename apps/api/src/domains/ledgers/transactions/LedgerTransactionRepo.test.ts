@@ -162,6 +162,33 @@ describe("LedgerTransactionRepoLive", () => {
 		await runtime.dispose();
 	});
 
+	it("persists pending effective-time edits and preserves them through posting", async () => {
+		const { organizationId, ledgerId } = await createLedger();
+		const debit = await createAccount(organizationId, ledgerId, "debit");
+		const credit = await createAccount(organizationId, ledgerId, "credit");
+		const body = request("pending", [
+			{ accountId: debit, direction: "debit", amount: 100 },
+			{ accountId: credit, direction: "credit", amount: 100 },
+		]);
+		const id = newLedgerTransactionID();
+		await runRepo(repo => persist(repo, organizationId, ledgerId, id, body));
+		const effectiveAt = "2027-01-01T00:00:00.000Z";
+		await runRepo(repo =>
+			repo.updateTransaction(organizationId, ledgerId, id, { ...body, effectiveAt })
+		);
+		await runRepo(repo => repo.updateTransaction(organizationId, ledgerId, id, body));
+		await runRepo(repo => repo.postTransaction(organizationId, ledgerId, id, DateTime.utc()));
+		const loaded = Option.getOrThrow(
+			await runRepo(repo => repo.getTransaction(organizationId, ledgerId, id))
+		);
+		expect(loaded.toResponse().effectiveAt).toBe(effectiveAt);
+		const balances = await accounts(organizationId, ledgerId, [debit]);
+		expect(balances.get(debit.toString())?.postedAmount).toBe(100);
+		await expect(
+			runRepo(repo => repo.updateTransaction(organizationId, ledgerId, id, body))
+		).rejects.toBeInstanceOf(TransactionLifecycleConflict);
+	});
+
 	it.each([
 		{ status: "pending" as const, posted: false },
 		{ status: "posted" as const, posted: true },

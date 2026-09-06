@@ -236,6 +236,7 @@ class LedgerAccountSettlementEntity {
 			// oxlint-disable-next-line unicorn/no-array-callback-reference -- The array is wrapped as an Option value.
 			entries: Option.some(entries),
 			postedAt: created,
+			effectiveAt: this.created,
 			lockVersion: 1,
 			created,
 			updated: created,

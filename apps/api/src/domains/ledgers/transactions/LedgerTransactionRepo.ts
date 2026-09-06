@@ -568,6 +568,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				description: row.description,
 				metadata: row.metadata,
 				postedAt: row.postedAt,
+				effectiveAt: row.effectiveAt,
 				lockVersion: row.lockVersion,
 				updated: row.updated,
 			})

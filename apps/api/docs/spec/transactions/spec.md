@@ -22,6 +22,11 @@ metadata. The Account remains authoritative: a supplied Currency Code must match
 Item and mutation responses return each Entry's persisted Currency Code. Minor Unit Exponent is
 deferred to the Asset model. List responses omit Entries.
 
+Create accepts optional `effectiveAt`, defaulting to Created Time. Pending updates may replace it;
+omission preserves it. Detail and list responses return `effectiveAt`. Every Entry inherits its
+Transaction's Effective Time. Posted Transactions cannot change it. Past and future effective times
+are allowed and do not delay live balance effects, which depend only on status.
+
 `GET /` accepts `offset` from 0 to 10,000 and `limit` from 1 to 100. Defaults are 0 and 20.
 
 ## Validation

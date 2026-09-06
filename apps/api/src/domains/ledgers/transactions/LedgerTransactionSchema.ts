@@ -36,6 +36,7 @@ const TransactionRequestEntry = Type.Object(
 const TransactionCreateRequest = Type.Object(
 	{
 		status: Type.Union([Type.Literal("pending"), Type.Literal("posted")]),
+		effectiveAt: Type.Optional(Type.String({ format: "date-time" })),
 		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(TransactionMetadataSchema),
 		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2, maxItems: 200 }),
@@ -44,6 +45,7 @@ const TransactionCreateRequest = Type.Object(
 );
 const TransactionUpdateRequest = Type.Object(
 	{
+		effectiveAt: Type.Optional(Type.String({ format: "date-time" })),
 		description: Type.Optional(Type.String()),
 		metadata: Type.Optional(TransactionMetadataSchema),
 		ledgerEntries: Type.Array(TransactionRequestEntry, { minItems: 2, maxItems: 200 }),
@@ -71,6 +73,7 @@ const TransactionResponse = Type.Object(
 		metadata: Type.Optional(TransactionMetadataSchema),
 		ledgerEntries: Type.Array(TransactionResponseEntry, { minItems: 2 }),
 		postedAt: Type.Optional(Type.String({ format: "date-time" })),
+		effectiveAt: Type.String({ format: "date-time" }),
 		created: Type.String({ format: "date-time" }),
 		updated: Type.String({ format: "date-time" }),
 	},

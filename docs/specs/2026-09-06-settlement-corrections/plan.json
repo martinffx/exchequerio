@@ -1,0 +1,101 @@
+{
+	"feature": "settlement-corrections",
+	"spec": "docs/specs/2026-09-06-settlement-corrections/design.md",
+	"approval": "Approved in conversation before the implementation request",
+	"tasks": [
+		{
+			"id": "T1",
+			"name": "Restore Transaction effective time",
+			"depends_on": [],
+			"status": "completed",
+			"files": [
+				"apps/api/src/domains/ledgers/transactions",
+				"apps/api/src/repo/schema.ts",
+				"apps/api/migrations",
+				"CONTEXT.md",
+				"apps/api/docs/spec/transactions/spec.md",
+				"apps/api/docs/product/erd.md"
+			],
+			"validation": [
+				"Create defaults, explicit past/future dates, pending edits, omission preservation, immutable posting",
+				"Persistence and detail/list response round trips",
+				"Backfill created without fabricating historical dates",
+				"Live balances remain status-based",
+				"Transaction regression suite, types, lint and build"
+			]
+		},
+		{
+			"id": "T2",
+			"name": "Replace Settlement schema, codecs and domain lifecycle",
+			"depends_on": ["T1"],
+			"status": "pending",
+			"files": [
+				"apps/api/src/repo/schema.ts",
+				"apps/api/migrations",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementEntity.ts",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementSchema.ts",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementErrors.ts"
+			],
+			"validation": [
+				"Exact mixed-direction netting, negative policy, empty/zero/unsafe rejection",
+				"Lifecycle and null derived facts",
+				"Option-based fallible codecs and shared representations",
+				"Empty-table migration preflight, ownership constraints, unique source membership"
+			]
+		},
+		{
+			"id": "T3",
+			"name": "Share atomic Transaction persistence and protect generated accounting",
+			"depends_on": ["T2"],
+			"status": "pending",
+			"files": [
+				"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts",
+				"apps/api/src/domains/ledgers/transactions/LedgerTransactionPersistence.ts",
+				"apps/api/src/domains/ledgers/transactions/LedgerTransactionErrors.ts"
+			],
+			"validation": [
+				"Existing Transaction accounting and concurrency behavior preserved",
+				"Current DB transaction accepted by shared persistence",
+				"Generic mutations reject Settlement-generated Transactions without service branching"
+			]
+		},
+		{
+			"id": "T4",
+			"name": "Implement atomic Settlement operations and selection",
+			"depends_on": ["T2", "T3"],
+			"status": "pending",
+			"files": [
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRepo.ts",
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementService.ts",
+				"apps/api/src/domains/ledgers/settlements/index.ts"
+			],
+			"validation": [
+				"Whole-operation rollback and stable accounting identity across posting/voiding",
+				"Settlement row locking, concurrent source exclusivity and Account projection updates",
+				"Cutoff equality, backdating, offset exclusion, 10000 source and 500 request limits",
+				"Organization and Ledger scope on every operation",
+				"One service idempotency claim, ID-only replay and uncertain-outcome retention"
+			]
+		},
+		{
+			"id": "T5",
+			"name": "Expose corrected Settlement API and complete verification",
+			"depends_on": ["T4"],
+			"status": "pending",
+			"files": [
+				"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRoutes.ts",
+				"apps/api/src/domains/ledgers/settlements",
+				"apps/api/docs/product/erd.md",
+				"apps/api/docs/spec",
+				"CONTEXT.md"
+			],
+			"validation": [
+				"PATCH lifecycle/metadata semantics; removed resource PUT, DELETE and status POST",
+				"Paginated auditable source GET and membership 204 responses",
+				"Create 201 Location, existing permissions, delete permission on void",
+				"Focused and full regression suites; types, build, lint, format; final diff inspection",
+				"Statement snapshot gap recorded separately"
+			]
+		}
+	]
+}

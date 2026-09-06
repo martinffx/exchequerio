@@ -53,6 +53,7 @@ erDiagram
         text description
         enum status
         timestamptz posted_at
+        timestamptz effective_at
         integer lock_version
         text metadata
         timestamptz created
@@ -96,7 +97,7 @@ erDiagram
 - An Entry repeats `organization_id` and `ledger_id` so composite foreign keys require its
   Transaction and Account to share both owners.
 - Transaction status is `pending`, `posted`, or `voided`. `posted_at` exists only for Posted
-  Transactions. Transactions have no Effective Time.
+  Transactions. Entries inherit their Transaction's `effective_at`; live balances depend on status.
 - Entries store the Transaction status and the request Currency Code alongside the Amount. Currency
   exponent handling is deferred until the Asset model exists.
 - Entry Amounts are positive integer Minor Units no greater than JavaScript's maximum safe integer.

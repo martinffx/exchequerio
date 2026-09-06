@@ -37,6 +37,7 @@ type LedgerTransactionOptions = Readonly<{
 	metadata?: Metadata;
 	entries: Option.Option<readonly LedgerTransactionEntry[]>;
 	postedAt?: DateTime;
+	effectiveAt: DateTime;
 	lockVersion: number;
 	created: DateTime;
 	updated: DateTime;
@@ -62,6 +63,7 @@ class LedgerTransaction {
 	readonly metadata?: Metadata;
 	readonly entries: Option.Option<readonly LedgerTransactionEntry[]>;
 	readonly postedAt?: DateTime;
+	readonly effectiveAt: DateTime;
 	readonly lockVersion: number;
 	readonly created: DateTime;
 	readonly updated: DateTime;
@@ -75,6 +77,7 @@ class LedgerTransaction {
 		this.metadata = options.metadata;
 		this.entries = options.entries;
 		this.postedAt = options.postedAt;
+		this.effectiveAt = options.effectiveAt;
 		this.lockVersion = options.lockVersion;
 		this.created = options.created;
 		this.updated = options.updated;
@@ -104,7 +107,7 @@ class LedgerTransaction {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		request: LedgerTransactionCreateRequest,
-		created = DateTime.utc(),
+		created: DateTime = DateTime.utc(),
 		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, TransactionValidationFailure> {
 		return Effect.all(
@@ -125,6 +128,10 @@ class LedgerTransaction {
 						// oxlint-disable-next-line unicorn/no-array-callback-reference
 						entries: Option.some(entries),
 						postedAt: request.status === "posted" ? created : undefined,
+						effectiveAt:
+							request.effectiveAt === undefined
+								? created
+								: DateTime.fromISO(request.effectiveAt, { zone: "utc" }),
 						lockVersion: 1,
 						created,
 						updated: created,
@@ -142,7 +149,7 @@ class LedgerTransaction {
 	 */
 	fromUpdateRequest(
 		request: LedgerTransactionUpdateRequest,
-		updated = DateTime.utc(),
+		updated: DateTime = DateTime.utc(),
 		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict | TransactionValidationFailure> {
 		if (this.status !== "pending") {
@@ -159,6 +166,10 @@ class LedgerTransaction {
 				entries =>
 					new LedgerTransaction({
 						...this,
+						effectiveAt:
+							request.effectiveAt === undefined
+								? this.effectiveAt
+								: DateTime.fromISO(request.effectiveAt, { zone: "utc" }),
 						description: request.description,
 						metadata: request.metadata,
 						// oxlint-disable-next-line unicorn/no-array-callback-reference
@@ -220,6 +231,7 @@ class LedgerTransaction {
 			metadata: encodeMetadata(this.metadata),
 			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			postedAt: this.postedAt?.toJSDate() ?? null,
+			effectiveAt: this.effectiveAt.toJSDate(),
 			lockVersion: this.lockVersion,
 			created: this.created.toJSDate(),
 			updated: this.updated.toJSDate(),
@@ -234,6 +246,7 @@ class LedgerTransaction {
 			status: this.status,
 			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
 			...(this.postedAt === undefined ? {} : { postedAt: toIso(this.postedAt) }),
+			effectiveAt: toIso(this.effectiveAt),
 			created: toIso(this.created),
 			updated: toIso(this.updated),
 		};
@@ -253,7 +266,7 @@ class LedgerTransaction {
 	 * @returns An Effect containing the posted Transaction or a lifecycle conflict.
 	 */
 	toPosted(
-		postedAt = DateTime.utc()
+		postedAt: DateTime = DateTime.utc()
 	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
 		if (this.status === "posted") return Effect.succeed(this);
 		if (this.status !== "pending") {
@@ -280,7 +293,7 @@ class LedgerTransaction {
 	 * @returns An Effect containing the voided Transaction or a lifecycle conflict.
 	 */
 	toVoided(
-		updated = DateTime.utc()
+		updated: DateTime = DateTime.utc()
 	): Effect.Effect<LedgerTransaction, TransactionLifecycleConflict> {
 		if (this.status === "voided") return Effect.succeed(this);
 		if (this.status !== "pending") {
@@ -309,6 +322,7 @@ class LedgerTransaction {
 			ledgerId: parseId<"lgr", LedgerID>("lgr", row.ledgerId),
 			metadata: parseMetadata(row.metadata),
 			postedAt: row.postedAt === null ? Effect.succeed(undefined) : parseDate(row.postedAt),
+			effectiveAt: parseDate(row.effectiveAt),
 			created: parseDate(row.created),
 			updated: parseDate(row.updated),
 		}).pipe(

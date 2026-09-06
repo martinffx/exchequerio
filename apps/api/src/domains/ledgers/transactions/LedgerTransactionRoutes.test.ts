@@ -31,6 +31,7 @@ const creditAccountId = new TypeID("lat") as LedgerAccountID;
 
 const createBody = {
 	status: "pending" as const,
+	effectiveAt: "2026-08-01T09:00:00.000Z",
 	description: "Transfer",
 	ledgerEntries: [
 		{
@@ -61,6 +62,7 @@ const transaction = (() => {
 })();
 
 const updateBody = {
+	effectiveAt: "2026-08-02T09:00:00.000Z",
 	description: "Updated",
 	ledgerEntries: createBody.ledgerEntries,
 };
@@ -133,6 +135,7 @@ describe("TransactionRoutes", () => {
 		expect(response.statusCode).toBe(200);
 		const [item] = response.json<Array<Record<string, unknown>>>();
 		expect(item).not.toHaveProperty("ledgerEntries");
+		expect(item).toHaveProperty("effectiveAt", createBody.effectiveAt);
 	});
 
 	it.each([
@@ -304,6 +307,13 @@ describe("TransactionRoutes", () => {
 			"POST",
 			`/api/ledgers/${ledgerId.toString()}/transactions`,
 			{ ...createBody, ledgerEntries: [] },
+			{ "idempotency-key": "create-42" },
+		],
+		[
+			"invalid effective time",
+			"POST",
+			`/api/ledgers/${ledgerId.toString()}/transactions`,
+			{ ...createBody, effectiveAt: "not-a-date" },
 			{ "idempotency-key": "create-42" },
 		],
 	] as const)("rejects %s before the service", async (_name, method, url, payload, headers) => {

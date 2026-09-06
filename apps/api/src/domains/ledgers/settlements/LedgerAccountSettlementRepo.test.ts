@@ -307,6 +307,7 @@ describe("LedgerAccountSettlementRepoLive", () => {
 			ledgerId: context.ledgerId.toString(),
 			status: "posted",
 			postedAt: new Date(),
+			effectiveAt: new Date(),
 		});
 		await db.insert(LedgerTransactionEntriesTable).values([
 			{

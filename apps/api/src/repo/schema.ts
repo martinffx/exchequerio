@@ -151,6 +151,7 @@ const LedgerTransactionsTable = pgTable(
 		description: text("description"),
 		status: ledgerTransactionStatus("status").notNull().default("pending"),
 		postedAt: timestamp("posted_at", { withTimezone: true }),
+		effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull(),
 		metadata: text("metadata"),
 		lockVersion: integer("lock_version").notNull().default(1),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
