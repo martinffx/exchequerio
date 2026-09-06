@@ -55,6 +55,7 @@ describe("LedgerAccountCategoryService", () => {
 		createLedger: vi.fn<LedgerRepo["createLedger"]>(() => Effect.succeed(ledger)),
 		updateLedger: vi.fn<LedgerRepo["updateLedger"]>(() => Effect.succeed(foundLedger)),
 		deleteLedger: vi.fn<LedgerRepo["deleteLedger"]>(() => Effect.succeed(foundLedger)),
+		deleteLedgerFixtures: vi.fn<LedgerRepo["deleteLedgerFixtures"]>(() => Effect.void),
 	} satisfies LedgerRepo;
 	const ledgerOwnership = new LedgerService(ledgerRepo);
 	const ledgerGet = vi.spyOn(ledgerOwnership, "getLedger");
