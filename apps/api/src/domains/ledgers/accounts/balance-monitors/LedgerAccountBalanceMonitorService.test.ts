@@ -119,10 +119,38 @@ describe("LedgerAccountBalanceMonitorService", () => {
 		);
 
 		expect(created.id.getType()).toBe("lbm");
-		expect(created.accountId).toEqual(accountId);
+		expect(created).toMatchObject({
+			accountId,
+			name: "Low balance",
+			description: "Low balance",
+			alertThreshold: 0,
+			isActive: true,
+			metadata: request.metadata,
+		});
+		expect(created).not.toHaveProperty("alertCondition");
 		expect(created.created).toEqual(now);
 		expect(created.updated).toEqual(now);
 		expect(repo.createMonitor).toHaveBeenCalledWith(created);
+	});
+
+	it("uses the default name and preserves omitted update fields", async () => {
+		const repo = repository();
+		const updated = await runService(repo, service =>
+			service.updateLedgerAccountBalanceMonitor(monitorId.toString(), {
+				...request,
+				description: undefined,
+				metadata: undefined,
+			})
+		);
+		expect(updated).toMatchObject({
+			name: "Balance Monitor",
+			description: undefined,
+			metadata: undefined,
+			alertThreshold: 0,
+			isActive: true,
+		});
+		expect(updated).not.toHaveProperty("alertCondition");
+		expect(repo.updateMonitor).toHaveBeenCalledWith(monitorId, updated);
 	});
 
 	it("parses both IDs and uses application time on update", async () => {

@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { DateTime } from "luxon";
 
-import { parseDate, parseId } from "@/lib/utils";
+import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
 import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/repo/entities/types";
 import type {
 	LedgerAccountBalanceMonitorRow,
@@ -14,7 +14,6 @@ import type {
 	LedgerAccountBalanceMonitorResponse,
 } from "./LedgerAccountBalanceMonitorSchema";
 
-type LedgerAccountBalanceMonitorMetadata = Readonly<Record<string, string>>;
 type LedgerAccountBalanceMonitorWriteRow = typeof LedgerAccountBalanceMonitorsTable.$inferInsert;
 
 type LedgerAccountBalanceMonitorOptions = Readonly<{
@@ -24,23 +23,10 @@ type LedgerAccountBalanceMonitorOptions = Readonly<{
 	description?: string;
 	alertThreshold: number;
 	isActive: boolean;
-	metadata?: LedgerAccountBalanceMonitorMetadata;
+	metadata?: Metadata;
 	created: DateTime;
 	updated: DateTime;
 }>;
-
-const decodeMetadata = (value: string | null): LedgerAccountBalanceMonitorMetadata | undefined => {
-	if (value === null) return undefined;
-	try {
-		return JSON.parse(value) as LedgerAccountBalanceMonitorMetadata;
-	} catch {
-		return undefined;
-	}
-};
-
-const encodeMetadata = (
-	metadata: LedgerAccountBalanceMonitorMetadata | undefined
-): string | undefined => (metadata === undefined ? undefined : JSON.stringify(metadata));
 
 const toIso = (value: DateTime): string => {
 	const encoded = value.toISO();
@@ -55,7 +41,7 @@ class LedgerAccountBalanceMonitor {
 	readonly description?: string;
 	readonly alertThreshold: number;
 	readonly isActive: boolean;
-	readonly metadata?: LedgerAccountBalanceMonitorMetadata;
+	readonly metadata?: Metadata;
 	readonly created: DateTime;
 	readonly updated: DateTime;
 
@@ -101,6 +87,7 @@ class LedgerAccountBalanceMonitor {
 			accountId: parseId<"lat", LedgerAccountID>("lat", row.accountId),
 			created: parseDate(row.created),
 			updated: parseDate(row.updated),
+			metadata: parseMetadata(row.metadata).pipe(Effect.catch(() => Effect.succeed(undefined))),
 		}).pipe(
 			Effect.map(
 				decoded =>
@@ -110,7 +97,6 @@ class LedgerAccountBalanceMonitor {
 						description: row.description ?? undefined,
 						alertThreshold: Number.parseFloat(row.alertThreshold),
 						isActive: row.isActive === 1,
-						metadata: decodeMetadata(row.metadata),
 					})
 			),
 			Effect.mapError(cause => new LedgerAccountBalanceMonitorPersistenceDecodingFailure(cause))
@@ -178,5 +164,4 @@ class LedgerAccountBalanceMonitor {
 	}
 }
 
-export type { LedgerAccountBalanceMonitorMetadata, LedgerAccountBalanceMonitorOptions };
 export { LedgerAccountBalanceMonitor };

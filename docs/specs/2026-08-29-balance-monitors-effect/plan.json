@@ -1,7 +1,7 @@
 {
 	"feature": "balance-monitors-effect",
 	"spec": "docs/specs/2026-08-29-balance-monitors-effect/design.md",
-	"goal": "Migrate the complete Ledger Account Balance Monitor CRUD slice to Effect while explicitly requiring lat-prefixed request Account IDs.",
+	"goal": "Migrate Balance Monitor CRUD to Effect with strict lat request Account IDs, then apply the separately approved metadata correction and history-driven completion cleanup.",
 	"phases": [
 		{
 			"id": "P1",
@@ -16,13 +16,12 @@
 						"The existing Balance Monitor TypeBox definitions in apps/api/src/routes/ledgers/schema.ts, Drizzle row types in apps/api/src/repo/schema.ts, and TypeID aliases and generators in apps/api/src/repo/entities/types.ts",
 						"The Organization entity ownership pattern, while retaining the Balance Monitor-specific malformed-metadata fallback and update omission behavior"
 					],
-					"description": "Create the relocated TypeBox schemas and derive the public request, response, parameter, and query types without changing schema IDs, descriptions, constraints, or response shapes. Create resource errors that distinguish absence from sanitized internal persistence failures, keeping database unavailability on the sanitized 500 path. Create LedgerAccountBalanceMonitor as the pure owner of request construction, row decoding, create and update row encoding, and response serialization. Accept service-supplied IDs and times, ignore alert conditions, preserve malformed metadata as absent, preserve undefined for omitted update fields, and retain all stored and placeholder values. Add no condition model, handwritten transport or row mirror, duplicate validation, or I/O.",
+					"description": "Create the relocated TypeBox schemas and derive the public request, response, parameter, and query types without changing schema IDs, descriptions, constraints, or response shapes. Create resource errors that distinguish absence from sanitized internal persistence failures, keeping database unavailability on the sanitized 500 path. Create LedgerAccountBalanceMonitor as the pure owner of request construction, row decoding, create and update row encoding, and response serialization. Accept service-supplied IDs and times, ignore alert conditions, preserve malformed metadata as absent, preserve undefined for omitted update fields, and retain all stored and placeholder values. Add no condition model, handwritten transport or row mirror, duplicate validation, or I/O. Verify construction through service tests, row conversion through PostgreSQL repository tests, and serialization through route tests; do not add a standalone entity suite.",
 					"files": {
 						"create": [
 							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorSchema.ts",
 							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorErrors.ts",
-							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitor.ts",
-							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitor.test.ts"
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitor.ts"
 						],
 						"modify": []
 					},
@@ -55,7 +54,7 @@
 						"The legacy SQL behavior in apps/api/src/repo/LedgerAccountBalanceMonitorRepo.ts",
 						"The Effect-enabled Drizzle database exposed by DatabaseTag and the Organization and Account repository Layer and PostgreSQL test patterns"
 					],
-					"description": "Define the smallest LedgerAccountBalanceMonitorRepo Effect capability required by the five CRUD use cases and implement its live adapter with the existing Effect-enabled Drizzle database. Preserve created-descending list order without a tie-breaker, pagination, ID-only predicates, assignments, and RETURNING behavior. Return explicit absence for get, update, and delete so the service can classify it. Decode create and update results through the domain model. Map row-decoding, PostgreSQL, and unexpected persistence failures to the sanitized internal resource error. Add no Account or Ledger scope, transaction, lock, retry, index, or migration.",
+					"description": "Define the smallest LedgerAccountBalanceMonitorRepo Effect capability required by the five CRUD use cases and implement its live adapter with the existing Effect-enabled Drizzle database. Preserve created-descending list order without a tie-breaker, pagination, ID-only predicates, assignments, and RETURNING behavior. Return explicit absence for get, update, and delete so the service can classify it. Decode create and update results through the domain model. Map row-decoding, PostgreSQL, and unexpected persistence failures to the sanitized internal resource error. Add no Account or Ledger scope, transaction, lock, retry, index, or migration. Derive the pagination input from the existing TypeBox list-query type rather than copying its fields.",
 					"files": {
 						"create": [
 							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRepo.ts",
@@ -68,7 +67,8 @@
 							"PostgreSQL tests preserve list ordering and pagination plus get, create, update, and delete behavior",
 							"Stored and omitted description and metadata values, application-supplied update time, and update assignments for Account ID, name, threshold, and active state remain unchanged",
 							"Missing get, update, and delete return explicit absence",
-							"Failing or undecodable persistence results enter the typed sanitized 500 error channel"
+							"Failing or undecodable persistence results enter the typed sanitized 500 error channel",
+							"Persisted non-default threshold, active state, name, and timestamps decode correctly; PostgreSQL owns created while the application supplies updated."
 						],
 						"acceptance": [
 							"Each mutation remains one SQL statement",
@@ -108,13 +108,14 @@
 							"Missing get and delete results become the existing public 404 error behavior, as do missing updates with a valid body Account ID",
 							"Repository failures propagate unchanged and malformed body Account IDs remain sanitized internal failures",
 							"Canonical non-lat body Account IDs fail before repository delegation for create and update",
-							"Strict Account ID validation takes precedence over missing-monitor classification during update"
+							"Strict Account ID validation takes precedence over missing-monitor classification during update",
+							"Request defaults, ignored alert conditions, and omitted update fields are covered at the service seam."
 						],
 						"acceptance": [
 							"All five use cases return Effects",
 							"The service error channels contain only errors the existing global HTTP handler can map",
 							"No parent-resource dependency, retry, idempotency, or new identifier abstraction is introduced",
-							"The only approved behavioral deviation is strict lat prefix validation for request Account IDs"
+							"Strict lat prefix validation is the only identifier change; T8 separately corrects metadata"
 						]
 					}
 				}
@@ -133,7 +134,7 @@
 						"The complete route contract and snapshots in apps/api/src/routes/ledgers/LedgerAccountBalanceMonitorRoutes.ts and its test",
 						"The explicit Effect route execution and service-Layer stub pattern from Organizations and Transactions"
 					],
-					"description": "Create the relocated Fastify route plugin with the same five paths, methods, operation IDs, tags, summaries, request schemas, response schemas, permission checks, and advertised error schemas. Run each service Effect through rq.server.runtime and let the existing global error handler translate failures. Serialize responses through the domain model. Continue to ignore Ledger and Account path parameters. Preserve 200 for create and delete and the existing observable characterization coverage. Consolidate duplicate shared Fastify tests and replace Promise mocks with one complete service Layer stub. Add no route executor, reusable harness, or plugin override hook.",
+					"description": "Create the relocated Fastify route plugin with the same five paths, methods, operation IDs, tags, summaries, request schemas, response schemas, permission checks, and advertised error schemas. Run each service Effect through rq.server.runtime and let the existing global error handler translate failures. Serialize responses through the domain model. Continue to ignore Ledger and Account path parameters. Preserve 200 for create and delete and the existing observable characterization coverage. Consolidate duplicate shared Fastify tests and replace Promise mocks with one complete service Layer stub. Add no route executor, reusable harness, or plugin override hook. Type-check the complete public service double before the unavoidable private-field cast at Layer provision. Replace partial OpenAPI status assertions with one complete generated-operation snapshot and use the existing production server for authentication and write-permission smoke checks.",
 					"files": {
 						"create": [
 							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes.ts",
@@ -148,11 +149,13 @@
 							"List defaults to offset 0 and limit 20 and accepts explicit pagination",
 							"Create and delete return exactly 200",
 							"Missing get and delete return 404, as does missing update with a valid body Account ID",
-							"Representative tests preserve shared 401, 403, 400, and sanitized 500 behavior"
+							"Representative tests preserve shared 401, 403, 400, and sanitized 500 behavior",
+							"The full OpenAPI operations preserve parameters, bodies, responses, patterns, descriptions, and required fields apart from the separately approved metadata correction.",
+							"Production GET authentication and POST write permission are checked through buildServer without a new harness."
 						],
 						"acceptance": [
 							"Route schemas retain every advertised error response, including 409, 429, and 503",
-							"Paths, ignored parent parameters, headers, operation IDs, tags, schemas, and deterministic JSON fields remain unchanged",
+							"Paths, ignored parent parameters, headers, operation IDs, tags, and deterministic JSON fields remain unchanged apart from the separately approved T8 metadata correction",
 							"No new route executor, reusable test harness, or plugin override hook is added"
 						]
 					}
@@ -172,15 +175,10 @@
 						"The integrated slice entry-point pattern and shared server runtime composition in apps/api/src/runtime.ts",
 						"The nested Ledger router registration in apps/api/src/routes/ledgers/index.ts"
 					],
-					"description": "Create the slice entry point with the approved public exports and one balanceMonitorLayer that provides the repository Layer to the service Layer. Merge that Layer into the existing server runtime and include the service capability in ServerRuntimeServices. Switch only the nested Balance Monitor route import to the relocated plugin while preserving prefix and registration order. Verify composition through Layer types, API build and type checks, existing server construction, and legacy-reference searches. Add no dedicated runtime test, runtime harness, or second runtime.",
+					"description": "Create the slice entry point with the approved public exports and one balanceMonitorLayer that provides the repository Layer to the service Layer. Merge that Layer into the existing server runtime and include the service capability in ServerRuntimeServices. Switch only the nested Balance Monitor route import to the relocated plugin while preserving prefix and registration order. Verify composition through Layer types, API build and type checks, existing server construction, and legacy-reference searches. Add no dedicated runtime test, runtime harness, or second runtime. Export only the route, composed Layer, service capability/tag, and public transport types; keep model options, repository internals, and error aliases inside the slice.",
 					"files": {
-						"create": [
-							"apps/api/src/domains/ledgers/accounts/balance-monitors/index.ts"
-						],
-						"modify": [
-							"apps/api/src/runtime.ts",
-							"apps/api/src/routes/ledgers/index.ts"
-						]
+						"create": ["apps/api/src/domains/ledgers/accounts/balance-monitors/index.ts"],
+						"modify": ["apps/api/src/runtime.ts", "apps/api/src/routes/ledgers/index.ts"]
 					},
 					"validation": {
 						"tests": [
@@ -246,31 +244,68 @@
 		},
 		{
 			"id": "P7",
+			"name": "Metadata Contract Correction",
+			"tasks": [
+				{
+					"id": "T8",
+					"name": "Preserve metadata keys with the shared string-map contract",
+					"depends_on": ["T1", "T2", "T3", "T4", "T5", "T6"],
+					"inputs": [
+						"The separately approved correction in design.md and Statements commit 54e34b0",
+						"Existing shared Metadata, encodeMetadata, and parseMetadata in apps/api/src/lib/utils.ts"
+					],
+					"description": "First demonstrate that valid metadata keys are lost over HTTP and invalid stored string maps are not omitted. Reuse the Statements MetadataSchema record definition for Monitor requests and responses, the existing shared Metadata type (derived from MetadataSchema with the utils re-export preserved), encoder, and shared parsing with Monitor-local recovery to absent metadata. Keep adjacent resource schemas and persistence unchanged. Retain unique coverage at the service, repository, and route seams instead of the standalone entity suite.",
+					"files": {
+						"create": ["apps/api/src/lib/schema.ts"],
+						"modify": [
+							"apps/api/src/lib/utils.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitor.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorSchema.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRepo.test.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/__snapshots__/LedgerAccountBalanceMonitorRoutes.test.ts.snap"
+						]
+					},
+					"validation": {
+						"tests": [
+							"Nonempty string-map metadata survives request delegation and HTTP response serialization.",
+							"Absent/malformed JSON, arrays, scalars, and non-string map values decode to absent metadata at the PostgreSQL repository seam."
+						],
+						"acceptance": [
+							"Before/after generated OpenAPI differs only in metadata schemas; existing non-metadata response snapshots remain unchanged.",
+							"No local Metadata mirror or encoder remains and no adjacent resource or database schema changes."
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P8",
 			"name": "Migration Verification",
 			"tasks": [
 				{
 					"id": "T7",
 					"name": "Run targeted and full migration validation",
-					"depends_on": ["T1", "T2", "T3", "T4", "T5", "T6"],
+					"depends_on": ["T1", "T2", "T3", "T4", "T5", "T6", "T8"],
 					"inputs": [
 						"The completed Effect slice and removed legacy wiring",
 						"The repository's pnpm, Vitest, PostgreSQL, Oxc, TypeScript, and Turborepo commands",
 						"The migration contract and definition of done in EFFECT_MIGRATION.md"
 					],
-					"description": "Run the focused Balance Monitor domain, service, repository, and route tests first, starting PostgreSQL only for repository tests. Then run the full CI pipeline once. Review the final diff and generated OpenAPI behavior for migration-only scope. Return to design or planning if any correction would change approved public, domain, persistence, transaction, concurrency, identifier, timestamp, or operational behavior.",
+					"description": "Run the focused Balance Monitor service, repository, and route tests first using the existing test infrastructure. Run pnpm run check. Then run the full CI pipeline once. Review the final diff and generated OpenAPI behavior for migration-only scope. Return to design or planning if any correction would change approved public, domain, persistence, transaction, concurrency, identifier, timestamp, or operational behavior.",
 					"files": {
 						"create": [],
 						"modify": []
 					},
 					"validation": {
 						"tests": [
-							"Focused Balance Monitor domain, service, repository, and route tests pass, with PostgreSQL used only by repository tests",
-							"pnpm run ci passes after the focused suite"
+							"Focused service, PostgreSQL repository, and route suites pass, including complete OpenAPI and production-route checks.",
+							"pnpm run check and full CI pass; use ci:gh with an isolated DATABASE_URL and --env-mode=loose when local infrastructure is already running."
 						],
 						"acceptance": [
 							"Existing observable characterization coverage and snapshots remain present and are not weakened",
 							"The final diff contains no database schema or migration changes, product completion, parent scoping, new retry, locking, transaction, or idempotency behavior, duplicate validation, handwritten mirror types, speculative abstractions, or unrelated cleanup",
-							"Every behavior-preservation item in US-1 through US-4 is satisfied apart from the approved strict request Account ID prefix validation"
+							"Every behavior-preservation item in US-1 through US-4 is satisfied apart from the approved strict request Account ID validation and separate metadata correction."
 						]
 					}
 				}

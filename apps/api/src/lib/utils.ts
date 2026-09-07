@@ -2,8 +2,7 @@ import { Effect } from "effect";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { InvalidId } from "./errors";
-
-type Metadata = Readonly<Record<string, string>>;
+import type { Metadata } from "./schema";
 
 const parseId = <Prefix extends string, Return extends TypeID<Prefix>>(
 	prefix: Prefix,
@@ -50,5 +49,5 @@ const parseMetadata = (value: string | null): Effect.Effect<Metadata | undefined
 const encodeMetadata = (metadata: Metadata | undefined): string | undefined =>
 	metadata === undefined ? undefined : JSON.stringify(metadata);
 
-export type { Metadata };
+export type { Metadata } from "./schema";
 export { encodeMetadata, parseId, parseDate, parseMetadata };

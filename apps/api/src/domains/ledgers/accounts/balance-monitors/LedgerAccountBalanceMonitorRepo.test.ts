@@ -1,6 +1,7 @@
 import { inArray } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
+import type { Metadata } from "@/lib/utils";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
@@ -38,7 +39,7 @@ const monitor = (
 	overrides: {
 		id?: LedgerAccountBalanceMonitorID;
 		description?: string;
-		metadata?: Readonly<Record<string, string>>;
+		metadata?: Metadata;
 		updated?: DateTime;
 	} = {}
 ) =>
@@ -149,6 +150,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		expect(created.description).toBe(description);
 		expect(created.metadata).toEqual(metadata);
 		expect(created.updated).toEqual(applicationTime);
+		expect(created.created.toMillis()).toBeGreaterThan(applicationTime.toMillis());
 		expect(Option.getOrUndefined(await run(repository => repository.getMonitor(record.id)))).toEqual(
 			created
 		);
@@ -199,6 +201,55 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 
 		expect(updated.description).toBe("Keep description");
 		expect(updated.metadata).toEqual({ keep: "metadata" });
+	});
+
+	it("decodes persisted values independently of request defaults", async () => {
+		const db = (await database()).db;
+		const id = newLedgerAccountBalanceMonitorID();
+		const created = new Date("2026-08-28T09:00:00.000Z");
+		await db.insert(LedgerAccountBalanceMonitorsTable).values({
+			id: id.toString(),
+			accountId: accountIds[0].toString(),
+			name: "Stored name",
+			alertThreshold: "12.3400",
+			isActive: 0,
+			created,
+			updated: applicationTime.toJSDate(),
+			metadata: JSON.stringify({ team: "treasury" }),
+		});
+		const found = Option.getOrThrow(await run(repository => repository.getMonitor(id)));
+		expect(found).toMatchObject({
+			id,
+			accountId: accountIds[0],
+			name: "Stored name",
+			description: undefined,
+			alertThreshold: 12.34,
+			isActive: false,
+			metadata: { team: "treasury" },
+			updated: applicationTime,
+		});
+		expect(found.created.toJSDate()).toEqual(created);
+	});
+
+	it.each([
+		// oxlint-disable-next-line unicorn/no-null -- PostgreSQL represents absent metadata as NULL.
+		null,
+		"not-json",
+		"null",
+		"[]",
+		"1",
+		'{"count":1}',
+	])("treats invalid or absent stored metadata %s as absent", async metadata => {
+		const db = (await database()).db;
+		const id = newLedgerAccountBalanceMonitorID();
+		await db.insert(LedgerAccountBalanceMonitorsTable).values({
+			id: id.toString(),
+			accountId: accountIds[0].toString(),
+			name: "Metadata fallback",
+			metadata,
+		});
+		const found = Option.getOrThrow(await run(repository => repository.getMonitor(id)));
+		expect(found.metadata).toBeUndefined();
 	});
 
 	it("returns explicit absence for missing get, update, and delete", async () => {

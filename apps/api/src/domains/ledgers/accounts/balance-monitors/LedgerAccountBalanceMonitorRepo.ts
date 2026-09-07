@@ -9,16 +9,12 @@ import {
 } from "@/repo/schema";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
+import type { LedgerAccountBalanceMonitorListQuery } from "./LedgerAccountBalanceMonitorSchema";
 import {
 	type LedgerAccountBalanceMonitorInfrastructureError,
 	LedgerAccountBalanceMonitorPersistenceDecodingFailure,
 	LedgerAccountBalanceMonitorPersistenceFailure,
 } from "./LedgerAccountBalanceMonitorErrors";
-
-type LedgerAccountBalanceMonitorListQuery = Readonly<{
-	offset: number;
-	limit: number;
-}>;
 
 interface LedgerAccountBalanceMonitorRepo {
 	listMonitors(
@@ -155,7 +151,7 @@ const ledgerAccountBalanceMonitorRepoLayer = Layer.effect(
 	)
 );
 
-export type { LedgerAccountBalanceMonitorListQuery, LedgerAccountBalanceMonitorRepo };
+export type { LedgerAccountBalanceMonitorRepo };
 export {
 	LedgerAccountBalanceMonitorRepoLive,
 	LedgerAccountBalanceMonitorRepoTag,

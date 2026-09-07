@@ -10,6 +10,7 @@ import { Config } from "@/config";
 import { globalErrorHandler, InternalServerError } from "@/lib/errors";
 import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/repo/entities/types";
 import { ServerRuntime } from "@/runtime";
+import { buildServer } from "@/server";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import { LedgerAccountBalanceMonitorNotFound } from "./LedgerAccountBalanceMonitorErrors";
@@ -45,18 +46,28 @@ const adminToken = signJWT({ sub: organizationId.toString(), scope: ["org_admin"
 const readOnlyToken = signJWT({ sub: organizationId.toString(), scope: ["org_readonly"] });
 const authorize = (token = adminToken) => ({ authorization: `Bearer ${token}` });
 
-const service = (): LedgerAccountBalanceMonitorService =>
-	vi.mocked<LedgerAccountBalanceMonitorService>({
-		listLedgerAccountBalanceMonitors: vi.fn(() => Effect.succeed([monitor])),
-		getLedgerAccountBalanceMonitor: vi.fn(() => Effect.succeed(monitor)),
-		createLedgerAccountBalanceMonitor: vi.fn(() => Effect.succeed(monitor)),
-		updateLedgerAccountBalanceMonitor: vi.fn(() => Effect.succeed(monitor)),
-		deleteLedgerAccountBalanceMonitor: vi.fn(() => Effect.void),
-	} as unknown as LedgerAccountBalanceMonitorService);
+const service = () =>
+	({
+		listLedgerAccountBalanceMonitors: vi.fn<
+			LedgerAccountBalanceMonitorService["listLedgerAccountBalanceMonitors"]
+		>(() => Effect.succeed([monitor])),
+		getLedgerAccountBalanceMonitor: vi.fn<
+			LedgerAccountBalanceMonitorService["getLedgerAccountBalanceMonitor"]
+		>(() => Effect.succeed(monitor)),
+		createLedgerAccountBalanceMonitor: vi.fn<
+			LedgerAccountBalanceMonitorService["createLedgerAccountBalanceMonitor"]
+		>(() => Effect.succeed(monitor)),
+		updateLedgerAccountBalanceMonitor: vi.fn<
+			LedgerAccountBalanceMonitorService["updateLedgerAccountBalanceMonitor"]
+		>(() => Effect.succeed(monitor)),
+		deleteLedgerAccountBalanceMonitor: vi.fn<
+			LedgerAccountBalanceMonitorService["deleteLedgerAccountBalanceMonitor"]
+		>(() => Effect.void),
+	}) satisfies Pick<LedgerAccountBalanceMonitorService, keyof LedgerAccountBalanceMonitorService>;
 
 const servers: FastifyInstance[] = [];
 
-const buildRouteServer = async (implementation: LedgerAccountBalanceMonitorService) => {
+const buildRouteServer = async (implementation: ReturnType<typeof service>) => {
 	const server = fastify();
 	server.decorate("config", new Config());
 	server.setErrorHandler(globalErrorHandler);
@@ -67,7 +78,11 @@ const buildRouteServer = async (implementation: LedgerAccountBalanceMonitorServi
 	});
 	const hasPermissions = vi.spyOn(server, "hasPermissions");
 	const runtime = new ServerRuntime(
-		Layer.succeed(LedgerAccountBalanceMonitorServiceTag, implementation)
+		// The complete public double omits only the class's private repository field.
+		Layer.succeed(
+			LedgerAccountBalanceMonitorServiceTag,
+			implementation as unknown as LedgerAccountBalanceMonitorService
+		)
 	);
 	server.decorate("runtime", runtime as never);
 	server.addHook("onClose", () => runtime.dispose());
@@ -94,77 +109,52 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		]);
 	});
 
-	it("preserves operation IDs and advertised response statuses", async () => {
+	it("preserves the complete OpenAPI contract", async () => {
 		const { server } = await buildRouteServer(service());
-		const paths = server.swagger().paths as Record<
-			string,
-			Record<string, { operationId?: string; responses?: Record<string, unknown> }>
-		>;
-		expect(Object.keys(paths)).toEqual([
-			"/api/ledgers/{ledgerId}/accounts/{accountId}/balance-monitors/",
-			"/api/ledgers/{ledgerId}/accounts/{accountId}/balance-monitors/{balanceMonitorId}",
-		]);
-		const collection = paths["/api/ledgers/{ledgerId}/accounts/{accountId}/balance-monitors/"];
-		const item =
-			paths["/api/ledgers/{ledgerId}/accounts/{accountId}/balance-monitors/{balanceMonitorId}"];
-
-		expect(collection.get.operationId).toBe("listLedgerAccountBalanceMonitors");
-		expect(collection.post.operationId).toBe("createLedgerAccountBalanceMonitor");
-		expect(item.get.operationId).toBe("getLedgerAccountBalanceMonitor");
-		expect(item.put.operationId).toBe("updateLedgerAccountBalanceMonitor");
-		expect(item.delete.operationId).toBe("deleteLedgerAccountBalanceMonitor");
-		expect(Object.keys(collection.get.responses ?? {})).toEqual([
-			"200",
-			"400",
-			"401",
-			"403",
-			"429",
-			"500",
-			"503",
-		]);
-		expect(Object.keys(collection.post.responses ?? {})).toEqual([
-			"200",
-			"400",
-			"401",
-			"403",
-			"409",
-			"429",
-			"500",
-			"503",
-		]);
-		expect(Object.keys(item.get.responses ?? {})).toEqual([
-			"200",
-			"400",
-			"401",
-			"403",
-			"404",
-			"429",
-			"500",
-			"503",
-		]);
-		expect(Object.keys(item.put.responses ?? {})).toEqual([
-			"200",
-			"400",
-			"401",
-			"403",
-			"404",
-			"409",
-			"429",
-			"500",
-			"503",
-		]);
-		expect(Object.keys(item.delete.responses ?? {})).toEqual([
-			"200",
-			"400",
-			"401",
-			"403",
-			"404",
-			"409",
-			"429",
-			"500",
-			"503",
-		]);
+		const { paths } = server.swagger();
+		expect({ paths }).toMatchSnapshot();
 	});
+
+	it("preserves metadata key-value pairs on the wire", async () => {
+		const implementation = service();
+		implementation.createLedgerAccountBalanceMonitor.mockImplementation(body =>
+			Effect.succeed(
+				LedgerAccountBalanceMonitor.fromRequest(monitorId, accountId, body, monitor.updated)
+			)
+		);
+		const { server } = await buildRouteServer(implementation);
+		const metadata = { team: "treasury", purpose: "low balance" };
+		const response = await server.inject({
+			method: "POST",
+			url: collectionUrl,
+			headers: authorize(),
+			payload: { ...request, metadata },
+		});
+		expect(response.statusCode).toBe(200);
+		expect(response.json()).toMatchObject({ metadata });
+		expect(implementation.createLedgerAccountBalanceMonitor).toHaveBeenCalledWith({
+			...request,
+			metadata,
+		});
+	});
+
+	it.each([
+		{ method: "GET", headers: authorize("invalid-token"), status: 401 },
+		{ method: "POST", headers: authorize(readOnlyToken), status: 403 },
+	] as const)(
+		"protects the production $method route with $status",
+		async ({ method, headers, status }) => {
+			const server = await buildServer();
+			servers.push(server);
+			const response = await server.inject({
+				method,
+				url: collectionUrl,
+				headers,
+				...(method === "POST" ? { payload: request } : {}),
+			});
+			expect(response.statusCode).toBe(status);
+		}
+	);
 
 	it("lists through the Effect service with the existing defaults and response", async () => {
 		const implementation = service();
@@ -284,29 +274,14 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		}
 	);
 
-	it("preserves representative authentication, permission, and validation failures", async () => {
+	it("preserves pagination validation", async () => {
 		const implementation = service();
 		const { server } = await buildRouteServer(implementation);
-
-		const unauthorized = await server.inject({
-			method: "GET",
-			url: collectionUrl,
-			headers: authorize("invalid-token"),
-		});
-		const forbidden = await server.inject({
-			method: "POST",
-			url: collectionUrl,
-			headers: authorize(readOnlyToken),
-			payload: request,
-		});
 		const invalid = await server.inject({
 			method: "GET",
 			url: `${collectionUrl}?offset=invalid`,
 			headers: authorize(),
 		});
-
-		expect(unauthorized.statusCode).toBe(401);
-		expect(forbidden.statusCode).toBe(403);
 		expect(invalid.statusCode).toBe(400);
 		expect(implementation.listLedgerAccountBalanceMonitors).not.toHaveBeenCalled();
 	});

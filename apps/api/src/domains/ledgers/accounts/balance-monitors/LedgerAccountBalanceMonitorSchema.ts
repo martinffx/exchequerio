@@ -1,7 +1,8 @@
 import { type Static, Type } from "@sinclair/typebox";
 
+import { MetadataSchema } from "@/lib/schema";
 import { PaginationQuery } from "@/routes/schema";
-import { Balances, LedgerAccountIdParams, LedgerRequest } from "@/routes/ledgers/schema";
+import { Balances, LedgerAccountIdParams } from "@/routes/ledgers/schema";
 
 const LedgerAccountBalanceMonitorId = Type.String({
 	description: "Unique identifier for the ledger account balance monitor.",
@@ -41,7 +42,7 @@ const LedgerAccountBalanceMonitorResponse = Type.Object(
 		),
 		alertCondition: Type.Array(AlertCondition),
 		balances: Balances,
-		metadata: LedgerRequest.properties.metadata,
+		metadata: Type.Optional(MetadataSchema),
 		lockVersion: Type.Number(),
 		created: Type.String(),
 		updated: Type.String(),
@@ -64,7 +65,7 @@ const LedgerAccountBalanceMonitorRequest = Type.Object(
 			})
 		),
 		alertCondition: Type.Array(AlertCondition),
-		metadata: LedgerRequest.properties.metadata,
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{
 		$id: "LedgerAccountBalanceMonitorRequest",
