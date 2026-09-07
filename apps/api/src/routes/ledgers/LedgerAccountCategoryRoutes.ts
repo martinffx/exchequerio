@@ -1,8 +1,11 @@
 import { Type } from "@sinclair/typebox";
-import type { FastifyPluginAsync } from "fastify";
+import { Value } from "@sinclair/typebox/value";
+import { MetadataSchema } from "@/lib/schema";
+import type { FastifyPluginAsync, preValidationAsyncHookHandler } from "fastify";
 import { Effect, Result } from "effect";
 
 import {
+	BadRequestError,
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
 	ForbiddenErrorResponse,
@@ -33,6 +36,19 @@ import {
 	type UnlinkLedgerAccountToCategoryRequest,
 	type UpdateLedgerAccountCategoryRequest,
 } from "./schema";
+
+// Check metadata before AJV can coerce non-string values into strings.
+const validateMetadata: preValidationAsyncHookHandler = async request => {
+	const body = request.body;
+	if (
+		body !== null &&
+		typeof body === "object" &&
+		"metadata" in body &&
+		!Value.Check(MetadataSchema, body.metadata)
+	) {
+		throw new BadRequestError("Metadata must be an object with string values");
+	}
+};
 
 const TAGS = ["Ledger Account Categories"];
 const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
@@ -144,6 +160,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			preValidation: validateMetadata,
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: CreateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {
@@ -189,6 +206,7 @@ const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
 					503: ServiceUnavailableErrorResponse,
 				},
 			},
+			preValidation: validateMetadata,
 			preHandler: server.hasPermissions(["ledger:account:category:write"]),
 		},
 		async (rq: UpdateLedgerAccountCategoryRequest): Promise<LedgerAccountCategoryResponse> => {

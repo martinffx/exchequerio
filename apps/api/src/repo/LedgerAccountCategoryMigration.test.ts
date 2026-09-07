@@ -68,7 +68,8 @@ const seedOwnershipGraph = async (client: PoolClient) => {
 			id, organization_id, ledger_id, name, normal_balance, currency_code
 		) VALUES
 			('account-1', 'org-1', 'ledger-1', 'Cash', 'debit', 'USD'),
-			('account-2', 'org-1', 'ledger-2', 'Cash', 'debit', 'USD');
+			('account-2', 'org-1', 'ledger-2', 'Cash', 'debit', 'USD'),
+			('account-3', 'org-2', 'ledger-3', 'Cash', 'debit', 'USD');
 		INSERT INTO ledger_account_categories (id, ledger_id, name, normal_balance)
 		VALUES
 			('category-1', 'ledger-1', 'Assets', 'debit'),
@@ -135,57 +136,76 @@ describe("Ledger Account Category ownership migration", () => {
 		});
 	}, 30_000);
 
-	it("aborts for a cross-Ledger Account relationship without changing the schema", async () => {
-		await withLegacyDatabase(async client => {
-			await seedOwnershipGraph(client);
-			await client.query(`
-				INSERT INTO ledger_account_category_accounts (category_id, account_id)
-				VALUES ('category-1', 'account-2')
-			`);
+	it.each([
+		{ scope: "Ledger", accountId: "account-2" },
+		{ scope: "Organization", accountId: "account-3" },
+	])(
+		"aborts for a cross-$scope Account relationship without changing the schema or data",
+		async ({ accountId }) => {
+			await withLegacyDatabase(async client => {
+				await seedOwnershipGraph(client);
+				await client.query(
+					`INSERT INTO ledger_account_category_accounts (category_id, account_id)
+				VALUES ('category-1', $1)`,
+					[accountId]
+				);
 
-			await expect(applyCategoryOwnershipMigration(client)).rejects.toThrow(
-				"category ownership migration found Account relationships outside the Category Organization or Ledger"
-			);
-			expect(
-				(
-					await client.query(`
+				await expect(applyCategoryOwnershipMigration(client)).rejects.toThrow(
+					"category ownership migration found Account relationships outside the Category Organization or Ledger"
+				);
+				expect(
+					(
+						await client.query(`
 						SELECT count(*)::int AS count FROM information_schema.columns
 						WHERE table_name = 'ledger_account_categories' AND column_name = 'organization_id'
 					`)
-				).rows[0]
-			).toEqual({ count: 0 });
-			expect(
-				(await client.query("SELECT count(*)::int AS count FROM ledger_account_category_accounts"))
-					.rows[0]
-			).toEqual({ count: 1 });
-		});
-	}, 30_000);
+					).rows[0]
+				).toEqual({ count: 0 });
+				expect(
+					(await client.query("SELECT category_id, account_id FROM ledger_account_category_accounts"))
+						.rows
+				).toEqual([{ category_id: "category-1", account_id: accountId }]);
+			});
+		},
+		30_000
+	);
 
-	it("aborts for a parent relationship outside the child Category scope", async () => {
-		await withLegacyDatabase(async client => {
-			await seedOwnershipGraph(client);
-			await client.query(`
-				INSERT INTO ledger_account_category_parents (category_id, parent_category_id)
-				VALUES ('category-1', 'category-4')
-			`);
+	it.each([
+		{ scope: "Ledger", parentId: "category-3" },
+		{ scope: "Organization", parentId: "category-4" },
+	])(
+		"aborts for a cross-$scope parent relationship without changing the schema or data",
+		async ({ parentId }) => {
+			await withLegacyDatabase(async client => {
+				await seedOwnershipGraph(client);
+				await client.query(
+					`INSERT INTO ledger_account_category_parents (category_id, parent_category_id)
+				VALUES ('category-1', $1)`,
+					[parentId]
+				);
 
-			await expect(applyCategoryOwnershipMigration(client)).rejects.toThrow(
-				"category ownership migration found parent relationships outside the child Category Organization or Ledger"
-			);
-			expect(
-				(
-					await client.query(`
+				await expect(applyCategoryOwnershipMigration(client)).rejects.toThrow(
+					"category ownership migration found parent relationships outside the child Category Organization or Ledger"
+				);
+				expect(
+					(
+						await client.query(`
 						SELECT count(*)::int AS count FROM information_schema.columns
 						WHERE table_name = 'ledger_account_category_parents' AND column_name = 'organization_id'
 					`)
-				).rows[0]
-			).toEqual({ count: 0 });
-			expect(
-				(await client.query("SELECT count(*)::int AS count FROM ledger_account_category_parents"))
-					.rows[0]
-			).toEqual({ count: 1 });
-		});
-	}, 30_000);
+					).rows[0]
+				).toEqual({ count: 0 });
+				expect(
+					(
+						await client.query(
+							"SELECT category_id, parent_category_id FROM ledger_account_category_parents"
+						)
+					).rows
+				).toEqual([{ category_id: "category-1", parent_category_id: parentId }]);
+			});
+		},
+		30_000
+	);
 
 	it("installs composite ownership constraints", async () => {
 		await withLegacyDatabase(async client => {
@@ -216,6 +236,17 @@ describe("Ledger Account Category ownership migration", () => {
 
 			await expect(
 				client.query(`
+					INSERT INTO ledger_account_category_accounts (
+						organization_id, ledger_id, category_id, account_id
+					) VALUES ('org-1', 'ledger-1', 'category-3', 'account-1')
+				`)
+			).rejects.toMatchObject({
+				code: "23503",
+				constraint: "ledger_account_category_accounts_category_ownership_fk",
+			});
+
+			await expect(
+				client.query(`
 					INSERT INTO ledger_account_category_parents (
 						organization_id, ledger_id, category_id, parent_category_id
 					) VALUES ('org-1', 'ledger-1', 'category-1', 'category-3')
@@ -223,6 +254,17 @@ describe("Ledger Account Category ownership migration", () => {
 			).rejects.toMatchObject({
 				code: "23503",
 				constraint: "ledger_account_category_parents_parent_ownership_fk",
+			});
+
+			await expect(
+				client.query(`
+					INSERT INTO ledger_account_category_parents (
+						organization_id, ledger_id, category_id, parent_category_id
+					) VALUES ('org-1', 'ledger-1', 'category-3', 'category-1')
+				`)
+			).rejects.toMatchObject({
+				code: "23503",
+				constraint: "ledger_account_category_parents_child_ownership_fk",
 			});
 		});
 	}, 30_000);

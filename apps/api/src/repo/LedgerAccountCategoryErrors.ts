@@ -8,14 +8,14 @@ import {
 } from "@/lib/errors";
 
 class CategoryNotFound extends NotFoundError {
-	constructor(message: string) {
-		super(message);
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
 	}
 }
 
 class CategoryConflict extends ConflictError {
-	constructor(message: string) {
-		super(message);
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
 	}
 }
 

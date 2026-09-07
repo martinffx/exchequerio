@@ -106,6 +106,57 @@
 							"The package typechecks with no compatibility bridge or generic executor."
 						]
 					}
+				},
+				{
+					"id": "T4a",
+					"name": "Apply lessons from corrective Git history",
+					"depends_on": ["T4"],
+					"inputs": [
+						"Approved corrective history review in design.md",
+						"Corrective commits across Organizations, Ledgers, Accounts, Transactions, Settlements, Statements, and Balance Monitors",
+						"Existing 131-test Category baseline"
+					],
+					"description": "Correct Category-only metadata serialization and string validation, defer upsert encoding and timestamps to Effect execution, reject unsupported stored timestamps at entity decoding, retain original SQL causes, and narrow the Ledger service dependency to getLedger. Add focused HTTP/OpenAPI, execution/error, deterministic ordering, migration ownership, and assembled JWT-to-PostgreSQL regressions. Preserve the initial migration and existing mutation semantics. Record the historical lesson and protecting test for each change; retain meaningful adapter tests and avoid a new test harness.",
+					"files": {
+						"create": [
+							"apps/api/src/lib/schema.ts",
+							"apps/api/src/routes/ledgers/__snapshots__/LedgerAccountCategoryRoutes.test.ts.snap"
+						],
+						"modify": [
+							"apps/api/src/domains/ledgers/LedgerErrors.ts",
+							"apps/api/src/domains/ledgers/accounts/AccountErrors.ts",
+							"apps/api/src/repo/LedgerAccountCategoryErrors.ts",
+							"apps/api/src/repo/LedgerAccountCategoryRepo.ts",
+							"apps/api/src/repo/LedgerAccountCategoryRepo.test.ts",
+							"apps/api/src/repo/LedgerAccountCategoryMigration.test.ts",
+							"apps/api/src/repo/entities/LedgerAccountCategoryEntity.ts",
+							"apps/api/src/repo/entities/LedgerAccountCategoryEntity.test.ts",
+							"apps/api/src/routes/ledgers/schema.ts",
+							"apps/api/src/routes/ledgers/fixtures.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.test.ts",
+							"docs/specs/2026-08-29-categories-effect/design.md",
+							"docs/specs/2026-08-29-categories-effect/plan.json"
+						]
+					},
+					"validation": {
+						"tests": [
+							"pnpm --filter=@exchequerio/api test LedgerAccountCategory",
+							"pnpm --filter=@exchequerio/api types",
+							"git diff --check"
+						],
+						"acceptance": [
+							"Category POST/PUT preserve string metadata maps and reject non-string values before coercion; other resources are unchanged.",
+							"Stored invalid metadata is absent; unsupported timestamps fail decoding, and deletion does not decode the removed row.",
+							"Upsert construction performs no encoding or timestamp capture; execution and mapped SQL failures retain typed errors and original causes.",
+							"Generated OpenAPI locks all nine Category operations; ordering tests control persisted timestamps and pagination.",
+							"All five composite foreign keys and both ownership mismatch dimensions are tested, retaining rollback/backfill/cascade coverage.",
+							"A signed JWT traverses the real server/runtime/database: owner mutations succeed, foreign mutation returns 404 with unchanged state.",
+							"The service test double requires only getLedger; no new runtime, clock, harness, concurrency, or product behavior is introduced beyond the listed corrections."
+						]
+					}
 				}
 			]
 		},
@@ -116,13 +167,14 @@
 				{
 					"id": "T5",
 					"name": "Validate both stacked change sets",
-					"depends_on": ["T4"],
+					"depends_on": ["T4a"],
 					"inputs": [
 						"Ownership and error behavior commit from T3",
 						"Typed Effect cutover commit from T4",
-						"Committed Category characterization baseline"
+						"Committed Category characterization baseline",
+						"Corrective Git-history work from T4a"
 					],
-					"description": "Run repository-wide validation, audit each stacked commit against its approved behavior, and review the complete branch. Keep the recovery stash until both commits and all checks pass.",
+					"description": "Run fresh focused and repository-wide validation, review the complete Category branch and local corrections against the approved behavior, and record completion evidence in the spec. Keep existing commits and the recovery stash. The user separately authorized committing the final corrections after local completion.",
 					"files": {
 						"create": [],
 						"modify": []
@@ -130,16 +182,16 @@
 					"validation": {
 						"tests": [
 							"pnpm run check",
-							"pnpm run ci",
+							"pnpm run ci --force",
 							"git diff --check",
+							"git diff --check e19448b",
 							"git status --short --untracked-files=all"
 						],
 						"acceptance": [
-							"The first commit contains ownership, schema, migration, error, and associated test changes without the Effect cutover.",
-							"The second commit contains the typed Effect cutover without unrelated product or infrastructure changes.",
-							"Focused, migration, type, formatting, lint, and full CI validation pass.",
-							"A final code review covers the complete committed branch, including both change sets.",
-							"The worktree is clean before the recovery stash is removed. Nothing is pushed or opened as a pull request."
+							"The existing ownership commit remains separate from the Effect cutover, and local corrections match T4a.",
+							"Fresh focused, migration, type, formatting, lint, build, and full CI validation pass.",
+							"A final code review covers the committed Category branch and local corrections, including the historical lessons.",
+							"Completion evidence is recorded, the final corrections are committed with separate user authorization, and the recovery stash is retained. Nothing is pushed, rebased, merged, or opened as a pull request."
 						]
 					}
 				}

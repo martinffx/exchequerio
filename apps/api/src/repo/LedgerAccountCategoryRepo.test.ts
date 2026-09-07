@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 import { Effect, Layer, ManagedRuntime, Result } from "effect";
 import { Config } from "@/config";
@@ -7,6 +7,7 @@ import { AccountNotFound } from "@/domains/ledgers/accounts/AccountErrors";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
 import {
+	CategoryConflict,
 	CategoryNotFound,
 	CategoryPersistenceDecodingFailure,
 	CategoryPersistenceFailure,
@@ -99,10 +100,15 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	afterAll(async () => {
-		// Clean up test data
-		await ledgerRepo.deleteLedger(testOrgId, testLedgerId);
-		await organizationRepo.deleteOrganization(testOrgId);
-		await runtime.dispose();
+		try {
+			await db
+				.delete(LedgerAccountCategoriesTable)
+				.where(eq(LedgerAccountCategoriesTable.ledgerId, testLedgerId.toString()));
+			await ledgerRepo.deleteLedger(testOrgId, testLedgerId);
+			await organizationRepo.deleteOrganization(testOrgId);
+		} finally {
+			await runtime.dispose();
+		}
 	});
 
 	afterEach(() => {
@@ -175,59 +181,43 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
-		it("should order categories by created date (descending)", async () => {
-			const category1Id = new TypeID("lac") as LedgerAccountCategoryID;
-			const category2Id = new TypeID("lac") as LedgerAccountCategoryID;
-
-			// Create first category
-			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
-				new LedgerAccountCategoryEntity({
-					id: category1Id,
-					organizationId: testOrgId,
-					ledgerId: testLedgerId,
-					name: "First Category",
-					normalBalance: "debit",
-					created: new Date("2024-01-01"),
-					updated: new Date("2024-01-01"),
-				})
+		it("orders persisted creation times descending and applies offset and limit", async () => {
+			const ids = [
+				new TypeID("lac"),
+				new TypeID("lac"),
+				new TypeID("lac"),
+			] as LedgerAccountCategoryID[];
+			await db.insert(LedgerAccountCategoriesTable).values(
+				ids.map((id, index) => ({
+					id: id.toString(),
+					organizationId: testOrgId.toString(),
+					ledgerId: testLedgerId.toString(),
+					name: "Ordered Category",
+					normalBalance: "debit" as const,
+					created: new Date(["2024-01-03", "2024-01-01", "2024-01-02"][index]),
+				}))
 			);
-
-			// Create second category (newer)
-			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
-				new LedgerAccountCategoryEntity({
-					id: category2Id,
-					organizationId: testOrgId,
-					ledgerId: testLedgerId,
-					name: "Second Category",
-					normalBalance: "credit",
-					created: new Date("2024-01-02"),
-					updated: new Date("2024-01-02"),
-				})
-			);
-
-			const categories = await ledgerAccountCategoryRepo.listLedgerAccountCategories(
-				testOrgId,
-				testLedgerId,
-				0,
-				10
-			);
-
-			expect(categories).toHaveLength(2);
-			// Newer category should be first
-			expect(categories[0].name).toBe("Second Category");
-			expect(categories[1].name).toBe("First Category");
-
-			// Cleanup
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
-				testOrgId,
-				testLedgerId,
-				category1Id
-			);
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
-				testOrgId,
-				testLedgerId,
-				category2Id
-			);
+			try {
+				const categories = await ledgerAccountCategoryRepo.listLedgerAccountCategories(
+					testOrgId,
+					testLedgerId,
+					0,
+					10
+				);
+				expect(categories.map(category => category.id.toString())).toEqual(
+					[ids[0], ids[2], ids[1]].map(id => id.toString())
+				);
+				const page = await ledgerAccountCategoryRepo.listLedgerAccountCategories(
+					testOrgId,
+					testLedgerId,
+					1,
+					1
+				);
+				expect(page.map(category => category.id.toString())).toEqual([ids[2].toString()]);
+			} finally {
+				for (const id of ids)
+					await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, id);
+			}
 		});
 	});
 
@@ -253,32 +243,42 @@ describe("LedgerAccountCategoryRepo", () => {
 			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
 		});
 
-		it("should map an unexpected row-decoding failure to CategoryPersistenceDecodingFailure", async () => {
-			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
-			const entity = new LedgerAccountCategoryEntity({
-				id: categoryId,
-				organizationId: testOrgId,
-				ledgerId: testLedgerId,
-				name: "Decode failure",
-				normalBalance: "debit",
-				created: new Date(),
-				updated: new Date(),
-			});
-			await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity);
-			const failure = new Error("unexpected decode failure");
-			const fromRecord = vi
-				.spyOn(LedgerAccountCategoryEntity, "fromRecord")
-				.mockImplementationOnce(() => {
-					throw failure;
+		it.each(["created", "updated"] as const)(
+			"classifies infinite %s during decoding and deletes without decoding",
+			async field => {
+				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
+				await db.insert(LedgerAccountCategoriesTable).values({
+					id: categoryId.toString(),
+					organizationId: testOrgId.toString(),
+					ledgerId: testLedgerId.toString(),
+					name: "Infinite timestamp",
+					normalBalance: "debit",
+					[field]: sql`'infinity'::timestamptz`,
 				});
-
-			await expect(
-				ledgerAccountCategoryRepo.getLedgerAccountCategory(testOrgId, testLedgerId, categoryId)
-			).rejects.toBeInstanceOf(CategoryPersistenceDecodingFailure);
-
-			fromRecord.mockRestore();
-			await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(testOrgId, testLedgerId, categoryId);
-		});
+				try {
+					const result = await runtime.runPromise(
+						Effect.result(liveRepo.getLedgerAccountCategory(testOrgId, testLedgerId, categoryId))
+					);
+					expect(Result.isFailure(result)).toBe(true);
+					if (Result.isFailure(result)) {
+						expect(result.failure).toBeInstanceOf(CategoryPersistenceDecodingFailure);
+						expect(result.failure.cause).toBeInstanceOf(Error);
+					}
+				} finally {
+					await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
+						testOrgId,
+						testLedgerId,
+						categoryId
+					);
+				}
+				expect(
+					await db
+						.select()
+						.from(LedgerAccountCategoriesTable)
+						.where(eq(LedgerAccountCategoriesTable.id, categoryId.toString()))
+				).toEqual([]);
+			}
+		);
 
 		it("should throw error when category not found", async () => {
 			const nonExistentId = new TypeID("lac") as LedgerAccountCategoryID;
@@ -344,6 +344,27 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("upsertLedgerAccountCategory", () => {
+		it("retains encoding failures in the typed Effect channel without executing SQL", async () => {
+			const entity = LedgerAccountCategoryEntity.fromRequest(
+				{ name: "Encoding", normalBalance: "debit" },
+				testOrgId,
+				testLedgerId
+			);
+			const failure = new Error("encoding failed");
+			vi.spyOn(entity, "toRecord").mockImplementation(() => {
+				throw failure;
+			});
+			const query = vi.spyOn(effectDb, "insert");
+			const program = liveRepo.upsertLedgerAccountCategory(entity);
+			const result = await runtime.runPromise(Effect.result(program));
+			expect(Result.isFailure(result)).toBe(true);
+			if (Result.isFailure(result)) {
+				expect(result.failure).toBeInstanceOf(CategoryPersistenceFailure);
+				expect(result.failure.cause).toBe(failure);
+			}
+			expect(query).not.toHaveBeenCalled();
+		});
+
 		describe("create (insert) operations", () => {
 			it("should let PostgreSQL set created and the application set updated", async () => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
@@ -351,22 +372,28 @@ describe("LedgerAccountCategoryRepo", () => {
 				const applicationTime = new Date("2001-01-01T00:00:00.000Z");
 				vi.useFakeTimers({ toFake: ["Date"] });
 				vi.setSystemTime(applicationTime);
-				const created = await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(
-					new LedgerAccountCategoryEntity({
-						id: categoryId,
-						organizationId: testOrgId,
-						ledgerId: testLedgerId,
-						name: "Timestamp ownership",
-						normalBalance: "debit",
-						created: suppliedTime,
-						updated: suppliedTime,
-					})
-				);
+				const entity = new LedgerAccountCategoryEntity({
+					id: categoryId,
+					organizationId: testOrgId,
+					ledgerId: testLedgerId,
+					name: "Timestamp ownership",
+					normalBalance: "debit",
+					created: suppliedTime,
+					updated: suppliedTime,
+				});
+				const encode = vi.spyOn(entity, "toRecord");
+				const query = vi.spyOn(effectDb, "insert");
+				const program = liveRepo.upsertLedgerAccountCategory(entity);
+				expect(encode).not.toHaveBeenCalled();
+				expect(query).not.toHaveBeenCalled();
+				const executionTime = new Date("2002-01-01T00:00:00.000Z");
+				vi.setSystemTime(executionTime);
+				const created = await runtime.runPromise(program);
 				vi.useRealTimers();
 
 				expect(created.created).not.toEqual(suppliedTime);
 				expect(created.created).not.toEqual(applicationTime);
-				expect(created.updated).toEqual(applicationTime);
+				expect(created.updated).toEqual(executionTime);
 
 				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
 					testOrgId,
@@ -527,14 +554,14 @@ describe("LedgerAccountCategoryRepo", () => {
 					...existing,
 					name: "Updated Name",
 					description: "Updated description",
-					metadata: { updated: true },
+					metadata: { updated: "true" },
 				});
 
 				const result = await ledgerAccountCategoryRepo.upsertLedgerAccountCategory(updated);
 
 				expect(result.name).toBe("Updated Name");
 				expect(result.description).toBe("Updated description");
-				expect(result.metadata).toEqual({ updated: true });
+				expect(result.metadata).toEqual({ updated: "true" });
 
 				// Cleanup
 				await ledgerAccountCategoryRepo.deleteLedgerAccountCategory(
@@ -1902,6 +1929,53 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("Organization ownership and typed failures", () => {
+		it.each([
+			["upsert", "23503", "ledger_account_categories_organization_ledger_fk", LedgerNotFound],
+			["account", "23503", "ledger_account_category_accounts_account_ownership_fk", AccountNotFound],
+			["account", "23503", "ledger_account_category_accounts_category_ownership_fk", CategoryNotFound],
+			["parent", "23503", "ledger_account_category_parents_child_ownership_fk", CategoryNotFound],
+			["parent", "23503", "ledger_account_category_parents_parent_ownership_fk", CategoryNotFound],
+			["parent", "23514", "check_no_self_reference", CategoryConflict],
+		] as const)("retains SQL cause for %s %s %s", async (operation, code, constraint, ErrorType) => {
+			const cause = Object.assign(new Error("constraint failure"), { code, constraint });
+			const entity = LedgerAccountCategoryEntity.fromRequest(
+				{ name: "Mapped failure", normalBalance: "debit" },
+				testOrgId,
+				testLedgerId
+			);
+			const repository = new LedgerAccountCategoryRepoLive({
+				insert: () => ({
+					values: () => ({
+						onConflictDoUpdate: () => ({ returning: () => Effect.fail(cause) }),
+						onConflictDoNothing: () => Effect.fail(cause),
+					}),
+				}),
+			} as never);
+			vi.spyOn(repository, "getLedgerAccountCategory").mockReturnValue(Effect.succeed(entity));
+			const program =
+				operation === "upsert"
+					? repository.upsertLedgerAccountCategory(entity)
+					: operation === "account"
+						? repository.linkAccountToCategory(
+								testOrgId,
+								testLedgerId,
+								entity.id,
+								new TypeID("lat") as LedgerAccountID
+							)
+						: repository.linkCategoryToParent(
+								testOrgId,
+								testLedgerId,
+								entity.id,
+								new TypeID("lac") as LedgerAccountCategoryID
+							);
+			const result = await Effect.runPromise(Effect.result(program));
+			expect(Result.isFailure(result)).toBe(true);
+			if (Result.isFailure(result)) {
+				expect(result.failure).toBeInstanceOf(ErrorType);
+				expect(result.failure.cause).toBe(cause);
+			}
+		});
+
 		it("makes every read, delete, and relationship operation invisible cross-Organization", async () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const accountId = new TypeID("lat") as LedgerAccountID;

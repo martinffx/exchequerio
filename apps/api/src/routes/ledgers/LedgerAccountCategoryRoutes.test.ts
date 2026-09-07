@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { createLedgerEntity, createOrganizationEntity, getRepos } from "@/repo/fixtures";
+import { LedgerAccountCategoriesTable } from "@/repo/schema";
 import fastify, { type FastifyInstance } from "fastify";
 import { Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
@@ -88,6 +91,129 @@ describe("LedgerAccountCategoryRoutes", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+	});
+
+	it.each(["POST", "PUT"] as const)(
+		"preserves %s metadata through the request and response",
+		async method => {
+			const metadata = { purpose: "position", empty: "" };
+			const category = createLedgerAccountCategoryFixture({ ledgerId, id: categoryId, metadata });
+			const service =
+				method === "POST"
+					? mockLedgerAccountCategoryService.createLedgerAccountCategory
+					: mockLedgerAccountCategoryService.updateLedgerAccountCategory;
+			service.mockReturnValue(Effect.succeed(category));
+			const response = await server.inject({
+				method,
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories${method === "PUT" ? `/${categoryIdStr}` : ""}`,
+				payload: { name: "Assets", normalBalance: "debit", metadata },
+			});
+			expect(response.statusCode).toBe(200);
+			expect(service.mock.calls[0]?.at(-1)).toMatchObject({ metadata });
+			expect(response.json()).toMatchObject({ metadata });
+		}
+	);
+	it.each(["POST", "PUT"] as const)(
+		"rejects %s non-string metadata before service execution",
+		async method => {
+			const service =
+				method === "POST"
+					? mockLedgerAccountCategoryService.createLedgerAccountCategory
+					: mockLedgerAccountCategoryService.updateLedgerAccountCategory;
+			// oxlint-disable-next-line unicorn/no-null -- JSON null must be rejected as a metadata value.
+			for (const value of [12, true, null, { nested: "value" }, ["value"]]) {
+				const response = await server.inject({
+					method,
+					url: `/api/ledgers/${ledgerIdStr}/accounts/categories${method === "PUT" ? `/${categoryIdStr}` : ""}`,
+					payload: { name: "Assets", normalBalance: "debit", metadata: { invalid: value } },
+				});
+				expect(response.statusCode).toBe(400);
+				expect(service).not.toHaveBeenCalled();
+			}
+		}
+	);
+
+	it("locks all nine generated Category OpenAPI operations", async () => {
+		await authServer.ready();
+		const paths = authServer.swagger().paths;
+		const prefix = "/api/ledgers/{ledgerId}/accounts/categories";
+		const collection = paths?.[`${prefix}/`];
+		const item = paths?.[`${prefix}/{categoryId}`];
+		const account = paths?.[`${prefix}/{categoryId}/accounts/{accountId}`];
+		const parent = paths?.[`${prefix}/{categoryId}/categories/{parentCategoryId}`];
+		const operations = {
+			list: collection?.get,
+			create: collection?.post,
+			get: item?.get,
+			update: item?.put,
+			delete: item?.delete,
+			linkAccount: account?.patch,
+			unlinkAccount: account?.delete,
+			linkParent: parent?.patch,
+			unlinkParent: parent?.delete,
+		};
+		for (const operation of Object.values(operations)) expect(operation).toBeDefined();
+		expect(operations).toMatchSnapshot();
+	});
+
+	it("allows the JWT owner to mutate a Category and prevents foreign Organization mutations in PostgreSQL", async () => {
+		const { organizationRepo, ledgerRepo, db } = getRepos();
+		const owner = createOrganizationEntity();
+		const foreign = createOrganizationEntity();
+		const ledger = createLedgerEntity({ organizationId: owner.id });
+		await organizationRepo.createOrganization(owner);
+		try {
+			await organizationRepo.createOrganization(foreign);
+			await ledgerRepo.upsertLedger(ledger);
+			const url = `/api/ledgers/${ledger.id.toString()}/accounts/categories`;
+			const ownerHeaders = {
+				Authorization: `Bearer ${signJWT({ sub: owner.id.toString(), scope: ["org_admin"] })}`,
+			};
+			const created = await authServer.inject({
+				method: "POST",
+				url,
+				headers: ownerHeaders,
+				payload: { name: "Assets", normalBalance: "debit" },
+			});
+			expect(created.statusCode).toBe(200);
+			const id = created.json<{ id: string }>().id;
+			const updated = await authServer.inject({
+				method: "PUT",
+				url: `${url}/${id}`,
+				headers: ownerHeaders,
+				payload: { name: "Owner update", normalBalance: "debit" },
+			});
+			expect(updated.statusCode).toBe(200);
+			expect(updated.json()).toMatchObject({ name: "Owner update" });
+			const before = await db
+				.select()
+				.from(LedgerAccountCategoriesTable)
+				.where(eq(LedgerAccountCategoriesTable.id, id));
+			expect(before).toHaveLength(1);
+			expect(before[0]?.name).toBe("Owner update");
+			const rejected = await authServer.inject({
+				method: "PUT",
+				url: `${url}/${id}`,
+				headers: {
+					Authorization: `Bearer ${signJWT({ sub: foreign.id.toString(), scope: ["org_admin"] })}`,
+				},
+				payload: { name: "Foreign update", normalBalance: "debit" },
+			});
+			expect(rejected.statusCode).toBe(404);
+			expect(
+				await db
+					.select()
+					.from(LedgerAccountCategoriesTable)
+					.where(eq(LedgerAccountCategoriesTable.id, id))
+			).toEqual(before);
+		} finally {
+			await db
+				.delete(LedgerAccountCategoriesTable)
+				.where(eq(LedgerAccountCategoriesTable.ledgerId, ledger.id.toString()));
+			await ledgerRepo.deleteLedger(owner.id, ledger.id);
+			await organizationRepo.deleteOrganization(owner.id);
+			await organizationRepo.deleteOrganization(foreign.id);
+		}
 	});
 
 	describe("List Ledger Account Categories", () => {

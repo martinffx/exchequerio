@@ -1,5 +1,6 @@
 import { faker } from "@faker-js/faker";
 import { TypeID } from "typeid-js";
+import type { Metadata } from "@/lib/schema";
 import {
 	LedgerAccountCategoryEntity,
 	LedgerAccountEntity,
@@ -74,7 +75,7 @@ function createLedgerAccountCategoryFixture(
 		name: string;
 		description?: string;
 		normalBalance: "debit" | "credit";
-		metadata?: Record<string, unknown>;
+		metadata?: Metadata;
 		created: Date;
 		updated: Date;
 	}>

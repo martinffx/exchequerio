@@ -176,33 +176,39 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 	upsertLedgerAccountCategory(
 		entity: LedgerAccountCategoryEntity
 	): Effect.Effect<LedgerAccountCategoryEntity, CategoryUpsertRepositoryError> {
-		const record = entity.toRecord();
-		return this.db
-			.insert(LedgerAccountCategoriesTable)
-			.values(record)
-			.onConflictDoUpdate({
-				target: LedgerAccountCategoriesTable.id,
-				set: {
-					name: record.name,
-					description: record.description,
-					normalBalance: record.normalBalance,
-					metadata: record.metadata,
-					updated: record.updated,
-				},
-				where: and(
-					eq(LedgerAccountCategoriesTable.organizationId, entity.organizationId.toString()),
-					eq(LedgerAccountCategoriesTable.ledgerId, entity.ledgerId.toString())
-				),
-			})
-			.returning()
-			.pipe(
-				Effect.mapError(cause =>
-					postgresErrorCode(cause) === "23503"
-						? new LedgerNotFound()
-						: mapCategoryInfrastructureError(cause)
-				),
-				Effect.flatMap(requireUpsertedCategory)
-			);
+		return Effect.try({
+			try: () => entity.toRecord(),
+			catch: mapCategoryInfrastructureError,
+		}).pipe(
+			Effect.flatMap(record =>
+				this.db
+					.insert(LedgerAccountCategoriesTable)
+					.values(record)
+					.onConflictDoUpdate({
+						target: LedgerAccountCategoriesTable.id,
+						set: {
+							name: record.name,
+							description: record.description,
+							normalBalance: record.normalBalance,
+							metadata: record.metadata,
+							updated: record.updated,
+						},
+						where: and(
+							eq(LedgerAccountCategoriesTable.organizationId, entity.organizationId.toString()),
+							eq(LedgerAccountCategoriesTable.ledgerId, entity.ledgerId.toString())
+						),
+					})
+					.returning()
+					.pipe(
+						Effect.mapError(cause =>
+							postgresErrorCode(cause) === "23503"
+								? new LedgerNotFound({ cause })
+								: mapCategoryInfrastructureError(cause)
+						),
+						Effect.flatMap(requireUpsertedCategory)
+					)
+			)
+		);
 	}
 
 	deleteLedgerAccountCategory(
@@ -252,9 +258,9 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 							if (postgresErrorCode(cause) === "23503") {
 								const constraint = postgresConstraint(cause);
 								if (constraint === "ledger_account_category_accounts_account_ownership_fk")
-									return new AccountNotFound();
+									return new AccountNotFound({ cause });
 								if (constraint === "ledger_account_category_accounts_category_ownership_fk")
-									return new CategoryNotFound(`Category not found: ${categoryId.toString()}`);
+									return new CategoryNotFound(`Category not found: ${categoryId.toString()}`, { cause });
 							}
 							return mapCategoryInfrastructureError(cause);
 						})
@@ -320,13 +326,15 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 				.pipe(
 					Effect.mapError(cause => {
 						if (postgresErrorCode(cause) === "23514")
-							return new CategoryConflict("Category cannot be its own parent");
+							return new CategoryConflict("Category cannot be its own parent", { cause });
 						if (postgresErrorCode(cause) === "23503") {
 							const constraint = postgresConstraint(cause);
 							if (constraint === "ledger_account_category_parents_child_ownership_fk")
-								return new CategoryNotFound(`Category not found: ${categoryId.toString()}`);
+								return new CategoryNotFound(`Category not found: ${categoryId.toString()}`, { cause });
 							if (constraint === "ledger_account_category_parents_parent_ownership_fk")
-								return new CategoryNotFound(`Category not found: ${parentCategoryId.toString()}`);
+								return new CategoryNotFound(`Category not found: ${parentCategoryId.toString()}`, {
+									cause,
+								});
 						}
 						return mapCategoryInfrastructureError(cause);
 					})

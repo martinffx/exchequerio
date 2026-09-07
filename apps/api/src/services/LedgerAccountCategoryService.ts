@@ -43,7 +43,7 @@ type CategoryUnlinkParentError = LedgerGetError | CategoryUnlinkParentRepository
 class LedgerAccountCategoryService {
 	constructor(
 		private readonly repository: LedgerAccountCategoryRepo,
-		private readonly ledgerService: LedgerService
+		private readonly ledgerService: Pick<LedgerService, "getLedger">
 	) {}
 
 	listLedgerAccountCategories(

@@ -11,11 +11,14 @@ Categories also remain on Promise-based routes, service wiring, and a Node Drizz
 the integrated Ledger slices use the server's managed Effect runtime. The prepared Category Effect
 cutover exposes `unknown` failures across repository and service boundaries.
 
-The work ships as two stacked change sets:
+The initial implementation consists of two stacked change sets:
 
 1. Add Organization and Ledger ownership, enforce relationship ownership, and define Category error
    behavior.
 2. Move the hardened Category slice to Effect with explicit error unions.
+
+A subsequent corrective pass applies the Git-history lessons below. The corrective changes are committed locally
+following separate user authorization; the recovery stash is retained.
 
 The first change set intentionally changes tenancy, persistence, and availability behavior. The
 second change set follows `EFFECT_MIGRATION.md` and preserves that new baseline.
@@ -280,3 +283,57 @@ and focused Effect tests after the second. The final branch must pass `pnpm run 
 Categories retain last-writer-wins PUTs, the delete/recreate race, longer Category cycles,
 unconstrained pagination values, and placeholder balances. These limitations do not weaken
 Organization or Ledger ownership.
+
+## Corrective history review (2026-09-07)
+
+The initial 131 Category tests passed. Comparing the implementation with corrective commits in
+other slices exposed gaps that those tests did not cover. This pass keeps the existing migration
+and ownership rules, and makes these intentional corrections:
+
+- Category metadata is a string-to-string map. POST and PUT preserve its keys and reject non-string
+  values with `400` before Fastify can coerce them. Other resources keep their current schemas.
+  Stored invalid JSON, primitives, arrays, and non-string-valued objects are treated as absent.
+- Upsert row encoding, update-time capture, and SQL construction occur when the Effect executes.
+  Encoding failures use `CategoryPersistenceFailure` with the original cause. PostgreSQL still
+  supplies creation time; updates still use the existing nontransactional ID-based upsert.
+- Invalid stored creation/update timestamps fail at entity decoding with
+  `CategoryPersistenceDecodingFailure`, rather than escaping during response conversion.
+- Category constraint-error mappings retain the SQL cause. Optional constructor options on shared
+  Ledger/Account not-found errors preserve existing callers and HTTP messages.
+
+| Corrective history                                      | Lesson and Category disposition                                                                                                                                                                     | Evidence                                                                                          |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Organizations `0af9224`, `de15f0d`, `aa3f3dc`           | Keep explicit routes and the managed runtime; avoid new runners, harnesses, and duplicated service layers. These are already applied.                                                               | Existing runtime composition and production-server ownership journey.                             |
+| Ledgers/Accounts `99cb535`, `4cbb547`, `09c9acb`        | Entities own conversion; preserve actual persisted fields and timestamp ownership. Reject unsupported stored dates without changing valid timestamps or placeholder balances.                       | Real PostgreSQL infinite-timestamp decoding and timestamp ownership tests.                        |
+| Ledgers `15b6e07`                                       | Do not decode a row after committing its deletion. Category already returns only its ID.                                                                                                            | Delete an infinite-timestamp row successfully after its read fails decoding.                      |
+| Transactions `bb628b4`, `6c55315`, `1a2022b`, `df6aa4d` | Keep SQL error translation at the repository boundary and preserve mutation sequencing and fields. Transaction effective time, idempotency, and concurrency policies are not Category requirements. | Typed cause assertions, existing last-writer-wins/delete-recreate and relationship-order tests.   |
+| Settlements `58573f6`, `080ac1e`, `5f5a66b`             | Defer repository timestamps until execution; keep precise error channels and focused dependency tests.                                                                                              | Construction/execution and throwing-encoder regressions; narrow `getLedger` dependency.           |
+| Statements `54e34b0`, `c3aa14e`, `3d7304d`              | Verify real wire serialization and generated OpenAPI rather than relying on empty fixtures or copied schemas.                                                                                       | Nonempty POST/PUT metadata tests and a snapshot of all nine Category operations.                  |
+| Balance Monitors `d0637fb`, `2bcda13`                   | Preserve not-found details, keep absence separate from decoding, and control persisted ordering timestamps.                                                                                         | Existing error/absence tests and explicit database creation times with pagination.                |
+| Categories `90e1af0`                                    | A test double for an entire Ledger repository couples Category tests to unrelated methods.                                                                                                          | Category service depends on `Pick<LedgerService, "getLedger">`; tests provide that one operation. |
+
+Migration tests now exercise all five composite foreign keys and both Organization/Ledger mismatch
+dimensions for Account and parent relationships. The production-server ownership journey uses real
+signed JWTs, the managed runtime, and PostgreSQL: owner mutations succeed, a foreign Organization's
+mutation returns `404`, and the stored Category is unchanged.
+
+The additional tests stay at their owning boundaries. Adapter fault-injection tests remain because
+they prove translation into the Effect failure channel; a pure error-mapper test cannot replace
+that coverage. The redundant service-Layer construction test is replaced by the assembled journey.
+No clock service, optimistic concurrency, idempotency, balance aggregation, cycle detection,
+pagination restriction, or slice relocation is introduced.
+
+## Completion evidence (2026-09-07)
+
+- `pnpm --filter=@exchequerio/api test LedgerAccountCategory`: 160 tests passed in six files,
+  including seven migration tests.
+- `pnpm run check`: all ten tasks passed.
+- `pnpm run ci --force`: all 14 tasks ran without cache and passed; the API suite passed
+  551 tests in 36 files. Builds, formatting, lint, types, and benchmark discovery passed.
+- `git diff --check` and `git diff --check e19448b`: passed.
+- Final review: approved with no findings, covering `e19448b..HEAD` and the local corrective
+  changes. T3, T4, T4a, and T5 are complete under the approved local-finish scope.
+
+The existing ownership and Effect commits remain intact. After local completion, the user
+authorized a separate corrective commit. The recovery stash is retained. The documentation build emits the
+existing Docusaurus `onBrokenMarkdownLinks` deprecation warning; it does not fail validation.

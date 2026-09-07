@@ -1,10 +1,9 @@
 import { TypeID } from "typeid-js";
-import { Effect, Layer, Option } from "effect";
+import { Effect } from "effect";
 import { DateTime } from "luxon";
 import { describe, expect, it, vi } from "vitest";
 import { Ledger } from "@/domains/ledgers/Ledger";
-import type { LedgerRepo } from "@/domains/ledgers/LedgerRepo";
-import { LedgerService, LedgerServiceTag } from "@/domains/ledgers/LedgerService";
+import type { LedgerService } from "@/domains/ledgers/LedgerService";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
 import { CategoryNotFound, CategoryPersistenceFailure } from "@/repo/LedgerAccountCategoryErrors";
@@ -14,15 +13,8 @@ import type {
 	LedgerID,
 	OrgID,
 } from "@/repo/entities/types";
-import {
-	type LedgerAccountCategoryRepo,
-	LedgerAccountCategoryRepoTag,
-} from "@/repo/LedgerAccountCategoryRepo";
-import {
-	LedgerAccountCategoryService,
-	LedgerAccountCategoryServiceTag,
-	ledgerAccountCategoryServiceLayer,
-} from "./LedgerAccountCategoryService";
+import type { LedgerAccountCategoryRepo } from "@/repo/LedgerAccountCategoryRepo";
+import { LedgerAccountCategoryService } from "./LedgerAccountCategoryService";
 
 describe("LedgerAccountCategoryService", () => {
 	const organizationId = new TypeID("org") as OrgID;
@@ -37,8 +29,6 @@ describe("LedgerAccountCategoryService", () => {
 		created: DateTime.utc(),
 		updated: DateTime.utc(),
 	});
-	// oxlint-disable-next-line unicorn/no-array-callback-reference -- Effect Option constructor, not an iterator.
-	const foundLedger = Option.some(ledger);
 	const mockRepo = {
 		listLedgerAccountCategories: vi.fn<LedgerAccountCategoryRepo["listLedgerAccountCategories"]>(),
 		getLedgerAccountCategory: vi.fn<LedgerAccountCategoryRepo["getLedgerAccountCategory"]>(),
@@ -49,23 +39,10 @@ describe("LedgerAccountCategoryService", () => {
 		linkCategoryToParent: vi.fn<LedgerAccountCategoryRepo["linkCategoryToParent"]>(),
 		unlinkCategoryFromParent: vi.fn<LedgerAccountCategoryRepo["unlinkCategoryFromParent"]>(),
 	} satisfies LedgerAccountCategoryRepo;
-	const ledgerRepo = {
-		listLedgers: vi.fn<LedgerRepo["listLedgers"]>(() => Effect.succeed([ledger])),
-		getLedger: vi.fn<LedgerRepo["getLedger"]>(() => Effect.succeed(foundLedger)),
-		createLedger: vi.fn<LedgerRepo["createLedger"]>(() => Effect.succeed(ledger)),
-		updateLedger: vi.fn<LedgerRepo["updateLedger"]>(() => Effect.succeed(foundLedger)),
-		deleteLedger: vi.fn<LedgerRepo["deleteLedger"]>(() => Effect.succeed(foundLedger)),
-		deleteLedgerFixtures: vi.fn<LedgerRepo["deleteLedgerFixtures"]>(() => Effect.void),
-	} satisfies LedgerRepo;
-	const ledgerOwnership = new LedgerService(ledgerRepo);
-	const ledgerGet = vi.spyOn(ledgerOwnership, "getLedger");
-	const repoLayer = Layer.succeed(LedgerAccountCategoryRepoTag, mockRepo);
-	const ledgerLayer = Layer.succeed(LedgerServiceTag, ledgerOwnership);
-	const serviceLayer = ledgerAccountCategoryServiceLayer.pipe(
-		Layer.provide(Layer.merge(repoLayer, ledgerLayer))
-	);
+	const ledgerGet = vi.fn<LedgerService["getLedger"]>(() => Effect.succeed(ledger));
+	const categoryService = new LedgerAccountCategoryService(mockRepo, { getLedger: ledgerGet });
 	const run = <A, E>(use: (service: LedgerAccountCategoryService) => Effect.Effect<A, E>) =>
-		Effect.runPromise(LedgerAccountCategoryServiceTag.use(use).pipe(Effect.provide(serviceLayer)));
+		Effect.runPromise(use(categoryService));
 	const service = {
 		listLedgerAccountCategories: (
 			...args: Parameters<LedgerAccountCategoryService["listLedgerAccountCategories"]>
@@ -95,12 +72,6 @@ describe("LedgerAccountCategoryService", () => {
 			...args: Parameters<LedgerAccountCategoryService["unlinkLedgerAccountCategoryToCategory"]>
 		) => run(value => value.unlinkLedgerAccountCategoryToCategory(...args)),
 	};
-
-	it("is available from its Effect service Layer", async () => {
-		await expect(
-			Effect.runPromise(LedgerAccountCategoryServiceTag.pipe(Effect.provide(serviceLayer)))
-		).resolves.toBeInstanceOf(LedgerAccountCategoryService);
-	});
 
 	afterEach(() => {
 		vi.clearAllMocks();

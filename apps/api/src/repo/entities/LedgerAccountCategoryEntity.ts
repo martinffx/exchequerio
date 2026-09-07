@@ -1,5 +1,6 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
+import type { Metadata } from "@/lib/schema";
 import type { LedgerAccountCategoriesTable } from "@/repo/schema";
 import type {
 	LedgerAccountCategoryRequest,
@@ -19,7 +20,7 @@ interface LedgerAccountCategoryEntityOptions {
 	name: string;
 	description?: string;
 	normalBalance: NormalBalance;
-	metadata?: Record<string, unknown>;
+	metadata?: Metadata;
 	created: Date;
 	updated: Date;
 }
@@ -31,7 +32,7 @@ class LedgerAccountCategoryEntity {
 	public readonly name: string;
 	public readonly description?: string;
 	public readonly normalBalance: NormalBalance;
-	public readonly metadata?: Record<string, unknown>;
+	public readonly metadata?: Metadata;
 	public readonly created: Date;
 	public readonly updated: Date;
 
@@ -68,11 +69,25 @@ class LedgerAccountCategoryEntity {
 	}
 
 	public static fromRecord(record: LedgerAccountCategoryRecord): LedgerAccountCategoryEntity {
-		// Parse metadata from TEXT (JSON string) to object
-		let metadata: Record<string, unknown> | undefined;
+		for (const field of ["created", "updated"] as const) {
+			if (!(record[field] instanceof Date) || !Number.isFinite(record[field].getTime())) {
+				throw new TypeError(`Invalid Category ${field} timestamp`);
+			}
+		}
+
+		// Invalid stored metadata remains absent for compatibility.
+		let metadata: Metadata | undefined;
 		if (record.metadata) {
 			try {
-				metadata = JSON.parse(record.metadata) as Record<string, unknown>;
+				const parsed: unknown = JSON.parse(record.metadata);
+				if (
+					parsed !== null &&
+					typeof parsed === "object" &&
+					!Array.isArray(parsed) &&
+					Object.values(parsed).every(value => typeof value === "string")
+				) {
+					metadata = parsed as Metadata;
+				}
 			} catch {
 				metadata = undefined;
 			}
