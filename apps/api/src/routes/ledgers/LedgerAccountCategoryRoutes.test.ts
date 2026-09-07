@@ -7,6 +7,8 @@ import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/auth";
+import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
+import type { LedgerAccountCategoryResponse } from "./schema";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { ConflictError, globalErrorHandler, NotFoundError } from "@/lib/errors";
 import {
@@ -213,6 +215,56 @@ describe("LedgerAccountCategoryRoutes", () => {
 			await ledgerRepo.deleteLedger(owner.id, ledger.id);
 			await organizationRepo.deleteOrganization(owner.id);
 			await organizationRepo.deleteOrganization(foreign.id);
+		}
+	});
+
+	it.each([
+		['{"period":"monthly"}', { period: "monthly" }],
+		["{}", {}],
+		['{"period":"monthly","count":1}', undefined],
+		['{"nested":{"toString":null}}', undefined],
+		['["monthly"]', undefined],
+		['"monthly"', undefined],
+		["1", undefined],
+		["true", undefined],
+		["null", undefined],
+		["not-json", undefined],
+	])("safely returns stored metadata %s on GET and list", async (metadata, expected) => {
+		const category = LedgerAccountCategoryEntity.fromRecord({
+			...mockCategory,
+			id: categoryIdStr,
+			organizationId: mockCategory.organizationId.toString(),
+			ledgerId: ledgerIdStr,
+			description: "Historical category",
+			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
+			parentCategoryId: null,
+			metadata,
+		});
+		mockLedgerAccountCategoryService.getLedgerAccountCategory.mockReturnValue(
+			Effect.succeed(category)
+		);
+		mockLedgerAccountCategoryService.listLedgerAccountCategories.mockReturnValue(
+			Effect.succeed([category])
+		);
+		const url = `/api/ledgers/${ledgerIdStr}/accounts/categories`;
+		const [get, list] = await Promise.all([
+			server.inject({
+				method: "GET",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `${url}/${categoryIdStr}`,
+			}),
+			server.inject({ method: "GET", headers: { Authorization: `Bearer ${token}` }, url }),
+		]);
+
+		expect(get.statusCode).toBe(200);
+		expect(list.statusCode).toBe(200);
+		for (const body of [
+			get.json<LedgerAccountCategoryResponse>(),
+			list.json<LedgerAccountCategoryResponse[]>()[0],
+		]) {
+			expect(body.id).toBe(categoryIdStr);
+			if (expected === undefined) expect(body).not.toHaveProperty("metadata");
+			else expect(body.metadata).toEqual(expected);
 		}
 	});
 
