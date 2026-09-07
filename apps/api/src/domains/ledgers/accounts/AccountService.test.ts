@@ -1,6 +1,6 @@
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { newLedgerAccountID, newLedgerID, newOrgID } from "@/repo/entities/types";
 import { Ledger } from "../Ledger";
 import type { LedgerService } from "../LedgerService";
@@ -38,51 +38,39 @@ const account = LedgerAccount.fromCreateRequest(
 // oxlint-disable-next-line unicorn/no-array-callback-reference -- Effect Option constructor, not an iterator.
 const someAccount = Option.some(account);
 
-const repository = (overrides: Partial<LedgerAccountRepo> = {}): LedgerAccountRepo =>
-	vi.mocked<LedgerAccountRepo>({
-		listAccounts: vi.fn(() => Effect.succeed([account])),
-		getAccount: vi.fn(() => Effect.succeed(someAccount)),
-		createAccount: vi.fn(() => Effect.succeed(account)),
-		updateAccount: vi.fn(() => Effect.succeed(account)),
-		deleteAccount: vi.fn(() => Effect.succeed(someAccount)),
-		...overrides,
-	});
-
-const ledgerService = (): LedgerService =>
-	vi.mocked<LedgerService>({
-		listLedgers: vi.fn(() => Effect.succeed([ledger])),
-		getLedger: vi.fn(() => Effect.succeed(ledger)),
-		createLedger: vi.fn(() => Effect.succeed(ledger)),
-		updateLedger: vi.fn(() => Effect.succeed(ledger)),
-		deleteLedger: vi.fn(() => Effect.succeed(ledger)),
-	} as unknown as LedgerService);
-
-const runService = <A, E>(
-	repositoryImplementation: LedgerAccountRepo,
-	ledgerImplementation: LedgerService,
-	use: (service: AccountService) => Effect.Effect<A, E>
-) =>
-	Effect.runPromise(
-		AccountServiceTag.pipe(Effect.flatMap(use)).pipe(
-			Effect.provide(
-				accountServiceLayer.pipe(
-					Layer.provide(
-						Layer.merge(
-							Layer.succeed(LedgerAccountRepoTag, repositoryImplementation),
-							Layer.succeed(LedgerServiceTag, ledgerImplementation)
-						)
-					)
-				)
-			)
+const repo = vi.mocked<LedgerAccountRepo>({
+	listAccounts: vi.fn(() => Effect.succeed([account])),
+	getAccount: vi.fn(() => Effect.succeed(someAccount)),
+	createAccount: vi.fn(() => Effect.succeed(account)),
+	updateAccount: vi.fn(() => Effect.succeed(account)),
+	deleteAccount: vi.fn(() => Effect.succeed(someAccount)),
+});
+const parent = vi.mocked<LedgerService>({
+	listLedgers: vi.fn(() => Effect.succeed([ledger])),
+	getLedger: vi.fn(() => Effect.succeed(ledger)),
+	createLedger: vi.fn(() => Effect.succeed(ledger)),
+	updateLedger: vi.fn(() => Effect.succeed(ledger)),
+	deleteLedger: vi.fn(() => Effect.succeed(ledger)),
+} as unknown as LedgerService);
+const runtime = ManagedRuntime.make(
+	accountServiceLayer.pipe(
+		Layer.provide(
+			Layer.merge(Layer.succeed(LedgerAccountRepoTag, repo), Layer.succeed(LedgerServiceTag, parent))
 		)
-	);
+	)
+);
+let service: AccountService;
+beforeAll(async () => {
+	service = await runtime.runPromise(AccountServiceTag);
+});
+beforeEach(() => {
+	vi.resetAllMocks();
+});
+afterAll(() => runtime.dispose());
 
 describe("AccountService", () => {
 	it("checks the parent Ledger before listing Accounts", async () => {
-		const repo = repository();
-		const parent = ledgerService();
-
-		await runService(repo, parent, service =>
+		await runtime.runPromise(
 			service.listAccounts(organizationId, ledgerId, { offset: 10, limit: 5 })
 		);
 
@@ -125,12 +113,9 @@ describe("AccountService", () => {
 			},
 		},
 	])("creates Account domain state from $name", async ({ request }) => {
-		const repo = repository({
-			createAccount: vi.fn((record: LedgerAccount) => Effect.succeed(record)),
-		});
-		const parent = ledgerService();
+		repo.createAccount.mockImplementation((record: LedgerAccount) => Effect.succeed(record));
 
-		const created = await runService(repo, parent, service =>
+		const created = await runtime.runPromise(
 			service.createAccount(organizationId, ledgerId, request)
 		);
 
@@ -159,9 +144,7 @@ describe("AccountService", () => {
 	});
 
 	it("passes the current lock version into update without changing immutable fields", async () => {
-		const repo = repository();
-
-		await runService(repo, ledgerService(), service =>
+		await runtime.runPromise(
 			service.updateAccount(organizationId, ledgerId, accountId, {
 				name: "Operating Cash",
 			})
@@ -188,11 +171,9 @@ describe("AccountService", () => {
 	it.each(["get", "update", "delete"] as const)(
 		"maps an absent %s Account to AccountNotFound",
 		async operation => {
-			const repo = repository({
-				getAccount: vi.fn(() => Effect.succeed(Option.none())),
-				deleteAccount: vi.fn(() => Effect.succeed(Option.none())),
-			});
-			const error = await runService(repo, ledgerService(), service =>
+			repo.getAccount.mockImplementation(() => Effect.succeed(Option.none()));
+			repo.deleteAccount.mockImplementation(() => Effect.succeed(Option.none()));
+			const error = await runtime.runPromise(
 				Effect.flip(
 					operation === "get"
 						? service.getAccount(organizationId, ledgerId, accountId)
