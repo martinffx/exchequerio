@@ -1,3 +1,7 @@
+import type {
+	AlertCondition,
+	BalanceSnapshot,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorSchema";
 import { type BuildQueryResult, defineRelations, sql } from "drizzle-orm";
 import {
 	bigint,
@@ -6,6 +10,7 @@ import {
 	foreignKey,
 	index,
 	integer,
+	jsonb,
 	numeric,
 	pgEnum,
 	pgTable,
@@ -92,12 +97,17 @@ const LedgerAccountsTable = pgTable(
 		postedDebits: bigint("posted_debits", { mode: "number" }).notNull().default(0),
 		availableCredits: bigint("available_credits", { mode: "number" }).notNull().default(0),
 		availableDebits: bigint("available_debits", { mode: "number" }).notNull().default(0),
+		balanceMonitorCount: integer("balance_monitor_count").notNull().default(0),
 		lockVersion: integer("lock_version").notNull().default(1),
 		metadata: text("metadata"), // TEXT for DSQL compatibility (JSON string)
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
+		balanceMonitorCountNonnegative: check(
+			"ledger_accounts_monitor_count_nonnegative",
+			sql`${table.balanceMonitorCount} >= 0`
+		),
 		organizationIdx: index("idx_ledger_accounts_organization").on(table.organizationId),
 		organizationLedgerFk: foreignKey({
 			name: "ledger_accounts_organization_ledger_fk",
@@ -354,24 +364,82 @@ type LedgerAccountCategoryAccountInsertRow = Required<
 	typeof LedgerAccountCategoryAccountsTable.$inferInsert
 >;
 
-// Account Balance Monitors: Real-time balance tracking with alerts
-const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monitors", {
-	id: text("id").primaryKey(),
-	accountId: text("account_id")
-		.notNull()
-		.references(() => LedgerAccountsTable.id),
-	name: text("name").notNull(),
-	description: text("description"),
-	alertThreshold: numeric("alert_threshold", { precision: 20, scale: 4 }).notNull().default("0"),
-	isActive: integer("is_active").notNull().default(1), // SQLite-compatible boolean
-	metadata: text("metadata"),
-	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
-	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-});
+// Monitor configuration is versioned at the Account's accounting write boundary.
+const LedgerAccountBalanceMonitorsTable = pgTable(
+	"ledger_account_balance_monitors",
+	{
+		id: text("id").primaryKey(),
+		organizationId: text("organization_id").notNull(),
+		ledgerId: text("ledger_id").notNull(),
+		accountId: text("account_id").notNull(),
+		description: text("description"),
+		alertCondition: jsonb("alert_condition").$type<AlertCondition>().notNull(),
+		webhookUrl: text("webhook_url").notNull(),
+		webhookToken: text("webhook_token").notNull(),
+		metadata: text("metadata"),
+		lockVersion: integer("lock_version").notNull().default(1),
+		deletedAt: timestamp("deleted_at", { withTimezone: true }),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => [
+		foreignKey({
+			name: "balance_monitor_account_scope_fk",
+			columns: [table.organizationId, table.ledgerId, table.accountId],
+			foreignColumns: [
+				LedgerAccountsTable.organizationId,
+				LedgerAccountsTable.ledgerId,
+				LedgerAccountsTable.id,
+			],
+		}),
+		index("balance_monitors_account_idx").on(table.accountId),
+	]
+);
 type LedgerAccountBalanceMonitorRow = typeof LedgerAccountBalanceMonitorsTable.$inferSelect;
-type LedgerAccountBalanceMonitorInsertRow = Required<
-	typeof LedgerAccountBalanceMonitorsTable.$inferInsert
+type LedgerAccountBalanceMonitorInsertRow = typeof LedgerAccountBalanceMonitorsTable.$inferInsert;
+type MonitorConfiguration = Pick<
+	LedgerAccountBalanceMonitorRow,
+	"description" | "alertCondition" | "webhookUrl" | "webhookToken" | "metadata"
 >;
+const BalanceMonitorRevisionsTable = pgTable(
+	"balance_monitor_revisions",
+	{
+		monitorId: text("monitor_id")
+			.notNull()
+			.references(() => LedgerAccountBalanceMonitorsTable.id, { onDelete: "cascade" }),
+		version: integer("version").notNull(),
+		accountId: text("account_id").notNull(),
+		startVersion: integer("start_version").notNull(),
+		endVersion: integer("end_version"),
+		configuration: jsonb("configuration").$type<MonitorConfiguration>().notNull(),
+	},
+	table => [
+		primaryKey({ columns: [table.monitorId, table.version] }),
+		index("balance_monitor_revisions_account_idx").on(table.accountId, table.startVersion),
+	]
+);
+const BalanceMonitorOutboxTable = pgTable(
+	"balance_monitor_outbox",
+	{
+		id: text("id").primaryKey(),
+		organizationId: text("organization_id").notNull(),
+		ledgerId: text("ledger_id").notNull(),
+		accountId: text("account_id").notNull(),
+		accountVersion: integer("account_version").notNull(),
+		transactionId: text("transaction_id").notNull(),
+		occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+		currencyCode: text("currency_code").notNull(),
+		before: jsonb("before").$type<BalanceSnapshot>().notNull(),
+		after: jsonb("after").$type<BalanceSnapshot>().notNull(),
+		claimToken: text("claim_token"),
+		claimUntil: timestamp("claim_until", { withTimezone: true }),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => [
+		unique("balance_monitor_event_account_version_unique").on(table.accountId, table.accountVersion),
+		index("balance_monitor_outbox_claim_idx").on(table.claimUntil, table.created),
+	]
+);
 
 // Account Statements: Periodic balance snapshots and statements
 const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
@@ -650,6 +718,8 @@ export {
 	LedgerAccountSettlementsTable,
 	LedgerAccountSettlementEntriesTable,
 	schemaRelations,
+	BalanceMonitorRevisionsTable,
+	BalanceMonitorOutboxTable,
 	// Enums
 	ledgerNormalBalance,
 	ledgerTransactionStatus,
@@ -657,6 +727,7 @@ export {
 	ledgerSettlementStatus,
 };
 export type {
+	MonitorConfiguration,
 	LedgerAccountInsertRow,
 	LedgerAccountRow,
 	LedgerAccountBalanceMonitorInsertRow,

@@ -1,7 +1,6 @@
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
-import type { Metadata } from "@/lib/utils";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
@@ -12,9 +11,9 @@ import {
 	newLedgerID,
 	newOrgID,
 	type LedgerAccountBalanceMonitorID,
-	type LedgerAccountID,
 } from "@/repo/entities/types";
 import {
+	BalanceMonitorRevisionsTable,
 	LedgerAccountBalanceMonitorsTable,
 	LedgerAccountsTable,
 	LedgersTable,
@@ -22,10 +21,7 @@ import {
 } from "@/repo/schema";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
-import {
-	LedgerAccountBalanceMonitorPersistenceDecodingFailure,
-	LedgerAccountBalanceMonitorPersistenceFailure,
-} from "./LedgerAccountBalanceMonitorErrors";
+import { LedgerAccountBalanceMonitorPersistenceDecodingFailure } from "./LedgerAccountBalanceMonitorErrors";
 import {
 	type LedgerAccountBalanceMonitorRepo,
 	LedgerAccountBalanceMonitorRepoTag,
@@ -33,27 +29,6 @@ import {
 } from "./LedgerAccountBalanceMonitorRepo";
 
 const applicationTime = DateTime.fromISO("2026-08-29T10:15:30.000Z", { zone: "utc" });
-
-const monitor = (
-	accountId: LedgerAccountID,
-	overrides: {
-		id?: LedgerAccountBalanceMonitorID;
-		description?: string;
-		metadata?: Metadata;
-		updated?: DateTime;
-	} = {}
-) =>
-	LedgerAccountBalanceMonitor.fromRequest(
-		overrides.id ?? newLedgerAccountBalanceMonitorID(),
-		accountId,
-		{
-			accountId: accountId.toString(),
-			description: overrides.description,
-			alertCondition: [],
-			metadata: overrides.metadata,
-		},
-		overrides.updated ?? applicationTime
-	);
 
 describe("LedgerAccountBalanceMonitorRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
@@ -116,182 +91,203 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		}
 	});
 
-	it("preserves created-descending list order and pagination without a tie-breaker", async () => {
-		const db = database.db;
-		const ids = [
-			newLedgerAccountBalanceMonitorID(),
-			newLedgerAccountBalanceMonitorID(),
-			newLedgerAccountBalanceMonitorID(),
-		];
-		await db.insert(LedgerAccountBalanceMonitorsTable).values(
-			ids.map((id, index) => ({
-				id: id.toString(),
-				accountId: accountIds[0].toString(),
-				name: `Ordered ${index}`,
-				created: new Date(`9999-12-31T23:5${7 + index}:00.000Z`),
-			}))
-		);
-
-		const page = await runtime.runPromise(repository.listMonitors({ offset: 1, limit: 1 }));
-
-		expect(page.map(value => value.id.toString())).toEqual([ids[1].toString()]);
-	});
-
-	it.each([
-		{
-			label: "stored optional values",
-			description: "Low balance",
-			metadata: { team: "treasury" },
+	const scope = {
+		organizationId: organizationId.toString(),
+		ledgerId: ledgerId.toString(),
+		accountId: accountIds[0].toString(),
+	};
+	const request = {
+		alertCondition: {
+			mode: "all" as const,
+			conditions: [{ balanceType: "posted" as const, operator: "<" as const, value: 100 }],
 		},
-		{ label: "omitted optional values", description: undefined, metadata: undefined },
-	])("creates, gets, and deletes $label", async ({ description, metadata }) => {
-		const record = monitor(accountIds[0], { description, metadata });
-		const created = await runtime.runPromise(repository.createMonitor(record));
-
-		expect(created.description).toBe(description);
-		expect(created.metadata).toEqual(metadata);
-		expect(created.updated).toEqual(applicationTime);
-		expect(created.created.toMillis()).toBeGreaterThan(applicationTime.toMillis());
-		expect(Option.getOrUndefined(await runtime.runPromise(repository.getMonitor(record.id)))).toEqual(
-			created
+		webhook: { url: "https://example.com/hook", bearerToken: "secret" },
+	};
+	const make = () =>
+		Effect.runSync(
+			LedgerAccountBalanceMonitor.fromRequest(
+				newLedgerAccountBalanceMonitorID(),
+				scope,
+				request,
+				applicationTime,
+				"ciphertext"
+			)
 		);
-		expect(await runtime.runPromise(repository.deleteMonitor(record.id))).toSatisfy(Option.isSome);
-	});
-
-	it("updates the existing assignments and application-supplied time", async () => {
-		const original = monitor(accountIds[0], {
-			description: "Before",
-			metadata: { version: "before" },
+	it("creates a baseline and versions edits and deletion without changing Account balances or version", async () => {
+		const original = make();
+		const before = (
+			await database.db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, scope.accountId))
+		)[0];
+		const created = await runtime.runPromise(repository.createMonitor(original));
+		expect(created.toResponse()).toMatchObject({
+			lockVersion: 1,
+			alertCondition: request.alertCondition,
 		});
-		await runtime.runPromise(repository.createMonitor(original));
-		const updatedAt = DateTime.fromISO("2026-08-29T12:30:00.000Z", { zone: "utc" });
-		const replacement = monitor(accountIds[1], {
-			id: original.id,
-			description: "After",
-			metadata: { version: "after" },
-			updated: updatedAt,
-		});
-
+		let account = (
+			await database.db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, scope.accountId))
+		)[0];
+		expect(account).toEqual({ ...before, balanceMonitorCount: before.balanceMonitorCount + 1 });
+		await database.db
+			.update(LedgerAccountsTable)
+			.set({ lockVersion: before.lockVersion + 2 })
+			.where(eq(LedgerAccountsTable.id, scope.accountId));
 		const updated = Option.getOrThrow(
-			await runtime.runPromise(repository.updateMonitor(original.id, replacement))
+			await runtime.runPromise(
+				repository.updateMonitor(
+					scope,
+					created.id,
+					{ webhookUrl: "https://example.com/changed" },
+					applicationTime.plus({ hours: 1 }).toJSDate()
+				)
+			)
 		);
-
-		expect(updated).toMatchObject({
-			id: original.id,
-			accountId: accountIds[1],
-			name: "After",
-			description: "After",
-			alertThreshold: 0,
-			isActive: true,
-			metadata: { version: "after" },
-			updated: updatedAt,
+		expect(updated.row).toMatchObject({
+			lockVersion: 2,
+			webhookToken: "ciphertext",
+			created: created.row.created,
 		});
-	});
-
-	it("preserves stored optional columns when update fields are omitted", async () => {
-		const original = monitor(accountIds[0], {
-			description: "Keep description",
-			metadata: { keep: "metadata" },
-		});
-		await runtime.runPromise(repository.createMonitor(original));
-		const replacement = monitor(accountIds[0], { id: original.id });
-
-		const updated = Option.getOrThrow(
-			await runtime.runPromise(repository.updateMonitor(original.id, replacement))
+		const versions = await database.db
+			.select()
+			.from(BalanceMonitorRevisionsTable)
+			.where(eq(BalanceMonitorRevisionsTable.monitorId, created.row.id))
+			.orderBy(BalanceMonitorRevisionsTable.version);
+		expect(versions).toMatchObject([
+			{
+				version: 1,
+				startVersion: before.lockVersion,
+				endVersion: before.lockVersion + 2,
+				configuration: { webhookUrl: request.webhook.url },
+			},
+			{
+				version: 2,
+				startVersion: before.lockVersion + 2,
+				// oxlint-disable-next-line unicorn/no-null -- PostgreSQL nullable columns use null.
+				endVersion: null,
+				configuration: { webhookUrl: "https://example.com/changed" },
+			},
+		]);
+		await runtime.runPromise(
+			repository.deleteMonitor(scope, created.id, applicationTime.plus({ hours: 2 }).toJSDate())
 		);
-
-		expect(updated.description).toBe("Keep description");
-		expect(updated.metadata).toEqual({ keep: "metadata" });
-	});
-
-	it("decodes persisted values independently of request defaults", async () => {
-		const db = database.db;
-		const id = newLedgerAccountBalanceMonitorID();
-		const created = new Date("2026-08-28T09:00:00.000Z");
-		await db.insert(LedgerAccountBalanceMonitorsTable).values({
-			id: id.toString(),
-			accountId: accountIds[0].toString(),
-			name: "Stored name",
-			alertThreshold: "12.3400",
-			isActive: 0,
-			created,
-			updated: applicationTime.toJSDate(),
-			metadata: JSON.stringify({ team: "treasury" }),
-		});
-		const found = Option.getOrThrow(await runtime.runPromise(repository.getMonitor(id)));
-		expect(found).toMatchObject({
-			id,
-			accountId: accountIds[0],
-			name: "Stored name",
-			description: undefined,
-			alertThreshold: 12.34,
-			isActive: false,
-			metadata: { team: "treasury" },
-			updated: applicationTime,
-		});
-		expect(found.created.toJSDate()).toEqual(created);
-	});
-
-	it.each([
-		// oxlint-disable-next-line unicorn/no-null -- PostgreSQL represents absent metadata as NULL.
-		null,
-		"not-json",
-		"null",
-		"[]",
-		"1",
-		'{"count":1}',
-	])("treats invalid or absent stored metadata %s as absent", async metadata => {
-		const db = database.db;
-		const id = newLedgerAccountBalanceMonitorID();
-		await db.insert(LedgerAccountBalanceMonitorsTable).values({
-			id: id.toString(),
-			accountId: accountIds[0].toString(),
-			name: "Metadata fallback",
-			metadata,
-		});
-		const found = Option.getOrThrow(await runtime.runPromise(repository.getMonitor(id)));
-		expect(found.metadata).toBeUndefined();
-	});
-
-	it("returns explicit absence for missing get, update, and delete", async () => {
-		const id = newLedgerAccountBalanceMonitorID();
-		const replacement = monitor(accountIds[0], { id });
-		const [found, updated, deleted] = await runtime.runPromise(
-			Effect.all([
-				repository.getMonitor(id),
-				repository.updateMonitor(id, replacement),
-				repository.deleteMonitor(id),
-			])
+		expect(Option.isNone(await runtime.runPromise(repository.getMonitor(scope, created.id)))).toBe(
+			true
 		);
-
-		expect(Option.isNone(found)).toBe(true);
-		expect(Option.isNone(updated)).toBe(true);
-		expect(Option.isNone(deleted)).toBe(true);
+		account = (
+			await database.db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, scope.accountId))
+		)[0];
+		expect(account.balanceMonitorCount).toBe(before.balanceMonitorCount);
+		expect(account.lockVersion).toBe(before.lockVersion + 2);
+		const deletedVersions = await database.db
+			.select()
+			.from(BalanceMonitorRevisionsTable)
+			.where(eq(BalanceMonitorRevisionsTable.monitorId, created.row.id));
+		expect(deletedVersions.every(revision => revision.endVersion === before.lockVersion + 2)).toBe(
+			true
+		);
 	});
-
-	it("maps PostgreSQL failures to the sanitized persistence error", async () => {
-		const missingAccount = newLedgerAccountID();
+	it("isolates Organization, Ledger and Account reads and mutations", async () => {
+		const record = await runtime.runPromise(repository.createMonitor(make()));
+		const otherAccount = { ...scope, accountId: accountIds[1].toString() };
+		expect(
+			await runtime.runPromise(repository.listMonitors(otherAccount, { offset: 0, limit: 20 }))
+		).toEqual([]);
+		expect(
+			Option.isNone(await runtime.runPromise(repository.getMonitor(otherAccount, record.id)))
+		).toBe(true);
+		expect(
+			Option.isNone(
+				await runtime.runPromise(
+					repository.updateMonitor(otherAccount, record.id, { description: "wrong" }, new Date())
+				)
+			)
+		).toBe(true);
+		expect(
+			Option.isNone(
+				await runtime.runPromise(repository.deleteMonitor(otherAccount, record.id, new Date()))
+			)
+		).toBe(true);
+		for (const invalid of [
+			{ ...scope, organizationId: newOrgID().toString() },
+			{ ...scope, ledgerId: newLedgerID().toString() },
+		]) {
+			expect(
+				await runtime.runPromise(Effect.flip(repository.getMonitor(invalid, record.id)))
+			).toMatchObject({ statusCode: 404 });
+			expect(
+				await runtime.runPromise(
+					Effect.flip(repository.listMonitors(invalid, { offset: 0, limit: 20 }))
+				)
+			).toMatchObject({ statusCode: 404 });
+		}
+	});
+	it("serializes concurrent edits into complete revisions and deletes only once", async () => {
+		const record = await runtime.runPromise(repository.createMonitor(make()));
+		const edits = await Promise.all(
+			["first", "second"].map(description =>
+				runtime.runPromise(repository.updateMonitor(scope, record.id, { description }, new Date()))
+			)
+		);
+		expect(edits.map(edit => Option.getOrThrow(edit).row.lockVersion).sort()).toEqual([2, 3]);
+		const deleted = await Promise.all(
+			[1, 2].map(() => runtime.runPromise(repository.deleteMonitor(scope, record.id, new Date())))
+		);
+		expect(deleted.filter(value => Option.isSome(value))).toHaveLength(1);
+	});
+	it("preserves created-descending pagination", async () => {
+		const rows = [0, 1, 2].map(index => ({ ...make().row, created: new Date(999999999000 + index) }));
+		await database.db.insert(LedgerAccountBalanceMonitorsTable).values(rows);
+		const all = await runtime.runPromise(repository.listMonitors(scope, { offset: 0, limit: 100 }));
+		const page = await runtime.runPromise(repository.listMonitors(scope, { offset: 1, limit: 1 }));
+		expect(page[0].row.id).toBe(all[1].row.id);
+	});
+	it("returns explicit absence for missing monitors", async () => {
+		const id = newLedgerAccountBalanceMonitorID();
+		expect(Option.isNone(await runtime.runPromise(repository.getMonitor(scope, id)))).toBe(true);
+		expect(
+			Option.isNone(await runtime.runPromise(repository.updateMonitor(scope, id, {}, new Date())))
+		).toBe(true);
+		expect(
+			Option.isNone(await runtime.runPromise(repository.deleteMonitor(scope, id, new Date())))
+		).toBe(true);
+	});
+	it("rolls back duplicate creates without changing the count or revisions", async () => {
+		const record = await runtime.runPromise(repository.createMonitor(make()));
+		const before = (
+			await database.db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, scope.accountId))
+		)[0];
+		const error = await runtime.runPromise(Effect.flip(repository.createMonitor(record)));
+		expect(error).toMatchObject({ statusCode: 500, message: "Internal Server Error" });
+		const after = (
+			await database.db
+				.select()
+				.from(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, scope.accountId))
+		)[0];
+		expect(after).toEqual(before);
+		const versions = await database.db
+			.select()
+			.from(BalanceMonitorRevisionsTable)
+			.where(eq(BalanceMonitorRevisionsTable.monitorId, record.row.id));
+		expect(versions).toHaveLength(1);
+	});
+	it("maps malformed stored IDs to sanitized decoding failures", async () => {
+		const row = { ...make().row, id: "invalid" };
+		await database.db.insert(LedgerAccountBalanceMonitorsTable).values(row);
 		const error = await runtime.runPromise(
-			Effect.flip(repository.createMonitor(monitor(missingAccount)))
+			Effect.flip(repository.getMonitor(scope, row.id as unknown as LedgerAccountBalanceMonitorID))
 		);
-
-		expect(error).toBeInstanceOf(LedgerAccountBalanceMonitorPersistenceFailure);
-		expect(error.message).toBe("Internal Server Error");
-	});
-
-	it("maps undecodable rows to the sanitized decoding error", async () => {
-		const invalidId = "not-a-balance-monitor";
-		const db = database.db;
-		await db.insert(LedgerAccountBalanceMonitorsTable).values({
-			id: invalidId,
-			accountId: accountIds[0].toString(),
-			name: "Malformed",
-		});
-
-		const error = await runtime.runPromise(
-			Effect.flip(repository.getMonitor(invalidId as unknown as LedgerAccountBalanceMonitorID))
-		);
-
 		expect(error).toBeInstanceOf(LedgerAccountBalanceMonitorPersistenceDecodingFailure);
 		expect(error.message).toBe("Internal Server Error");
 	});

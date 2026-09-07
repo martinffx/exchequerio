@@ -34,6 +34,7 @@ const accountRow: LedgerAccountRow = {
 	availableCredits: 10,
 	availableDebits: 25,
 	lockVersion: 1,
+	balanceMonitorCount: 0,
 	metadata: JSON.stringify({ externalId: "cash-42" }),
 	created: new Date("2026-08-09T10:00:00.000Z"),
 	updated: new Date("2026-08-09T11:00:00.000Z"),

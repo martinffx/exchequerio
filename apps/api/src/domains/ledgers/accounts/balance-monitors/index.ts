@@ -3,9 +3,10 @@ import { Layer } from "effect";
 import { ledgerAccountBalanceMonitorRepoLayer } from "./LedgerAccountBalanceMonitorRepo";
 import { ledgerAccountBalanceMonitorServiceLayer } from "./LedgerAccountBalanceMonitorService";
 
-const balanceMonitorLayer = ledgerAccountBalanceMonitorServiceLayer.pipe(
-	Layer.provide(ledgerAccountBalanceMonitorRepoLayer)
-);
+const balanceMonitorLayer = (encryptionKey: string) =>
+	ledgerAccountBalanceMonitorServiceLayer(encryptionKey).pipe(
+		Layer.provide(ledgerAccountBalanceMonitorRepoLayer)
+	);
 
 export { LedgerAccountBalanceMonitorRoutes } from "./LedgerAccountBalanceMonitorRoutes";
 export type {

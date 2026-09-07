@@ -1,3 +1,4 @@
+import { AccountItemParameters } from "../AccountSchema";
 import { Type } from "@sinclair/typebox";
 import { Effect, Result } from "effect";
 import type { FastifyPluginAsync } from "fastify";
@@ -18,6 +19,7 @@ import {
 	type LedgerAccountBalanceMonitorListQuery,
 	LedgerAccountBalanceMonitorListQuerySchema,
 	LedgerAccountBalanceMonitorRequest,
+	LedgerAccountBalanceMonitorUpdateRequest,
 	LedgerAccountBalanceMonitorResponse,
 } from "./LedgerAccountBalanceMonitorSchema";
 import { LedgerAccountBalanceMonitorServiceTag } from "./LedgerAccountBalanceMonitorService";
@@ -33,7 +35,7 @@ const commonErrors = {
 };
 
 const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
-	server.get<{ Querystring: LedgerAccountBalanceMonitorListQuery }>(
+	server.get<{ Params: AccountItemParameters; Querystring: LedgerAccountBalanceMonitorListQuery }>(
 		"/",
 		{
 			preHandler: [server.hasPermissions(["ledger:account:balance_monitor:read"])],
@@ -42,13 +44,22 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 				tags,
 				summary: "List Ledger Account Balance Monitors",
 				description: "List Ledger Account Balance Monitors",
+				params: AccountItemParameters,
 				querystring: LedgerAccountBalanceMonitorListQuerySchema,
 				response: { 200: Type.Array(LedgerAccountBalanceMonitorResponse), ...commonErrors },
 			},
 		},
 		async request => {
 			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.listLedgerAccountBalanceMonitors(request.query.offset, request.query.limit)
+				service.listLedgerAccountBalanceMonitors(
+					{
+						organizationId: request.token.orgId.toString(),
+						ledgerId: request.params.ledgerId,
+						accountId: request.params.accountId,
+					},
+					request.query.offset,
+					request.query.limit
+				)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
@@ -79,7 +90,14 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 		},
 		async request => {
 			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.getLedgerAccountBalanceMonitor(request.params.balanceMonitorId)
+				service.getLedgerAccountBalanceMonitor(
+					{
+						organizationId: request.token.orgId.toString(),
+						ledgerId: request.params.ledgerId,
+						accountId: request.params.accountId,
+					},
+					request.params.balanceMonitorId
+				)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
@@ -91,7 +109,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 		}
 	);
 
-	server.post<{ Body: LedgerAccountBalanceMonitorRequest }>(
+	server.post<{ Params: AccountItemParameters; Body: LedgerAccountBalanceMonitorRequest }>(
 		"/",
 		{
 			preHandler: [server.hasPermissions(["ledger:account:balance_monitor:write"])],
@@ -100,17 +118,26 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 				tags,
 				summary: "Create Ledger Account Balance Monitor",
 				description: "Create Ledger Account Balance Monitor",
+				params: AccountItemParameters,
 				body: LedgerAccountBalanceMonitorRequest,
 				response: {
 					200: LedgerAccountBalanceMonitorResponse,
 					409: ConflictProblem,
+					404: NotFoundProblem,
 					...commonErrors,
 				},
 			},
 		},
 		async request => {
 			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.createLedgerAccountBalanceMonitor(request.body)
+				service.createLedgerAccountBalanceMonitor(
+					{
+						organizationId: request.token.orgId.toString(),
+						ledgerId: request.params.ledgerId,
+						accountId: request.params.accountId,
+					},
+					request.body
+				)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
@@ -124,7 +151,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 
 	server.put<{
 		Params: LedgerAccountBalanceMonitorIdParameters;
-		Body: LedgerAccountBalanceMonitorRequest;
+		Body: LedgerAccountBalanceMonitorUpdateRequest;
 	}>(
 		"/:balanceMonitorId",
 		{
@@ -135,18 +162,26 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 				summary: "Update Ledger Account Balance Monitor",
 				description: "Update Ledger Account Balance Monitor",
 				params: LedgerAccountBalanceMonitorIdParameters,
-				body: LedgerAccountBalanceMonitorRequest,
+				body: LedgerAccountBalanceMonitorUpdateRequest,
 				response: {
 					200: LedgerAccountBalanceMonitorResponse,
-					404: NotFoundProblem,
 					409: ConflictProblem,
+					404: NotFoundProblem,
 					...commonErrors,
 				},
 			},
 		},
 		async request => {
 			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.updateLedgerAccountBalanceMonitor(request.params.balanceMonitorId, request.body)
+				service.updateLedgerAccountBalanceMonitor(
+					{
+						organizationId: request.token.orgId.toString(),
+						ledgerId: request.params.ledgerId,
+						accountId: request.params.accountId,
+					},
+					request.params.balanceMonitorId,
+					request.body
+				)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
@@ -170,15 +205,22 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 				params: LedgerAccountBalanceMonitorIdParameters,
 				response: {
 					200: {},
-					404: NotFoundProblem,
 					409: ConflictProblem,
+					404: NotFoundProblem,
 					...commonErrors,
 				},
 			},
 		},
 		async request => {
 			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.deleteLedgerAccountBalanceMonitor(request.params.balanceMonitorId)
+				service.deleteLedgerAccountBalanceMonitor(
+					{
+						organizationId: request.token.orgId.toString(),
+						ledgerId: request.params.ledgerId,
+						accountId: request.params.accountId,
+					},
+					request.params.balanceMonitorId
+				)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {

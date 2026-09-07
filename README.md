@@ -16,6 +16,7 @@ Real-time double-entry ledger systems for PSPs, Marketplaces, and anyone who nee
 
 pnpm install
 cp apps/api/.env.example apps/api/.env
+# Generate with openssl rand -base64 32 and set BALANCE_MONITOR_ENCRYPTION_KEY in apps/api/.env
 pnpm run docker:up
 pnpm run dev
 ```
@@ -35,7 +36,7 @@ uses `postgresql://postgres:password@localhost:5432/ledger?schema=public` and
 pnpm run dev
 
 # Start specific app
-pnpm run dev:api      # API only
+pnpm run dev:api      # API and balance-monitor worker
 pnpm run dev:web      # Web only
 pnpm run dev:docs     # Docs only
 ```
@@ -124,7 +125,7 @@ pnpm --filter=@exchequerio/docs build
 # Start PostgreSQL and Valkey
 pnpm run docker:up
 
-# Build and start PostgreSQL, Valkey, and the API
+# Build and start PostgreSQL, Valkey, API, and worker (export BALANCE_MONITOR_ENCRYPTION_KEY first)
 pnpm run docker:up:api
 
 # Stop every profile
@@ -152,6 +153,7 @@ pnpm run ci
 
 - [Getting Started](AGENTS.md) — Full development guide
 - [Engineering Standards](docs/standards/README.md) — Shared standards and app addenda
+- [Balance Monitors](apps/api/docs/product/balance-monitors.md) — Rules, webhook delivery, and worker operations
 - [Ledger API Standards](docs/standards/api.md) — Backend architecture and development
 - [Customer Portal Standards](docs/standards/web.md) — Frontend architecture and development
 - [Documentation Standards](docs/standards/documentation.md) — Public content guidance

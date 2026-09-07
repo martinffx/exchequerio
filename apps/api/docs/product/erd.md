@@ -132,3 +132,16 @@ for each new action and reuse it only for retries. Claims store resource IDs for
 claims receive a bounded wait followed by retryable 409; unavailable storage returns 503. Domain
 services explicitly claim, execute or replay, and complete or release; the idempotency service does
 not execute business operations.
+
+## Balance monitoring
+
+An Account owns Balance Monitors through a scoped Organization/Ledger/Account foreign key.
+`balance_monitor_count` controls capture without changing the Account's accounting version.
+Each monitor has immutable `balance_monitor_revisions`, identified by monitor ID and version.
+A revision applies after `start_version` through `end_version` (inclusive), or indefinitely while
+its end is unset. An Account lock serializes these boundaries with accounting writes.
+
+`balance_monitor_outbox` stores one committed before/after snapshot per changed monitored Account
+version. It keeps its own identity and ownership fields while the relay hands off self-contained
+jobs. Retired revisions remain until their applicable outbox events have been handed off.
+See [Balance monitors](./balance-monitors.md) for the API, delivery, and operational contracts.

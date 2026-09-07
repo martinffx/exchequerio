@@ -1,7 +1,7 @@
 {
 	"name": "@exchequerio/api",
-	"private": true,
 	"version": "0.0.0",
+	"private": true,
 	"type": "module",
 	"scripts": {
 		"build": "tsdown",
@@ -18,7 +18,10 @@
 		"format:check": "oxfmt --check ./src ./test/bench",
 		"types": "tsc --noEmit",
 		"db:gen": "drizzle-kit generate",
-		"db:migrate": "dotenvx run -- drizzle-kit migrate"
+		"db:migrate": "dotenvx run -- drizzle-kit migrate",
+		"dev:worker": "dotenvx run -- tsx watch ./src/worker.ts",
+		"start:worker": "node ./dist/worker.mjs",
+		"monitor:jobs": "dotenvx run -- tsx ./src/monitor-jobs.ts"
 	},
 	"dependencies": {
 		"@effect/sql-pg": "4.0.0-rc.112",
@@ -32,6 +35,7 @@
 		"@sinclair/typebox": "^0.34.41",
 		"drizzle-orm": "1.0.0-rc.5-ab785fc",
 		"effect": "4.0.0-rc.112",
+		"effect-mq": "0.7.0",
 		"fast-jwt": "^6.0.2",
 		"fastify": "^5.6.2",
 		"ioredis": "^6.0.0",

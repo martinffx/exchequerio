@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
 
@@ -19,6 +20,7 @@ import type {
 	OrgID,
 } from "@/repo/entities/types";
 import {
+	BalanceMonitorOutboxTable,
 	LedgerAccountSettlementsTable,
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
@@ -346,7 +348,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				transaction.organizationId,
 				transaction.ledgerId,
 				accounts,
-				updated
+				updated,
+				transaction.id
 			);
 			return transaction;
 		});
@@ -562,7 +565,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 					);
 					yield* this.writeTransaction(tx, current, next);
 					yield* this.writeEntryStatus(tx, next);
-					yield* this.writeAccounts(tx, organizationId, ledgerId, accounts, updated);
+					yield* this.writeAccounts(tx, organizationId, ledgerId, accounts, updated, next.id);
 					return next;
 				})
 			)
@@ -618,7 +621,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			yield* this.db.transaction(tx =>
 				this.writeTransaction(tx, current, transaction).pipe(
 					Effect.andThen(this.replaceEntries(tx, transaction, entries)),
-					Effect.andThen(this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts))
+					Effect.andThen(
+						this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts, transaction.id)
+					)
 				)
 			);
 
@@ -668,7 +673,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			yield* this.db.transaction(tx =>
 				this.writeTransaction(tx, current, transaction).pipe(
 					Effect.andThen(this.writeEntryStatus(tx, transaction)),
-					Effect.andThen(this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts))
+					Effect.andThen(
+						this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts, transaction.id)
+					)
 				)
 			);
 
@@ -718,7 +725,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			yield* this.db.transaction(tx =>
 				this.writeTransaction(tx, current, transaction).pipe(
 					Effect.andThen(this.writeEntryStatus(tx, transaction)),
-					Effect.andThen(this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts))
+					Effect.andThen(
+						this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts, transaction.id)
+					)
 				)
 			);
 
@@ -947,40 +956,89 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accounts: AccountsById,
-		updatedAccounts: AccountsById
+		updatedAccounts: AccountsById,
+		transactionId: LedgerTransactionID
 	) {
-		return Effect.forEach(
-			[...accounts.entries()].sort(([left], [right]) => left.localeCompare(right)),
-			([accountId, account]) => {
-				const updated = updatedAccounts.get(accountId)!;
-				return tx
-					.update(LedgerAccountsTable)
-					.set({
-						pendingAmount: updated.pendingAmount,
-						postedAmount: updated.postedAmount,
-						availableAmount: updated.availableAmount,
-						pendingCredits: updated.pendingCredits,
-						pendingDebits: updated.pendingDebits,
-						postedCredits: updated.postedCredits,
-						postedDebits: updated.postedDebits,
-						availableCredits: updated.availableCredits,
-						availableDebits: updated.availableDebits,
-						lockVersion: account.lockVersion + 1,
-						updated: updated.updated.toJSDate(),
-					})
-					.where(
-						and(
-							eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-							eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-							eq(LedgerAccountsTable.id, accountId),
-							eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+		return Effect.gen(function* () {
+			const events: (typeof BalanceMonitorOutboxTable.$inferInsert)[] = [];
+			yield* Effect.forEach(
+				[...accounts.entries()].sort(([left], [right]) => left.localeCompare(right)),
+				([accountId, account]) => {
+					const updated = updatedAccounts.get(accountId)!;
+					return tx
+						.update(LedgerAccountsTable)
+						.set({
+							pendingAmount: updated.pendingAmount,
+							postedAmount: updated.postedAmount,
+							availableAmount: updated.availableAmount,
+							pendingCredits: updated.pendingCredits,
+							pendingDebits: updated.pendingDebits,
+							postedCredits: updated.postedCredits,
+							postedDebits: updated.postedDebits,
+							availableCredits: updated.availableCredits,
+							availableDebits: updated.availableDebits,
+							lockVersion: account.lockVersion + 1,
+							updated: updated.updated.toJSDate(),
+						})
+						.where(
+							and(
+								eq(LedgerAccountsTable.organizationId, organizationId.toString()),
+								eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
+								eq(LedgerAccountsTable.id, accountId),
+								eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+							)
 						)
-					)
-					.returning({ id: LedgerAccountsTable.id })
-					.pipe(Effect.flatMap(rows => requireAccountWrite(rows.length === 1)));
-			},
-			{ concurrency: 1, discard: true }
-		);
+						.returning({
+							id: LedgerAccountsTable.id,
+							monitorCount: LedgerAccountsTable.balanceMonitorCount,
+						})
+						.pipe(
+							Effect.flatMap(rows =>
+								requireAccountWrite(rows.length === 1).pipe(
+									Effect.andThen(
+										Effect.sync(() => {
+											if (!rows[0]!.monitorCount) return;
+											const before = {
+												posted: account.postedAmount,
+												pending: account.pendingAmount,
+												availableBalance: account.availableAmount,
+											};
+											const after = {
+												posted: updated.postedAmount,
+												pending: updated.pendingAmount,
+												availableBalance: updated.availableAmount,
+											};
+											if (
+												before.posted === after.posted &&
+												before.pending === after.pending &&
+												before.availableBalance === after.availableBalance
+											)
+												return;
+											events.push({
+												id: randomUUID(),
+												organizationId: organizationId.toString(),
+												ledgerId: ledgerId.toString(),
+												accountId,
+												accountVersion: account.lockVersion + 1,
+												transactionId: transactionId.toString(),
+												occurredAt: updated.updated.toJSDate(),
+												currencyCode: account.currency,
+												before,
+												after,
+											});
+										})
+									)
+								)
+							)
+						);
+				},
+				{ concurrency: 1, discard: true }
+			);
+			if (events.length > 0) {
+				yield* tx.insert(BalanceMonitorOutboxTable).values(events);
+				yield* tx.execute(sql`select pg_notify('balance_monitor_outbox', '')`);
+			}
+		});
 	}
 }
 

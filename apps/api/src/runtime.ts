@@ -78,7 +78,7 @@ const makeServerRuntimeLayer = (
 		ledgerLayer,
 		accountWithLedger,
 		settlementWithServices,
-		balanceMonitorLayer,
+		balanceMonitorLayer(config.balanceMonitorEncryptionKey),
 		ledgerAccountStatementLayer,
 		transactionWithLedger,
 		ledgerAccountCategory,
