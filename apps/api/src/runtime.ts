@@ -4,6 +4,10 @@ import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag
 import { ledgerLayer, type LedgerService } from "@/domains/ledgers";
 import { accountLayer, type AccountService } from "@/domains/ledgers/accounts";
 import {
+	balanceMonitorLayer,
+	type LedgerAccountBalanceMonitorService,
+} from "@/domains/ledgers/accounts/balance-monitors";
+import {
 	settlementLayer,
 	type LedgerAccountSettlementService,
 } from "@/domains/ledgers/settlements";
@@ -20,6 +24,7 @@ type ServerRuntimeServices =
 	| LedgerService
 	| AccountService
 	| LedgerAccountSettlementService
+	| LedgerAccountBalanceMonitorService
 	| TransactionService
 	| IdempotencyService
 	| OrganizationService;
@@ -56,6 +61,7 @@ const makeServerRuntimeLayer = (
 		ledgerLayer,
 		accountWithLedger,
 		settlementWithServices,
+		balanceMonitorLayer,
 		transactionWithLedger,
 		organizationLayer
 	).pipe(Layer.provideMerge(infrastructure));

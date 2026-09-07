@@ -5,15 +5,12 @@ import { Pool } from "pg";
 import { TypeID } from "typeid-js";
 import { Config } from "@/config";
 import { LedgerAccountEntity, LedgerEntity, OrganizationEntity } from "@/repo/entities";
-import type { LedgerAccountBalanceMonitorEntityOpts } from "@/repo/entities/LedgerAccountBalanceMonitorEntity";
-import { LedgerAccountBalanceMonitorEntity } from "@/repo/entities/LedgerAccountBalanceMonitorEntity";
 import type { LedgerAccountEntityOpts } from "@/repo/entities/LedgerAccountEntity";
 import type { LedgerAccountStatementEntityOpts } from "@/repo/entities/LedgerAccountStatementEntity";
 import { LedgerAccountStatementEntity } from "@/repo/entities/LedgerAccountStatementEntity";
 import type { LedgerEntityOpts } from "@/repo/entities/LedgerEntity";
 import type { OrgEntityOpts } from "@/repo/entities/OrganizationEntity";
 import type { LedgerID } from "@/repo/entities/types";
-import { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import { LedgerAccountCategoryRepo } from "./LedgerAccountCategoryRepo";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
 import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
@@ -64,7 +61,6 @@ function getRepos(): TestRepos {
 	const ledgerAccountRepo = new LedgerAccountRepo(db);
 	const ledgerAccountCategoryRepo = new LedgerAccountCategoryRepo(db);
 	const ledgerAccountStatementRepo = new LedgerAccountStatementRepo(db);
-	const ledgerAccountBalanceMonitorRepo = new LedgerAccountBalanceMonitorRepo(db);
 
 	repos = {
 		db,
@@ -73,7 +69,6 @@ function getRepos(): TestRepos {
 		ledgerAccountRepo,
 		ledgerAccountCategoryRepo,
 		ledgerAccountStatementRepo,
-		ledgerAccountBalanceMonitorRepo,
 	};
 
 	return repos;
@@ -159,38 +154,6 @@ function createLedgerAccountEntity(
 }
 
 /**
- * Creates a LedgerAccountBalanceMonitorEntity with sensible test defaults.
- *
- * @param options - Partial options to override defaults
- * @returns A new LedgerAccountBalanceMonitorEntity instance
- *
- * @example
- * ```typescript
- * const monitor = createLedgerAccountBalanceMonitorEntity({
- *   accountId: accountId,
- *   name: "Low Balance Alert",
- *   alertThreshold: 1000
- * });
- * ```
- */
-function createLedgerAccountBalanceMonitorEntity(
-	options: Partial<LedgerAccountBalanceMonitorEntityOpts> = {}
-): LedgerAccountBalanceMonitorEntity {
-	const now = new Date();
-	return new LedgerAccountBalanceMonitorEntity({
-		id: options.id ?? new TypeID("lbm"),
-		accountId: options.accountId ?? new TypeID("lat"),
-		name: options.name ?? "Test Balance Monitor",
-		description: options.description,
-		alertThreshold: options.alertThreshold ?? 0,
-		isActive: options.isActive ?? true,
-		metadata: options.metadata,
-		created: options.created ?? now,
-		updated: options.updated ?? now,
-	});
-}
-
-/**
  * Creates a LedgerAccountStatementEntity with sensible test defaults.
  *
  * @param options - Partial options to override defaults
@@ -230,6 +193,5 @@ export {
 	createOrganizationEntity,
 	createLedgerEntity,
 	createLedgerAccountEntity,
-	createLedgerAccountBalanceMonitorEntity,
 	createLedgerAccountStatementEntity,
 };

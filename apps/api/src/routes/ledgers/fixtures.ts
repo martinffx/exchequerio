@@ -1,7 +1,6 @@
 import { faker } from "@faker-js/faker";
 import { TypeID } from "typeid-js";
 import {
-	LedgerAccountBalanceMonitorEntity,
 	LedgerAccountCategoryEntity,
 	LedgerAccountEntity,
 	LedgerAccountStatementEntity,
@@ -130,39 +129,10 @@ function createLedgerAccountStatementFixture(
 	});
 }
 
-function createLedgerAccountBalanceMonitorFixture(
-	overrides?: Partial<{
-		id: TypeID<"lbm">;
-		accountId: TypeID<"lat">;
-		name: string;
-		description?: string;
-		alertThreshold: number;
-		isActive: boolean;
-		metadata?: Record<string, unknown>;
-		created: Date;
-		updated: Date;
-	}>
-): LedgerAccountBalanceMonitorEntity {
-	const now = new Date();
-	return new LedgerAccountBalanceMonitorEntity({
-		id: new TypeID("lbm"),
-		accountId: new TypeID("lat"),
-		name: faker.lorem.words(3),
-		description: faker.lorem.sentence(),
-		alertThreshold: 100000, // $1,000.00
-		isActive: true,
-		metadata: undefined,
-		created: now,
-		updated: now,
-		...overrides,
-	});
-}
-
 export {
 	createOrganizationFixture,
 	createLedgerFixture,
 	createLedgerAccountFixture,
 	createLedgerAccountCategoryFixture,
 	createLedgerAccountStatementFixture,
-	createLedgerAccountBalanceMonitorFixture,
 };

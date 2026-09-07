@@ -1,0 +1,3260 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LedgerAccountBalanceMonitorRoutes > creates with the existing 200 response 1`] = `
+{
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "alertCondition": [],
+  "balances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test balance monitor",
+  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "lockVersion": 0,
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes > gets through the Effect service and ignores parent path IDs 1`] = `
+{
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "alertCondition": [],
+  "balances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test balance monitor",
+  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "lockVersion": 0,
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes > lists through the Effect service with the existing defaults and response 1`] = `
+[
+  {
+    "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+    "alertCondition": [],
+    "balances": [
+      {
+        "amount": 0,
+        "balanceType": "pending",
+        "credits": 0,
+        "currency": "USD",
+        "currencyExponent": 2,
+        "debits": 0,
+      },
+      {
+        "amount": 0,
+        "balanceType": "posted",
+        "credits": 0,
+        "currency": "USD",
+        "currencyExponent": 2,
+        "debits": 0,
+      },
+      {
+        "amount": 0,
+        "balanceType": "availableBalance",
+        "credits": 0,
+        "currency": "USD",
+        "currencyExponent": 2,
+        "debits": 0,
+      },
+    ],
+    "created": "2025-01-01T00:00:00.000Z",
+    "description": "Test balance monitor",
+    "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+    "lockVersion": 0,
+    "updated": "2025-01-01T00:00:00.000Z",
+  },
+]
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI contract 1`] = `
+{
+  "paths": {
+    "/api/ledgers/{ledgerId}/accounts/{accountId}/balance-monitors/": {
+      "get": {
+        "description": "List Ledger Account Balance Monitors",
+        "operationId": "listLedgerAccountBalanceMonitors",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": true,
+            "schema": {
+              "default": 0,
+              "type": "number",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": true,
+            "schema": {
+              "default": 20,
+              "type": "number",
+            },
+          },
+          {
+            "in": "path",
+            "name": "ledgerId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+                    "properties": {
+                      "accountId": {
+                        "description": "The ledger account's ID",
+                        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                        "type": "string",
+                      },
+                      "alertCondition": {
+                        "items": {
+                          "properties": {
+                            "field": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "balance",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "created",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "updated",
+                                  ],
+                                  "type": "string",
+                                },
+                              ],
+                            },
+                            "operator": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "!=",
+                                  ],
+                                  "type": "string",
+                                },
+                              ],
+                            },
+                            "value": {
+                              "type": "number",
+                            },
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
+                          ],
+                          "type": "object",
+                        },
+                        "type": "array",
+                      },
+                      "balances": {
+                        "description": "The pending, posted, and available balances.",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "amount": {
+                                  "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                  "type": "number",
+                                },
+                                "balanceType": {
+                                  "description": "The sum of all pending AND posted entry amounts.",
+                                  "enum": [
+                                    "pending",
+                                  ],
+                                  "type": "string",
+                                },
+                                "credits": {
+                                  "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
+                                  "type": "number",
+                                },
+                                "currency": {
+                                  "description": "Currency of the ledger",
+                                  "type": "string",
+                                },
+                                "currencyExponent": {
+                                  "description": "Currency exponent of the ledger",
+                                  "type": "number",
+                                },
+                                "debits": {
+                                  "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
+                                  "type": "number",
+                                },
+                              },
+                              "required": [
+                                "balanceType",
+                                "credits",
+                                "debits",
+                                "amount",
+                                "currency",
+                                "currencyExponent",
+                              ],
+                              "type": "object",
+                            },
+                            {
+                              "properties": {
+                                "amount": {
+                                  "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                  "type": "number",
+                                },
+                                "balanceType": {
+                                  "description": "The sum of all posted entry amounts.",
+                                  "enum": [
+                                    "posted",
+                                  ],
+                                  "type": "string",
+                                },
+                                "credits": {
+                                  "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                                  "type": "number",
+                                },
+                                "currency": {
+                                  "description": "Currency of the ledger",
+                                  "type": "string",
+                                },
+                                "currencyExponent": {
+                                  "description": "Currency exponent of the ledger",
+                                  "type": "number",
+                                },
+                                "debits": {
+                                  "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                                  "type": "number",
+                                },
+                              },
+                              "required": [
+                                "balanceType",
+                                "credits",
+                                "debits",
+                                "amount",
+                                "currency",
+                                "currencyExponent",
+                              ],
+                              "type": "object",
+                            },
+                            {
+                              "properties": {
+                                "amount": {
+                                  "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                  "type": "number",
+                                },
+                                "balanceType": {
+                                  "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
+                                  "enum": [
+                                    "availableBalance",
+                                  ],
+                                  "type": "string",
+                                },
+                                "credits": {
+                                  "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                                  "type": "number",
+                                },
+                                "currency": {
+                                  "description": "Currency of the ledger",
+                                  "type": "string",
+                                },
+                                "currencyExponent": {
+                                  "description": "Currency exponent of the ledger",
+                                  "type": "number",
+                                },
+                                "debits": {
+                                  "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                                  "type": "number",
+                                },
+                              },
+                              "required": [
+                                "balanceType",
+                                "credits",
+                                "debits",
+                                "amount",
+                                "currency",
+                                "currencyExponent",
+                              ],
+                              "type": "object",
+                            },
+                          ],
+                        },
+                        "type": "array",
+                      },
+                      "created": {
+                        "type": "string",
+                      },
+                      "description": {
+                        "description": "An optional free-form description for internal use.",
+                        "type": "string",
+                      },
+                      "id": {
+                        "description": "Unique identifier for the ledger account balance monitor.",
+                        "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                        "type": "string",
+                      },
+                      "lockVersion": {
+                        "type": "number",
+                      },
+                      "metadata": {
+                        "additionalProperties": {
+                          "type": "string",
+                        },
+                        "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                        "type": "object",
+                      },
+                      "updated": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "id",
+                      "accountId",
+                      "alertCondition",
+                      "balances",
+                      "lockVersion",
+                      "created",
+                      "updated",
+                    ],
+                    "title": "LedgerAccountBalanceMonitorResponse",
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        400,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "BAD_REQUEST",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        401,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "UNAUTHORIZED",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        403,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "FORBIDDEN",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        429,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "TOO_MANY_REQUESTS",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        500,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "INTERNAL_SERVER_ERROR",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        503,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "SERVICE_UNAVAILABLE",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+        },
+        "summary": "List Ledger Account Balance Monitors",
+        "tags": [
+          "Ledger Account Balance Monitors",
+        ],
+      },
+      "post": {
+        "description": "Create Ledger Account Balance Monitor",
+        "operationId": "createLedgerAccountBalanceMonitor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ledgerId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "accountId": {
+                    "description": "The ledger account associated with this balance monitor.",
+                    "type": "string",
+                  },
+                  "alertCondition": {
+                    "items": {
+                      "properties": {
+                        "field": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "balance",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "created",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "updated",
+                              ],
+                              "type": "string",
+                            },
+                          ],
+                        },
+                        "operator": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "=",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "<",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                ">",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "<=",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                ">=",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "!=",
+                              ],
+                              "type": "string",
+                            },
+                          ],
+                        },
+                        "value": {
+                          "type": "number",
+                        },
+                      },
+                      "required": [
+                        "field",
+                        "operator",
+                        "value",
+                      ],
+                      "type": "object",
+                    },
+                    "type": "array",
+                  },
+                  "description": {
+                    "description": "An optional free-form description for internal use.",
+                    "type": "string",
+                  },
+                  "metadata": {
+                    "additionalProperties": {
+                      "type": "string",
+                    },
+                    "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                    "type": "object",
+                  },
+                },
+                "required": [
+                  "accountId",
+                  "alertCondition",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+                  "properties": {
+                    "accountId": {
+                      "description": "The ledger account's ID",
+                      "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
+                    "alertCondition": {
+                      "items": {
+                        "properties": {
+                          "field": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "balance",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "created",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "updated",
+                                ],
+                                "type": "string",
+                              },
+                            ],
+                          },
+                          "operator": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "=",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "<",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  ">",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "<=",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  ">=",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "!=",
+                                ],
+                                "type": "string",
+                              },
+                            ],
+                          },
+                          "value": {
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "field",
+                          "operator",
+                          "value",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "balances": {
+                      "description": "The pending, posted, and available balances.",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "amount": {
+                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                "type": "number",
+                              },
+                              "balanceType": {
+                                "description": "The sum of all pending AND posted entry amounts.",
+                                "enum": [
+                                  "pending",
+                                ],
+                                "type": "string",
+                              },
+                              "credits": {
+                                "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
+                                "type": "number",
+                              },
+                              "currency": {
+                                "description": "Currency of the ledger",
+                                "type": "string",
+                              },
+                              "currencyExponent": {
+                                "description": "Currency exponent of the ledger",
+                                "type": "number",
+                              },
+                              "debits": {
+                                "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "credits",
+                              "debits",
+                              "amount",
+                              "currency",
+                              "currencyExponent",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "properties": {
+                              "amount": {
+                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                "type": "number",
+                              },
+                              "balanceType": {
+                                "description": "The sum of all posted entry amounts.",
+                                "enum": [
+                                  "posted",
+                                ],
+                                "type": "string",
+                              },
+                              "credits": {
+                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                                "type": "number",
+                              },
+                              "currency": {
+                                "description": "Currency of the ledger",
+                                "type": "string",
+                              },
+                              "currencyExponent": {
+                                "description": "Currency exponent of the ledger",
+                                "type": "number",
+                              },
+                              "debits": {
+                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "credits",
+                              "debits",
+                              "amount",
+                              "currency",
+                              "currencyExponent",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "properties": {
+                              "amount": {
+                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                "type": "number",
+                              },
+                              "balanceType": {
+                                "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
+                                "enum": [
+                                  "availableBalance",
+                                ],
+                                "type": "string",
+                              },
+                              "credits": {
+                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                                "type": "number",
+                              },
+                              "currency": {
+                                "description": "Currency of the ledger",
+                                "type": "string",
+                              },
+                              "currencyExponent": {
+                                "description": "Currency exponent of the ledger",
+                                "type": "number",
+                              },
+                              "debits": {
+                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "credits",
+                              "debits",
+                              "amount",
+                              "currency",
+                              "currencyExponent",
+                            ],
+                            "type": "object",
+                          },
+                        ],
+                      },
+                      "type": "array",
+                    },
+                    "created": {
+                      "type": "string",
+                    },
+                    "description": {
+                      "description": "An optional free-form description for internal use.",
+                      "type": "string",
+                    },
+                    "id": {
+                      "description": "Unique identifier for the ledger account balance monitor.",
+                      "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
+                    "lockVersion": {
+                      "type": "number",
+                    },
+                    "metadata": {
+                      "additionalProperties": {
+                        "type": "string",
+                      },
+                      "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                      "type": "object",
+                    },
+                    "updated": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "accountId",
+                    "alertCondition",
+                    "balances",
+                    "lockVersion",
+                    "created",
+                    "updated",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        400,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "BAD_REQUEST",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        401,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "UNAUTHORIZED",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        403,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "FORBIDDEN",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        409,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "CONFLICT",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        429,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "TOO_MANY_REQUESTS",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        500,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "INTERNAL_SERVER_ERROR",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        503,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "SERVICE_UNAVAILABLE",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+        },
+        "summary": "Create Ledger Account Balance Monitor",
+        "tags": [
+          "Ledger Account Balance Monitors",
+        ],
+      },
+    },
+    "/api/ledgers/{ledgerId}/accounts/{accountId}/balance-monitors/{balanceMonitorId}": {
+      "delete": {
+        "description": "Delete Ledger Account Balance Monitor",
+        "operationId": "deleteLedgerAccountBalanceMonitor",
+        "parameters": [
+          {
+            "description": "Unique identifier for the ledger account balance monitor.",
+            "in": "path",
+            "name": "balanceMonitorId",
+            "required": true,
+            "schema": {
+              "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {},
+              },
+            },
+            "description": "Default Response",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        400,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "BAD_REQUEST",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        401,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "UNAUTHORIZED",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        403,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "FORBIDDEN",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        404,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "NOT_FOUND",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        409,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "CONFLICT",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        429,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "TOO_MANY_REQUESTS",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        500,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "INTERNAL_SERVER_ERROR",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        503,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "SERVICE_UNAVAILABLE",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+        },
+        "summary": "Delete Ledger Account Balance Monitor",
+        "tags": [
+          "Ledger Account Balance Monitors",
+        ],
+      },
+      "get": {
+        "description": "Get Ledger Account Balance Monitor",
+        "operationId": "getLedgerAccountBalanceMonitor",
+        "parameters": [
+          {
+            "description": "Unique identifier for the ledger account balance monitor.",
+            "in": "path",
+            "name": "balanceMonitorId",
+            "required": true,
+            "schema": {
+              "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+                  "properties": {
+                    "accountId": {
+                      "description": "The ledger account's ID",
+                      "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
+                    "alertCondition": {
+                      "items": {
+                        "properties": {
+                          "field": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "balance",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "created",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "updated",
+                                ],
+                                "type": "string",
+                              },
+                            ],
+                          },
+                          "operator": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "=",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "<",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  ">",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "<=",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  ">=",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "!=",
+                                ],
+                                "type": "string",
+                              },
+                            ],
+                          },
+                          "value": {
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "field",
+                          "operator",
+                          "value",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "balances": {
+                      "description": "The pending, posted, and available balances.",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "amount": {
+                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                "type": "number",
+                              },
+                              "balanceType": {
+                                "description": "The sum of all pending AND posted entry amounts.",
+                                "enum": [
+                                  "pending",
+                                ],
+                                "type": "string",
+                              },
+                              "credits": {
+                                "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
+                                "type": "number",
+                              },
+                              "currency": {
+                                "description": "Currency of the ledger",
+                                "type": "string",
+                              },
+                              "currencyExponent": {
+                                "description": "Currency exponent of the ledger",
+                                "type": "number",
+                              },
+                              "debits": {
+                                "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "credits",
+                              "debits",
+                              "amount",
+                              "currency",
+                              "currencyExponent",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "properties": {
+                              "amount": {
+                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                "type": "number",
+                              },
+                              "balanceType": {
+                                "description": "The sum of all posted entry amounts.",
+                                "enum": [
+                                  "posted",
+                                ],
+                                "type": "string",
+                              },
+                              "credits": {
+                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                                "type": "number",
+                              },
+                              "currency": {
+                                "description": "Currency of the ledger",
+                                "type": "string",
+                              },
+                              "currencyExponent": {
+                                "description": "Currency exponent of the ledger",
+                                "type": "number",
+                              },
+                              "debits": {
+                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "credits",
+                              "debits",
+                              "amount",
+                              "currency",
+                              "currencyExponent",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "properties": {
+                              "amount": {
+                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                "type": "number",
+                              },
+                              "balanceType": {
+                                "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
+                                "enum": [
+                                  "availableBalance",
+                                ],
+                                "type": "string",
+                              },
+                              "credits": {
+                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                                "type": "number",
+                              },
+                              "currency": {
+                                "description": "Currency of the ledger",
+                                "type": "string",
+                              },
+                              "currencyExponent": {
+                                "description": "Currency exponent of the ledger",
+                                "type": "number",
+                              },
+                              "debits": {
+                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "credits",
+                              "debits",
+                              "amount",
+                              "currency",
+                              "currencyExponent",
+                            ],
+                            "type": "object",
+                          },
+                        ],
+                      },
+                      "type": "array",
+                    },
+                    "created": {
+                      "type": "string",
+                    },
+                    "description": {
+                      "description": "An optional free-form description for internal use.",
+                      "type": "string",
+                    },
+                    "id": {
+                      "description": "Unique identifier for the ledger account balance monitor.",
+                      "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
+                    "lockVersion": {
+                      "type": "number",
+                    },
+                    "metadata": {
+                      "additionalProperties": {
+                        "type": "string",
+                      },
+                      "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                      "type": "object",
+                    },
+                    "updated": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "accountId",
+                    "alertCondition",
+                    "balances",
+                    "lockVersion",
+                    "created",
+                    "updated",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        400,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "BAD_REQUEST",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        401,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "UNAUTHORIZED",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        403,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "FORBIDDEN",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        404,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "NOT_FOUND",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        429,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "TOO_MANY_REQUESTS",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        500,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "INTERNAL_SERVER_ERROR",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        503,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "SERVICE_UNAVAILABLE",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+        },
+        "summary": "Get Ledger Account Balance Monitor",
+        "tags": [
+          "Ledger Account Balance Monitors",
+        ],
+      },
+      "put": {
+        "description": "Update Ledger Account Balance Monitor",
+        "operationId": "updateLedgerAccountBalanceMonitor",
+        "parameters": [
+          {
+            "description": "Unique identifier for the ledger account balance monitor.",
+            "in": "path",
+            "name": "balanceMonitorId",
+            "required": true,
+            "schema": {
+              "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "accountId": {
+                    "description": "The ledger account associated with this balance monitor.",
+                    "type": "string",
+                  },
+                  "alertCondition": {
+                    "items": {
+                      "properties": {
+                        "field": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "balance",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "created",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "updated",
+                              ],
+                              "type": "string",
+                            },
+                          ],
+                        },
+                        "operator": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "=",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "<",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                ">",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "<=",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                ">=",
+                              ],
+                              "type": "string",
+                            },
+                            {
+                              "enum": [
+                                "!=",
+                              ],
+                              "type": "string",
+                            },
+                          ],
+                        },
+                        "value": {
+                          "type": "number",
+                        },
+                      },
+                      "required": [
+                        "field",
+                        "operator",
+                        "value",
+                      ],
+                      "type": "object",
+                    },
+                    "type": "array",
+                  },
+                  "description": {
+                    "description": "An optional free-form description for internal use.",
+                    "type": "string",
+                  },
+                  "metadata": {
+                    "additionalProperties": {
+                      "type": "string",
+                    },
+                    "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                    "type": "object",
+                  },
+                },
+                "required": [
+                  "accountId",
+                  "alertCondition",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+                  "properties": {
+                    "accountId": {
+                      "description": "The ledger account's ID",
+                      "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
+                    "alertCondition": {
+                      "items": {
+                        "properties": {
+                          "field": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "balance",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "created",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "updated",
+                                ],
+                                "type": "string",
+                              },
+                            ],
+                          },
+                          "operator": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "=",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "<",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  ">",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "<=",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  ">=",
+                                ],
+                                "type": "string",
+                              },
+                              {
+                                "enum": [
+                                  "!=",
+                                ],
+                                "type": "string",
+                              },
+                            ],
+                          },
+                          "value": {
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "field",
+                          "operator",
+                          "value",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "balances": {
+                      "description": "The pending, posted, and available balances.",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "amount": {
+                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                "type": "number",
+                              },
+                              "balanceType": {
+                                "description": "The sum of all pending AND posted entry amounts.",
+                                "enum": [
+                                  "pending",
+                                ],
+                                "type": "string",
+                              },
+                              "credits": {
+                                "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
+                                "type": "number",
+                              },
+                              "currency": {
+                                "description": "Currency of the ledger",
+                                "type": "string",
+                              },
+                              "currencyExponent": {
+                                "description": "Currency exponent of the ledger",
+                                "type": "number",
+                              },
+                              "debits": {
+                                "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "credits",
+                              "debits",
+                              "amount",
+                              "currency",
+                              "currencyExponent",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "properties": {
+                              "amount": {
+                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                "type": "number",
+                              },
+                              "balanceType": {
+                                "description": "The sum of all posted entry amounts.",
+                                "enum": [
+                                  "posted",
+                                ],
+                                "type": "string",
+                              },
+                              "credits": {
+                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                                "type": "number",
+                              },
+                              "currency": {
+                                "description": "Currency of the ledger",
+                                "type": "string",
+                              },
+                              "currencyExponent": {
+                                "description": "Currency exponent of the ledger",
+                                "type": "number",
+                              },
+                              "debits": {
+                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "credits",
+                              "debits",
+                              "amount",
+                              "currency",
+                              "currencyExponent",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "properties": {
+                              "amount": {
+                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                                "type": "number",
+                              },
+                              "balanceType": {
+                                "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
+                                "enum": [
+                                  "availableBalance",
+                                ],
+                                "type": "string",
+                              },
+                              "credits": {
+                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                                "type": "number",
+                              },
+                              "currency": {
+                                "description": "Currency of the ledger",
+                                "type": "string",
+                              },
+                              "currencyExponent": {
+                                "description": "Currency exponent of the ledger",
+                                "type": "number",
+                              },
+                              "debits": {
+                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "credits",
+                              "debits",
+                              "amount",
+                              "currency",
+                              "currencyExponent",
+                            ],
+                            "type": "object",
+                          },
+                        ],
+                      },
+                      "type": "array",
+                    },
+                    "created": {
+                      "type": "string",
+                    },
+                    "description": {
+                      "description": "An optional free-form description for internal use.",
+                      "type": "string",
+                    },
+                    "id": {
+                      "description": "Unique identifier for the ledger account balance monitor.",
+                      "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
+                    "lockVersion": {
+                      "type": "number",
+                    },
+                    "metadata": {
+                      "additionalProperties": {
+                        "type": "string",
+                      },
+                      "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                      "type": "object",
+                    },
+                    "updated": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "accountId",
+                    "alertCondition",
+                    "balances",
+                    "lockVersion",
+                    "created",
+                    "updated",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        400,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "BAD_REQUEST",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        401,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "UNAUTHORIZED",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        403,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "FORBIDDEN",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        404,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "NOT_FOUND",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        409,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "CONFLICT",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        429,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "TOO_MANY_REQUESTS",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        500,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "INTERNAL_SERVER_ERROR",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        503,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "SERVICE_UNAVAILABLE",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+        },
+        "summary": "Update Ledger Account Balance Monitor",
+        "tags": [
+          "Ledger Account Balance Monitors",
+        ],
+      },
+    },
+  },
+}
+`;
+
+exports[`LedgerAccountBalanceMonitorRoutes > updates with the existing response and service inputs 1`] = `
+{
+  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
+  "alertCondition": [],
+  "balances": [
+    {
+      "amount": 0,
+      "balanceType": "pending",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "posted",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+    {
+      "amount": 0,
+      "balanceType": "availableBalance",
+      "credits": 0,
+      "currency": "USD",
+      "currencyExponent": 2,
+      "debits": 0,
+    },
+  ],
+  "created": "2025-01-01T00:00:00.000Z",
+  "description": "Test balance monitor",
+  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
+  "lockVersion": 0,
+  "updated": "2025-01-01T00:00:00.000Z",
+}
+`;

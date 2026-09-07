@@ -1,6 +1,5 @@
 // Export shared types first
 
-export { LedgerAccountBalanceMonitorEntity } from "./LedgerAccountBalanceMonitorEntity";
 export { LedgerAccountCategoryEntity } from "./LedgerAccountCategoryEntity";
 export { LedgerAccountEntity } from "./LedgerAccountEntity";
 export { LedgerAccountStatementEntity } from "./LedgerAccountStatementEntity";
