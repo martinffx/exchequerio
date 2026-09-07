@@ -1,8 +1,8 @@
-import { type Static, Type } from "@sinclair/typebox";
+import { CloneType, type Static, Type } from "@sinclair/typebox";
 
 import { MetadataSchema } from "@/lib/schema";
-import { PaginationQuery } from "@/routes/schema";
-import { Balances, LedgerAccountIdParams } from "@/routes/ledgers/schema";
+import { PaginationQuery } from "@/lib/schema";
+import { Balances, AccountIdSchema } from "@/domains/ledgers/accounts/AccountSchema";
 
 const LedgerAccountBalanceMonitorId = Type.String({
 	description: "Unique identifier for the ledger account balance monitor.",
@@ -34,7 +34,7 @@ const AlertCondition = Type.Object({
 const LedgerAccountBalanceMonitorResponse = Type.Object(
 	{
 		id: LedgerAccountBalanceMonitorId,
-		accountId: LedgerAccountIdParams.properties.accountId,
+		accountId: CloneType(AccountIdSchema, { description: "The ledger account's ID" }),
 		description: Type.Optional(
 			Type.String({
 				description: "An optional free-form description for internal use.",

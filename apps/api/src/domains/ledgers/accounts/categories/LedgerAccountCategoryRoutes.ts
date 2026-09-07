@@ -1,4 +1,3 @@
-import { LedgerIdParams as LedgerIdParameters } from "@/routes/ledgers/schema";
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { MetadataSchema } from "@/lib/schema";
@@ -19,8 +18,9 @@ import {
 import { parseId } from "@/lib/utils";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/lib/ids";
 import { LedgerAccountCategoryServiceTag } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryService";
-import { PaginationQuery } from "@/routes/schema";
+import { PaginationQuery } from "@/lib/schema";
 import {
+	LedgerIdParameters,
 	type CreateLedgerAccountCategoryRequest,
 	type DeleteLedgerAccountCategoryRequest,
 	type GetLedgerAccountCategoryRequest,

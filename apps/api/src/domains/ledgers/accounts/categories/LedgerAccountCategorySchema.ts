@@ -1,14 +1,19 @@
-import { type Static, Type } from "@sinclair/typebox";
+import { CloneType, type Static, Type } from "@sinclair/typebox";
 import type { FastifyRequest } from "fastify";
 import { MetadataSchema } from "@/lib/schema";
-import type { PaginationQuery } from "@/routes/schema";
+import type { PaginationQuery } from "@/lib/schema";
+import { LedgerIdSchema } from "@/domains/ledgers/LedgerSchema";
 import {
-	LedgerId,
-	LedgerIdParams as LedgerIdParameters,
-	LedgerAccountId,
-	NormalBalance,
+	AccountIdSchema,
+	NormalBalanceSchema as NormalBalance,
 	Balances,
-} from "@/routes/ledgers/schema";
+} from "@/domains/ledgers/accounts/AccountSchema";
+
+const LedgerId = CloneType(LedgerIdSchema, { description: "The ledger's ID" });
+const LedgerIdParameters = Type.Object({ ledgerId: LedgerId });
+type LedgerIdParameters = Static<typeof LedgerIdParameters>;
+const LedgerAccountId = CloneType(AccountIdSchema, { description: "The ledger account's ID" });
+
 const LedgerAccountCategoryId = Type.String({
 	description: "Unique identifier for the ledger account category.",
 	pattern: "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
@@ -111,6 +116,7 @@ type UnlinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
 }>;
 
 export {
+	LedgerIdParameters,
 	LinkAccountToCategoryParameters as LinkAccountToCategoryParams,
 	LinkCategoryToCategoryParameters as LinkCategoryToCategoryParams,
 	LedgerAccountCategoryIdParameters as LedgerAccountCategoryIdParams,

@@ -244,21 +244,6 @@
 				"mode": "full"
 			},
 			{
-				"type": "legacy-route-contracts",
-				"pattern": "src/routes/schema.ts",
-				"mode": "full"
-			},
-			{
-				"type": "legacy-ledger-route-contracts",
-				"pattern": "src/routes/ledgers/schema.ts",
-				"mode": "full"
-			},
-			{
-				"type": "legacy-routes",
-				"pattern": "src/routes/**/*",
-				"mode": "full"
-			},
-			{
 				"type": "config",
 				"pattern": "src/Config.ts",
 				"mode": "full"
@@ -355,30 +340,8 @@
 						"allow": ["*"]
 					},
 					{
-						"from": ["legacy-routes"],
-						"allow": [
-							"legacy-routes",
-							"legacy-route-contracts",
-							"legacy-ledger-route-contracts",
-							"shared-ids",
-							"ledger-composition",
-							"account-composition",
-							"transaction-composition",
-							"organization-composition",
-							"category-composition"
-						]
-					},
-					{
 						"from": ["persistence-schema"],
 						"disallow": ["*"]
-					},
-					{
-						"from": ["legacy-route-contracts"],
-						"disallow": ["*"]
-					},
-					{
-						"from": ["legacy-ledger-route-contracts"],
-						"allow": ["legacy-route-contracts"]
 					},
 					{
 						"from": ["ledger-domain"],
@@ -616,12 +579,15 @@
 					{
 						"from": ["server"],
 						"allow": [
-							"legacy-routes",
 							"config",
 							"database",
 							"http",
 							"organization-composition",
-							"runtime"
+							"runtime",
+							"ledger-composition",
+							"account-composition",
+							"transaction-composition",
+							"category-composition"
 						]
 					},
 					{
@@ -660,17 +626,11 @@
 					},
 					{
 						"from": ["category-routes"],
-						"allow": [
-							"category-service",
-							"category-transport",
-							"shared-ids",
-							"legacy-route-contracts",
-							"legacy-ledger-route-contracts"
-						]
+						"allow": ["category-service", "category-transport", "shared-ids"]
 					},
 					{
 						"from": ["category-transport"],
-						"allow": ["legacy-route-contracts", "legacy-ledger-route-contracts"]
+						"allow": ["ledger-transport", "account-transport"]
 					},
 					{
 						"from": ["category-fixtures"],

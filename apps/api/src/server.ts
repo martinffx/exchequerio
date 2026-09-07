@@ -2,11 +2,10 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUI from "@fastify/swagger-ui";
 import fastifyUnderPressure from "@fastify/under-pressure";
-import fastify, { type FastifyInstance } from "fastify";
+import fastify, { type FastifyInstance, type FastifyPluginAsync } from "fastify";
 import { registerAuth } from "@/auth";
 import { Config } from "@/config";
 import { globalErrorHandler } from "@/lib/errors";
-import { RouterPlugin } from "@/routes";
 import {
 	makeServerRuntimeLayer,
 	ServerConfigTag,
@@ -14,6 +13,41 @@ import {
 	type ServerRuntimeLayer,
 	type ServerRuntimeServices,
 } from "@/runtime";
+import { OrganizationRoutes } from "@/domains/organizations";
+import { LedgerRoutes } from "@/domains/ledgers";
+import { AccountRoutes } from "@/domains/ledgers/accounts";
+import { LedgerAccountBalanceMonitorRoutes } from "@/domains/ledgers/accounts/balance-monitors";
+import { LedgerAccountStatementRoutes } from "@/domains/ledgers/accounts/statements";
+import { LedgerAccountSettlementRoutes } from "@/domains/ledgers/settlements";
+import { TransactionRoutes } from "@/domains/ledgers/transactions";
+import { LedgerAccountCategoryRoutes } from "@/domains/ledgers/accounts/categories";
+
+const LedgerRouterPlugin: FastifyPluginAsync = async server => {
+	await server.register(LedgerAccountCategoryRoutes, {
+		prefix: "/:ledgerId/accounts/categories",
+	});
+	await server.register(LedgerAccountSettlementRoutes, {
+		prefix: "/:ledgerId/settlements",
+	});
+	await server.register(LedgerAccountStatementRoutes, {
+		prefix: "/:ledgerId/accounts/:accountId/statements",
+	});
+	await server.register(LedgerAccountBalanceMonitorRoutes, {
+		prefix: "/:ledgerId/accounts/:accountId/balance-monitors",
+	});
+	await server.register(AccountRoutes, { prefix: "/:ledgerId/accounts" });
+	await server.register(TransactionRoutes, {
+		prefix: "/:ledgerId/transactions",
+	});
+	await server.register(LedgerRoutes);
+};
+
+const RouterPlugin: FastifyPluginAsync = async server => {
+	server.addHook("preHandler", server.auth([server.verifyJWT]));
+
+	await server.register(OrganizationRoutes, { prefix: "/organizations" });
+	await server.register(LedgerRouterPlugin, { prefix: "/ledgers" });
+};
 
 type ServerOpts = {
 	runtimeLayer?: ServerRuntimeLayer;
