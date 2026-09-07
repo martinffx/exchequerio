@@ -4,10 +4,9 @@ import type { Metadata } from "@/lib/schema";
 import {
 	LedgerAccountCategoryEntity,
 	LedgerAccountEntity,
-	LedgerAccountStatementEntity,
 	LedgerEntity,
 	OrganizationEntity,
-} from "@/services";
+} from "@/repo/entities";
 
 function createOrganizationFixture(): OrganizationEntity {
 	return new OrganizationEntity({
@@ -42,7 +41,7 @@ function createLedgerAccountFixture(
 		postedCredits: number;
 		postedDebits: number;
 		lockVersion: number;
-		metadata?: Record<string, unknown>;
+		metadata?: Metadata;
 		created: Date;
 		updated: Date;
 	}>
@@ -95,47 +94,9 @@ function createLedgerAccountCategoryFixture(
 	});
 }
 
-function createLedgerAccountStatementFixture(
-	overrides?: Partial<{
-		id: TypeID<"lst">;
-		ledgerId: TypeID<"lgr">;
-		accountId: TypeID<"lat">;
-		statementDate: Date;
-		openingBalance: number;
-		closingBalance: number;
-		totalCredits: number;
-		totalDebits: number;
-		transactionCount: number;
-		metadata?: Record<string, unknown>;
-		created: Date;
-		updated: Date;
-	}>
-): LedgerAccountStatementEntity {
-	const now = new Date();
-	// Use fixed IDs for stable snapshots when created/updated are provided
-	const useFixedIds = overrides?.created !== undefined || overrides?.updated !== undefined;
-
-	return new LedgerAccountStatementEntity({
-		id: useFixedIds ? TypeID.fromString("lst_01h2x3y4z5a6b7c8d9e0f1g2h7") : new TypeID("lst"),
-		ledgerId: useFixedIds ? TypeID.fromString("lgr_01h2x3y4z5a6b7c8d9e0f1g2h4") : new TypeID("lgr"),
-		accountId: useFixedIds ? TypeID.fromString("lat_01h2x3y4z5a6b7c8d9e0f1g2h8") : new TypeID("lat"),
-		statementDate: now,
-		openingBalance: 0,
-		closingBalance: 0,
-		totalCredits: 0,
-		totalDebits: 0,
-		transactionCount: 0,
-		metadata: undefined,
-		created: now,
-		updated: now,
-		...overrides,
-	});
-}
-
 export {
 	createOrganizationFixture,
 	createLedgerFixture,
 	createLedgerAccountFixture,
 	createLedgerAccountCategoryFixture,
-	createLedgerAccountStatementFixture,
 };

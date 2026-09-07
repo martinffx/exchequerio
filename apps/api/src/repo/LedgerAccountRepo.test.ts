@@ -228,14 +228,14 @@ describe("LedgerAccountRepo", () => {
 					...existing,
 					name: "Updated Name",
 					description: "Updated description",
-					metadata: { updated: true },
+					metadata: { updated: "true" },
 				});
 
 				const result = await ledgerAccountRepo.upsertLedgerAccount(updated);
 
 				expect(result.name).toBe("Updated Name");
 				expect(result.description).toBe("Updated description");
-				expect(result.metadata).toEqual({ updated: true });
+				expect(result.metadata).toEqual({ updated: "true" });
 				expect(result.lockVersion).toBe(2); // Incremented from 1 to 2
 			});
 

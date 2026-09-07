@@ -1,5 +1,6 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
+import type { Metadata } from "@/lib/schema";
 import type { LedgerAccountsTable } from "@/repo/schema";
 import type {
 	AvailableBalance,
@@ -29,7 +30,7 @@ interface LedgerAccountEntityOptions {
 	postedCredits: number;
 	postedDebits: number;
 	lockVersion: number;
-	metadata?: Record<string, unknown>;
+	metadata?: Metadata;
 	created: Date;
 	updated: Date;
 }
@@ -47,7 +48,7 @@ class LedgerAccountEntity {
 	public readonly postedCredits: number;
 	public readonly postedDebits: number;
 	public readonly lockVersion: number;
-	public readonly metadata?: Record<string, unknown>;
+	public readonly metadata?: Metadata;
 	public readonly created: Date;
 	public readonly updated: Date;
 
@@ -97,10 +98,10 @@ class LedgerAccountEntity {
 
 	public static fromRecord(record: LedgerAccountRecord): LedgerAccountEntity {
 		// Parse metadata from TEXT (JSON string) to object
-		let metadata: Record<string, unknown> | undefined;
+		let metadata: Metadata | undefined;
 		if (record.metadata) {
 			try {
-				metadata = JSON.parse(record.metadata) as Record<string, unknown>;
+				metadata = JSON.parse(record.metadata) as Metadata;
 			} catch {
 				metadata = undefined;
 			}

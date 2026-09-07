@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Config } from "@/config";
 import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
-import type { OrgID } from "./services";
+import type { OrgID } from "@/repo/entities/types";
 
 const Permissions = [
 	"ledger:read",

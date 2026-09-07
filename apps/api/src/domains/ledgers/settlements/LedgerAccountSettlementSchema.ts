@@ -1,5 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { ListQuery } from "@/lib/ListQuery";
+import { MetadataSchema } from "@/lib/schema";
 import { LedgerIdSchema } from "../LedgerSchema";
 import { AccountIdSchema } from "../accounts/AccountSchema";
 
@@ -27,8 +28,6 @@ const LedgerAccountSettlementIdParams = Type.Object({ settlementId: LedgerAccoun
 const LedgerAccountSettlementCollectionParameters = Type.Object({ ledgerId: LedgerIdSchema });
 /** Shared offset and limit validation for Settlement pages. */
 const LedgerAccountSettlementListQuery = ListQuery;
-/** String-valued metadata supplied by clients. */
-const Metadata = Type.Record(Type.String(), Type.String());
 /** ISO date-time accepted by the entity parser, excluding leap seconds. */
 const Timestamp = Type.String({ format: "date-time", pattern: "[Tt][0-9]{2}:[0-9]{2}:[0-5][0-9]" });
 /** Creation payload; defaults to pending with automatic source selection. */
@@ -42,7 +41,7 @@ const LedgerAccountSettlementRequest = Type.Object(
 			})
 		),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 		externalReference: Type.Optional(Type.String()),
 		effectiveAtUpperBound: Type.Optional(Timestamp),
 		allowEitherDirection: Type.Optional(Type.Boolean({ default: false })),
@@ -54,7 +53,7 @@ const LedgerAccountSettlementPatchRequest = Type.Object(
 	{
 		status: Type.Optional(SettlementTargetStatus),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{ additionalProperties: false }
 );
@@ -76,7 +75,7 @@ const LedgerAccountSettlementResponse = Type.Object(
 		allowEitherDirection: Type.Boolean(),
 		effectiveAtUpperBound: Type.Union([Timestamp, Type.Null()]),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 		externalReference: Type.Optional(Type.String()),
 		created: Timestamp,
 		updated: Timestamp,
@@ -104,7 +103,7 @@ const LedgerAccountSettlementEntryResponse = Type.Object({
 	amount: Type.Integer(),
 	currencyCode: Type.String(),
 	status: Type.Literal("posted"),
-	metadata: Type.Optional(Metadata),
+	metadata: Type.Optional(MetadataSchema),
 	created: Timestamp,
 });
 /** TypeScript values validated by the LedgerAccountSettlementId schema. */

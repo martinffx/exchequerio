@@ -6,12 +6,6 @@ import type { PaginationQuery } from "../schema";
 /**
  * Common Types
  */
-const Metadata = Type.Mapped(Type.KeyOf(Type.String()), () => Type.String(), {
-	description:
-		"Additional data represented as key-value pairs. Both the key and value must be strings.",
-});
-type Metadata = Static<typeof Metadata>;
-
 const NormalBalance = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 type NormalBalance = Static<typeof NormalBalance>;
 
@@ -106,7 +100,7 @@ const LedgerResponse = Type.Object(
 		id: LedgerId,
 		name: Type.String(),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 		created: Type.String(),
 		updated: Type.String(),
 	},
@@ -129,7 +123,7 @@ const LedgerRequest = Type.Object(
 				default: 2,
 			})
 		),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{ $id: "LedgerRequest" }
 );
@@ -171,7 +165,7 @@ const LedgerAccountResponse = Type.Object(
 		normalBalance: NormalBalance,
 		balances: Balances,
 		ledgerId: Type.String(),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 		lockVersion: Type.Number(),
 		created: Type.String(),
 		updated: Type.String(),
@@ -187,7 +181,7 @@ const LedgerAccountRequest = Type.Object(
 	{
 		name: Type.String(),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{
 		$id: "LedgerAccountRequest",
@@ -318,93 +312,6 @@ type UnlinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
 	Params: LedgerIdParameters & LinkCategoryToCategoryParameters;
 }>;
 
-/**
- * Ledger Account Statement
- */
-const LedgerAccountStatementId = Type.String({
-	description: "The ledger account statement ID",
-	pattern: "^lst_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-});
-type LedgerAccountStatementId = Static<typeof LedgerAccountStatementId>;
-const LedgerAccountStatementIdParameters = Type.Object({
-	statementId: LedgerAccountStatementId,
-});
-type LedgerAccountStatementIdParameters = Static<typeof LedgerAccountStatementIdParameters>;
-const LedgerAccountStatementResponse = Type.Object(
-	{
-		id: LedgerAccountStatementId,
-		ledgerId: LedgerId,
-		accountId: LedgerAccountId,
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
-		),
-		startDatetime: Type.String({
-			description:
-				"The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
-		}),
-		endDatetime: Type.String({
-			description:
-				"The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
-		}),
-		ledgerAccountVersion: Type.Number({
-			description: "Version of the ledger account at the time of statement generation.",
-		}),
-		normalBalance: NormalBalance,
-		startingBalances: Balances,
-		endingBalances: Balances,
-		currency: Type.String({
-			description: "The currency of the ledger account settlement.",
-		}),
-		currencyExponent: Type.Number({
-			description: "The currency exponent of the ledger account settlement.",
-		}),
-		metadata: Type.Optional(Metadata),
-		created: Type.String({
-			description: "Timestamp of when the ledger account category was created.",
-		}),
-		updated: Type.String({
-			description: "Timestamp of when the ledger account category was last updated.",
-		}),
-	},
-	{
-		$id: "LedgerAccountStatementResponse",
-		description:
-			"A ledger account statement is an object that provides the starting and ending balances for a specific time period. Once created, it can be used to retrieve the ledger entries and ledger transaction versions that correspond to that time period and lock version of the ledger account.",
-	}
-);
-type LedgerAccountStatementResponse = Static<typeof LedgerAccountStatementResponse>;
-const LedgerAccountStatementRequest = Type.Object(
-	{
-		ledgerId: LedgerId,
-		accountId: LedgerAccountId,
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
-		),
-		startDatetime: Type.String({
-			description:
-				"The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
-		}),
-		endDatetime: Type.String({
-			description:
-				"The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
-		}),
-	},
-	{
-		$id: "LedgerAccountStatementRequest",
-	}
-);
-type LedgerAccountStatementRequest = Static<typeof LedgerAccountStatementRequest>;
-type GetLedgerAccountStatementRequest = FastifyRequest<{
-	Params: LedgerAccountStatementIdParameters;
-}>;
-type CreateLedgerAccountStatementRequest = FastifyRequest<{
-	Body: LedgerAccountStatementRequest;
-}>;
-
 export {
 	LinkAccountToCategoryParameters as LinkAccountToCategoryParams,
 	LinkCategoryToCategoryParameters as LinkCategoryToCategoryParams,
@@ -419,9 +326,6 @@ export {
 	LedgerAccountCategoryIdParameters as LedgerAccountCategoryIdParams,
 	LedgerAccountCategoryResponse,
 	LedgerAccountCategoryRequest,
-	LedgerAccountStatementIdParameters as LedgerAccountStatementIdParams,
-	LedgerAccountStatementResponse,
-	LedgerAccountStatementRequest,
 	type ListLedgersRequest,
 	type GetLedgerRequest,
 	type CreateLedgerRequest,
@@ -441,17 +345,15 @@ export {
 	type UnlinkLedgerAccountToCategoryRequest,
 	type LinkLedgerAccountCategoryToCategoryRequest,
 	type UnlinkLedgerAccountCategoryToCategoryRequest,
-	type CreateLedgerAccountStatementRequest,
-	type GetLedgerAccountStatementRequest,
 	Balances,
 	PendingBalance,
 	PostedBalance,
 	AvailableBalance,
 	// Export unused types to make the schema's public surface explicit
-	type Metadata,
 	type NormalBalance,
 	type Balance,
 	type LedgerAccountId,
 	type LedgerAccountCategoryId,
-	type LedgerAccountStatementId,
 };
+
+export type { Metadata } from "@/lib/schema";

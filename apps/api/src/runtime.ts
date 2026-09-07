@@ -8,6 +8,10 @@ import {
 	type LedgerAccountBalanceMonitorService,
 } from "@/domains/ledgers/accounts/balance-monitors";
 import {
+	ledgerAccountStatementLayer,
+	type LedgerAccountStatementService,
+} from "@/domains/ledgers/accounts/statements";
+import {
 	settlementLayer,
 	type LedgerAccountSettlementService,
 } from "@/domains/ledgers/settlements";
@@ -33,6 +37,7 @@ type ServerRuntimeServices =
 	| AccountService
 	| LedgerAccountSettlementService
 	| LedgerAccountBalanceMonitorService
+	| LedgerAccountStatementService
 	| TransactionService
 	| IdempotencyService
 	| LedgerAccountCategoryService
@@ -74,6 +79,7 @@ const makeServerRuntimeLayer = (
 		accountWithLedger,
 		settlementWithServices,
 		balanceMonitorLayer,
+		ledgerAccountStatementLayer,
 		transactionWithLedger,
 		ledgerAccountCategory,
 		organizationLayer

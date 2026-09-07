@@ -1,0 +1,277 @@
+{
+  "feature": "statements-effect",
+  "spec": "docs/specs/2026-08-29-statements-effect/design.md",
+  "goal": "Migrate Ledger Account Statements to the shared Effect v4 runtime and relocate the slice under its Account owner, with the approved correction that metadata is consistently a string key-value record and Statement responses preserve valid metadata keys.",
+  "phases": [
+    {
+      "id": "P1",
+      "name": "Domain and transport contract",
+      "tasks": [
+        {
+          "id": "T1",
+          "name": "Relocate the Statement model and schemas",
+          "depends_on": [],
+          "inputs": [
+            "Approved compatibility baseline and response projection in design.md",
+            "Legacy Statement entity and Statement section of the shared Ledger route schema",
+            "Current Drizzle Statement row and insert types in apps/api/src/repo/schema.ts",
+            "Canonical Ledger, Account, and Statement TypeID aliases in apps/api/src/repo/entities/types.ts"
+          ],
+          "description": "Add the Account-owned Statement model and TypeBox schemas while preserving the current request, parameters, response fields, descriptions, schema IDs, and accepted input shapes except for the approved metadata correction. Define one shared TypeBox metadata schema and type for string key-value records, use it across API schemas and legacy metadata annotations, preserve valid stored Statement metadata keys on the wire, and treat malformed metadata or metadata containing non-string values as absent. Give the model only the conversions required by the slice: validated request to placeholder domain state, persistence row to domain state, domain state to insert row, and domain state to the existing wire representation. Preserve native Date and TypeID creation, body-ID precedence, ignored description and end time, zero aggregates, database-owned Created Time, fresh Updated Time on insert encoding, and every hard-coded placeholder response value. Reuse the shared Drizzle table and canonical ID aliases. Add no product validation or handwritten mirror of a TypeBox or Drizzle type.",
+          "files": {
+            "create": [
+              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatement.ts",
+              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatement.test.ts",
+              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementSchema.ts",
+              "apps/api/src/lib/schema.ts"
+            ],
+            "modify": [
+              "apps/api/src/domains/ledgers/LedgerSchema.ts",
+              "apps/api/src/domains/ledgers/accounts/AccountSchema.ts",
+              "apps/api/src/domains/ledgers/transactions/LedgerTransactionSchema.ts",
+              "apps/api/src/lib/utils.ts",
+              "apps/api/src/routes/ledgers/schema.ts",
+              "apps/api/src/repo/entities/LedgerEntity.ts",
+              "apps/api/src/repo/entities/LedgerAccountEntity.ts",
+              "apps/api/src/repo/entities/LedgerAccountCategoryEntity.ts",
+              "apps/api/src/repo/entities/LedgerAccountSettlementEntity.ts",
+              "apps/api/src/repo/entities/LedgerAccountBalanceMonitorEntity.ts",
+              "apps/api/src/services/LedgerAccountCategoryService.ts",
+              "apps/api/src/services/LedgerAccountSettlementService.ts",
+              "apps/api/src/services/LedgerAccountBalanceMonitorService.ts",
+              "apps/api/src/routes/ledgers/fixtures.ts",
+              "apps/api/src/repo/LedgerAccountRepo.test.ts",
+              "apps/api/src/repo/LedgerAccountCategoryRepo.test.ts",
+              "apps/api/src/repo/LedgerAccountBalanceMonitorRepo.test.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "request construction generates an lst TypeID, uses body Ledger and Account IDs, uses startDatetime as the Statement date, captures one construction time, and ignores description and endDatetime",
+              "request construction initializes all stored aggregates and the transaction count to zero and leaves metadata absent",
+              "row decoding preserves stored identifiers, numeric aggregates, timestamps, and valid string key-value metadata; malformed JSON, non-string values, and nullable metadata produce absent metadata",
+              "insert encoding omits Created Time, writes a fresh Updated Time, and preserves the existing numeric-string and metadata representations",
+              "response conversion matches the complete placeholder payload, including equal start and end times, version 0, Debit Normal Balance, USD exponent 2, and zero Pending, Posted, and Available starting and ending Balances"
+            ],
+            "acceptance": [
+              "The model performs no I/O",
+              "No product behavior from Complete Ledger Account Statements is added",
+              "No duplicate ID type, transport type, or row type is introduced"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Persistence and application services",
+      "tasks": [
+        {
+          "id": "T2",
+          "name": "Implement the Effect Statement repository",
+          "depends_on": ["T1"],
+          "inputs": [
+            "Statement model and Drizzle-derived row conversions from T1",
+            "Legacy repository SELECT and INSERT behavior",
+            "DatabaseTag.effectDb and the PostgreSQL cleanup pattern in LedgerTransactionRepo.test.ts"
+          ],
+          "description": "Add a Statement repository capability backed by the installed Effect-Drizzle client. Expose only ID-only get with LIMIT 1 and one-row insert with RETURNING. Represent a missing get with the existing Not Found failure and keep every other database or decoding failure on the generic server-error path. Repository tests remove their rows through the database test Layer rather than a production cleanup method. Add no tenant predicates, joins, error translations, transactions, locks, retries, conflict handling, or idempotency.",
+          "files": {
+            "create": [
+              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.ts",
+              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.test.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "PostgreSQL get filters only by Statement ID and returns a decoded Statement",
+              "missing get produces the existing Not Found failure",
+              "create performs one insert, returns database-generated timestamps, and round-trips valid metadata and all stored aggregate fields",
+              "duplicate-key and foreign-key failures remain unexpected generic failures"
+            ],
+            "acceptance": [
+              "Each operation remains one autocommit SQL statement through DatabaseTag.effectDb",
+              "No new 409 or 503 mapping is introduced",
+              "Repository methods retain the existing SQL predicates and absence behavior"
+            ]
+          }
+        },
+        {
+          "id": "T3",
+          "name": "Implement the Effect Statement service and slice Layer",
+          "depends_on": ["T2"],
+          "inputs": [
+            "Statement repository capability from T2",
+            "Legacy Statement service get and create orchestration",
+            "Installed Effect v4 Context.Service and Layer conventions"
+          ],
+          "description": "Add the Statement service capability. Get parses the supplied lst ID and delegates to the repository. Create builds the placeholder Statement from the validated body and delegates to the repository. Compose the repository and service into one exported Statement Layer and expose the slice's public contracts through its entrypoint. The service must not query Organizations, Ledgers, Accounts, Transactions, or Entries, and it must propagate repository failures unchanged.",
+          "files": {
+            "create": [
+              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
+              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.test.ts",
+              "apps/api/src/domains/ledgers/accounts/statements/index.ts"
+            ],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "a tagged stub repository proves get parses the Statement ID and delegates once",
+              "create passes a Statement built from the body to the repository with body-ID precedence, start-time selection, and zero placeholder values",
+              "repository Not Found and unexpected failures remain unchanged in the Effect error channel",
+              "no parent-resource lookup or extra call occurs in either use case"
+            ],
+            "acceptance": [
+              "The exported Statement Layer requires the existing Database service and provides the Statement service",
+              "The slice creates no additional runtime or database resource",
+              "No parallel interface, ID service, Clock service, or error hierarchy is added"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "Runtime and HTTP adapter",
+      "tasks": [
+        {
+          "id": "T4",
+          "name": "Register Statements in the shared managed runtime",
+          "depends_on": ["T3"],
+          "inputs": [
+            "Composed Statement Layer from T3",
+            "Existing server runtime composition",
+            "Existing runtime Layer overrides used by API integration tests"
+          ],
+          "description": "Add the Statement service to the server runtime service union and compose the Statement Layer with the existing Database Layer. Keep the existing managed runtime, resource ownership, shutdown path, server startup, and test override semantics unchanged. Do not add tests for unchanged runtime reuse or disposal behavior.",
+          "files": {
+            "create": [],
+            "modify": ["apps/api/src/runtime.ts"]
+          },
+          "validation": {
+            "tests": [
+              "the T5 route tests resolve the Statement service through the existing server runtime override"
+            ],
+            "acceptance": [
+              "Runtime construction remains outside request handlers",
+              "The Statement Layer owns no PostgreSQL pool",
+              "Existing runtime override and disposal semantics remain unchanged"
+            ]
+          }
+        },
+        {
+          "id": "T5",
+          "name": "Relocate the Statement routes and preserve the HTTP contract",
+          "depends_on": ["T1", "T3", "T4"],
+          "inputs": [
+            "Statement TypeBox schemas from T1 and service capability from T3",
+            "Legacy nested route paths, permissions, OpenAPI metadata, and snapshots",
+            "Direct Effect handler pattern used by Organizations and the integrated Account slice"
+          ],
+          "description": "Add the Account-owned Statement Fastify plugin and register it from the existing Ledger router at the same nested prefix. Preserve operation IDs, tags, summaries, descriptions, permissions, validation, success status 200, and every advertised response schema except for the approved correction to the metadata object schema. Each handler constructs a lazy Statement Effect, runs Effect.result through request.server.runtime, serializes success through the Statement model, and throws failures to the unchanged global handler. Route tests use a Statement service Layer override instead of legacy Fastify service decoration and make critical placeholder values explicit even if the existing snapshots are retained. Production-server smoke tests verify the real nested registration, authentication, and write authorization.",
+          "files": {
+            "create": [
+              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.ts",
+              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.test.ts"
+            ],
+            "modify": [
+              "apps/api/src/domains/ledgers/accounts/statements/index.ts",
+              "apps/api/src/routes/ledgers/index.ts"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "GET and POST retain their exact paths, permissions, operation IDs, tags, descriptions, response schemas, and advertised statuses",
+              "GET success returns the existing payload and uses only statementId when Ledger and Account path IDs differ or do not exist",
+              "POST success remains 200, persists body Ledger and Account IDs, uses startDatetime, and ignores path IDs, description, and endDatetime",
+              "a response backed by valid stored metadata preserves its string key-value pairs on the wire",
+              "invalid transport values return 400, missing Statements return 404, and unexpected service failures return the current sanitized 500 problem",
+              "authentication and read/write authorization remain 401 and 403 Fastify pre-handler concerns"
+            ],
+            "acceptance": [
+              "Each service call crosses the existing runtime boundary exactly once",
+              "No request-owned runtime, route runner, or shared test harness is added",
+              "The public HTTP and OpenAPI contract is unchanged except for the approved shared metadata-schema correction"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "name": "Legacy removal and verification",
+      "tasks": [
+        {
+          "id": "T6",
+          "name": "Remove Statement-specific legacy wiring and artifacts",
+          "depends_on": ["T5"],
+          "inputs": [
+            "Active Account-owned Statement route, service, repository, and runtime registration",
+            "Statement references in legacy repository, service, route, entity, schema, fixture, and plugin modules"
+          ],
+          "description": "After the relocated route is active, remove Statement from the legacy repository and service plugin types, construction, decorations, and exports. Delete the old Statement route, service, repository, entity, tests, snapshots, and fixture helpers. Remove only the Statement section from the shared Ledger route schema. Keep the Drizzle Statement table, relations, exported row types, canonical Statement ID alias, and every unrelated legacy resource intact. Review all remaining Statement imports so production code reaches the slice through its entrypoint.",
+          "files": {
+            "create": [],
+            "modify": [
+              "apps/api/src/repo/index.ts",
+              "apps/api/src/repo/types.ts",
+              "apps/api/src/repo/entities/index.ts",
+              "apps/api/src/repo/fixtures.ts",
+              "apps/api/src/services/index.ts",
+              "apps/api/src/routes/ledgers/schema.ts",
+              "apps/api/src/routes/ledgers/fixtures.ts",
+              "apps/api/src/repo/entities/LedgerAccountStatementEntity.ts",
+              "apps/api/src/repo/LedgerAccountStatementRepo.ts",
+              "apps/api/src/repo/LedgerAccountStatementRepo.test.ts",
+              "apps/api/src/services/LedgerAccountStatementService.ts",
+              "apps/api/src/services/LedgerAccountStatementService.test.ts",
+              "apps/api/src/routes/ledgers/LedgerAccountStatementRoutes.ts",
+              "apps/api/src/routes/ledgers/LedgerAccountStatementRoutes.test.ts",
+              "apps/api/src/routes/ledgers/__snapshots__/LedgerAccountStatementRoutes.test.ts.snap"
+            ]
+          },
+          "validation": {
+            "tests": [
+              "a repository-wide reference search finds no import of a deleted Statement module and no stale Statement fixture or plugin property",
+              "RepoPlugin and ServicePlugin retain every non-Statement dependency and test override",
+              "canonical LedgerAccountStatementID and its generator remain available to the relocated slice"
+            ],
+            "acceptance": [
+              "No production Statement request depends on server.repo, server.services, promise Drizzle, or a legacy Statement decorator",
+              "The shared Drizzle Statement table, relations, row types, and database schema remain unchanged",
+              "Only Statement-specific legacy artifacts are removed"
+            ]
+          }
+        },
+        {
+          "id": "T7",
+          "name": "Run migration gates and review the final scope",
+          "depends_on": ["T2", "T3", "T4", "T5", "T6"],
+          "inputs": [
+            "Completed Account-owned Statement slice",
+            "Repository pnpm, Vitest, Oxc, TypeScript, and Turborepo commands",
+            "Migration lock and out-of-scope list in design.md"
+          ],
+          "description": "Run focused Statement tests while implementing, then run the repository CI gate once. Review the final diff and generated OpenAPI evidence against the migration lock. Any failure that requires a contract, schema, migration, dependency, or architecture change returns to planning instead of being folded into this migration.",
+          "files": {
+            "create": [],
+            "modify": []
+          },
+          "validation": {
+            "tests": [
+              "start PostgreSQL with pnpm run docker:up when it is not already running",
+              "run focused tests under apps/api/src/domains/ledgers/accounts/statements while implementing",
+              "run pnpm run ci once before integration"
+            ],
+            "acceptance": [
+              "The final diff contains no SQL migration, schema change, dependency change, unrelated cleanup, or weakened assertion",
+              "The final diff adds no behavior from Complete Ledger Account Statements; its only public behavior change is the approved metadata correction",
+              "All preserved HTTP, domain, error, persistence, transaction, concurrency, identifier, timestamp, and operational contracts remain intact"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

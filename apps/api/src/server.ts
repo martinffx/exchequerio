@@ -5,11 +5,8 @@ import fastifyUnderPressure from "@fastify/under-pressure";
 import fastify, { type FastifyInstance } from "fastify";
 import { registerAuth } from "@/auth";
 import { Config } from "@/config";
-import { DatabaseTag } from "@/db";
 import { globalErrorHandler } from "@/lib/errors";
-import { RepoPlugin, type RepoPluginOptions } from "@/repo";
 import { RouterPlugin } from "@/routes";
-import { ServicePlugin, type ServicePluginOpts } from "@/services";
 import {
 	makeServerRuntimeLayer,
 	ServerConfigTag,
@@ -19,8 +16,6 @@ import {
 } from "@/runtime";
 
 type ServerOpts = {
-	repoPluginOpts?: Omit<RepoPluginOptions, "db">;
-	servicePluginOpts?: ServicePluginOpts;
 	runtimeLayer?: ServerRuntimeLayer;
 };
 
@@ -31,11 +26,7 @@ declare module "fastify" {
 	}
 }
 
-const buildServer = async ({
-	repoPluginOpts,
-	servicePluginOpts,
-	runtimeLayer,
-}: ServerOpts = {}): Promise<FastifyInstance> => {
+const buildServer = async ({ runtimeLayer }: ServerOpts = {}): Promise<FastifyInstance> => {
 	const runtime = new ServerRuntime(runtimeLayer ?? makeServerRuntimeLayer(new Config()));
 	let runtimeDisposal: Promise<void> | undefined;
 	const disposeRuntime = () => (runtimeDisposal ??= runtime.dispose());
@@ -124,9 +115,6 @@ const buildServer = async ({
 		});
 
 		await registerAuth(server);
-		const { db } = await runtime.runPromise(DatabaseTag);
-		await server.register(RepoPlugin, { ...repoPluginOpts, db });
-		await server.register(ServicePlugin, servicePluginOpts ?? {});
 		await server.register(RouterPlugin, { prefix: "/api" });
 
 		return server;

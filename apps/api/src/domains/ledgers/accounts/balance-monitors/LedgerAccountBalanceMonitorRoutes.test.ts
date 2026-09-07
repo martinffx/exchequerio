@@ -13,6 +13,7 @@ import { ServerRuntime } from "@/runtime";
 import { buildServer } from "@/server";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
+import type { LedgerAccountBalanceMonitorResponse } from "./LedgerAccountBalanceMonitorSchema";
 import { LedgerAccountBalanceMonitorNotFound } from "./LedgerAccountBalanceMonitorErrors";
 import { LedgerAccountBalanceMonitorRoutes } from "./LedgerAccountBalanceMonitorRoutes";
 import type { LedgerAccountBalanceMonitorRequest } from "./LedgerAccountBalanceMonitorSchema";
@@ -97,6 +98,56 @@ afterEach(async () => {
 });
 
 describe("LedgerAccountBalanceMonitorRoutes", () => {
+	it.each([
+		['{"period":"monthly"}', { period: "monthly" }],
+		["{}", {}],
+		['{"period":"monthly","count":1}', undefined],
+		['{"nested":{"toString":null}}', undefined],
+		['["monthly"]', undefined],
+		['"monthly"', undefined],
+		["1", undefined],
+		["true", undefined],
+		["null", undefined],
+		["not-json", undefined],
+	])("safely returns stored metadata %s on GET and list", async (metadata, expected) => {
+		const stored = await Effect.runPromise(
+			LedgerAccountBalanceMonitor.fromRow({
+				id: monitorId.toString(),
+				accountId: accountId.toString(),
+				name: monitor.name,
+				description: "Historical monitor",
+				alertThreshold: "0",
+				isActive: 1,
+				created: monitor.created.toJSDate(),
+				updated: monitor.updated.toJSDate(),
+				metadata,
+			})
+		);
+		const implementation = service();
+		implementation.getLedgerAccountBalanceMonitor.mockReturnValue(Effect.succeed(stored));
+		implementation.listLedgerAccountBalanceMonitors.mockReturnValue(Effect.succeed([stored]));
+		const { server } = await buildRouteServer(implementation);
+		const [get, list] = await Promise.all([
+			server.inject({
+				method: "GET",
+				headers: authorize(),
+				url: itemUrl,
+			}),
+			server.inject({ method: "GET", headers: authorize(), url: collectionUrl }),
+		]);
+
+		expect(get.statusCode).toBe(200);
+		expect(list.statusCode).toBe(200);
+		for (const body of [
+			get.json<LedgerAccountBalanceMonitorResponse>(),
+			list.json<LedgerAccountBalanceMonitorResponse[]>()[0],
+		]) {
+			expect(body.id).toBe(monitorId.toString());
+			if (expected === undefined) expect(body).not.toHaveProperty("metadata");
+			else expect(body.metadata).toEqual(expected);
+		}
+	});
+
 	it("keeps the five existing permission declarations", async () => {
 		const { hasPermissions } = await buildRouteServer(service());
 

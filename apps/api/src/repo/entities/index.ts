@@ -2,7 +2,6 @@
 
 export { LedgerAccountCategoryEntity } from "./LedgerAccountCategoryEntity";
 export { LedgerAccountEntity } from "./LedgerAccountEntity";
-export { LedgerAccountStatementEntity } from "./LedgerAccountStatementEntity";
 export { LedgerEntity } from "./LedgerEntity";
 // Export entities with explicit re-exports to avoid conflicts
 export { OrganizationEntity } from "./OrganizationEntity";

@@ -1,4 +1,6 @@
+import { Effect, Result } from "effect";
 import type { FastifyPluginAsync } from "fastify";
+
 import {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -9,15 +11,18 @@ import {
 	TooManyRequestsErrorResponse,
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
+
 import {
 	type CreateLedgerAccountStatementRequest,
 	type GetLedgerAccountStatementRequest,
-	LedgerAccountStatementIdParams as LedgerAccountStatementIdParameters,
+	LedgerAccountStatementIdParameters,
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,
-} from "./schema";
+} from "./LedgerAccountStatementSchema";
+import { LedgerAccountStatementServiceTag } from "./LedgerAccountStatementService";
 
 const TAGS = ["Ledger Account Statements"];
+
 const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 	server.get<{ Params: LedgerAccountStatementIdParameters }>(
 		"/:statementId",
@@ -41,12 +46,17 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:statement:read"]),
 		},
-		async (rq: GetLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
-			const statement =
-				await rq.server.services.ledgerAccountStatementService.getLedgerAccountStatement(
-					rq.params.statementId
-				);
-			return statement.toResponse();
+		async (request: GetLedgerAccountStatementRequest) => {
+			const effect = LedgerAccountStatementServiceTag.use(service =>
+				service.getLedgerAccountStatement(request.params.statementId)
+			);
+			const result = await request.server.runtime.runPromise(Effect.result(effect));
+			return Result.match(result, {
+				onSuccess: statement => statement.toResponse(),
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 
@@ -72,10 +82,17 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 			},
 			preHandler: server.hasPermissions(["ledger:account:statement:write"]),
 		},
-		async (rq: CreateLedgerAccountStatementRequest): Promise<LedgerAccountStatementResponse> => {
-			const statement =
-				await rq.server.services.ledgerAccountStatementService.createLedgerAccountStatement(rq.body);
-			return statement.toResponse();
+		async (request: CreateLedgerAccountStatementRequest) => {
+			const effect = LedgerAccountStatementServiceTag.use(service =>
+				service.createLedgerAccountStatement(request.body)
+			);
+			const result = await request.server.runtime.runPromise(Effect.result(effect));
+			return Result.match(result, {
+				onSuccess: statement => statement.toResponse(),
+				onFailure: error => {
+					throw error;
+				},
+			});
 		}
 	);
 };

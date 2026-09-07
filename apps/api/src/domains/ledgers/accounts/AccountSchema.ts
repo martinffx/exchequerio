@@ -1,5 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { ListQuery } from "@/lib/ListQuery";
+import { MetadataSchema } from "@/lib/schema";
 import { LedgerIdSchema } from "../LedgerSchema";
 
 /** Canonical Account TypeID used by Account and Settlement routes. */
@@ -8,7 +9,6 @@ const AccountCollectionParameters = Type.Object({ ledgerId: LedgerIdSchema });
 const AccountItemParameters = Type.Object({ ledgerId: LedgerIdSchema, accountId: AccountIdSchema });
 /** Shared pagination for Account collections. */
 const AccountListQuery = ListQuery;
-const AccountMetadataSchema = Type.Record(Type.String(), Type.String());
 const NormalBalanceSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
 const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });
 const AccountCreateRequest = Type.Object(
@@ -17,7 +17,7 @@ const AccountCreateRequest = Type.Object(
 		description: Type.Optional(Type.String()),
 		normalBalance: NormalBalanceSchema,
 		currencyCode: CurrencyCodeSchema,
-		metadata: Type.Optional(AccountMetadataSchema),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{ additionalProperties: false }
 );
@@ -25,7 +25,7 @@ const AccountUpdateRequest = Type.Object(
 	{
 		name: Type.String(),
 		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(AccountMetadataSchema),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{ additionalProperties: false }
 );
@@ -47,7 +47,7 @@ const AccountResponse = Type.Object({
 	normalBalance: NormalBalanceSchema,
 	currencyCode: CurrencyCodeSchema,
 	balances: Type.Array(AccountBalanceResponse),
-	metadata: Type.Optional(AccountMetadataSchema),
+	metadata: Type.Optional(MetadataSchema),
 	lockVersion: Type.Integer({ minimum: 0 }),
 	created: Type.String({ format: "date-time" }),
 	updated: Type.String({ format: "date-time" }),

@@ -24,7 +24,6 @@ Read only the documents relevant to the work:
 - Use `atelier-orchestrator` at the start of development work. It selects an Inline Plan for bounded changes or a Spec-backed Plan when durable design and coordination artifacts are warranted.
 - Use `ponytail` at full intensity for development work. Prefer the smallest behavior-preserving change, reuse existing code and platform behavior, and defer shared abstractions until a second current consumer exists.
 - Treat framework and architecture migrations as behavior-preserving. Before implementation, list every intended change to API behavior, domain rules, persistence, errors, identifiers, time, or operational behavior; the default is none. Stop and split the work if implementation discovers an unlisted change.
-- For Effect migrations, follow [EFFECT_MIGRATION.md](./EFFECT_MIGRATION.md). Product documents and existing contracts define behavior, the API standard defines ownership, and the migration guide defines only migration sequence and method.
 - Keep migrations separate from product and infrastructure changes unless the broader scope is explicitly requested.
 - Treat skills as decision guidance, not implementation checklists; the task and existing source determine which patterns apply.
 - Read [domain documentation guidance](./docs/agents/domain.md) before domain-modelling work. Maintain `CONTEXT.md` as a glossary, not an implementation specification.

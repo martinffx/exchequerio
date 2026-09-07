@@ -6,23 +6,19 @@ import { TypeID } from "typeid-js";
 import { Config } from "@/config";
 import { LedgerAccountEntity, LedgerEntity, OrganizationEntity } from "@/repo/entities";
 import type { LedgerAccountEntityOpts } from "@/repo/entities/LedgerAccountEntity";
-import type { LedgerAccountStatementEntityOpts } from "@/repo/entities/LedgerAccountStatementEntity";
-import { LedgerAccountStatementEntity } from "@/repo/entities/LedgerAccountStatementEntity";
 import type { LedgerEntityOpts } from "@/repo/entities/LedgerEntity";
 import type { OrgEntityOpts } from "@/repo/entities/OrganizationEntity";
-import type { LedgerID } from "@/repo/entities/types";
 import { LedgerAccountRepo } from "./LedgerAccountRepo";
-import { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import { LedgerRepo } from "./LedgerRepo";
 import * as schema from "./schema";
-import type { DrizzleDB, Repos } from "./types";
+import type { DrizzleDB } from "./types";
 
 interface OrganizationFixtureRepo {
 	createOrganization(record: OrganizationEntity): Promise<OrganizationEntity>;
 	deleteOrganization(id: TypeID<"org">): Promise<void>;
 }
 
-type TestRepos = Repos & {
+type TestRepos = {
 	db: DrizzleDB;
 	organizationRepo: OrganizationFixtureRepo;
 	ledgerRepo: LedgerRepo;
@@ -58,14 +54,12 @@ function getRepos(): TestRepos {
 	};
 	const ledgerRepo = new LedgerRepo(db);
 	const ledgerAccountRepo = new LedgerAccountRepo(db);
-	const ledgerAccountStatementRepo = new LedgerAccountStatementRepo(db);
 
 	repos = {
 		db,
 		organizationRepo,
 		ledgerRepo,
 		ledgerAccountRepo,
-		ledgerAccountStatementRepo,
 	};
 
 	return repos;
@@ -150,45 +144,4 @@ function createLedgerAccountEntity(
 	});
 }
 
-/**
- * Creates a LedgerAccountStatementEntity with sensible test defaults.
- *
- * @param options - Partial options to override defaults
- * @returns A new LedgerAccountStatementEntity instance
- *
- * @example
- * ```typescript
- * const statement = createLedgerAccountStatementEntity({
- *   accountId: accountId,
- *   statementDate: new Date('2024-01-01'),
- *   closingBalance: 50000
- * });
- * ```
- */
-function createLedgerAccountStatementEntity(
-	options: Partial<LedgerAccountStatementEntityOpts> = {}
-): LedgerAccountStatementEntity {
-	const now = new Date();
-	return new LedgerAccountStatementEntity({
-		id: options.id ?? new TypeID("lst"),
-		ledgerId: options.ledgerId ?? (new TypeID("lgr") as LedgerID),
-		accountId: options.accountId ?? new TypeID("lat"),
-		statementDate: options.statementDate ?? now,
-		openingBalance: options.openingBalance ?? 0,
-		closingBalance: options.closingBalance ?? 0,
-		totalCredits: options.totalCredits ?? 0,
-		totalDebits: options.totalDebits ?? 0,
-		transactionCount: options.transactionCount ?? 0,
-		metadata: options.metadata,
-		created: options.created ?? now,
-		updated: options.updated ?? now,
-	});
-}
-
-export {
-	getRepos,
-	createOrganizationEntity,
-	createLedgerEntity,
-	createLedgerAccountEntity,
-	createLedgerAccountStatementEntity,
-};
+export { getRepos, createOrganizationEntity, createLedgerEntity, createLedgerAccountEntity };
