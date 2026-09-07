@@ -5,7 +5,7 @@ export default [
 	defineConfig({
 		test: {
 			name: "repo",
-			include: ["src/repo/**/*.test.ts"],
+			include: ["src/domains/**/*Repo.test.ts"],
 			fileParallelism: false, // repo tests run sequentially to avoid FK conflicts
 			globals: true,
 			environment: "node",
@@ -21,7 +21,7 @@ export default [
 		test: {
 			name: "unit",
 			include: ["src/**/*.test.ts"],
-			exclude: ["src/repo/**/*.test.ts"],
+			exclude: ["src/domains/**/*Repo.test.ts"],
 			globals: true,
 			environment: "node",
 			globalSetup: "./test.setup.ts",

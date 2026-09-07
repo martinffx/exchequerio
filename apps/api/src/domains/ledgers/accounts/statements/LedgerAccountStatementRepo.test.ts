@@ -6,18 +6,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { NotFoundError } from "@/lib/errors";
-import type {
-	LedgerAccountID,
-	LedgerAccountStatementID,
-	LedgerID,
-	OrgID,
-} from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerAccountStatementID, LedgerID, OrgID } from "@/lib/ids";
 import {
 	LedgerAccountsTable,
 	LedgerAccountStatementsTable,
 	LedgersTable,
 	OrganizationsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import {

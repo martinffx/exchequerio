@@ -7,12 +7,7 @@ import { LedgerAccount } from "../accounts/LedgerAccount";
 import type { LedgerTransactionRepo } from "../transactions/LedgerTransactionRepo";
 import { TransactionValidationFailure } from "../transactions/LedgerTransactionErrors";
 import { ConflictError, ServiceUnavailableError } from "@/lib/errors";
-import {
-	newOrgID,
-	newLedgerID,
-	newLedgerAccountID,
-	newLedgerAccountSettlementID,
-} from "@/repo/entities/types";
+import { newOrgID, newLedgerID, newLedgerAccountID, newLedgerAccountSettlementID } from "@/lib/ids";
 import type { IdempotencyService } from "@/services/IdempotencyService";
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import type { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";

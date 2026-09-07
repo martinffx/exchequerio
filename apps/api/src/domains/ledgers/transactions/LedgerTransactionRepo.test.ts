@@ -16,14 +16,14 @@ import {
 	newOrgID,
 	type LedgerID,
 	type OrgID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import {
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
 	LedgerTransactionsTable,
 	LedgersTable,
 	OrganizationsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { LedgerTransaction } from "./LedgerTransaction";
 

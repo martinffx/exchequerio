@@ -3,7 +3,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type DrizzleDatabase } from "@/db";
 import { OrganizationNotFound } from "@/domains/organizations";
-import type { LedgerID, OrgID } from "@/repo/entities/types";
+import type { LedgerID, OrgID } from "@/lib/ids";
 import {
 	LedgersTable,
 	LedgerAccountsTable,
@@ -11,7 +11,7 @@ import {
 	LedgerAccountSettlementEntriesTable,
 	LedgerTransactionsTable,
 	LedgerTransactionEntriesTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 import { Ledger } from "./Ledger";
 import {
 	LedgerHasDependents,

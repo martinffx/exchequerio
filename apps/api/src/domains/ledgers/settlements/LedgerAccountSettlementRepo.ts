@@ -17,14 +17,14 @@ import {
 	ServiceUnavailableError,
 } from "@/lib/errors";
 import { encodeUuid, encodeMetadata, parseMetadata } from "@/lib/utils";
-import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
+import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/lib/ids";
 import {
 	LedgerAccountSettlementEntriesTable as Links,
 	LedgerAccountSettlementsTable as Settlements,
 	LedgerAccountsTable as Accounts,
 	LedgerTransactionEntriesTable as Entries,
 	LedgerTransactionsTable as Transactions,
-} from "@/repo/schema";
+} from "@/db/schema";
 import { LedgerTransaction } from "../transactions/LedgerTransaction";
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import type {

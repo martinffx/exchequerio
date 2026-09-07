@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerAuth, signJWT } from "@/auth";
 import { Config } from "@/config";
 import { globalErrorHandler, InternalServerError } from "@/lib/errors";
-import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/repo/entities/types";
+import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/lib/ids";
 import { ServerRuntime } from "@/runtime";
 import { buildServer } from "@/server";
 

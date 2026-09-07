@@ -14,7 +14,7 @@ import {
 	type LedgerID,
 	type LedgerTransactionID,
 	type OrgID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 
 import { LedgerTransaction } from "./LedgerTransaction";
 import {

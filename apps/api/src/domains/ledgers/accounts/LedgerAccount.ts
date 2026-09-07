@@ -4,12 +4,12 @@ import { DateTime } from "luxon";
 import { BadRequestError } from "@/lib/errors";
 import type { Metadata } from "@/lib/schema";
 import { encodeUuid, encodeMetadata, parseDate, parseUuid, parseMetadata } from "@/lib/utils";
-import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
 import type {
 	LedgerAccountInsertRow,
 	LedgerAccountRow,
 	LedgerTransactionEntryRow,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { AccountPersistenceDecodingFailure } from "./AccountErrors";
 import type {

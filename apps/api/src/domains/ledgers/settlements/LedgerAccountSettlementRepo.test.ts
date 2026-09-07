@@ -31,7 +31,7 @@ import {
 	newLedgerAccountID,
 	newLedgerTransactionID,
 	newLedgerTransactionEntryID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import {
 	ledgerAccountSettlementRepoLayer,

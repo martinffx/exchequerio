@@ -3,7 +3,7 @@ import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NotFoundError } from "@/lib/errors";
-import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/lib/ids";
 
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import {

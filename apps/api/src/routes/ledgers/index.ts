@@ -5,7 +5,7 @@ import { LedgerAccountBalanceMonitorRoutes } from "@/domains/ledgers/accounts/ba
 import { LedgerAccountStatementRoutes } from "@/domains/ledgers/accounts/statements";
 import { LedgerAccountSettlementRoutes } from "@/domains/ledgers/settlements";
 import { TransactionRoutes } from "@/domains/ledgers/transactions";
-import { LedgerAccountCategoryRoutes } from "./LedgerAccountCategoryRoutes";
+import { LedgerAccountCategoryRoutes } from "@/domains/ledgers/accounts/categories";
 
 const LedgerRouterPlugin: FastifyPluginAsync = async server => {
 	await server.register(LedgerAccountCategoryRoutes, {

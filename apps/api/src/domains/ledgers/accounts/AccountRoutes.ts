@@ -11,7 +11,7 @@ import {
 	UnauthorizedProblem,
 } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
-import type { LedgerAccountID, LedgerID } from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerID } from "@/lib/ids";
 import {
 	AccountCollectionParameters,
 	AccountCreateRequest,

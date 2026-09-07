@@ -2,7 +2,7 @@ import { Effect, ManagedRuntime, Option } from "effect";
 import Redis from "ioredis";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
-import { newOrgID } from "@/repo/entities/types";
+import { newOrgID } from "@/lib/ids";
 import {
 	IdempotencyPending,
 	type IdempotencyService,

@@ -1,3 +1,4 @@
+import { LedgerIdParams as LedgerIdParameters } from "@/routes/ledgers/schema";
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { MetadataSchema } from "@/lib/schema";
@@ -16,8 +17,8 @@ import {
 	UnauthorizedErrorResponse,
 } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
-import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
-import { LedgerAccountCategoryServiceTag } from "@/services/LedgerAccountCategoryService";
+import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/lib/ids";
+import { LedgerAccountCategoryServiceTag } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryService";
 import { PaginationQuery } from "@/routes/schema";
 import {
 	type CreateLedgerAccountCategoryRequest,
@@ -26,7 +27,6 @@ import {
 	LedgerAccountCategoryIdParams as LedgerAccountCategoryIdParameters,
 	LedgerAccountCategoryRequest,
 	LedgerAccountCategoryResponse,
-	LedgerIdParams as LedgerIdParameters,
 	LinkAccountToCategoryParams as LinkAccountToCategoryParameters,
 	LinkCategoryToCategoryParams as LinkCategoryToCategoryParameters,
 	type LinkLedgerAccountCategoryToCategoryRequest,
@@ -35,7 +35,7 @@ import {
 	type UnlinkLedgerAccountCategoryToCategoryRequest,
 	type UnlinkLedgerAccountToCategoryRequest,
 	type UpdateLedgerAccountCategoryRequest,
-} from "./schema";
+} from "./LedgerAccountCategorySchema";
 
 // Check metadata before AJV can coerce non-string values into strings.
 const validateMetadata: preValidationAsyncHookHandler = async request => {

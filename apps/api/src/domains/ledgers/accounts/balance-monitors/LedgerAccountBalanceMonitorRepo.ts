@@ -3,11 +3,11 @@ import { desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
-import type { LedgerAccountBalanceMonitorID } from "@/repo/entities/types";
+import type { LedgerAccountBalanceMonitorID } from "@/lib/ids";
 import {
 	type LedgerAccountBalanceMonitorRow,
 	LedgerAccountBalanceMonitorsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import type { LedgerAccountBalanceMonitorListQuery } from "./LedgerAccountBalanceMonitorSchema";

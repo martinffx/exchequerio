@@ -1,11 +1,11 @@
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
-import type { OrgID } from "../../repo/entities/types";
+import type { OrgID } from "@/lib/ids";
 import type {
 	OrganizationInsertRow,
 	OrganizationRow,
 	OrganizationUpdateRow,
-} from "../../repo/schema";
+} from "../../db/schema";
 import type { OrganizationResponse, OrganizationUpdateRequest } from "./OrganizationSchema";
 import {
 	type OrganizationInfrastructureError,

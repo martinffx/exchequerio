@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Option } from "effect";
-import type { OrgID } from "../../repo/entities/types";
+import type { OrgID } from "@/lib/ids";
 import { Organization } from "./Organization";
 import { OrganizationHasDependents, OrganizationNotFound } from "./OrganizationErrors";
 import {

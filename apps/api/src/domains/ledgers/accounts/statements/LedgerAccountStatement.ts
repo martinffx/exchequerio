@@ -3,8 +3,8 @@ import type { InferInsertModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 
 import type { Metadata } from "@/lib/schema";
-import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/repo/entities/types";
-import type { LedgerAccountStatementRow, LedgerAccountStatementsTable } from "@/repo/schema";
+import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/lib/ids";
+import type { LedgerAccountStatementRow, LedgerAccountStatementsTable } from "@/db/schema";
 
 import type {
 	LedgerAccountStatementRequest,

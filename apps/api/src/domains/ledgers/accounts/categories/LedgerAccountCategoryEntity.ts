@@ -2,12 +2,12 @@ import { encodeUuid } from "@/lib/utils";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 import type { Metadata } from "@/lib/schema";
-import type { LedgerAccountCategoriesTable } from "@/repo/schema";
+import type { LedgerAccountCategoriesTable } from "@/db/schema";
 import type {
 	LedgerAccountCategoryRequest,
 	LedgerAccountCategoryResponse,
-} from "@/routes/ledgers/schema";
-import type { LedgerAccountCategoryID, LedgerID, OrgID } from "./types";
+} from "./LedgerAccountCategorySchema";
+import type { LedgerAccountCategoryID, LedgerID, OrgID } from "@/lib/ids";
 
 // Infer types from Drizzle schema
 type LedgerAccountCategoryRecord = InferSelectModel<typeof LedgerAccountCategoriesTable>;

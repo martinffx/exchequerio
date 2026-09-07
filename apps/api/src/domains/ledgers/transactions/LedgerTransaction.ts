@@ -9,12 +9,12 @@ import type {
 	LedgerTransactionEntryID,
 	LedgerTransactionID,
 	OrgID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import type {
 	LedgerTransactionInsertRow,
 	LedgerTransactionRow,
 	LedgerTransactionWithEntriesRow,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import {
 	TransactionLifecycleConflict,

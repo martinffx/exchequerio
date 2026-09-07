@@ -9,11 +9,11 @@ import {
 	parseUuid,
 	parseMetadata,
 } from "@/lib/utils";
-import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/repo/entities/types";
+import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/lib/ids";
 import type {
 	LedgerAccountBalanceMonitorRow,
 	LedgerAccountBalanceMonitorsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { LedgerAccountBalanceMonitorPersistenceDecodingFailure } from "./LedgerAccountBalanceMonitorErrors";
 import type {

@@ -2,8 +2,8 @@ import { encodeUuid } from "@/lib/utils";
 import { asc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
-import type { OrgID } from "../../repo/entities/types";
-import { OrganizationsTable } from "../../repo/schema";
+import type { OrgID } from "@/lib/ids";
+import { OrganizationsTable } from "../../db/schema";
 import { Organization } from "./Organization";
 import {
 	OrganizationHasDependents,

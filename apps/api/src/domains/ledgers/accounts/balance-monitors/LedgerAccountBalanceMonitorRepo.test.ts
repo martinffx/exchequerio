@@ -13,13 +13,13 @@ import {
 	newOrgID,
 	type LedgerAccountBalanceMonitorID,
 	type LedgerAccountID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import {
 	LedgerAccountBalanceMonitorsTable,
 	LedgerAccountsTable,
 	LedgersTable,
 	OrganizationsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import {

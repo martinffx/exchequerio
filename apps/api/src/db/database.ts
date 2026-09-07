@@ -3,7 +3,7 @@ import * as PgDrizzle from "drizzle-orm/effect-postgres";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Context, Effect, Layer } from "effect";
 import { Pool, types } from "pg";
-import { schemaRelations } from "../repo/schema";
+import { schemaRelations } from "./schema";
 
 type DrizzleDatabase = NodePgDatabase<typeof schemaRelations>;
 type EffectDrizzleDatabase = PgDrizzle.EffectPgDatabase<typeof schemaRelations>;

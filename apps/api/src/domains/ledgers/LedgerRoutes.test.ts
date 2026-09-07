@@ -5,7 +5,7 @@ import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { globalErrorHandler, ServiceUnavailableError } from "@/lib/errors";
-import type { LedgerID, OrgID } from "@/repo/entities/types";
+import type { LedgerID, OrgID } from "@/lib/ids";
 import { ServerRuntime } from "@/runtime";
 import { Ledger } from "./Ledger";
 import { LedgerHasDependents, LedgerNotFound } from "./LedgerErrors";

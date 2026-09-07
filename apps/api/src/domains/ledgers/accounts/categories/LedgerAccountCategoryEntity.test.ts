@@ -1,6 +1,6 @@
 import { TypeID } from "typeid-js";
-import type { LedgerAccountCategoryRequest } from "@/routes/ledgers/schema";
-import type { LedgerID, OrgID } from "./types";
+import type { LedgerAccountCategoryRequest } from "./LedgerAccountCategorySchema";
+import type { LedgerID, OrgID } from "@/lib/ids";
 import { LedgerAccountCategoryEntity } from "./LedgerAccountCategoryEntity";
 
 describe("LedgerAccountCategoryEntity ownership", () => {

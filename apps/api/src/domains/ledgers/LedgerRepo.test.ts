@@ -5,8 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { OrganizationNotFound } from "@/domains/organizations";
-import { newLedgerAccountID, newLedgerID, newOrgID, type OrgID } from "@/repo/entities/types";
-import { LedgersTable } from "@/repo/schema";
+import { newLedgerAccountID, newLedgerID, newOrgID, type OrgID } from "@/lib/ids";
+import { LedgersTable } from "@/db/schema";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,

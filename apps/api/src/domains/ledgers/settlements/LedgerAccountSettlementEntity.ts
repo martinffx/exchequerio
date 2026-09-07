@@ -18,8 +18,8 @@ import {
 	type LedgerAccountSettlementID,
 	type LedgerID,
 	type OrgID,
-} from "@/repo/entities/types";
-import type { LedgerAccountSettlementInsert, LedgerAccountSettlementRow } from "@/repo/schema";
+} from "@/lib/ids";
+import type { LedgerAccountSettlementInsert, LedgerAccountSettlementRow } from "@/db/schema";
 import type {
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,

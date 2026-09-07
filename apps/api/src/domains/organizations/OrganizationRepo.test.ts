@@ -4,8 +4,8 @@ import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
-import type { OrgID } from "../../repo/entities/types";
-import { OrganizationsTable } from "../../repo/schema";
+import type { OrgID } from "@/lib/ids";
+import { OrganizationsTable } from "../../db/schema";
 import { Organization } from "./Organization";
 import {
 	type OrganizationRepo,

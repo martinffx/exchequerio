@@ -19,13 +19,13 @@ import type {
 	LedgerTransactionEntryID,
 	LedgerTransactionID,
 	OrgID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import {
 	LedgerAccountSettlementsTable,
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
 	LedgerTransactionsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { LedgerTransaction } from "./LedgerTransaction";
 import type { LedgerTransactionEntry } from "./LedgerTransactionEntry";

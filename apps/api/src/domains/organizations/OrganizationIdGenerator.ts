@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
-import type { OrgID } from "../../repo/entities/types";
+import type { OrgID } from "@/lib/ids";
 import { parseId } from "@/lib/utils";
 
 interface OrganizationIdGenerator {

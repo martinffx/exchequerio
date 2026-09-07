@@ -2,7 +2,7 @@ import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { HttpError, InternalServerError, ServiceUnavailableError } from "@/lib/errors";
-import type { OrgID } from "../../repo/entities/types";
+import type { OrgID } from "@/lib/ids";
 import { Organization } from "./Organization";
 import {
 	OrganizationHasDependents,

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { globalErrorHandler } from "@/lib/errors";
-import type { LedgerAccountID, LedgerID, LedgerTransactionID, OrgID } from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerID, LedgerTransactionID, OrgID } from "@/lib/ids";
 import { IdempotencyPending, IdempotencyUnavailable } from "@/services/IdempotencyService";
 
 import { LedgerTransaction } from "./LedgerTransaction";

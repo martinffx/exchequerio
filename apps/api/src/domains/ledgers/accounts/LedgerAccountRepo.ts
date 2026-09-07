@@ -4,8 +4,8 @@ import { Context, Effect, Layer, Option } from "effect";
 
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
-import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
-import { LedgerAccountsTable } from "@/repo/schema";
+import type { LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
+import { LedgerAccountsTable } from "@/db/schema";
 
 import {
 	AccountHasDependents,

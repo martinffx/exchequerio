@@ -1,22 +1,29 @@
 import { randomUUID } from "node:crypto";
 
 import autocannon from "autocannon";
-import { sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import type { FastifyInstance } from "fastify";
 import { Pool } from "pg";
+import { sql } from "drizzle-orm";
+import type { FastifyInstance } from "fastify";
 import { retry } from "radash";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { TypeID } from "typeid-js";
 import { signJWT } from "@/auth";
 import { Config } from "@/config";
-import { LedgerAccountEntity, LedgerEntity, type LedgerID, type OrgID } from "@/repo/entities";
-import { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
-import { LedgerRepo } from "@/repo/LedgerRepo";
-import * as schema from "@/repo/schema";
-import { OrganizationsTable } from "@/repo/schema";
+import type { LedgerID, OrgID } from "@/lib/ids";
+import { newLedgerID, newLedgerAccountID } from "@/lib/ids";
+import { Ledger } from "@/domains/ledgers/Ledger";
+import { LedgerAccount } from "@/domains/ledgers/accounts/LedgerAccount";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { DatabaseTag, makeDatabaseLive } from "@/db";
+import {
+	type LedgerAccountRepo,
+	LedgerAccountRepoTag,
+	ledgerAccountRepoLayer,
+} from "@/domains/ledgers/accounts/LedgerAccountRepo";
+import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "@/domains/ledgers/LedgerRepo";
+import { OrganizationsTable } from "@/db/schema";
 import { buildServer } from "@/server";
-import type { DrizzleDB } from "@/repo/types";
+import type { DrizzleDatabase } from "@/db";
 
 interface BenchmarkScenario {
 	name: string;
@@ -50,15 +57,12 @@ async function setupFixtures(
 	accountPairs: Array<{ debitId: string; creditId: string }>;
 }> {
 	// Create ledger
-	const ledger = await ledgerRepo.upsertLedger(
-		LedgerEntity.fromRequest(
-			{
+	const ledger = await Effect.runPromise(
+		ledgerRepo.createLedger(
+			Ledger.fromRequest(newLedgerID(), orgId, {
 				name: "Benchmark Ledger",
 				description: "Ledger for benchmarking",
-				currency: "USD",
-				currencyExponent: 2,
-			},
-			orgId
+			})
 		)
 	);
 
@@ -74,27 +78,25 @@ async function setupFixtures(
 		const hotPairCount = hotAccountCount / 2;
 
 		for (let i = 0; i < hotPairCount; i++) {
-			const hotDebit = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
+			const hotDebit = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
 						name: `Hot Debit Account ${i}`,
 						description: `Hot debit account ${i} (high contention)`,
-					},
-					orgId,
-					ledger.id,
-					"debit"
+						normalBalance: "debit",
+						currencyCode: "USD",
+					})
 				)
 			);
 
-			const hotCredit = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
+			const hotCredit = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
 						name: `Hot Credit Account ${i}`,
 						description: `Hot credit account ${i} (high contention)`,
-					},
-					orgId,
-					ledger.id,
-					"credit"
+						normalBalance: "credit",
+						currencyCode: "USD",
+					})
 				)
 			);
 
@@ -108,15 +110,14 @@ async function setupFixtures(
 		const regularAccountCount = accountCount - hotAccountCount;
 
 		for (let i = 0; i < regularAccountCount; i++) {
-			const regularAccount = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
+			const regularAccount = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
 						name: `Regular Account ${i}`,
 						description: `Regular account ${i}`,
-					},
-					orgId,
-					ledger.id,
-					i % 2 === 0 ? "debit" : "credit"
+						normalBalance: i % 2 === 0 ? "debit" : "credit",
+						currencyCode: "USD",
+					})
 				)
 			);
 
@@ -142,27 +143,25 @@ async function setupFixtures(
 		const pairCount = accountCount / 2;
 
 		for (let i = 0; i < pairCount; i++) {
-			const debitAccount = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
+			const debitAccount = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
 						name: `Debit Account ${i}`,
 						description: `Debit account for pair ${i}`,
-					},
-					orgId,
-					ledger.id,
-					"debit"
+						normalBalance: "debit",
+						currencyCode: "USD",
+					})
 				)
 			);
 
-			const creditAccount = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
+			const creditAccount = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
 						name: `Credit Account ${i}`,
 						description: `Credit account for pair ${i}`,
-					},
-					orgId,
-					ledger.id,
-					"credit"
+						normalBalance: "credit",
+						currencyCode: "USD",
+					})
 				)
 			);
 
@@ -179,7 +178,7 @@ async function setupFixtures(
 	};
 }
 
-async function cleanupFixtures(db: DrizzleDB, orgId: OrgID): Promise<void> {
+async function cleanupFixtures(db: DrizzleDatabase, orgId: OrgID): Promise<void> {
 	// Retry cleanup to handle transient failures from straggler connections
 	await retry(
 		{
@@ -257,11 +256,13 @@ function createTransactionPayload(accountPair: { debitId: string; creditId: stri
 				accountId: accountPair.debitId,
 				direction: "debit",
 				amount: 10000,
+				currencyCode: "USD",
 			},
 			{
 				accountId: accountPair.creditId,
 				direction: "credit",
 				amount: 10000,
+				currencyCode: "USD",
 			},
 		],
 	};
@@ -310,6 +311,7 @@ async function runBenchmark(
 		})),
 	});
 
+	expect(result["2xx"]).toBeGreaterThan(0);
 	return {
 		scenario: scenario.name,
 		accountCount: scenario.accountCount,
@@ -378,20 +380,27 @@ function printResults(results: BenchmarkResult[]): void {
 
 describe("Transaction Creation Benchmarks", () => {
 	let server: FastifyInstance;
-	let pool: Pool;
-	let db: DrizzleDB;
+	const fixtureRuntime = ManagedRuntime.make(
+		Layer.mergeAll(ledgerRepoLayer, ledgerAccountRepoLayer).pipe(
+			Layer.provideMerge(
+				makeDatabaseLive(
+					new Config().databaseUrl,
+					connectionString => new Pool({ connectionString, max: 20 })
+				)
+			)
+		)
+	);
+	let db: DrizzleDatabase;
 	let ledgerRepo: LedgerRepo;
 	let accountRepo: LedgerAccountRepo;
 	let sharedOrgId: OrgID;
 	const results: BenchmarkResult[] = [];
 
 	beforeAll(async () => {
-		const config = new Config();
-		pool = new Pool({ connectionString: config.databaseUrl, max: 20 });
-		db = drizzle({ client: pool, relations: schema.schemaRelations });
+		db = (await fixtureRuntime.runPromise(DatabaseTag)).db;
 
-		ledgerRepo = new LedgerRepo(db);
-		accountRepo = new LedgerAccountRepo(db);
+		ledgerRepo = await fixtureRuntime.runPromise(LedgerRepoTag);
+		accountRepo = await fixtureRuntime.runPromise(LedgerAccountRepoTag);
 
 		// Create shared organization for all tests
 		console.log("Creating shared organization...");
@@ -423,8 +432,8 @@ describe("Transaction Creation Benchmarks", () => {
 		await cleanupFixtures(db, sharedOrgId);
 		console.log("Cleanup complete\n");
 
-		// Close our test pool
-		await pool.end();
+		// Close the fixture runtime and its database pools
+		await fixtureRuntime.dispose();
 
 		// Print summary of all results
 		if (results.length > 0) {

@@ -5,7 +5,7 @@ import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { HttpError, InternalServerError } from "@/lib/errors";
-import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/repo/entities/types";
+import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/lib/ids";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import {

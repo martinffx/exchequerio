@@ -1,8 +1,8 @@
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 import type { Metadata } from "@/lib/schema";
-import type { LedgerID, OrgID } from "@/repo/entities/types";
-import type { LedgerInsertRow, LedgerRow, LedgerUpdateRow } from "@/repo/schema";
+import type { LedgerID, OrgID } from "@/lib/ids";
+import type { LedgerInsertRow, LedgerRow, LedgerUpdateRow } from "@/db/schema";
 import { encodeUuid, parseUuid } from "@/lib/utils";
 import type { LedgerCreateRequest, LedgerResponse, LedgerUpdateRequest } from "./LedgerSchema";
 import { LedgerPersistenceDecodingFailure } from "./LedgerErrors";

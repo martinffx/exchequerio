@@ -2,7 +2,7 @@ import { encodeUuid } from "@/lib/utils";
 import { TypeID } from "typeid-js";
 import { describe, expect, it } from "vitest";
 
-import type { LedgerAccountStatementRow } from "@/repo/schema";
+import type { LedgerAccountStatementRow } from "@/db/schema";
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 
 const ledgerId = "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4";

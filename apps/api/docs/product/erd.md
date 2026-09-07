@@ -1,7 +1,7 @@
 # Exchequer Ledger API entity relationships
 
 This diagram shows the ownership and accounting columns used by Ledger Transactions. See
-[`schema.ts`](../../src/repo/schema.ts) for the complete database schema.
+[`schema.ts`](../../src/db/schema.ts) for the complete database schema.
 
 ```mermaid
 erDiagram

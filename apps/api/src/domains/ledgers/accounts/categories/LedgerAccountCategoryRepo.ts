@@ -1,21 +1,12 @@
 import { encodeUuid } from "@/lib/utils";
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-// oxlint-disable-next-line boundaries/element-types -- The in-place migration uses the shared Effect database.
 import { DatabaseTag, type EffectDrizzleDatabase, postgresErrorCode } from "@/db";
-// oxlint-disable-next-line boundaries/element-types -- The in-place migration reuses shared PostgreSQL constraint inspection.
 import { postgresConstraint } from "@/db/errors";
-// oxlint-disable-next-line boundaries/element-types -- Relationship persistence exposes canonical ownership errors.
 import { AccountNotFound } from "@/domains/ledgers/accounts/AccountErrors";
-// oxlint-disable-next-line boundaries/element-types -- Category persistence exposes the canonical Ledger ownership error.
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
-import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
-import type {
-	LedgerAccountCategoryID,
-	LedgerAccountID,
-	LedgerID,
-	OrgID,
-} from "@/repo/entities/types";
+import { LedgerAccountCategoryEntity } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryEntity";
+import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
 import {
 	CategoryConflict,
 	type CategoryInfrastructureError,
@@ -27,7 +18,7 @@ import {
 	LedgerAccountCategoriesTable,
 	LedgerAccountCategoryAccountsTable,
 	LedgerAccountCategoryParentsTable,
-} from "./schema";
+} from "@/db/schema";
 
 type CategoryListRepositoryError = CategoryInfrastructureError;
 type CategoryGetRepositoryError = CategoryNotFound | CategoryInfrastructureError;
