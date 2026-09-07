@@ -14,6 +14,7 @@ import {
 	timestamp,
 	unique,
 	uniqueIndex,
+	uuid,
 } from "drizzle-orm/pg-core";
 
 // Enums for ledger system
@@ -33,7 +34,7 @@ const ledgerSettlementStatus = pgEnum("ledger_settlement_status", [
 ]);
 
 const OrganizationsTable = pgTable("organizations_table", {
-	id: text("id").primaryKey(),
+	id: uuid("id").primaryKey(),
 	name: text("name").notNull(),
 	description: text("description"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
@@ -47,8 +48,8 @@ type OrganizationUpdateRow = Pick<OrganizationRow, "name" | "description" | "upd
 const LedgersTable = pgTable(
 	"ledgers",
 	{
-		id: text("id").primaryKey(),
-		organizationId: text("organization_id")
+		id: uuid("id").primaryKey(),
+		organizationId: uuid("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
 		name: text("name").notNull(),
@@ -73,11 +74,11 @@ type LedgerUpdateRow = Pick<LedgerRow, "name" | "description" | "metadata" | "up
 const LedgerAccountsTable = pgTable(
 	"ledger_accounts",
 	{
-		id: text("id").primaryKey(),
-		organizationId: text("organization_id")
+		id: uuid("id").primaryKey(),
+		organizationId: uuid("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		ledgerId: text("ledger_id").notNull(),
+		ledgerId: uuid("ledger_id").notNull(),
 		name: text("name").notNull(),
 		description: text("description"),
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
@@ -143,10 +144,10 @@ type LedgerAccountInsertRow = typeof LedgerAccountsTable.$inferInsert;
 const LedgerTransactionsTable = pgTable(
 	"ledger_transactions",
 	{
-		id: text("id").primaryKey(),
-		settlementId: text("settlement_id"),
-		ledgerId: text("ledger_id").notNull(),
-		organizationId: text("organization_id")
+		id: uuid("id").primaryKey(),
+		settlementId: uuid("settlement_id"),
+		ledgerId: uuid("ledger_id").notNull(),
+		organizationId: uuid("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
 		description: text("description"),
@@ -194,13 +195,13 @@ type LedgerTransactionInsertRow = typeof LedgerTransactionsTable.$inferInsert;
 const LedgerTransactionEntriesTable = pgTable(
 	"ledger_transaction_entries",
 	{
-		id: text("id").primaryKey(),
-		transactionId: text("transaction_id").notNull(),
-		accountId: text("account_id").notNull(),
-		organizationId: text("organization_id")
+		id: uuid("id").primaryKey(),
+		transactionId: uuid("transaction_id").notNull(),
+		accountId: uuid("account_id").notNull(),
+		organizationId: uuid("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		ledgerId: text("ledger_id").notNull(),
+		ledgerId: uuid("ledger_id").notNull(),
 		direction: ledgerEntryDirection("direction").notNull(),
 		amount: bigint("amount", { mode: "number" }).notNull(), // Integer minor units
 		currency: text("currency").notNull(),
@@ -244,15 +245,15 @@ type LedgerTransactionEntryInsertRow = typeof LedgerTransactionEntriesTable.$inf
 const LedgerAccountCategoriesTable = pgTable(
 	"ledger_account_categories",
 	{
-		id: text("id").primaryKey(),
-		organizationId: text("organization_id")
+		id: uuid("id").primaryKey(),
+		organizationId: uuid("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		ledgerId: text("ledger_id").notNull(),
+		ledgerId: uuid("ledger_id").notNull(),
 		name: text("name").notNull(),
 		description: text("description"),
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
-		parentCategoryId: text("parent_category_id"),
+		parentCategoryId: uuid("parent_category_id"),
 		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
@@ -277,12 +278,12 @@ type LedgerAccountCategoryInsertRow = Required<typeof LedgerAccountCategoriesTab
 const LedgerAccountCategoryParentsTable = pgTable(
 	"ledger_account_category_parents",
 	{
-		organizationId: text("organization_id")
+		organizationId: uuid("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		ledgerId: text("ledger_id").notNull(),
-		categoryId: text("category_id").notNull(),
-		parentCategoryId: text("parent_category_id").notNull(),
+		ledgerId: uuid("ledger_id").notNull(),
+		categoryId: uuid("category_id").notNull(),
+		parentCategoryId: uuid("parent_category_id").notNull(),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
@@ -318,12 +319,12 @@ type LedgerAccountCategoryParentInsertRow = Required<
 const LedgerAccountCategoryAccountsTable = pgTable(
 	"ledger_account_category_accounts",
 	{
-		organizationId: text("organization_id")
+		organizationId: uuid("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		ledgerId: text("ledger_id").notNull(),
-		categoryId: text("category_id").notNull(),
-		accountId: text("account_id").notNull(),
+		ledgerId: uuid("ledger_id").notNull(),
+		categoryId: uuid("category_id").notNull(),
+		accountId: uuid("account_id").notNull(),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
@@ -356,8 +357,8 @@ type LedgerAccountCategoryAccountInsertRow = Required<
 
 // Account Balance Monitors: Real-time balance tracking with alerts
 const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monitors", {
-	id: text("id").primaryKey(),
-	accountId: text("account_id")
+	id: uuid("id").primaryKey(),
+	accountId: uuid("account_id")
 		.notNull()
 		.references(() => LedgerAccountsTable.id),
 	name: text("name").notNull(),
@@ -375,11 +376,11 @@ type LedgerAccountBalanceMonitorInsertRow = Required<
 
 // Account Statements: Periodic balance snapshots and statements
 const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
-	id: text("id").primaryKey(),
-	ledgerId: text("ledger_id")
+	id: uuid("id").primaryKey(),
+	ledgerId: uuid("ledger_id")
 		.notNull()
 		.references(() => LedgersTable.id),
-	accountId: text("account_id")
+	accountId: uuid("account_id")
 		.notNull()
 		.references(() => LedgerAccountsTable.id),
 	statementDate: timestamp("statement_date", { withTimezone: true }).notNull(),
@@ -399,17 +400,17 @@ type LedgerAccountStatementInsertRow = Required<typeof LedgerAccountStatementsTa
 const LedgerAccountSettlementsTable = pgTable(
 	"ledger_account_settlements",
 	{
-		id: text("id").primaryKey(),
-		organizationId: text("organization_id")
+		id: uuid("id").primaryKey(),
+		organizationId: uuid("organization_id")
 			.notNull()
 			.references(() => OrganizationsTable.id),
-		ledgerId: text("ledger_id").notNull(),
+		ledgerId: uuid("ledger_id").notNull(),
 		allowEitherDirection: boolean("allow_either_direction").notNull().default(false),
 		targetStatus: ledgerTransactionStatus("target_status"),
-		settledAccountId: text("settled_account_id")
+		settledAccountId: uuid("settled_account_id")
 			.notNull()
 			.references(() => LedgerAccountsTable.id),
-		contraAccountId: text("contra_account_id")
+		contraAccountId: uuid("contra_account_id")
 			.notNull()
 			.references(() => LedgerAccountsTable.id),
 		currency: text("currency").notNull(),
@@ -466,10 +467,10 @@ type LedgerAccountSettlementInsertRow = Required<typeof LedgerAccountSettlements
 const LedgerAccountSettlementEntriesTable = pgTable(
 	"ledger_account_settlement_entries",
 	{
-		settlementId: text("settlement_id")
+		settlementId: uuid("settlement_id")
 			.notNull()
 			.references(() => LedgerAccountSettlementsTable.id, { onDelete: "cascade" }),
-		entryId: text("entry_id")
+		entryId: uuid("entry_id")
 			.notNull()
 			.references(() => LedgerTransactionEntriesTable.id, { onDelete: "cascade" }),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),

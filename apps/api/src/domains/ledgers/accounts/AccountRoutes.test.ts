@@ -4,9 +4,9 @@ import fastify, { type FastifyInstance } from "fastify";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { globalErrorHandler } from "@/lib/errors";
-import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
 import { ServerRuntime } from "@/runtime";
-import type { LedgerAccountRow } from "@/repo/schema";
+import type { LedgerAccountRow } from "@/db/schema";
 import { AccountHasDependents, AccountNotFound } from "./AccountErrors";
 import { AccountRoutes } from "./AccountRoutes";
 import type { AccountService } from "./AccountService";
@@ -17,9 +17,9 @@ const organizationId = new TypeID("org") as OrgID;
 const ledgerId = new TypeID("lgr") as LedgerID;
 const accountId = new TypeID("lat") as LedgerAccountID;
 const accountRow: LedgerAccountRow = {
-	id: accountId.toString(),
-	organizationId: organizationId.toString(),
-	ledgerId: ledgerId.toString(),
+	id: accountId.toUUID(),
+	organizationId: organizationId.toUUID(),
+	ledgerId: ledgerId.toUUID(),
 	name: "Cash",
 	description: "Operating cash",
 	normalBalance: "debit",

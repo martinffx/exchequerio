@@ -17,15 +17,11 @@ import {
 } from "@/domains/ledgers/settlements";
 import { transactionLayer, type TransactionService } from "@/domains/ledgers/transactions";
 import { organizationLayer, type OrganizationService } from "@/domains/organizations";
-// oxlint-disable-next-line boundaries/element-types -- The approved in-place migration composes this legacy-path repository in the runtime.
-import { ledgerAccountCategoryRepoLayer } from "@/repo/LedgerAccountCategoryRepo";
-// oxlint-disable boundaries/element-types -- The approved in-place migration composes this legacy-path service in the runtime.
 import {
-	ledgerAccountCategoryServiceLayer,
+	ledgerAccountCategoryLayer,
 	type LedgerAccountCategoryService,
-} from "@/services/LedgerAccountCategoryService";
-// oxlint-enable boundaries/element-types
-import { makeIdempotencyService, type IdempotencyService } from "@/services/IdempotencyService";
+} from "@/domains/ledgers/accounts/categories";
+import { makeIdempotencyService, type IdempotencyService } from "@/lib/IdempotencyService";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
 
@@ -71,9 +67,7 @@ const makeServerRuntimeLayer = (
 	const settlementWithServices = settlementLayer.pipe(
 		Layer.provide(Layer.mergeAll(ledgerLayer, accountWithLedger, transactionWithLedger))
 	);
-	const ledgerAccountCategory = ledgerAccountCategoryServiceLayer.pipe(
-		Layer.provide(Layer.merge(ledgerAccountCategoryRepoLayer, ledgerLayer))
-	);
+	const ledgerAccountCategory = ledgerAccountCategoryLayer.pipe(Layer.provide(ledgerLayer));
 	return Layer.mergeAll(
 		ledgerLayer,
 		accountWithLedger,

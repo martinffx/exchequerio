@@ -5,15 +5,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Ledger } from "@/domains/ledgers/Ledger";
 import type { LedgerService } from "@/domains/ledgers/LedgerService";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
-import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
-import { CategoryNotFound, CategoryPersistenceFailure } from "@/repo/LedgerAccountCategoryErrors";
-import type {
-	LedgerAccountCategoryID,
-	LedgerAccountID,
-	LedgerID,
-	OrgID,
-} from "@/repo/entities/types";
-import type { LedgerAccountCategoryRepo } from "@/repo/LedgerAccountCategoryRepo";
+import { LedgerAccountCategoryEntity } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryEntity";
+import {
+	CategoryNotFound,
+	CategoryPersistenceFailure,
+} from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryErrors";
+import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
+import type { LedgerAccountCategoryRepo } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo";
 import { LedgerAccountCategoryService } from "./LedgerAccountCategoryService";
 
 describe("LedgerAccountCategoryService", () => {

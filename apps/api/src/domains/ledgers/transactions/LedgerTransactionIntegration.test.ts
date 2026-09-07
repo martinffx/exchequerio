@@ -1,3 +1,4 @@
+import { TypeID } from "typeid-js";
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Option } from "effect";
@@ -13,21 +14,21 @@ import {
 	newLedgerTransactionID,
 	newOrgID,
 	type OrgID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import {
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
 	LedgerTransactionsTable,
 	LedgersTable,
 	OrganizationsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 import { makeServerRuntimeLayer } from "@/runtime";
 import { buildServer } from "@/server";
 import {
 	IdempotencyPending,
 	type IdempotencyService,
 	IdempotencyServiceTag,
-} from "@/services/IdempotencyService";
+} from "@/lib/IdempotencyService";
 
 type JsonObject = Record<string, unknown>;
 
@@ -100,7 +101,7 @@ describe("Transaction assembled journeys", () => {
 	});
 
 	afterEach(async () => {
-		const ids = [...organizationIds];
+		const ids = [...organizationIds].map(id => TypeID.fromString(id, "org").toUUID());
 		if (ids.length === 0) return;
 		await db
 			.delete(LedgerTransactionEntriesTable)
@@ -117,7 +118,9 @@ describe("Transaction assembled journeys", () => {
 	const createOrganization = async () => {
 		const id = newOrgID().toString();
 		organizationIds.add(id);
-		await db.insert(OrganizationsTable).values({ id, name: `Integration ${id}` });
+		await db
+			.insert(OrganizationsTable)
+			.values({ id: TypeID.fromString(id, "org").toUUID(), name: `Integration ${id}` });
 		return id;
 	};
 
@@ -404,11 +407,18 @@ describe("Transaction assembled journeys", () => {
 			db
 				.select({ id: LedgerTransactionsTable.id })
 				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.organizationId, organizationId)),
+				.where(
+					eq(LedgerTransactionsTable.organizationId, TypeID.fromString(organizationId, "org").toUUID())
+				),
 			db
 				.select({ id: LedgerTransactionEntriesTable.id })
 				.from(LedgerTransactionEntriesTable)
-				.where(eq(LedgerTransactionEntriesTable.organizationId, organizationId)),
+				.where(
+					eq(
+						LedgerTransactionEntriesTable.organizationId,
+						TypeID.fromString(organizationId, "org").toUUID()
+					)
+				),
 		]);
 		expect(transactions).toHaveLength(1);
 		expect(entries).toHaveLength(2);
@@ -500,6 +510,7 @@ describe("Transaction assembled journeys", () => {
 			`/api/ledgers/${ownerLedgerId}/transactions/${ownerTransaction.id as string}`,
 			`/api/ledgers/${requesterLedgerId}/accounts/${missingAccountId}`,
 			`/api/ledgers/${ownerLedgerId}/accounts/${ownerDebit.id as string}`,
+			`/api/ledgers/${requesterLedgerId}/accounts/lat_00000000000000000000000001`,
 		] as const;
 
 		const responses = await Promise.all(

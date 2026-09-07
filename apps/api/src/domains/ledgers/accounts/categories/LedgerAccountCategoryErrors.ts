@@ -1,4 +1,3 @@
-// oxlint-disable-next-line boundaries/element-types -- The in-place Category migration keeps its errors beside the legacy repository.
 import { isPostgresUnavailable } from "@/db";
 import {
 	ConflictError,

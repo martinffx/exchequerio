@@ -1,12 +1,19 @@
 import { Effect } from "effect";
 import { DateTime } from "luxon";
 
-import { encodeMetadata, type Metadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
-import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/repo/entities/types";
+import {
+	encodeUuid,
+	encodeMetadata,
+	type Metadata,
+	parseDate,
+	parseUuid,
+	parseMetadata,
+} from "@/lib/utils";
+import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/lib/ids";
 import type {
 	LedgerAccountBalanceMonitorRow,
 	LedgerAccountBalanceMonitorsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { LedgerAccountBalanceMonitorPersistenceDecodingFailure } from "./LedgerAccountBalanceMonitorErrors";
 import type {
@@ -83,8 +90,8 @@ class LedgerAccountBalanceMonitor {
 		LedgerAccountBalanceMonitorPersistenceDecodingFailure
 	> {
 		return Effect.all({
-			id: parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", row.id),
-			accountId: parseId<"lat", LedgerAccountID>("lat", row.accountId),
+			id: parseUuid<"lbm", LedgerAccountBalanceMonitorID>("lbm", row.id),
+			accountId: parseUuid<"lat", LedgerAccountID>("lat", row.accountId),
 			created: parseDate(row.created),
 			updated: parseDate(row.updated),
 			metadata: parseMetadata(row.metadata).pipe(Effect.catch(() => Effect.succeed(undefined))),
@@ -152,8 +159,8 @@ class LedgerAccountBalanceMonitor {
 
 	private toWriteRow(): LedgerAccountBalanceMonitorWriteRow {
 		return {
-			id: this.id.toString(),
-			accountId: this.accountId.toString(),
+			id: encodeUuid(this.id),
+			accountId: encodeUuid(this.accountId),
 			name: this.name,
 			description: this.description,
 			alertThreshold: this.alertThreshold.toString(),

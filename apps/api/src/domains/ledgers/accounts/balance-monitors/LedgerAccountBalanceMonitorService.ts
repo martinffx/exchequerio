@@ -7,7 +7,7 @@ import {
 	newLedgerAccountBalanceMonitorID,
 	type LedgerAccountBalanceMonitorID,
 	type LedgerAccountID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import {

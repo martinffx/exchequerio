@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Option } from "effect";
 import { TypeID } from "typeid-js";
 import { ServiceUnavailableError } from "@/lib/errors";
-import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
 import { type LedgerGetError, LedgerServiceTag, type LedgerService } from "../LedgerService";
 import { LedgerAccount } from "./LedgerAccount";
 import {

@@ -2,7 +2,7 @@ import { Context, Effect, Layer, Option, Result, Schedule } from "effect";
 import type Redis from "ioredis";
 
 import { ConflictError, ServiceUnavailableError } from "@/lib/errors";
-import type { OrgID } from "@/repo/entities/types";
+import type { OrgID } from "@/lib/ids";
 
 /** Lifetime of an action claim and its stored result, in seconds. */
 const TTL_SECONDS = 15 * 60;

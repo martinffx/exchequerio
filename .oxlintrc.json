@@ -22,14 +22,67 @@
 	],
 	"settings": {
 		"import/resolver": {
-			"typescript": { "alwaysTryTypes": true },
+			"typescript": {
+				"alwaysTryTypes": true
+			},
 			"eslint-import-resolver-node": {
 				"extensions": [".js", ".jsx", ".ts", ".tsx"]
 			}
 		},
 		"boundaries/elements": [
-			{ "type": "tests", "pattern": "src/**/*.test.ts", "mode": "full" },
-			{ "type": "http", "pattern": "src/http/**/*", "mode": "full" },
+			{
+				"type": "tests",
+				"pattern": "src/**/*.test.ts",
+				"mode": "full"
+			},
+			{
+				"type": "shared-ids",
+				"pattern": "src/lib/ids.ts",
+				"mode": "full"
+			},
+			{
+				"type": "category-composition",
+				"pattern": ["src/domains/ledgers/accounts/categories/index.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "category-domain",
+				"pattern": [
+					"src/domains/ledgers/accounts/categories/LedgerAccountCategoryEntity.ts",
+					"src/domains/ledgers/accounts/categories/LedgerAccountCategoryErrors.ts"
+				],
+				"mode": "full"
+			},
+			{
+				"type": "category-repo",
+				"pattern": ["src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "category-service",
+				"pattern": ["src/domains/ledgers/accounts/categories/LedgerAccountCategoryService.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "category-routes",
+				"pattern": ["src/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "category-transport",
+				"pattern": ["src/domains/ledgers/accounts/categories/LedgerAccountCategorySchema.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "category-fixtures",
+				"pattern": ["src/domains/ledgers/accounts/categories/fixtures.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "http",
+				"pattern": "src/http/**/*",
+				"mode": "full"
+			},
 			{
 				"type": "ledger-composition",
 				"pattern": "src/domains/ledgers/index.ts",
@@ -120,7 +173,7 @@
 			},
 			{
 				"type": "idempotency-capability",
-				"pattern": "src/services/IdempotencyService.ts",
+				"pattern": "src/lib/IdempotencyService.ts",
 				"mode": "full"
 			},
 			{
@@ -175,21 +228,46 @@
 				"pattern": "src/domains/organizations/OrganizationSchema.ts",
 				"mode": "full"
 			},
-			{ "type": "database", "pattern": "src/db/**/*", "mode": "full" },
-			{ "type": "runtime", "pattern": "src/runtime.ts", "mode": "full" },
-			{ "type": "legacy-route-contracts", "pattern": "src/routes/schema.ts", "mode": "full" },
+			{
+				"type": "persistence-schema",
+				"pattern": "src/db/schema.ts",
+				"mode": "full"
+			},
+			{
+				"type": "database",
+				"pattern": "src/db/**/*",
+				"mode": "full"
+			},
+			{
+				"type": "runtime",
+				"pattern": "src/runtime.ts",
+				"mode": "full"
+			},
+			{
+				"type": "legacy-route-contracts",
+				"pattern": "src/routes/schema.ts",
+				"mode": "full"
+			},
 			{
 				"type": "legacy-ledger-route-contracts",
 				"pattern": "src/routes/ledgers/schema.ts",
 				"mode": "full"
 			},
-			{ "type": "legacy-routes", "pattern": "src/routes/**/*", "mode": "full" },
-			{ "type": "legacy-services", "pattern": "src/services/**/*", "mode": "full" },
-			{ "type": "legacy-entities", "pattern": "src/repo/entities/**/*", "mode": "full" },
-			{ "type": "persistence-schema", "pattern": "src/repo/schema.ts", "mode": "full" },
-			{ "type": "legacy-repo", "pattern": "src/repo/**/*", "mode": "full" },
-			{ "type": "config", "pattern": "src/Config.ts", "mode": "full" },
-			{ "type": "server", "pattern": "src/Server.ts", "mode": "full" }
+			{
+				"type": "legacy-routes",
+				"pattern": "src/routes/**/*",
+				"mode": "full"
+			},
+			{
+				"type": "config",
+				"pattern": "src/Config.ts",
+				"mode": "full"
+			},
+			{
+				"type": "server",
+				"pattern": "src/Server.ts",
+				"mode": "full"
+			}
 		]
 	},
 	"rules": {
@@ -272,55 +350,32 @@
 			{
 				"default": "disallow",
 				"rules": [
-					{ "from": ["tests"], "allow": ["*"] },
+					{
+						"from": ["tests"],
+						"allow": ["*"]
+					},
 					{
 						"from": ["legacy-routes"],
 						"allow": [
 							"legacy-routes",
 							"legacy-route-contracts",
 							"legacy-ledger-route-contracts",
-							"legacy-services",
-							"legacy-entities",
+							"shared-ids",
 							"ledger-composition",
 							"account-composition",
 							"transaction-composition",
-							"organization-composition"
+							"organization-composition",
+							"category-composition"
 						]
 					},
 					{
-						"from": ["legacy-services"],
-						"allow": [
-							"legacy-services",
-							"legacy-repo",
-							"legacy-entities",
-							"legacy-route-contracts",
-							"legacy-ledger-route-contracts",
-							"transaction-composition"
-						]
+						"from": ["persistence-schema"],
+						"disallow": ["*"]
 					},
 					{
-						"from": ["legacy-entities"],
-						"allow": [
-							"legacy-entities",
-							"persistence-schema",
-							"legacy-repo",
-							"legacy-route-contracts",
-							"legacy-ledger-route-contracts"
-						]
+						"from": ["legacy-route-contracts"],
+						"disallow": ["*"]
 					},
-					{ "from": ["persistence-schema"], "disallow": ["*"] },
-					{
-						"from": ["legacy-repo"],
-						"allow": [
-							"legacy-repo",
-							"legacy-entities",
-							"legacy-route-contracts",
-							"legacy-ledger-route-contracts",
-							"persistence-schema",
-							"config"
-						]
-					},
-					{ "from": ["legacy-route-contracts"], "disallow": ["*"] },
 					{
 						"from": ["legacy-ledger-route-contracts"],
 						"allow": ["legacy-route-contracts"]
@@ -332,7 +387,7 @@
 							"ledger-transport",
 							"database",
 							"http",
-							"legacy-entities",
+							"shared-ids",
 							"organization-composition",
 							"persistence-schema"
 						]
@@ -343,14 +398,13 @@
 							"ledger-domain",
 							"database",
 							"organization-composition",
-							"legacy-entities",
-							"persistence-schema",
-							"legacy-repo"
+							"shared-ids",
+							"persistence-schema"
 						]
 					},
 					{
 						"from": ["ledger-service"],
-						"allow": ["ledger-domain", "ledger-repo", "ledger-transport", "http", "legacy-entities"]
+						"allow": ["ledger-domain", "ledger-repo", "ledger-transport", "http", "shared-ids"]
 					},
 					{
 						"from": ["ledger-transport"],
@@ -358,7 +412,7 @@
 					},
 					{
 						"from": ["ledger-routes"],
-						"allow": ["ledger-domain", "ledger-service", "ledger-transport", "http", "legacy-entities"]
+						"allow": ["ledger-domain", "ledger-service", "ledger-transport", "http", "shared-ids"]
 					},
 					{
 						"from": ["ledger-composition"],
@@ -371,7 +425,7 @@
 							"account-transport",
 							"database",
 							"ledger-domain",
-							"legacy-entities",
+							"shared-ids",
 							"persistence-schema"
 						]
 					},
@@ -383,9 +437,8 @@
 							"ledger-domain",
 							"database",
 							"http",
-							"legacy-entities",
-							"persistence-schema",
-							"legacy-repo"
+							"shared-ids",
+							"persistence-schema"
 						]
 					},
 					{
@@ -397,7 +450,7 @@
 							"ledger-domain",
 							"ledger-service",
 							"http",
-							"legacy-entities"
+							"shared-ids"
 						]
 					},
 					{
@@ -406,7 +459,7 @@
 					},
 					{
 						"from": ["account-routes"],
-						"allow": ["account-service", "account-transport", "http", "legacy-entities"]
+						"allow": ["account-service", "account-transport", "http", "shared-ids"]
 					},
 					{
 						"from": ["account-composition"],
@@ -427,7 +480,7 @@
 							"account-domain",
 							"database",
 							"http",
-							"legacy-entities",
+							"shared-ids",
 							"persistence-schema"
 						]
 					},
@@ -441,17 +494,17 @@
 							"account-domain",
 							"database",
 							"http",
-							"legacy-entities",
+							"shared-ids",
 							"persistence-schema"
 						]
 					},
 					{
 						"from": ["transaction-capability"],
-						"allow": ["transaction-domain", "http", "legacy-entities"]
+						"allow": ["transaction-domain", "http", "shared-ids"]
 					},
 					{
 						"from": ["idempotency-capability"],
-						"allow": ["http", "legacy-entities"]
+						"allow": ["http", "shared-ids"]
 					},
 					{
 						"from": ["transaction-service"],
@@ -466,7 +519,7 @@
 							"ledger-service",
 							"database",
 							"http",
-							"legacy-entities"
+							"shared-ids"
 						]
 					},
 					{
@@ -475,7 +528,7 @@
 					},
 					{
 						"from": ["transaction-routes"],
-						"allow": ["transaction-service", "transaction-transport", "http", "legacy-entities"]
+						"allow": ["transaction-service", "transaction-transport", "http", "shared-ids"]
 					},
 					{
 						"from": ["transaction-composition"],
@@ -487,23 +540,17 @@
 							"organization-domain",
 							"organization-transport",
 							"http",
-							"legacy-entities",
+							"shared-ids",
 							"persistence-schema"
 						]
 					},
 					{
 						"from": ["organization-capability"],
-						"allow": ["organization-domain", "legacy-entities"]
+						"allow": ["organization-domain", "shared-ids"]
 					},
 					{
 						"from": ["organization-repo"],
-						"allow": [
-							"organization-domain",
-							"database",
-							"legacy-entities",
-							"persistence-schema",
-							"legacy-repo"
-						]
+						"allow": ["organization-domain", "database", "shared-ids", "persistence-schema"]
 					},
 					{
 						"from": ["organization-service"],
@@ -512,7 +559,7 @@
 							"organization-capability",
 							"organization-repo",
 							"organization-transport",
-							"legacy-entities"
+							"shared-ids"
 						]
 					},
 					{
@@ -526,7 +573,7 @@
 							"organization-service",
 							"organization-transport",
 							"http",
-							"legacy-entities"
+							"shared-ids"
 						]
 					},
 					{
@@ -539,10 +586,13 @@
 							"organization-transport"
 						]
 					},
-					{ "from": ["http"], "allow": ["http"] },
+					{
+						"from": ["http"],
+						"allow": ["http"]
+					},
 					{
 						"from": ["database"],
-						"allow": ["database", "persistence-schema", "legacy-repo"]
+						"allow": ["database", "persistence-schema"]
 					},
 					{
 						"from": ["runtime"],
@@ -555,21 +605,84 @@
 							"transaction-capability",
 							"idempotency-capability",
 							"organization-composition",
-							"runtime"
+							"runtime",
+							"category-composition"
 						]
 					},
-					{ "from": ["config"], "disallow": ["*"] },
+					{
+						"from": ["config"],
+						"disallow": ["*"]
+					},
 					{
 						"from": ["server"],
 						"allow": [
 							"legacy-routes",
-							"legacy-services",
-							"legacy-repo",
 							"config",
 							"database",
 							"http",
 							"organization-composition",
 							"runtime"
+						]
+					},
+					{
+						"from": ["shared-ids"],
+						"disallow": ["*"]
+					},
+					{
+						"from": ["category-composition"],
+						"allow": ["category-repo", "category-service", "category-routes"]
+					},
+					{
+						"from": ["category-domain"],
+						"allow": ["category-transport", "shared-ids", "persistence-schema", "database"]
+					},
+					{
+						"from": ["category-repo"],
+						"allow": [
+							"category-domain",
+							"shared-ids",
+							"persistence-schema",
+							"database",
+							"account-domain",
+							"ledger-domain"
+						]
+					},
+					{
+						"from": ["category-service"],
+						"allow": [
+							"category-domain",
+							"category-repo",
+							"category-transport",
+							"shared-ids",
+							"ledger-service",
+							"ledger-domain"
+						]
+					},
+					{
+						"from": ["category-routes"],
+						"allow": [
+							"category-service",
+							"category-transport",
+							"shared-ids",
+							"legacy-route-contracts",
+							"legacy-ledger-route-contracts"
+						]
+					},
+					{
+						"from": ["category-transport"],
+						"allow": ["legacy-route-contracts", "legacy-ledger-route-contracts"]
+					},
+					{
+						"from": ["category-fixtures"],
+						"allow": [
+							"category-domain",
+							"organization-domain",
+							"organization-repo",
+							"ledger-domain",
+							"ledger-repo",
+							"account-domain",
+							"account-repo",
+							"shared-ids"
 						]
 					}
 				]
@@ -580,11 +693,15 @@
 	"overrides": [
 		{
 			"files": ["apps/api/src/**/*.test.ts"],
-			"rules": { "boundaries/entry-point": "off" }
+			"rules": {
+				"boundaries/entry-point": "off"
+			}
 		},
 		{
 			"files": ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
-			"env": { "browser": true }
+			"env": {
+				"browser": true
+			}
 		}
 	]
 }

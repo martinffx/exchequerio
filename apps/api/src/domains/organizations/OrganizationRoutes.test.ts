@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { globalErrorHandler } from "@/lib/errors";
-import type { OrgID } from "../../repo/entities/types";
+import type { OrgID } from "@/lib/ids";
 import { ServerRuntime } from "@/runtime";
 import { Organization } from "./Organization";
 import { OrganizationNotFound } from "./OrganizationErrors";

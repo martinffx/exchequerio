@@ -1,5 +1,5 @@
 import { InternalServerError, NotFoundError } from "@/lib/errors";
-import type { LedgerAccountBalanceMonitorID } from "@/repo/entities/types";
+import type { LedgerAccountBalanceMonitorID } from "@/lib/ids";
 
 class LedgerAccountBalanceMonitorNotFound extends NotFoundError {
 	constructor(id: LedgerAccountBalanceMonitorID) {

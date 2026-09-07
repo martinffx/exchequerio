@@ -1,18 +1,11 @@
 import { Context, Effect, Layer } from "effect";
-// oxlint-disable boundaries/element-types -- The approved in-place migration composes Category orchestration with the integrated Ledger service.
 import {
 	type LedgerGetError,
 	LedgerServiceTag,
 	type LedgerService,
 } from "@/domains/ledgers/LedgerService";
-// oxlint-enable boundaries/element-types
-import { LedgerAccountCategoryEntity } from "@/repo/entities";
-import type {
-	LedgerAccountCategoryID,
-	LedgerAccountID,
-	LedgerID,
-	OrgID,
-} from "@/repo/entities/types";
+import { LedgerAccountCategoryEntity } from "./LedgerAccountCategoryEntity";
+import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
 import {
 	type CategoryDeleteRepositoryError,
 	type CategoryGetRepositoryError,
@@ -24,8 +17,8 @@ import {
 	type CategoryUpsertRepositoryError,
 	type LedgerAccountCategoryRepo,
 	LedgerAccountCategoryRepoTag,
-} from "@/repo/LedgerAccountCategoryRepo";
-import type { LedgerAccountCategoryRequest } from "@/routes/ledgers/schema";
+} from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo";
+import type { LedgerAccountCategoryRequest } from "./LedgerAccountCategorySchema";
 
 type CategoryListError = LedgerGetError | CategoryListRepositoryError;
 type CategoryGetError = LedgerGetError | CategoryGetRepositoryError;

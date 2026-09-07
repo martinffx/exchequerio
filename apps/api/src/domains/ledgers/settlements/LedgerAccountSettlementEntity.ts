@@ -3,7 +3,14 @@ import { DateTime } from "luxon";
 import { LedgerTransaction } from "../transactions/LedgerTransaction";
 import { BadRequestError, ConflictError } from "@/lib/errors";
 import type { Metadata } from "@/lib/schema";
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import {
+	encodeUuid,
+	encodeMetadata,
+	parseDate,
+	parseId,
+	parseUuid,
+	parseMetadata,
+} from "@/lib/utils";
 import {
 	newLedgerAccountSettlementID,
 	newLedgerTransactionID,
@@ -11,8 +18,8 @@ import {
 	type LedgerAccountSettlementID,
 	type LedgerID,
 	type OrgID,
-} from "@/repo/entities/types";
-import type { LedgerAccountSettlementInsert, LedgerAccountSettlementRow } from "@/repo/schema";
+} from "@/lib/ids";
+import type { LedgerAccountSettlementInsert, LedgerAccountSettlementRow } from "@/db/schema";
 import type {
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
@@ -149,11 +156,11 @@ class LedgerAccountSettlementEntity {
 			return Option.some(
 				// oxlint-disable-next-line unicorn/no-array-callback-reference -- Wrap the decoded entity in an Option.
 				new LedgerAccountSettlementEntity({
-					id: yield* parseId<"las", LedgerAccountSettlementID>("las", row.id),
-					organizationId: yield* parseId<"org", OrgID>("org", row.organizationId),
-					ledgerId: yield* parseId<"lgr", LedgerID>("lgr", row.ledgerId),
-					settledAccountId: yield* parseId<"lat", LedgerAccountID>("lat", row.settledAccountId),
-					contraAccountId: yield* parseId<"lat", LedgerAccountID>("lat", row.contraAccountId),
+					id: yield* parseUuid<"las", LedgerAccountSettlementID>("las", row.id),
+					organizationId: yield* parseUuid<"org", OrgID>("org", row.organizationId),
+					ledgerId: yield* parseUuid<"lgr", LedgerID>("lgr", row.ledgerId),
+					settledAccountId: yield* parseUuid<"lat", LedgerAccountID>("lat", row.settledAccountId),
+					contraAccountId: yield* parseUuid<"lat", LedgerAccountID>("lat", row.contraAccountId),
 					status: row.status,
 					targetStatus: row.targetStatus ?? undefined,
 					currency: row.currency,
@@ -179,11 +186,11 @@ class LedgerAccountSettlementEntity {
 	toRow(): LedgerAccountSettlementInsert {
 		const d = this.data;
 		return {
-			id: d.id.toString(),
-			organizationId: d.organizationId.toString(),
-			ledgerId: d.ledgerId.toString(),
-			settledAccountId: d.settledAccountId.toString(),
-			contraAccountId: d.contraAccountId.toString(),
+			id: encodeUuid(d.id),
+			organizationId: encodeUuid(d.organizationId),
+			ledgerId: encodeUuid(d.ledgerId),
+			settledAccountId: encodeUuid(d.settledAccountId),
+			contraAccountId: encodeUuid(d.contraAccountId),
 			currency: d.currency,
 			status: d.status,
 			targetStatus: d.targetStatus,

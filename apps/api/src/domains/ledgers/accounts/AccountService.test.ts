@@ -1,7 +1,7 @@
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { newLedgerAccountID, newLedgerID, newOrgID } from "@/repo/entities/types";
+import { newLedgerAccountID, newLedgerID, newOrgID } from "@/lib/ids";
 import { Ledger } from "../Ledger";
 import type { LedgerService } from "../LedgerService";
 import { LedgerServiceTag } from "../LedgerService";

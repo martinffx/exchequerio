@@ -1,12 +1,12 @@
 # Exchequer Ledger API entity relationships
 
 This diagram shows the ownership and accounting columns used by Ledger Transactions. See
-[`schema.ts`](../../src/repo/schema.ts) for the complete database schema.
+[`schema.ts`](../../src/db/schema.ts) for the complete database schema.
 
 ```mermaid
 erDiagram
     ORGANIZATION {
-        text id PK
+        uuid id PK
         text name
         text description
         timestamptz created
@@ -14,8 +14,8 @@ erDiagram
     }
 
     LEDGER {
-        text id PK
-        text organization_id FK
+        uuid id PK
+        uuid organization_id FK
         text name
         text description
         text metadata
@@ -24,9 +24,9 @@ erDiagram
     }
 
     LEDGER_ACCOUNT {
-        text id PK
-        text organization_id FK
-        text ledger_id FK
+        uuid id PK
+        uuid organization_id FK
+        uuid ledger_id FK
         text name
         text description
         enum normal_balance
@@ -47,10 +47,10 @@ erDiagram
     }
 
     LEDGER_TRANSACTION {
-        text id PK
-        text settlement_id FK
-        text organization_id FK
-        text ledger_id FK
+        uuid id PK
+        uuid settlement_id FK
+        uuid organization_id FK
+        uuid ledger_id FK
         text description
         enum status
         timestamptz posted_at
@@ -62,11 +62,11 @@ erDiagram
     }
 
     LEDGER_ACCOUNT_SETTLEMENT {
-        text id PK
-        text organization_id FK
-        text ledger_id FK
-        text settled_account_id FK
-        text contra_account_id FK
+        uuid id PK
+        uuid organization_id FK
+        uuid ledger_id FK
+        uuid settled_account_id FK
+        uuid contra_account_id FK
         enum status
         enum target_status
         boolean allow_either_direction
@@ -76,11 +76,11 @@ erDiagram
     LEDGER_ACCOUNT_SETTLEMENT ||--o| LEDGER_TRANSACTION : generates
 
     LEDGER_TRANSACTION_ENTRY {
-        text id PK
-        text organization_id FK
-        text ledger_id FK
-        text transaction_id FK
-        text account_id FK
+        uuid id PK
+        uuid organization_id FK
+        uuid ledger_id FK
+        uuid transaction_id FK
+        uuid account_id FK
         enum direction
         bigint amount
         text currency
@@ -90,11 +90,11 @@ erDiagram
     }
 
     LEDGER_ACCOUNT_SETTLEMENT {
-        text id PK
-        text organization_id FK
-        text transaction_id FK
-        text settled_account_id FK
-        text contra_account_id FK
+        uuid id PK
+        uuid organization_id FK
+        uuid transaction_id FK
+        uuid settled_account_id FK
+        uuid contra_account_id FK
     }
 
     ORGANIZATION ||--o{ LEDGER : owns

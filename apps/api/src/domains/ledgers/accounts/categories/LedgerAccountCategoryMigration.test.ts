@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Pool, type PoolClient } from "pg";
 import { Config } from "@/config";
 
-const migrationsDirectory = join(import.meta.dirname, "../../migrations");
+const migrationsDirectory = join(import.meta.dirname, "../../../../../migrations");
 const legacyMigrationNames = [
 	"20251206175734_normal_retro_girl",
 	"20251207122110_narrow_tigra",

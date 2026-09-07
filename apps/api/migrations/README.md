@@ -23,3 +23,17 @@ Before applying this migration to production:
 If a write maintenance window is not acceptable, do not run this migration through the standard
 migrator. Use an operator-reviewed, non-transactional `CREATE INDEX CONCURRENTLY` procedure and a
 separately approved process for reconciling migration state.
+
+## UUID storage
+
+`20260907204057_uuid-storage/migration.sql` stores resource IDs and their references as native
+PostgreSQL UUIDs. The application keeps the existing TypeIDs and converts their embedded UUIDs
+at persistence boundaries. ID generation and public IDs are unchanged.
+
+Recreate the development and test databases before replaying migration history with the updated
+application. This migration has no TypeID backfill: its UUID casts cannot convert populated
+TypeID text columns. It temporarily removes and restores the existing foreign keys and
+ID-comparison checks within the migration transaction.
+
+Point `DATABASE_URL` at each recreated database and run the normal API `db:migrate` command.
+Start the updated application only after migration replay succeeds.

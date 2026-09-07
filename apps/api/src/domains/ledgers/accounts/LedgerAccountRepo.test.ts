@@ -5,15 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { LedgerNotFound } from "@/domains/ledgers";
-import {
-	type LedgerAccountID,
-	type LedgerID,
-	newLedgerAccountID,
-	newLedgerID,
-	newOrgID,
-	type OrgID,
-} from "@/repo/entities/types";
-import { type LedgerAccountRow, LedgerAccountsTable } from "@/repo/schema";
+import { type LedgerID, newLedgerAccountID, newLedgerID, newOrgID, type OrgID } from "@/lib/ids";
+import { type LedgerAccountRow, LedgerAccountsTable } from "@/db/schema";
 import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "../LedgerRepo";
 import { Ledger } from "../Ledger";
 import {
@@ -137,6 +130,68 @@ describe("LedgerAccountRepoLive", () => {
 		);
 		expect(accounts.map(account => account.id)).toEqual(expected.map(account => account.id));
 	});
+
+	it("paginates only Accounts within the requested Organization and Ledger", async () => {
+		const owner = await createOrganizationAndLedger();
+		const other = await createOrganizationAndLedger();
+		expect(
+			await runtime.runPromise(
+				repository.listAccounts(owner.organizationId, owner.ledgerId, { offset: 0, limit: 10 })
+			)
+		).toEqual([]);
+		for (const name of ["A", "B", "C"]) {
+			await runtime.runPromise(
+				repository.createAccount(ledgerAccountCreate(owner.organizationId, owner.ledgerId, { name }))
+			);
+		}
+		await runtime.runPromise(
+			repository.createAccount(ledgerAccountCreate(other.organizationId, other.ledgerId))
+		);
+		const all = await runtime.runPromise(
+			repository.listAccounts(owner.organizationId, owner.ledgerId, { offset: 0, limit: 10 })
+		);
+		const page = await runtime.runPromise(
+			repository.listAccounts(owner.organizationId, owner.ledgerId, { offset: 1, limit: 1 })
+		);
+		expect(all).toHaveLength(3);
+		expect(page.map(account => account.id)).toEqual([all[1]?.id]);
+		expect(
+			await runtime.runPromise(
+				repository.listAccounts(other.organizationId, owner.ledgerId, { offset: 0, limit: 10 })
+			)
+		).toEqual([]);
+	});
+
+	it.each(["organizationId", "ledgerId"] as const)(
+		"rejects updates and deletes with a different %s",
+		async field => {
+			const owner = await createOrganizationAndLedger();
+			const other = await createOrganizationAndLedger();
+			const created = await runtime.runPromise(
+				repository.createAccount(
+					ledgerAccountCreate(owner.organizationId, owner.ledgerId, { normalBalance: "credit" })
+				)
+			);
+			expect(created.normalBalance).toBe("credit");
+			const scope = { ...owner, [field]: other[field] };
+			const changed = ledgerAccountCreate(scope.organizationId, scope.ledgerId, {
+				id: created.id,
+				normalBalance: "credit",
+			});
+			expect(await runtime.runPromise(Effect.flip(repository.updateAccount(changed)))).toBeInstanceOf(
+				AccountVersionConflict
+			);
+			expect(
+				await runtime.runPromise(
+					repository.deleteAccount(changed.organizationId, changed.ledgerId, changed.id)
+				)
+			).toEqual(Option.none());
+			const unchanged = await runtime.runPromise(
+				repository.getAccount(owner.organizationId, owner.ledgerId, created.id)
+			);
+			expect(Option.getOrThrow(unchanged)).toEqual(created);
+		}
+	);
 
 	it("enforces Organization and Ledger scope", async () => {
 		const owner = await createOrganizationAndLedger();
@@ -379,35 +434,33 @@ describe("LedgerAccountRepoLive", () => {
 	});
 
 	it.each([
-		{ label: "invalid ID", id: "not-an-account", metadata: undefined, lockVersion: 1 },
-		{ label: "invalid serialized metadata", id: undefined, metadata: "{", lockVersion: 1 },
+		{ label: "invalid serialized metadata", metadata: "{", lockVersion: 1 },
 		{
 			label: "non-string metadata value",
-			id: undefined,
 			metadata: JSON.stringify({ source: 42 }),
 			lockVersion: 1,
 		},
 	])("returns a typed decoding failure for $label", async testCase => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const id = testCase.id ?? newLedgerAccountID().toString();
+		const id = newLedgerAccountID();
 		const db = database.db;
 		const row = ledgerAccountCreate(organizationId, ledgerId, {
 			name: `Malformed ${testCase.label}`,
 		}).toRow();
 		await db.insert(LedgerAccountsTable).values({
 			...row,
-			id,
+			id: id.toUUID(),
 			metadata: testCase.metadata ?? row.metadata,
 			lockVersion: testCase.lockVersion,
 		});
 
 		try {
 			const error = await runtime.runPromise(
-				Effect.flip(repository.getAccount(organizationId, ledgerId, id as unknown as LedgerAccountID))
+				Effect.flip(repository.getAccount(organizationId, ledgerId, id))
 			);
 			expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
 		} finally {
-			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, id));
+			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, id.toUUID()));
 		}
 	});
 });

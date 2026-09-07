@@ -1,8 +1,9 @@
+import { encodeUuid } from "@/lib/utils";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type DrizzleDatabase } from "@/db";
 import { OrganizationNotFound } from "@/domains/organizations";
-import type { LedgerID, OrgID } from "@/repo/entities/types";
+import type { LedgerID, OrgID } from "@/lib/ids";
 import {
 	LedgersTable,
 	LedgerAccountsTable,
@@ -10,7 +11,7 @@ import {
 	LedgerAccountSettlementEntriesTable,
 	LedgerTransactionsTable,
 	LedgerTransactionEntriesTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 import { Ledger } from "./Ledger";
 import {
 	LedgerHasDependents,
@@ -138,7 +139,7 @@ class LedgerRepoLive implements LedgerRepo {
 				this.db
 					.select(publicColumns)
 					.from(LedgersTable)
-					.where(eq(LedgersTable.organizationId, organizationId.toString()))
+					.where(eq(LedgersTable.organizationId, encodeUuid(organizationId)))
 					.orderBy(asc(LedgersTable.id))
 					.limit(limit)
 					.offset(offset),
@@ -167,8 +168,8 @@ class LedgerRepoLive implements LedgerRepo {
 					.from(LedgersTable)
 					.where(
 						and(
-							eq(LedgersTable.id, ledgerId.toString()),
-							eq(LedgersTable.organizationId, organizationId.toString())
+							eq(LedgersTable.id, encodeUuid(ledgerId)),
+							eq(LedgersTable.organizationId, encodeUuid(organizationId))
 						)
 					)
 					.limit(1),
@@ -206,8 +207,8 @@ class LedgerRepoLive implements LedgerRepo {
 					.set(record.toUpdateRow())
 					.where(
 						and(
-							eq(LedgersTable.id, record.id.toString()),
-							eq(LedgersTable.organizationId, record.organizationId.toString())
+							eq(LedgersTable.id, encodeUuid(record.id)),
+							eq(LedgersTable.organizationId, encodeUuid(record.organizationId))
 						)
 					)
 					.returning(publicColumns),
@@ -232,8 +233,8 @@ class LedgerRepoLive implements LedgerRepo {
 					.delete(LedgersTable)
 					.where(
 						and(
-							eq(LedgersTable.id, ledgerId.toString()),
-							eq(LedgersTable.organizationId, organizationId.toString())
+							eq(LedgersTable.id, encodeUuid(ledgerId)),
+							eq(LedgersTable.organizationId, encodeUuid(organizationId))
 						)
 					)
 					.returning(publicColumns),
@@ -263,8 +264,8 @@ class LedgerRepoLive implements LedgerRepo {
 						.from(LedgersTable)
 						.where(
 							and(
-								eq(LedgersTable.organizationId, organizationId.toString()),
-								eq(LedgersTable.id, ledgerId.toString())
+								eq(LedgersTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgersTable.id, encodeUuid(ledgerId))
 							)
 						)
 						.for("update");
@@ -274,8 +275,8 @@ class LedgerRepoLive implements LedgerRepo {
 						.from(LedgerAccountSettlementsTable)
 						.where(
 							and(
-								eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString()),
-								eq(LedgerAccountSettlementsTable.ledgerId, ledgerId.toString())
+								eq(LedgerAccountSettlementsTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgerAccountSettlementsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
 					await tx
@@ -285,40 +286,40 @@ class LedgerRepoLive implements LedgerRepo {
 						.delete(LedgerTransactionEntriesTable)
 						.where(
 							and(
-								eq(LedgerTransactionEntriesTable.organizationId, organizationId.toString()),
-								eq(LedgerTransactionEntriesTable.ledgerId, ledgerId.toString())
+								eq(LedgerTransactionEntriesTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgerTransactionEntriesTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
 					await tx
 						.delete(LedgerTransactionsTable)
 						.where(
 							and(
-								eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
-								eq(LedgerTransactionsTable.ledgerId, ledgerId.toString())
+								eq(LedgerTransactionsTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgerTransactionsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
 					await tx
 						.delete(LedgerAccountSettlementsTable)
 						.where(
 							and(
-								eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString()),
-								eq(LedgerAccountSettlementsTable.ledgerId, ledgerId.toString())
+								eq(LedgerAccountSettlementsTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgerAccountSettlementsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
 					await tx
 						.delete(LedgerAccountsTable)
 						.where(
 							and(
-								eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-								eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+								eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
 					await tx
 						.delete(LedgersTable)
 						.where(
 							and(
-								eq(LedgersTable.organizationId, organizationId.toString()),
-								eq(LedgersTable.id, ledgerId.toString())
+								eq(LedgersTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgersTable.id, encodeUuid(ledgerId))
 							)
 						);
 				}),

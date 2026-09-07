@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
 import type { Metadata } from "@/lib/utils";
@@ -13,13 +13,13 @@ import {
 	newOrgID,
 	type LedgerAccountBalanceMonitorID,
 	type LedgerAccountID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import {
 	LedgerAccountBalanceMonitorsTable,
 	LedgerAccountsTable,
 	LedgersTable,
 	OrganizationsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import {
@@ -72,19 +72,19 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		database = await runtime.runPromise(DatabaseTag);
 		const db = database.db;
 		await db.insert(OrganizationsTable).values({
-			id: organizationId.toString(),
+			id: organizationId.toUUID(),
 			name: "Balance Monitor repository test",
 		});
 		await db.insert(LedgersTable).values({
-			id: ledgerId.toString(),
-			organizationId: organizationId.toString(),
+			id: ledgerId.toUUID(),
+			organizationId: organizationId.toUUID(),
 			name: "Ledger",
 		});
 		await db.insert(LedgerAccountsTable).values(
 			accountIds.map((accountId, index) => ({
-				id: accountId.toString(),
-				organizationId: organizationId.toString(),
-				ledgerId: ledgerId.toString(),
+				id: accountId.toUUID(),
+				organizationId: organizationId.toUUID(),
+				ledgerId: ledgerId.toUUID(),
 				name: `Account ${index}`,
 				normalBalance: "debit" as const,
 				currencyCode: "USD",
@@ -98,19 +98,19 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			await db.delete(LedgerAccountBalanceMonitorsTable).where(
 				inArray(
 					LedgerAccountBalanceMonitorsTable.accountId,
-					accountIds.map(accountId => accountId.toString())
+					accountIds.map(accountId => accountId.toUUID())
 				)
 			);
 			await db.delete(LedgerAccountsTable).where(
 				inArray(
 					LedgerAccountsTable.id,
-					accountIds.map(accountId => accountId.toString())
+					accountIds.map(accountId => accountId.toUUID())
 				)
 			);
-			await db.delete(LedgersTable).where(inArray(LedgersTable.id, [ledgerId.toString()]));
+			await db.delete(LedgersTable).where(inArray(LedgersTable.id, [ledgerId.toUUID()]));
 			await db
 				.delete(OrganizationsTable)
-				.where(inArray(OrganizationsTable.id, [organizationId.toString()]));
+				.where(inArray(OrganizationsTable.id, [organizationId.toUUID()]));
 		} finally {
 			await runtime.dispose();
 		}
@@ -125,8 +125,8 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		];
 		await db.insert(LedgerAccountBalanceMonitorsTable).values(
 			ids.map((id, index) => ({
-				id: id.toString(),
-				accountId: accountIds[0].toString(),
+				id: id.toUUID(),
+				accountId: accountIds[0].toUUID(),
 				name: `Ordered ${index}`,
 				created: new Date(`9999-12-31T23:5${7 + index}:00.000Z`),
 			}))
@@ -209,8 +209,8 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		const id = newLedgerAccountBalanceMonitorID();
 		const created = new Date("2026-08-28T09:00:00.000Z");
 		await db.insert(LedgerAccountBalanceMonitorsTable).values({
-			id: id.toString(),
-			accountId: accountIds[0].toString(),
+			id: id.toUUID(),
+			accountId: accountIds[0].toUUID(),
 			name: "Stored name",
 			alertThreshold: "12.3400",
 			isActive: 0,
@@ -244,8 +244,8 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		const db = database.db;
 		const id = newLedgerAccountBalanceMonitorID();
 		await db.insert(LedgerAccountBalanceMonitorsTable).values({
-			id: id.toString(),
-			accountId: accountIds[0].toString(),
+			id: id.toUUID(),
+			accountId: accountIds[0].toUUID(),
 			name: "Metadata fallback",
 			metadata,
 		});
@@ -279,18 +279,17 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		expect(error.message).toBe("Internal Server Error");
 	});
 
-	it("maps undecodable rows to the sanitized decoding error", async () => {
-		const invalidId = "not-a-balance-monitor";
+	it("maps an unrepresentable stored timestamp to the sanitized decoding error", async () => {
+		const id = newLedgerAccountBalanceMonitorID();
 		const db = database.db;
 		await db.insert(LedgerAccountBalanceMonitorsTable).values({
-			id: invalidId,
-			accountId: accountIds[0].toString(),
+			id: id.toUUID(),
+			accountId: accountIds[0].toUUID(),
 			name: "Malformed",
+			created: sql`'infinity'::timestamptz`,
 		});
 
-		const error = await runtime.runPromise(
-			Effect.flip(repository.getMonitor(invalidId as unknown as LedgerAccountBalanceMonitorID))
-		);
+		const error = await runtime.runPromise(Effect.flip(repository.getMonitor(id)));
 
 		expect(error).toBeInstanceOf(LedgerAccountBalanceMonitorPersistenceDecodingFailure);
 		expect(error.message).toBe("Internal Server Error");

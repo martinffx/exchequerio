@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
 
-import type { LedgerAccountStatementID } from "@/repo/entities/types";
+import type { LedgerAccountStatementID } from "@/lib/ids";
 
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import {

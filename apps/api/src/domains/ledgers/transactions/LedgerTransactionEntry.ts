@@ -2,7 +2,14 @@ import { Effect } from "effect";
 import { DateTime } from "luxon";
 
 import type { Metadata } from "@/lib/schema";
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import {
+	encodeUuid,
+	encodeMetadata,
+	parseDate,
+	parseId,
+	parseUuid,
+	parseMetadata,
+} from "@/lib/utils";
 import {
 	newLedgerTransactionEntryID,
 	type LedgerAccountID,
@@ -10,8 +17,8 @@ import {
 	type LedgerTransactionEntryID,
 	type LedgerTransactionID,
 	type OrgID,
-} from "@/repo/entities/types";
-import type { LedgerTransactionEntryInsertRow, LedgerTransactionEntryRow } from "@/repo/schema";
+} from "@/lib/ids";
+import type { LedgerTransactionEntryInsertRow, LedgerTransactionEntryRow } from "@/db/schema";
 
 import { TransactionValidationFailure } from "./LedgerTransactionErrors";
 import type {
@@ -110,8 +117,8 @@ class LedgerTransactionEntry {
 	 */
 	static fromRow(row: LedgerTransactionEntryRow): Effect.Effect<LedgerTransactionEntry, Error> {
 		return Effect.all({
-			id: parseId<"lte", LedgerTransactionEntryID>("lte", row.id),
-			accountId: parseId<"lat", LedgerAccountID>("lat", row.accountId),
+			id: parseUuid<"lte", LedgerTransactionEntryID>("lte", row.id),
+			accountId: parseUuid<"lat", LedgerAccountID>("lat", row.accountId),
 			metadata: parseMetadata(row.metadata),
 			created: parseDate(row.created),
 		}).pipe(
@@ -136,11 +143,11 @@ class LedgerTransactionEntry {
 	 */
 	toRow(transaction: LedgerTransactionEntryParent): LedgerTransactionEntryInsertRow {
 		return {
-			id: this.id.toString(),
-			transactionId: transaction.id.toString(),
-			accountId: this.accountId.toString(),
-			organizationId: transaction.organizationId.toString(),
-			ledgerId: transaction.ledgerId.toString(),
+			id: encodeUuid(this.id),
+			transactionId: encodeUuid(transaction.id),
+			accountId: encodeUuid(this.accountId),
+			organizationId: encodeUuid(transaction.organizationId),
+			ledgerId: encodeUuid(transaction.ledgerId),
 			direction: this.direction,
 			amount: this.amount,
 			currency: this.currency,

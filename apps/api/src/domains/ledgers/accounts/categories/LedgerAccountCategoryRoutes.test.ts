@@ -1,28 +1,32 @@
+import { OrganizationRepoTag } from "@/domains/organizations/OrganizationRepo";
+import { LedgerRepoTag } from "@/domains/ledgers/LedgerRepo";
+import { Config } from "@/config";
+import { DatabaseTag, makeDatabaseLive } from "@/db";
 import { eq } from "drizzle-orm";
-import { createLedgerEntity, createOrganizationEntity, getRepos } from "@/repo/fixtures";
-import { LedgerAccountCategoriesTable } from "@/repo/schema";
+import { createLedgerEntity, createOrganizationEntity, fixtureRepoLayer } from "./fixtures";
+import { LedgerAccountCategoriesTable } from "@/db/schema";
 import fastify, { type FastifyInstance } from "fastify";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/auth";
-import { LedgerAccountCategoryEntity } from "@/repo/entities/LedgerAccountCategoryEntity";
-import type { LedgerAccountCategoryResponse } from "./schema";
+import { LedgerAccountCategoryEntity } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryEntity";
+import type { LedgerAccountCategoryResponse } from "./LedgerAccountCategorySchema";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { ConflictError, globalErrorHandler, NotFoundError } from "@/lib/errors";
 import {
 	CategoryPersistenceFailure,
 	CategoryRepositoryUnavailable,
-} from "@/repo/LedgerAccountCategoryErrors";
-import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/repo/entities/types";
-import type { OrgID } from "@/repo/entities/types";
+} from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryErrors";
+import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/lib/ids";
+import type { OrgID } from "@/lib/ids";
 import { buildServer } from "@/server";
 import { ServerRuntime } from "@/runtime";
 import {
 	type LedgerAccountCategoryService,
 	LedgerAccountCategoryServiceTag,
-} from "@/services/LedgerAccountCategoryService";
+} from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryService";
 import type {
 	BadRequestErrorResponse,
 	ConflictErrorResponse,
@@ -46,6 +50,9 @@ const mockLedgerAccountCategoryService = vi.mocked<LedgerAccountCategoryService>
 } as unknown as LedgerAccountCategoryService);
 
 describe("LedgerAccountCategoryRoutes", () => {
+	const fixtureRuntime = ManagedRuntime.make(
+		fixtureRepoLayer.pipe(Layer.provideMerge(makeDatabaseLive(new Config().databaseUrl)))
+	);
 	let server: FastifyInstance;
 	let authServer: FastifyInstance;
 	let runtime: ServerRuntime<LedgerAccountCategoryService, never>;
@@ -88,6 +95,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 	afterAll(async () => {
 		await server.close();
 		await runtime.dispose();
+		await fixtureRuntime.dispose();
 		await authServer.close();
 	});
 
@@ -159,14 +167,16 @@ describe("LedgerAccountCategoryRoutes", () => {
 	});
 
 	it("allows the JWT owner to mutate a Category and prevents foreign Organization mutations in PostgreSQL", async () => {
-		const { organizationRepo, ledgerRepo, db } = getRepos();
+		const organizationRepo = await fixtureRuntime.runPromise(OrganizationRepoTag);
+		const ledgerRepo = await fixtureRuntime.runPromise(LedgerRepoTag);
+		const { db } = await fixtureRuntime.runPromise(DatabaseTag);
 		const owner = createOrganizationEntity();
 		const foreign = createOrganizationEntity();
 		const ledger = createLedgerEntity({ organizationId: owner.id });
-		await organizationRepo.createOrganization(owner);
+		await fixtureRuntime.runPromise(organizationRepo.createOrganization(owner));
 		try {
-			await organizationRepo.createOrganization(foreign);
-			await ledgerRepo.upsertLedger(ledger);
+			await fixtureRuntime.runPromise(organizationRepo.createOrganization(foreign));
+			await fixtureRuntime.runPromise(ledgerRepo.createLedger(ledger));
 			const url = `/api/ledgers/${ledger.id.toString()}/accounts/categories`;
 			const ownerHeaders = {
 				Authorization: `Bearer ${signJWT({ sub: owner.id.toString(), scope: ["org_admin"] })}`,
@@ -190,7 +200,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 			const before = await db
 				.select()
 				.from(LedgerAccountCategoriesTable)
-				.where(eq(LedgerAccountCategoriesTable.id, id));
+				.where(eq(LedgerAccountCategoriesTable.id, TypeID.fromString(id, "lac").toUUID()));
 			expect(before).toHaveLength(1);
 			expect(before[0]?.name).toBe("Owner update");
 			const rejected = await authServer.inject({
@@ -206,15 +216,15 @@ describe("LedgerAccountCategoryRoutes", () => {
 				await db
 					.select()
 					.from(LedgerAccountCategoriesTable)
-					.where(eq(LedgerAccountCategoriesTable.id, id))
+					.where(eq(LedgerAccountCategoriesTable.id, TypeID.fromString(id, "lac").toUUID()))
 			).toEqual(before);
 		} finally {
 			await db
 				.delete(LedgerAccountCategoriesTable)
-				.where(eq(LedgerAccountCategoriesTable.ledgerId, ledger.id.toString()));
-			await ledgerRepo.deleteLedger(owner.id, ledger.id);
-			await organizationRepo.deleteOrganization(owner.id);
-			await organizationRepo.deleteOrganization(foreign.id);
+				.where(eq(LedgerAccountCategoriesTable.ledgerId, ledger.id.toUUID()));
+			await fixtureRuntime.runPromise(ledgerRepo.deleteLedgerFixtures(owner.id, ledger.id));
+			await fixtureRuntime.runPromise(organizationRepo.deleteOrganization(owner.id));
+			await fixtureRuntime.runPromise(organizationRepo.deleteOrganization(foreign.id));
 		}
 	});
 
@@ -232,9 +242,9 @@ describe("LedgerAccountCategoryRoutes", () => {
 	])("safely returns stored metadata %s on GET and list", async (metadata, expected) => {
 		const category = LedgerAccountCategoryEntity.fromRecord({
 			...mockCategory,
-			id: categoryIdStr,
-			organizationId: mockCategory.organizationId.toString(),
-			ledgerId: ledgerIdStr,
+			id: categoryId.toUUID(),
+			organizationId: mockCategory.organizationId.toUUID(),
+			ledgerId: ledgerId.toUUID(),
 			description: "Historical category",
 			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			parentCategoryId: null,

@@ -11,7 +11,7 @@ import {
 	type LedgerAccountID,
 	type LedgerID,
 	type OrgID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 
 import { LedgerTransaction } from "./LedgerTransaction";
 import {
@@ -27,7 +27,7 @@ import {
 	type IdempotencyService,
 	IdempotencyServiceTag,
 	IdempotencyUnavailable,
-} from "@/services/IdempotencyService";
+} from "@/lib/IdempotencyService";
 import { type LedgerTransactionRepo, LedgerTransactionRepoTag } from "./LedgerTransactionRepo";
 import type { TransactionCreateRequest, TransactionUpdateRequest } from "./LedgerTransactionSchema";
 import {

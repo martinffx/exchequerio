@@ -7,13 +7,8 @@ import {
 } from "../transactions/LedgerTransactionRepo";
 import { HttpError } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
-import type {
-	LedgerAccountID,
-	LedgerAccountSettlementID,
-	LedgerID,
-	OrgID,
-} from "@/repo/entities/types";
-import { type IdempotencyService, IdempotencyServiceTag } from "@/services/IdempotencyService";
+import type { LedgerAccountID, LedgerAccountSettlementID, LedgerID, OrgID } from "@/lib/ids";
+import { type IdempotencyService, IdempotencyServiceTag } from "@/lib/IdempotencyService";
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import {
 	type LedgerAccountSettlementRepo,

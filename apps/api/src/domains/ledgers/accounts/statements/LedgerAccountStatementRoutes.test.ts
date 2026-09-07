@@ -6,12 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { signJWT } from "@/auth";
 import { ConflictError, globalErrorHandler, NotFoundError } from "@/lib/errors";
-import type {
-	LedgerAccountID,
-	LedgerAccountStatementID,
-	LedgerID,
-	OrgID,
-} from "@/repo/entities/types";
+import type { LedgerAccountID, LedgerAccountStatementID, LedgerID, OrgID } from "@/lib/ids";
 import { ServerRuntime } from "@/runtime";
 import { buildServer } from "@/server";
 

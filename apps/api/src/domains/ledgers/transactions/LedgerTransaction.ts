@@ -2,19 +2,19 @@ import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 
 import type { Metadata } from "@/lib/schema";
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import { encodeUuid, encodeMetadata, parseDate, parseUuid, parseMetadata } from "@/lib/utils";
 import type {
 	LedgerAccountSettlementID,
 	LedgerID,
 	LedgerTransactionEntryID,
 	LedgerTransactionID,
 	OrgID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import type {
 	LedgerTransactionInsertRow,
 	LedgerTransactionRow,
 	LedgerTransactionWithEntriesRow,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import {
 	TransactionLifecycleConflict,
@@ -229,11 +229,11 @@ class LedgerTransaction {
 	/** @returns The Transaction's Drizzle persistence representation. */
 	toRow(): LedgerTransactionInsertRow {
 		return {
-			id: this.id.toString(),
-			organizationId: this.organizationId.toString(),
-			ledgerId: this.ledgerId.toString(),
+			id: encodeUuid(this.id),
+			organizationId: encodeUuid(this.organizationId),
+			ledgerId: encodeUuid(this.ledgerId),
 			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
-			settlementId: this.settlementId?.toString() ?? null,
+			settlementId: this.settlementId ? encodeUuid(this.settlementId) : null,
 			status: this.status,
 			// oxlint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			description: this.description ?? null,
@@ -326,13 +326,13 @@ class LedgerTransaction {
 		entries: Option.Option<readonly LedgerTransactionEntry[]>
 	): Effect.Effect<LedgerTransactionOptions, Error> {
 		return Effect.all({
-			id: parseId<"ltr", LedgerTransactionID>("ltr", row.id),
-			organizationId: parseId<"org", OrgID>("org", row.organizationId),
-			ledgerId: parseId<"lgr", LedgerID>("lgr", row.ledgerId),
+			id: parseUuid<"ltr", LedgerTransactionID>("ltr", row.id),
+			organizationId: parseUuid<"org", OrgID>("org", row.organizationId),
+			ledgerId: parseUuid<"lgr", LedgerID>("lgr", row.ledgerId),
 			settlementId:
 				row.settlementId === null
 					? Effect.succeed(undefined)
-					: parseId<"las", LedgerAccountSettlementID>("las", row.settlementId),
+					: parseUuid<"las", LedgerAccountSettlementID>("las", row.settlementId),
 			metadata: parseMetadata(row.metadata),
 			postedAt: row.postedAt === null ? Effect.succeed(undefined) : parseDate(row.postedAt),
 			effectiveAt: parseDate(row.effectiveAt),

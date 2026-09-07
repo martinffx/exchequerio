@@ -1,12 +1,13 @@
+import { encodeUuid } from "@/lib/utils";
 import { desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
-import type { LedgerAccountBalanceMonitorID } from "@/repo/entities/types";
+import type { LedgerAccountBalanceMonitorID } from "@/lib/ids";
 import {
 	type LedgerAccountBalanceMonitorRow,
 	LedgerAccountBalanceMonitorsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import type { LedgerAccountBalanceMonitorListQuery } from "./LedgerAccountBalanceMonitorSchema";
@@ -84,7 +85,7 @@ class LedgerAccountBalanceMonitorRepoLive implements LedgerAccountBalanceMonitor
 		return this.db
 			.select()
 			.from(LedgerAccountBalanceMonitorsTable)
-			.where(eq(LedgerAccountBalanceMonitorsTable.id, id.toString()))
+			.where(eq(LedgerAccountBalanceMonitorsTable.id, encodeUuid(id)))
 			.limit(1)
 			.pipe(
 				Effect.flatMap(rows => decodeOptionalRow(rows[0])),
@@ -121,7 +122,7 @@ class LedgerAccountBalanceMonitorRepoLive implements LedgerAccountBalanceMonitor
 		return this.db
 			.update(LedgerAccountBalanceMonitorsTable)
 			.set(record.toUpdateRow())
-			.where(eq(LedgerAccountBalanceMonitorsTable.id, id.toString()))
+			.where(eq(LedgerAccountBalanceMonitorsTable.id, encodeUuid(id)))
 			.returning()
 			.pipe(
 				Effect.flatMap(rows => decodeOptionalRow(rows[0])),
@@ -134,7 +135,7 @@ class LedgerAccountBalanceMonitorRepoLive implements LedgerAccountBalanceMonitor
 	): Effect.Effect<Option.Option<void>, LedgerAccountBalanceMonitorInfrastructureError> {
 		return this.db
 			.delete(LedgerAccountBalanceMonitorsTable)
-			.where(eq(LedgerAccountBalanceMonitorsTable.id, id.toString()))
+			.where(eq(LedgerAccountBalanceMonitorsTable.id, encodeUuid(id)))
 			.returning({ id: LedgerAccountBalanceMonitorsTable.id })
 			.pipe(
 				// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the presence marker.

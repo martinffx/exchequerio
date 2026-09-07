@@ -2,12 +2,7 @@ import { Effect } from "effect";
 import { DateTime } from "luxon";
 import { describe, expect, it } from "vitest";
 
-import {
-	newLedgerAccountID,
-	newLedgerID,
-	newLedgerTransactionID,
-	newOrgID,
-} from "@/repo/entities/types";
+import { newLedgerAccountID, newLedgerID, newLedgerTransactionID, newOrgID } from "@/lib/ids";
 import { LedgerTransaction } from "./LedgerTransaction";
 import type { TransactionCreateRequest } from "./LedgerTransactionSchema";
 
