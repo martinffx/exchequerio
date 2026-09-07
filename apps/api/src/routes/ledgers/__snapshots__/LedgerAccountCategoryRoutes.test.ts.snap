@@ -1,0 +1,4556 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI operations 1`] = `
+{
+  "create": {
+    "description": "Create Ledger Account Category",
+    "operationId": "createLedgerAccountCategory",
+    "parameters": [
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "properties": {
+              "description": {
+                "description": "An optional free-form description for internal use.",
+                "type": "string",
+              },
+              "metadata": {
+                "additionalProperties": {
+                  "type": "string",
+                },
+                "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                "type": "object",
+              },
+              "name": {
+                "description": "The name of the ledger account category.",
+                "type": "string",
+              },
+              "normalBalance": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "debit",
+                    ],
+                    "type": "string",
+                  },
+                  {
+                    "enum": [
+                      "credit",
+                    ],
+                    "type": "string",
+                  },
+                ],
+              },
+            },
+            "required": [
+              "name",
+              "normalBalance",
+            ],
+            "type": "object",
+          },
+        },
+      },
+      "required": true,
+    },
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+              "properties": {
+                "balances": {
+                  "description": "The pending, posted, and available balances.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "amount": {
+                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                            "type": "number",
+                          },
+                          "balanceType": {
+                            "description": "The sum of all pending AND posted entry amounts.",
+                            "enum": [
+                              "pending",
+                            ],
+                            "type": "string",
+                          },
+                          "credits": {
+                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
+                            "type": "number",
+                          },
+                          "currency": {
+                            "description": "Currency of the ledger",
+                            "type": "string",
+                          },
+                          "currencyExponent": {
+                            "description": "Currency exponent of the ledger",
+                            "type": "number",
+                          },
+                          "debits": {
+                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "credits",
+                          "debits",
+                          "amount",
+                          "currency",
+                          "currencyExponent",
+                        ],
+                        "type": "object",
+                      },
+                      {
+                        "properties": {
+                          "amount": {
+                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                            "type": "number",
+                          },
+                          "balanceType": {
+                            "description": "The sum of all posted entry amounts.",
+                            "enum": [
+                              "posted",
+                            ],
+                            "type": "string",
+                          },
+                          "credits": {
+                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                            "type": "number",
+                          },
+                          "currency": {
+                            "description": "Currency of the ledger",
+                            "type": "string",
+                          },
+                          "currencyExponent": {
+                            "description": "Currency exponent of the ledger",
+                            "type": "number",
+                          },
+                          "debits": {
+                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "credits",
+                          "debits",
+                          "amount",
+                          "currency",
+                          "currencyExponent",
+                        ],
+                        "type": "object",
+                      },
+                      {
+                        "properties": {
+                          "amount": {
+                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                            "type": "number",
+                          },
+                          "balanceType": {
+                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
+                            "enum": [
+                              "availableBalance",
+                            ],
+                            "type": "string",
+                          },
+                          "credits": {
+                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                            "type": "number",
+                          },
+                          "currency": {
+                            "description": "Currency of the ledger",
+                            "type": "string",
+                          },
+                          "currencyExponent": {
+                            "description": "Currency exponent of the ledger",
+                            "type": "number",
+                          },
+                          "debits": {
+                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "credits",
+                          "debits",
+                          "amount",
+                          "currency",
+                          "currencyExponent",
+                        ],
+                        "type": "object",
+                      },
+                    ],
+                  },
+                  "type": "array",
+                },
+                "created": {
+                  "description": "Timestamp of when the ledger account category was created.",
+                  "type": "string",
+                },
+                "description": {
+                  "description": "An optional free-form description for internal use.",
+                  "type": "string",
+                },
+                "id": {
+                  "description": "Unique identifier for the ledger account category.",
+                  "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "type": "string",
+                },
+                "ledgerId": {
+                  "description": "The ledger's ID",
+                  "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "type": "string",
+                },
+                "metadata": {
+                  "additionalProperties": {
+                    "type": "string",
+                  },
+                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                  "type": "object",
+                },
+                "name": {
+                  "description": "The name of the ledger account category.",
+                  "type": "string",
+                },
+                "normalBalance": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "debit",
+                      ],
+                      "type": "string",
+                    },
+                    {
+                      "enum": [
+                        "credit",
+                      ],
+                      "type": "string",
+                    },
+                  ],
+                },
+                "updated": {
+                  "description": "Timestamp of when the ledger account category was last updated.",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "id",
+                "ledgerId",
+                "name",
+                "normalBalance",
+                "balances",
+                "created",
+                "updated",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    409,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "CONFLICT",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "Create Ledger Account Category",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
+  "delete": {
+    "description": "Delete Ledger Account Category",
+    "operationId": "deleteLedgerAccountCategory",
+    "parameters": [
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "categoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {},
+          },
+        },
+        "description": "Default Response",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    409,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "CONFLICT",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "Delete Ledger Account Category",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
+  "get": {
+    "description": "Get Ledger Account Category",
+    "operationId": "getLedgerAccountCategory",
+    "parameters": [
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "categoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+              "properties": {
+                "balances": {
+                  "description": "The pending, posted, and available balances.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "amount": {
+                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                            "type": "number",
+                          },
+                          "balanceType": {
+                            "description": "The sum of all pending AND posted entry amounts.",
+                            "enum": [
+                              "pending",
+                            ],
+                            "type": "string",
+                          },
+                          "credits": {
+                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
+                            "type": "number",
+                          },
+                          "currency": {
+                            "description": "Currency of the ledger",
+                            "type": "string",
+                          },
+                          "currencyExponent": {
+                            "description": "Currency exponent of the ledger",
+                            "type": "number",
+                          },
+                          "debits": {
+                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "credits",
+                          "debits",
+                          "amount",
+                          "currency",
+                          "currencyExponent",
+                        ],
+                        "type": "object",
+                      },
+                      {
+                        "properties": {
+                          "amount": {
+                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                            "type": "number",
+                          },
+                          "balanceType": {
+                            "description": "The sum of all posted entry amounts.",
+                            "enum": [
+                              "posted",
+                            ],
+                            "type": "string",
+                          },
+                          "credits": {
+                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                            "type": "number",
+                          },
+                          "currency": {
+                            "description": "Currency of the ledger",
+                            "type": "string",
+                          },
+                          "currencyExponent": {
+                            "description": "Currency exponent of the ledger",
+                            "type": "number",
+                          },
+                          "debits": {
+                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "credits",
+                          "debits",
+                          "amount",
+                          "currency",
+                          "currencyExponent",
+                        ],
+                        "type": "object",
+                      },
+                      {
+                        "properties": {
+                          "amount": {
+                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                            "type": "number",
+                          },
+                          "balanceType": {
+                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
+                            "enum": [
+                              "availableBalance",
+                            ],
+                            "type": "string",
+                          },
+                          "credits": {
+                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                            "type": "number",
+                          },
+                          "currency": {
+                            "description": "Currency of the ledger",
+                            "type": "string",
+                          },
+                          "currencyExponent": {
+                            "description": "Currency exponent of the ledger",
+                            "type": "number",
+                          },
+                          "debits": {
+                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "credits",
+                          "debits",
+                          "amount",
+                          "currency",
+                          "currencyExponent",
+                        ],
+                        "type": "object",
+                      },
+                    ],
+                  },
+                  "type": "array",
+                },
+                "created": {
+                  "description": "Timestamp of when the ledger account category was created.",
+                  "type": "string",
+                },
+                "description": {
+                  "description": "An optional free-form description for internal use.",
+                  "type": "string",
+                },
+                "id": {
+                  "description": "Unique identifier for the ledger account category.",
+                  "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "type": "string",
+                },
+                "ledgerId": {
+                  "description": "The ledger's ID",
+                  "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "type": "string",
+                },
+                "metadata": {
+                  "additionalProperties": {
+                    "type": "string",
+                  },
+                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                  "type": "object",
+                },
+                "name": {
+                  "description": "The name of the ledger account category.",
+                  "type": "string",
+                },
+                "normalBalance": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "debit",
+                      ],
+                      "type": "string",
+                    },
+                    {
+                      "enum": [
+                        "credit",
+                      ],
+                      "type": "string",
+                    },
+                  ],
+                },
+                "updated": {
+                  "description": "Timestamp of when the ledger account category was last updated.",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "id",
+                "ledgerId",
+                "name",
+                "normalBalance",
+                "balances",
+                "created",
+                "updated",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "Get Ledger Account Category",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
+  "linkAccount": {
+    "description": "Add a Ledger Account to a Ledger Account Category.",
+    "operationId": "linkLedgerAccountToCategory",
+    "parameters": [
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "categoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "The ledger account's ID",
+        "in": "path",
+        "name": "accountId",
+        "required": true,
+        "schema": {
+          "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {},
+          },
+        },
+        "description": "Default Response",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    409,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "CONFLICT",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "Link Ledger Account to Category",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
+  "linkParent": {
+    "description": "Nest a Ledger Account Category within a higher-level Ledger Account Category.",
+    "operationId": "linkLedgerAccountCategoryToCategory",
+    "parameters": [
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "categoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "parentCategoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {},
+          },
+        },
+        "description": "Default Response",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    409,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "CONFLICT",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "Link Ledger Account Category to Category",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
+  "list": {
+    "description": "List Ledger Account Categories",
+    "operationId": "listLedgerAccountCategories",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "offset",
+        "required": true,
+        "schema": {
+          "default": 0,
+          "type": "number",
+        },
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": true,
+        "schema": {
+          "default": 20,
+          "type": "number",
+        },
+      },
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "items": {
+                "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+                "properties": {
+                  "balances": {
+                    "description": "The pending, posted, and available balances.",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "amount": {
+                              "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                              "type": "number",
+                            },
+                            "balanceType": {
+                              "description": "The sum of all pending AND posted entry amounts.",
+                              "enum": [
+                                "pending",
+                              ],
+                              "type": "string",
+                            },
+                            "credits": {
+                              "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
+                              "type": "number",
+                            },
+                            "currency": {
+                              "description": "Currency of the ledger",
+                              "type": "string",
+                            },
+                            "currencyExponent": {
+                              "description": "Currency exponent of the ledger",
+                              "type": "number",
+                            },
+                            "debits": {
+                              "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
+                              "type": "number",
+                            },
+                          },
+                          "required": [
+                            "balanceType",
+                            "credits",
+                            "debits",
+                            "amount",
+                            "currency",
+                            "currencyExponent",
+                          ],
+                          "type": "object",
+                        },
+                        {
+                          "properties": {
+                            "amount": {
+                              "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                              "type": "number",
+                            },
+                            "balanceType": {
+                              "description": "The sum of all posted entry amounts.",
+                              "enum": [
+                                "posted",
+                              ],
+                              "type": "string",
+                            },
+                            "credits": {
+                              "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                              "type": "number",
+                            },
+                            "currency": {
+                              "description": "Currency of the ledger",
+                              "type": "string",
+                            },
+                            "currencyExponent": {
+                              "description": "Currency exponent of the ledger",
+                              "type": "number",
+                            },
+                            "debits": {
+                              "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                              "type": "number",
+                            },
+                          },
+                          "required": [
+                            "balanceType",
+                            "credits",
+                            "debits",
+                            "amount",
+                            "currency",
+                            "currencyExponent",
+                          ],
+                          "type": "object",
+                        },
+                        {
+                          "properties": {
+                            "amount": {
+                              "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                              "type": "number",
+                            },
+                            "balanceType": {
+                              "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
+                              "enum": [
+                                "availableBalance",
+                              ],
+                              "type": "string",
+                            },
+                            "credits": {
+                              "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                              "type": "number",
+                            },
+                            "currency": {
+                              "description": "Currency of the ledger",
+                              "type": "string",
+                            },
+                            "currencyExponent": {
+                              "description": "Currency exponent of the ledger",
+                              "type": "number",
+                            },
+                            "debits": {
+                              "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                              "type": "number",
+                            },
+                          },
+                          "required": [
+                            "balanceType",
+                            "credits",
+                            "debits",
+                            "amount",
+                            "currency",
+                            "currencyExponent",
+                          ],
+                          "type": "object",
+                        },
+                      ],
+                    },
+                    "type": "array",
+                  },
+                  "created": {
+                    "description": "Timestamp of when the ledger account category was created.",
+                    "type": "string",
+                  },
+                  "description": {
+                    "description": "An optional free-form description for internal use.",
+                    "type": "string",
+                  },
+                  "id": {
+                    "description": "Unique identifier for the ledger account category.",
+                    "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "ledgerId": {
+                    "description": "The ledger's ID",
+                    "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "metadata": {
+                    "additionalProperties": {
+                      "type": "string",
+                    },
+                    "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                    "type": "object",
+                  },
+                  "name": {
+                    "description": "The name of the ledger account category.",
+                    "type": "string",
+                  },
+                  "normalBalance": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "debit",
+                        ],
+                        "type": "string",
+                      },
+                      {
+                        "enum": [
+                          "credit",
+                        ],
+                        "type": "string",
+                      },
+                    ],
+                  },
+                  "updated": {
+                    "description": "Timestamp of when the ledger account category was last updated.",
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "id",
+                  "ledgerId",
+                  "name",
+                  "normalBalance",
+                  "balances",
+                  "created",
+                  "updated",
+                ],
+                "title": "LedgerAccountCategoryResponse",
+                "type": "object",
+              },
+              "type": "array",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "List Ledger Account Categories",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
+  "unlinkAccount": {
+    "description": "Remove a Ledger Account from a Ledger Account Category",
+    "operationId": "unlinkLedgerAccountToCategory",
+    "parameters": [
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "categoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "The ledger account's ID",
+        "in": "path",
+        "name": "accountId",
+        "required": true,
+        "schema": {
+          "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {},
+          },
+        },
+        "description": "Default Response",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    409,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "CONFLICT",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "Unlink Ledger Account to Category",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
+  "unlinkParent": {
+    "description": "Remove a Ledger Account Category from a higher-level Ledger Account Category",
+    "operationId": "unlinkLedgerAccountCategoryToCategory",
+    "parameters": [
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "categoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "parentCategoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {},
+          },
+        },
+        "description": "Default Response",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    409,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "CONFLICT",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "Unlink Ledger Account Category to Category",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
+  "update": {
+    "description": "Update Ledger Account Category",
+    "operationId": "updateLedgerAccountCategory",
+    "parameters": [
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "categoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "properties": {
+              "description": {
+                "description": "An optional free-form description for internal use.",
+                "type": "string",
+              },
+              "metadata": {
+                "additionalProperties": {
+                  "type": "string",
+                },
+                "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                "type": "object",
+              },
+              "name": {
+                "description": "The name of the ledger account category.",
+                "type": "string",
+              },
+              "normalBalance": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "debit",
+                    ],
+                    "type": "string",
+                  },
+                  {
+                    "enum": [
+                      "credit",
+                    ],
+                    "type": "string",
+                  },
+                ],
+              },
+            },
+            "required": [
+              "name",
+              "normalBalance",
+            ],
+            "type": "object",
+          },
+        },
+      },
+      "required": true,
+    },
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+              "properties": {
+                "balances": {
+                  "description": "The pending, posted, and available balances.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "amount": {
+                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                            "type": "number",
+                          },
+                          "balanceType": {
+                            "description": "The sum of all pending AND posted entry amounts.",
+                            "enum": [
+                              "pending",
+                            ],
+                            "type": "string",
+                          },
+                          "credits": {
+                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
+                            "type": "number",
+                          },
+                          "currency": {
+                            "description": "Currency of the ledger",
+                            "type": "string",
+                          },
+                          "currencyExponent": {
+                            "description": "Currency exponent of the ledger",
+                            "type": "number",
+                          },
+                          "debits": {
+                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "credits",
+                          "debits",
+                          "amount",
+                          "currency",
+                          "currencyExponent",
+                        ],
+                        "type": "object",
+                      },
+                      {
+                        "properties": {
+                          "amount": {
+                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                            "type": "number",
+                          },
+                          "balanceType": {
+                            "description": "The sum of all posted entry amounts.",
+                            "enum": [
+                              "posted",
+                            ],
+                            "type": "string",
+                          },
+                          "credits": {
+                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                            "type": "number",
+                          },
+                          "currency": {
+                            "description": "Currency of the ledger",
+                            "type": "string",
+                          },
+                          "currencyExponent": {
+                            "description": "Currency exponent of the ledger",
+                            "type": "number",
+                          },
+                          "debits": {
+                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "credits",
+                          "debits",
+                          "amount",
+                          "currency",
+                          "currencyExponent",
+                        ],
+                        "type": "object",
+                      },
+                      {
+                        "properties": {
+                          "amount": {
+                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+                            "type": "number",
+                          },
+                          "balanceType": {
+                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
+                            "enum": [
+                              "availableBalance",
+                            ],
+                            "type": "string",
+                          },
+                          "credits": {
+                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
+                            "type": "number",
+                          },
+                          "currency": {
+                            "description": "Currency of the ledger",
+                            "type": "string",
+                          },
+                          "currencyExponent": {
+                            "description": "Currency exponent of the ledger",
+                            "type": "number",
+                          },
+                          "debits": {
+                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                            "type": "number",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "credits",
+                          "debits",
+                          "amount",
+                          "currency",
+                          "currencyExponent",
+                        ],
+                        "type": "object",
+                      },
+                    ],
+                  },
+                  "type": "array",
+                },
+                "created": {
+                  "description": "Timestamp of when the ledger account category was created.",
+                  "type": "string",
+                },
+                "description": {
+                  "description": "An optional free-form description for internal use.",
+                  "type": "string",
+                },
+                "id": {
+                  "description": "Unique identifier for the ledger account category.",
+                  "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "type": "string",
+                },
+                "ledgerId": {
+                  "description": "The ledger's ID",
+                  "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "type": "string",
+                },
+                "metadata": {
+                  "additionalProperties": {
+                    "type": "string",
+                  },
+                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                  "type": "object",
+                },
+                "name": {
+                  "description": "The name of the ledger account category.",
+                  "type": "string",
+                },
+                "normalBalance": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "debit",
+                      ],
+                      "type": "string",
+                    },
+                    {
+                      "enum": [
+                        "credit",
+                      ],
+                      "type": "string",
+                    },
+                  ],
+                },
+                "updated": {
+                  "description": "Timestamp of when the ledger account category was last updated.",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "id",
+                "ledgerId",
+                "name",
+                "normalBalance",
+                "balances",
+                "created",
+                "updated",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    409,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "CONFLICT",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "Update Ledger Account Category",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
+}
+`;

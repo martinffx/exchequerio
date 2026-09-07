@@ -1,0 +1,201 @@
+{
+	"feature": "categories-ownership-effect",
+	"spec": "docs/specs/2026-08-29-categories-effect/design.md",
+	"goal": "Enforce Organization and Ledger ownership for Categories and their relationships, then migrate the hardened slice to Effect with explicit error unions.",
+	"phases": [
+		{
+			"id": "P1",
+			"name": "Ownership and error behavior",
+			"tasks": [
+				{
+					"id": "T3",
+					"name": "Harden Category ownership and failure behavior",
+					"depends_on": [],
+					"inputs": [
+						"Committed Category characterization tests",
+						"Organization and Ledger ownership decisions in design.md",
+						"Composite ownership patterns in LedgerAccountsTable and LedgerTransactionEntriesTable",
+						"Existing LedgerNotFound and AccountNotFound errors"
+					],
+					"description": "Add organization_id to Categories and organization_id plus ledger_id to both relationship tables, with the composite ownership keys and cascades defined in design.md. Generate and review a migration that backfills from Ledgers and child Categories, aborts on cross-scope Account or parent rows, and never deletes data. Carry OrgID on the Category entity, scope every repository method by Organization and Ledger, and make each service method validate Ledger ownership before its existing sequence. Pass request.token.orgId from every route. Add CategoryNotFound, CategoryConflict, CategoryPersistenceDecodingFailure, CategoryPersistenceFailure, and CategoryRepositoryUnavailable; map PostgreSQL unavailability to 503 and add 404 OpenAPI responses to list and create. Retain all unrelated HTTP, timestamp, pagination, upsert, and relationship behavior.",
+					"files": {
+						"create": [
+							"apps/api/src/repo/LedgerAccountCategoryErrors.test.ts",
+							"apps/api/src/repo/LedgerAccountCategoryErrors.ts",
+							"apps/api/src/repo/LedgerAccountCategoryMigration.test.ts",
+							"apps/api/src/repo/entities/LedgerAccountCategoryEntity.test.ts",
+							"apps/api/migrations/20260829170957_category_ownership/migration.sql",
+							"apps/api/migrations/20260829170957_category_ownership/snapshot.json"
+						],
+						"modify": [
+							"apps/api/src/repo/schema.ts",
+							"apps/api/src/repo/entities/LedgerAccountCategoryEntity.ts",
+							"apps/api/src/repo/LedgerAccountCategoryRepo.ts",
+							"apps/api/src/repo/LedgerAccountCategoryRepo.test.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.test.ts",
+							"apps/api/src/services/index.ts",
+							"apps/api/src/routes/ledgers/fixtures.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"pnpm run docker:up",
+							"pnpm --filter=@exchequerio/api db:migrate",
+							"pnpm --filter=@exchequerio/api test -- src/repo/LedgerAccountCategoryMigration.test.ts src/repo/LedgerAccountCategoryRepo.test.ts src/services/LedgerAccountCategoryService.test.ts src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts",
+							"pnpm --filter=@exchequerio/api types",
+							"git diff --check"
+						],
+						"acceptance": [
+							"A valid database backfills Category and relationship ownership without deleting rows.",
+							"Migration tests fail and roll back for pre-existing cross-Ledger or cross-Organization Account and parent links.",
+							"PostgreSQL rejects new cross-scope Account and parent relationships through composite constraints.",
+							"Every operation returns 404 for a Ledger owned by another Organization.",
+							"PostgreSQL unavailability returns the Category 503 response; other persistence and decoding failures return 500.",
+							"Methods, paths, permissions, success responses, IDs, timestamps, ordering, pagination, upsert races, and valid relationship sequencing remain unchanged."
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P2",
+			"name": "Typed Effect cutover",
+			"tasks": [
+				{
+					"id": "T4",
+					"name": "Cut the hardened Category slice over to Effect",
+					"depends_on": ["T3"],
+					"inputs": [
+						"Green ownership hardening from T3",
+						"Category error family from T3",
+						"Organizations ownership pattern",
+						"Transaction Effect Drizzle pattern",
+						"DatabaseTag.effectDb and Effect 4.0.0-rc.112"
+					],
+					"description": "Perform one compile-green Effect cutover of the hardened Category repository, service, runtime, plugins, routes, and focused tests. Define the eight repository and nine service capabilities with operation-specific unions of LedgerNotFound, AccountNotFound, CategoryNotFound, CategoryConflict, and Category infrastructure errors; no capability uses unknown as its failure type. Map SQL and row-decoding failures at their owning boundaries and retain their causes. Compose the Category repository from DatabaseTag.effectDb, compose the service from the Category repository and Ledger service tags, run routes through server.runtime, and remove only Category from legacy plugin wiring. Preserve the ownership baseline and operation order from T3.",
+					"files": {
+						"create": [],
+						"modify": [
+							"apps/api/src/repo/LedgerAccountCategoryRepo.ts",
+							"apps/api/src/repo/LedgerAccountCategoryRepo.test.ts",
+							"apps/api/src/repo/index.ts",
+							"apps/api/src/repo/types.ts",
+							"apps/api/src/repo/fixtures.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.test.ts",
+							"apps/api/src/services/index.ts",
+							"apps/api/src/runtime.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts"
+						]
+					},
+					"validation": {
+						"tests": [
+							"pnpm --filter=@exchequerio/api types",
+							"pnpm --filter=@exchequerio/api test -- src/repo/LedgerAccountCategoryRepo.test.ts src/services/LedgerAccountCategoryService.test.ts src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts",
+							"git diff --check"
+						],
+						"acceptance": [
+							"Repository and service capabilities contain no unknown failure type.",
+							"Expected adapter and decoding failures remain Effect failures with the exact typed Category error rather than defects.",
+							"All nine routes run through the server-owned managed runtime.",
+							"Category is absent from legacy repository and service construction while unrelated slices remain unchanged.",
+							"The package typechecks with no compatibility bridge or generic executor."
+						]
+					}
+				},
+				{
+					"id": "T4a",
+					"name": "Apply lessons from corrective Git history",
+					"depends_on": ["T4"],
+					"inputs": [
+						"Approved corrective history review in design.md",
+						"Corrective commits across Organizations, Ledgers, Accounts, Transactions, Settlements, Statements, and Balance Monitors",
+						"Existing 131-test Category baseline"
+					],
+					"description": "Correct Category-only metadata serialization and string validation, defer upsert encoding and timestamps to Effect execution, reject unsupported stored timestamps at entity decoding, retain original SQL causes, and narrow the Ledger service dependency to getLedger. Add focused HTTP/OpenAPI, execution/error, deterministic ordering, migration ownership, and assembled JWT-to-PostgreSQL regressions. Preserve the initial migration and existing mutation semantics. Record the historical lesson and protecting test for each change; retain meaningful adapter tests and avoid a new test harness.",
+					"files": {
+						"create": [
+							"apps/api/src/lib/schema.ts",
+							"apps/api/src/routes/ledgers/__snapshots__/LedgerAccountCategoryRoutes.test.ts.snap"
+						],
+						"modify": [
+							"apps/api/src/domains/ledgers/LedgerErrors.ts",
+							"apps/api/src/domains/ledgers/accounts/AccountErrors.ts",
+							"apps/api/src/repo/LedgerAccountCategoryErrors.ts",
+							"apps/api/src/repo/LedgerAccountCategoryRepo.ts",
+							"apps/api/src/repo/LedgerAccountCategoryRepo.test.ts",
+							"apps/api/src/repo/LedgerAccountCategoryMigration.test.ts",
+							"apps/api/src/repo/entities/LedgerAccountCategoryEntity.ts",
+							"apps/api/src/repo/entities/LedgerAccountCategoryEntity.test.ts",
+							"apps/api/src/routes/ledgers/schema.ts",
+							"apps/api/src/routes/ledgers/fixtures.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.ts",
+							"apps/api/src/routes/ledgers/LedgerAccountCategoryRoutes.test.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.ts",
+							"apps/api/src/services/LedgerAccountCategoryService.test.ts",
+							"docs/specs/2026-08-29-categories-effect/design.md",
+							"docs/specs/2026-08-29-categories-effect/plan.json"
+						]
+					},
+					"validation": {
+						"tests": [
+							"pnpm --filter=@exchequerio/api test LedgerAccountCategory",
+							"pnpm --filter=@exchequerio/api types",
+							"git diff --check"
+						],
+						"acceptance": [
+							"Category POST/PUT preserve string metadata maps and reject non-string values before coercion; other resources are unchanged.",
+							"Stored invalid metadata is absent; unsupported timestamps fail decoding, and deletion does not decode the removed row.",
+							"Upsert construction performs no encoding or timestamp capture; execution and mapped SQL failures retain typed errors and original causes.",
+							"Generated OpenAPI locks all nine Category operations; ordering tests control persisted timestamps and pagination.",
+							"All five composite foreign keys and both ownership mismatch dimensions are tested, retaining rollback/backfill/cascade coverage.",
+							"A signed JWT traverses the real server/runtime/database: owner mutations succeed, foreign mutation returns 404 with unchanged state.",
+							"The service test double requires only getLedger; no new runtime, clock, harness, concurrency, or product behavior is introduced beyond the listed corrections."
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P3",
+			"name": "Final verification",
+			"tasks": [
+				{
+					"id": "T5",
+					"name": "Validate both stacked change sets",
+					"depends_on": ["T4a"],
+					"inputs": [
+						"Ownership and error behavior commit from T3",
+						"Typed Effect cutover commit from T4",
+						"Committed Category characterization baseline",
+						"Corrective Git-history work from T4a"
+					],
+					"description": "Run fresh focused and repository-wide validation, review the complete Category branch and local corrections against the approved behavior, and record completion evidence in the spec. Keep existing commits and the recovery stash. The user separately authorized committing the final corrections after local completion.",
+					"files": {
+						"create": [],
+						"modify": []
+					},
+					"validation": {
+						"tests": [
+							"pnpm run check",
+							"pnpm run ci --force",
+							"git diff --check",
+							"git diff --check e19448b",
+							"git status --short --untracked-files=all"
+						],
+						"acceptance": [
+							"The existing ownership commit remains separate from the Effect cutover, and local corrections match T4a.",
+							"Fresh focused, migration, type, formatting, lint, build, and full CI validation pass.",
+							"A final code review covers the committed Category branch and local corrections, including the historical lessons.",
+							"Completion evidence is recorded, the final corrections are committed with separate user authorization, and the recovery stash is retained. Nothing is pushed, rebased, merged, or opened as a pull request."
+						]
+					}
+				}
+			]
+		}
+	]
+}

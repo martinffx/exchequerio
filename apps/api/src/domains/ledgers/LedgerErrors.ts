@@ -10,8 +10,8 @@ import {
 import { OrganizationNotFound } from "@/domains/organizations";
 
 class LedgerNotFound extends NotFoundError {
-	constructor() {
-		super("Ledger not found");
+	constructor(options?: ErrorOptions) {
+		super("Ledger not found", options);
 	}
 }
 

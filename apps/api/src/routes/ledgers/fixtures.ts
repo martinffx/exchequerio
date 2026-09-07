@@ -1,5 +1,6 @@
 import { faker } from "@faker-js/faker";
 import { TypeID } from "typeid-js";
+import type { Metadata } from "@/lib/schema";
 import {
 	LedgerAccountCategoryEntity,
 	LedgerAccountEntity,
@@ -69,11 +70,12 @@ function createLedgerAccountFixture(
 function createLedgerAccountCategoryFixture(
 	overrides?: Partial<{
 		id: TypeID<"lac">;
+		organizationId: TypeID<"org">;
 		ledgerId: TypeID<"lgr">;
 		name: string;
 		description?: string;
 		normalBalance: "debit" | "credit";
-		metadata?: Record<string, unknown>;
+		metadata?: Metadata;
 		created: Date;
 		updated: Date;
 	}>
@@ -81,6 +83,7 @@ function createLedgerAccountCategoryFixture(
 	const now = new Date();
 	return new LedgerAccountCategoryEntity({
 		id: new TypeID("lac"),
+		organizationId: new TypeID("org"),
 		ledgerId: new TypeID("lgr"),
 		name: faker.finance.accountName(),
 		description: faker.lorem.sentence(),

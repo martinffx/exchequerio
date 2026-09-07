@@ -1,11 +1,12 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
+import type { Metadata } from "@/lib/schema";
 import type { LedgerAccountCategoriesTable } from "@/repo/schema";
 import type {
 	LedgerAccountCategoryRequest,
 	LedgerAccountCategoryResponse,
 } from "@/routes/ledgers/schema";
-import type { LedgerAccountCategoryID, LedgerID } from "./types";
+import type { LedgerAccountCategoryID, LedgerID, OrgID } from "./types";
 
 // Infer types from Drizzle schema
 type LedgerAccountCategoryRecord = InferSelectModel<typeof LedgerAccountCategoriesTable>;
@@ -14,27 +15,30 @@ type NormalBalance = "debit" | "credit";
 
 interface LedgerAccountCategoryEntityOptions {
 	id: LedgerAccountCategoryID;
+	organizationId: OrgID;
 	ledgerId: LedgerID;
 	name: string;
 	description?: string;
 	normalBalance: NormalBalance;
-	metadata?: Record<string, unknown>;
+	metadata?: Metadata;
 	created: Date;
 	updated: Date;
 }
 
 class LedgerAccountCategoryEntity {
 	public readonly id: LedgerAccountCategoryID;
+	public readonly organizationId: OrgID;
 	public readonly ledgerId: LedgerID;
 	public readonly name: string;
 	public readonly description?: string;
 	public readonly normalBalance: NormalBalance;
-	public readonly metadata?: Record<string, unknown>;
+	public readonly metadata?: Metadata;
 	public readonly created: Date;
 	public readonly updated: Date;
 
 	constructor(options: LedgerAccountCategoryEntityOptions) {
 		this.id = options.id;
+		this.organizationId = options.organizationId;
 		this.ledgerId = options.ledgerId;
 		this.name = options.name;
 		this.description = options.description;
@@ -46,12 +50,14 @@ class LedgerAccountCategoryEntity {
 
 	public static fromRequest(
 		rq: LedgerAccountCategoryRequest,
+		organizationId: OrgID,
 		ledgerId: LedgerID,
 		id?: string
 	): LedgerAccountCategoryEntity {
 		const now = new Date();
 		return new LedgerAccountCategoryEntity({
 			id: id ? TypeID.fromString<"lac">(id) : new TypeID("lac"),
+			organizationId,
 			ledgerId,
 			name: rq.name,
 			description: rq.description,
@@ -63,11 +69,25 @@ class LedgerAccountCategoryEntity {
 	}
 
 	public static fromRecord(record: LedgerAccountCategoryRecord): LedgerAccountCategoryEntity {
-		// Parse metadata from TEXT (JSON string) to object
-		let metadata: Record<string, unknown> | undefined;
+		for (const field of ["created", "updated"] as const) {
+			if (!(record[field] instanceof Date) || !Number.isFinite(record[field].getTime())) {
+				throw new TypeError(`Invalid Category ${field} timestamp`);
+			}
+		}
+
+		// Invalid stored metadata remains absent for compatibility.
+		let metadata: Metadata | undefined;
 		if (record.metadata) {
 			try {
-				metadata = JSON.parse(record.metadata) as Record<string, unknown>;
+				const parsed: unknown = JSON.parse(record.metadata);
+				if (
+					parsed !== null &&
+					typeof parsed === "object" &&
+					!Array.isArray(parsed) &&
+					Object.values(parsed).every(value => typeof value === "string")
+				) {
+					metadata = parsed as Metadata;
+				}
 			} catch {
 				metadata = undefined;
 			}
@@ -75,6 +95,7 @@ class LedgerAccountCategoryEntity {
 
 		return new LedgerAccountCategoryEntity({
 			id: TypeID.fromString<"lac">(record.id),
+			organizationId: TypeID.fromString<"org">(record.organizationId),
 			ledgerId: TypeID.fromString<"lgr">(record.ledgerId),
 			name: record.name,
 			description: record.description ?? undefined,
@@ -88,6 +109,7 @@ class LedgerAccountCategoryEntity {
 	public toRecord(): LedgerAccountCategoryInsert {
 		return {
 			id: this.id.toString(),
+			organizationId: this.organizationId.toString(),
 			ledgerId: this.ledgerId.toString(),
 			name: this.name,
 			description: this.description,

@@ -1,5 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
 import type { FastifyRequest } from "fastify";
+import { MetadataSchema } from "@/lib/schema";
 import type { PaginationQuery } from "../schema";
 
 /**
@@ -252,7 +253,7 @@ const LedgerAccountCategoryResponse = Type.Object(
 		),
 		normalBalance: NormalBalance,
 		balances: Balances,
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 		created: Type.String({
 			description: "Timestamp of when the ledger account category was created.",
 		}),
@@ -278,7 +279,7 @@ const LedgerAccountCategoryRequest = Type.Object(
 			})
 		),
 		normalBalance: NormalBalance,
-		metadata: Type.Optional(Metadata),
+		metadata: Type.Optional(MetadataSchema),
 	},
 	{
 		$id: "LedgerAccountCategoryRequest",

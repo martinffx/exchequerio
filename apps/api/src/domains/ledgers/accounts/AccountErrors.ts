@@ -11,8 +11,8 @@ import {
 } from "@/lib/errors";
 
 class AccountNotFound extends NotFoundError {
-	constructor() {
-		super("Account not found");
+	constructor(options?: ErrorOptions) {
+		super("Account not found", options);
 	}
 }
 
