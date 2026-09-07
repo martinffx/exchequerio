@@ -39,6 +39,76 @@ const AccountBalanceResponse = Type.Object({
 	debits: Type.Integer(),
 	amount: Type.Integer(),
 });
+const PendingBalance = Type.Object({
+	balanceType: Type.Literal("pending", {
+		description: "The sum of all pending AND posted entry amounts.",
+	}),
+	credits: Type.Number({
+		description: "Summed amounts of all posted and pending ledger entries with `credit` direction.",
+	}),
+	debits: Type.Number({
+		description: "Summed amounts of all posted and pending ledger entries with `debit` direction.",
+	}),
+	amount: Type.Number({
+		description: "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+	}),
+	currency: Type.String({
+		description: "Currency of the ledger",
+	}),
+	currencyExponent: Type.Number({
+		description: "Currency exponent of the ledger",
+	}),
+});
+
+const PostedBalance = Type.Object({
+	balanceType: Type.Literal("posted", {
+		description: "The sum of all posted entry amounts.",
+	}),
+	credits: Type.Number({
+		description: "Summed amounts of all posted ledger entries with `credit` direction.",
+	}),
+	debits: Type.Number({
+		description: "Summed amounts of all posted ledger entries with `debit` direction.",
+	}),
+	amount: Type.Number({
+		description: "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+	}),
+	currency: Type.String({
+		description: "Currency of the ledger",
+	}),
+	currencyExponent: Type.Number({
+		description: "Currency exponent of the ledger",
+	}),
+});
+
+const AvailableBalance = Type.Object({
+	balanceType: Type.Literal("availableBalance", {
+		description:
+			"The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
+	}),
+	credits: Type.Number({
+		description: "Summed amounts of all posted ledger entries with `credit` direction.",
+	}),
+	debits: Type.Number({
+		description: "Summed amounts of all posted ledger entries with `debit` direction.",
+	}),
+	amount: Type.Number({
+		description: "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
+	}),
+	currency: Type.String({
+		description: "Currency of the ledger",
+	}),
+	currencyExponent: Type.Number({
+		description: "Currency exponent of the ledger",
+	}),
+});
+
+const Balance = Type.Union([PendingBalance, PostedBalance, AvailableBalance]);
+const Balances = Type.Array(Balance, {
+	description: "The pending, posted, and available balances.",
+});
+type Balances = Static<typeof Balances>;
+
 const AccountResponse = Type.Object({
 	id: AccountIdSchema,
 	ledgerId: LedgerIdSchema,
@@ -61,6 +131,8 @@ type AccountUpdateRequest = Static<typeof AccountUpdateRequest>;
 type AccountResponse = Static<typeof AccountResponse>;
 
 export {
+	Balances,
+	NormalBalanceSchema,
 	AccountCollectionParameters,
 	AccountCreateRequest,
 	AccountIdSchema,
