@@ -1,8 +1,8 @@
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { HttpError, InternalServerError } from "@/lib/errors";
 import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/repo/entities/types";
@@ -42,37 +42,42 @@ const request: LedgerAccountBalanceMonitorRequest = {
 };
 const existing = LedgerAccountBalanceMonitor.fromRequest(monitorId, accountId, request, now);
 
-const repository = (
-	overrides: Partial<LedgerAccountBalanceMonitorRepo> = {}
-): LedgerAccountBalanceMonitorRepo =>
-	vi.mocked<LedgerAccountBalanceMonitorRepo>({
-		listMonitors: vi.fn(() => Effect.succeed([existing])),
-		// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the stub value.
-		getMonitor: vi.fn(() => Effect.succeed(Option.some(existing))),
-		createMonitor: vi.fn(record => Effect.succeed(record)),
-		// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the stub value.
-		updateMonitor: vi.fn((_id, record) => Effect.succeed(Option.some(record))),
-		// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the presence marker.
-		deleteMonitor: vi.fn(() => Effect.succeed(Option.some(undefined))),
-		...overrides,
-	});
+const repo = vi.mocked<LedgerAccountBalanceMonitorRepo>({
+	listMonitors: vi.fn(() => Effect.succeed([existing])),
+	// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the stub value.
+	getMonitor: vi.fn(() => Effect.succeed(Option.some(existing))),
+	createMonitor: vi.fn(record => Effect.succeed(record)),
+	// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the stub value.
+	updateMonitor: vi.fn((_id, record) => Effect.succeed(Option.some(record))),
+	// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the presence marker.
+	deleteMonitor: vi.fn(() => Effect.succeed(Option.some(undefined))),
+});
+const runtime = ManagedRuntime.make(
+	Layer.merge(
+		ledgerAccountBalanceMonitorServiceLayer.pipe(
+			Layer.provide(Layer.succeed(LedgerAccountBalanceMonitorRepoTag, repo))
+		),
+		TestClock.layer()
+	)
+);
+let service: LedgerAccountBalanceMonitorService;
+beforeAll(async () => {
+	service = await runtime.runPromise(LedgerAccountBalanceMonitorServiceTag);
+});
+beforeEach(async () => {
+	vi.resetAllMocks();
+	await runtime.runPromise(TestClock.setTime(now.toMillis()));
+});
+afterAll(() => runtime.dispose());
 
-const runService = <A, E>(
-	repositoryImplementation: LedgerAccountBalanceMonitorRepo,
-	use: (service: LedgerAccountBalanceMonitorService) => Effect.Effect<A, E>
-) => {
-	const serviceLayer = ledgerAccountBalanceMonitorServiceLayer.pipe(
-		Layer.provide(Layer.succeed(LedgerAccountBalanceMonitorRepoTag, repositoryImplementation))
-	);
-	return Effect.runPromise(
-		Effect.gen(function* () {
-			yield* TestClock.setTime(now.toMillis());
-			return yield* use(yield* LedgerAccountBalanceMonitorServiceTag);
-		}).pipe(Effect.provide(Layer.merge(serviceLayer, TestClock.layer())))
-	);
-};
-
-type Operation = "list" | "get" | "create" | "update" | "delete";
+const repositoryMethods = {
+	list: "listMonitors",
+	get: "getMonitor",
+	create: "createMonitor",
+	update: "updateMonitor",
+	delete: "deleteMonitor",
+} as const;
+type Operation = keyof typeof repositoryMethods;
 
 const invoke = (
 	service: LedgerAccountBalanceMonitorService,
@@ -94,29 +99,21 @@ const invoke = (
 
 describe("LedgerAccountBalanceMonitorService", () => {
 	it("forwards list pagination", async () => {
-		const repo = repository();
-
 		await expect(
-			runService(repo, service => service.listLedgerAccountBalanceMonitors(10, 5))
+			runtime.runPromise(service.listLedgerAccountBalanceMonitors(10, 5))
 		).resolves.toEqual([existing]);
 		expect(repo.listMonitors).toHaveBeenCalledWith({ offset: 10, limit: 5 });
 	});
 
 	it("parses the Balance Monitor ID for get and delegates", async () => {
-		const repo = repository();
-
 		await expect(
-			runService(repo, service => service.getLedgerAccountBalanceMonitor(monitorId.toString()))
+			runtime.runPromise(service.getLedgerAccountBalanceMonitor(monitorId.toString()))
 		).resolves.toBe(existing);
 		expect(repo.getMonitor).toHaveBeenCalledWith(monitorId);
 	});
 
 	it("generates an lbm ID, parses the Account ID, and uses application time on create", async () => {
-		const repo = repository();
-
-		const created = await runService(repo, service =>
-			service.createLedgerAccountBalanceMonitor(request)
-		);
+		const created = await runtime.runPromise(service.createLedgerAccountBalanceMonitor(request));
 
 		expect(created.id.getType()).toBe("lbm");
 		expect(created).toMatchObject({
@@ -134,8 +131,7 @@ describe("LedgerAccountBalanceMonitorService", () => {
 	});
 
 	it("uses the default name and preserves omitted update fields", async () => {
-		const repo = repository();
-		const updated = await runService(repo, service =>
+		const updated = await runtime.runPromise(
 			service.updateLedgerAccountBalanceMonitor(monitorId.toString(), {
 				...request,
 				description: undefined,
@@ -154,9 +150,7 @@ describe("LedgerAccountBalanceMonitorService", () => {
 	});
 
 	it("parses both IDs and uses application time on update", async () => {
-		const repo = repository();
-
-		const updated = await runService(repo, service =>
+		const updated = await runtime.runPromise(
 			service.updateLedgerAccountBalanceMonitor(monitorId.toString(), request)
 		);
 
@@ -165,10 +159,8 @@ describe("LedgerAccountBalanceMonitorService", () => {
 	});
 
 	it("parses the Balance Monitor ID for delete and delegates", async () => {
-		const repo = repository();
-
 		await expect(
-			runService(repo, service => service.deleteLedgerAccountBalanceMonitor(monitorId.toString()))
+			runtime.runPromise(service.deleteLedgerAccountBalanceMonitor(monitorId.toString()))
 		).resolves.toBeUndefined();
 		expect(repo.deleteMonitor).toHaveBeenCalledWith(monitorId);
 	});
@@ -176,15 +168,9 @@ describe("LedgerAccountBalanceMonitorService", () => {
 	it.each(["get", "update", "delete"] as const)(
 		"maps missing %s results to LedgerAccountBalanceMonitorNotFound",
 		async operation => {
-			const repo = repository(
-				operation === "get"
-					? { getMonitor: vi.fn(() => Effect.succeed(Option.none())) }
-					: operation === "update"
-						? { updateMonitor: vi.fn(() => Effect.succeed(Option.none())) }
-						: { deleteMonitor: vi.fn(() => Effect.succeed(Option.none())) }
-			);
+			repo[repositoryMethods[operation]].mockReturnValue(Effect.succeed(Option.none<never>()));
 
-			const error = await runService(repo, service => Effect.flip(invoke(service, operation)));
+			const error = await runtime.runPromise(Effect.flip(invoke(service, operation)));
 
 			expect(error).toBeInstanceOf(LedgerAccountBalanceMonitorNotFound);
 			expect(error.message).toBe(`Balance monitor not found: ${monitorId.toString()}`);
@@ -195,16 +181,9 @@ describe("LedgerAccountBalanceMonitorService", () => {
 		"preserves repository failures from %s",
 		async operation => {
 			const failure = new LedgerAccountBalanceMonitorPersistenceFailure(new Error("database"));
-			const failed = vi.fn(() => Effect.fail(failure));
-			const repo = repository({
-				...(operation === "list" ? { listMonitors: failed } : {}),
-				...(operation === "get" ? { getMonitor: failed } : {}),
-				...(operation === "create" ? { createMonitor: failed } : {}),
-				...(operation === "update" ? { updateMonitor: failed } : {}),
-				...(operation === "delete" ? { deleteMonitor: failed } : {}),
-			} as Partial<LedgerAccountBalanceMonitorRepo>);
+			repo[repositoryMethods[operation]].mockReturnValue(Effect.fail(failure));
 
-			const error = await runService(repo, service => Effect.flip(invoke(service, operation)));
+			const error = await runtime.runPromise(Effect.flip(invoke(service, operation)));
 
 			expect(error).toBe(failure);
 		}
@@ -218,10 +197,9 @@ describe("LedgerAccountBalanceMonitorService", () => {
 	] as const)(
 		"keeps %s body Account IDs on the sanitized internal path for %s",
 		async (_case, operation, invalidAccountId) => {
-			const repo = repository();
 			const invalid = { ...request, accountId: invalidAccountId };
 
-			const error = await runService(repo, service =>
+			const error = await runtime.runPromise(
 				Effect.flip(
 					operation === "create"
 						? service.createLedgerAccountBalanceMonitor(invalid)

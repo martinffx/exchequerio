@@ -64,12 +64,13 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 	const ledgerId = newLedgerID();
 	const accountIds = [newLedgerAccountID(), newLedgerAccountID()] as const;
 
-	const run = <A, E>(use: (repository: LedgerAccountBalanceMonitorRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(LedgerAccountBalanceMonitorRepoTag.pipe(Effect.flatMap(use)));
-	const database = () => runtime.runPromise(DatabaseTag);
+	let repository: LedgerAccountBalanceMonitorRepo;
+	let database: Database;
 
 	beforeAll(async () => {
-		const db = (await database()).db;
+		repository = await runtime.runPromise(LedgerAccountBalanceMonitorRepoTag);
+		database = await runtime.runPromise(DatabaseTag);
+		const db = database.db;
 		await db.insert(OrganizationsTable).values({
 			id: organizationId.toString(),
 			name: "Balance Monitor repository test",
@@ -93,7 +94,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 
 	afterAll(async () => {
 		try {
-			const db = (await database()).db;
+			const db = database.db;
 			await db.delete(LedgerAccountBalanceMonitorsTable).where(
 				inArray(
 					LedgerAccountBalanceMonitorsTable.accountId,
@@ -116,7 +117,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 	});
 
 	it("preserves created-descending list order and pagination without a tie-breaker", async () => {
-		const db = (await database()).db;
+		const db = database.db;
 		const ids = [
 			newLedgerAccountBalanceMonitorID(),
 			newLedgerAccountBalanceMonitorID(),
@@ -131,7 +132,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			}))
 		);
 
-		const page = await run(repository => repository.listMonitors({ offset: 1, limit: 1 }));
+		const page = await runtime.runPromise(repository.listMonitors({ offset: 1, limit: 1 }));
 
 		expect(page.map(value => value.id.toString())).toEqual([ids[1].toString()]);
 	});
@@ -145,16 +146,16 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		{ label: "omitted optional values", description: undefined, metadata: undefined },
 	])("creates, gets, and deletes $label", async ({ description, metadata }) => {
 		const record = monitor(accountIds[0], { description, metadata });
-		const created = await run(repository => repository.createMonitor(record));
+		const created = await runtime.runPromise(repository.createMonitor(record));
 
 		expect(created.description).toBe(description);
 		expect(created.metadata).toEqual(metadata);
 		expect(created.updated).toEqual(applicationTime);
 		expect(created.created.toMillis()).toBeGreaterThan(applicationTime.toMillis());
-		expect(Option.getOrUndefined(await run(repository => repository.getMonitor(record.id)))).toEqual(
+		expect(Option.getOrUndefined(await runtime.runPromise(repository.getMonitor(record.id)))).toEqual(
 			created
 		);
-		expect(await run(repository => repository.deleteMonitor(record.id))).toSatisfy(Option.isSome);
+		expect(await runtime.runPromise(repository.deleteMonitor(record.id))).toSatisfy(Option.isSome);
 	});
 
 	it("updates the existing assignments and application-supplied time", async () => {
@@ -162,7 +163,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			description: "Before",
 			metadata: { version: "before" },
 		});
-		await run(repository => repository.createMonitor(original));
+		await runtime.runPromise(repository.createMonitor(original));
 		const updatedAt = DateTime.fromISO("2026-08-29T12:30:00.000Z", { zone: "utc" });
 		const replacement = monitor(accountIds[1], {
 			id: original.id,
@@ -172,7 +173,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		});
 
 		const updated = Option.getOrThrow(
-			await run(repository => repository.updateMonitor(original.id, replacement))
+			await runtime.runPromise(repository.updateMonitor(original.id, replacement))
 		);
 
 		expect(updated).toMatchObject({
@@ -192,11 +193,11 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			description: "Keep description",
 			metadata: { keep: "metadata" },
 		});
-		await run(repository => repository.createMonitor(original));
+		await runtime.runPromise(repository.createMonitor(original));
 		const replacement = monitor(accountIds[0], { id: original.id });
 
 		const updated = Option.getOrThrow(
-			await run(repository => repository.updateMonitor(original.id, replacement))
+			await runtime.runPromise(repository.updateMonitor(original.id, replacement))
 		);
 
 		expect(updated.description).toBe("Keep description");
@@ -204,7 +205,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 	});
 
 	it("decodes persisted values independently of request defaults", async () => {
-		const db = (await database()).db;
+		const db = database.db;
 		const id = newLedgerAccountBalanceMonitorID();
 		const created = new Date("2026-08-28T09:00:00.000Z");
 		await db.insert(LedgerAccountBalanceMonitorsTable).values({
@@ -217,7 +218,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			updated: applicationTime.toJSDate(),
 			metadata: JSON.stringify({ team: "treasury" }),
 		});
-		const found = Option.getOrThrow(await run(repository => repository.getMonitor(id)));
+		const found = Option.getOrThrow(await runtime.runPromise(repository.getMonitor(id)));
 		expect(found).toMatchObject({
 			id,
 			accountId: accountIds[0],
@@ -240,7 +241,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		"1",
 		'{"count":1}',
 	])("treats invalid or absent stored metadata %s as absent", async metadata => {
-		const db = (await database()).db;
+		const db = database.db;
 		const id = newLedgerAccountBalanceMonitorID();
 		await db.insert(LedgerAccountBalanceMonitorsTable).values({
 			id: id.toString(),
@@ -248,14 +249,14 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			name: "Metadata fallback",
 			metadata,
 		});
-		const found = Option.getOrThrow(await run(repository => repository.getMonitor(id)));
+		const found = Option.getOrThrow(await runtime.runPromise(repository.getMonitor(id)));
 		expect(found.metadata).toBeUndefined();
 	});
 
 	it("returns explicit absence for missing get, update, and delete", async () => {
 		const id = newLedgerAccountBalanceMonitorID();
 		const replacement = monitor(accountIds[0], { id });
-		const [found, updated, deleted] = await run(repository =>
+		const [found, updated, deleted] = await runtime.runPromise(
 			Effect.all([
 				repository.getMonitor(id),
 				repository.updateMonitor(id, replacement),
@@ -270,7 +271,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 
 	it("maps PostgreSQL failures to the sanitized persistence error", async () => {
 		const missingAccount = newLedgerAccountID();
-		const error = await run(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(repository.createMonitor(monitor(missingAccount)))
 		);
 
@@ -280,14 +281,14 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 
 	it("maps undecodable rows to the sanitized decoding error", async () => {
 		const invalidId = "not-a-balance-monitor";
-		const db = (await database()).db;
+		const db = database.db;
 		await db.insert(LedgerAccountBalanceMonitorsTable).values({
 			id: invalidId,
 			accountId: accountIds[0].toString(),
 			name: "Malformed",
 		});
 
-		const error = await run(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(repository.getMonitor(invalidId as unknown as LedgerAccountBalanceMonitorID))
 		);
 
