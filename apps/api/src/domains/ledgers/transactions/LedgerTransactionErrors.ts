@@ -5,7 +5,7 @@ import {
 	AccountNotFound,
 	AccountPersistenceDecodingFailure,
 	AccountVersionConflict,
-	LedgerAccountCurrencyMismatch,
+	LedgerAccountAssetMismatch,
 } from "@/domains/ledgers/accounts";
 import {
 	BadRequestError,
@@ -102,18 +102,20 @@ const mapTransactionConcurrentError = (cause: unknown) => {
 };
 
 const mapTransactionCreateError = (cause: unknown) =>
+	cause instanceof ConflictError ||
 	cause instanceof AccountNotFound ||
 	cause instanceof AccountVersionConflict ||
-	cause instanceof LedgerAccountCurrencyMismatch ||
+	cause instanceof LedgerAccountAssetMismatch ||
 	cause instanceof TransactionSettlementConflict ||
 	cause instanceof TransactionValidationFailure
 		? cause
 		: mapTransactionConcurrentError(cause);
 
 const mapTransactionMutationError = (cause: unknown) =>
+	cause instanceof ConflictError ||
 	cause instanceof AccountNotFound ||
 	cause instanceof AccountVersionConflict ||
-	cause instanceof LedgerAccountCurrencyMismatch ||
+	cause instanceof LedgerAccountAssetMismatch ||
 	cause instanceof TransactionSettlementConflict ||
 	cause instanceof TransactionLifecycleConflict ||
 	cause instanceof TransactionNotFound ||

@@ -1,21 +1,33 @@
 # Exchequer Ledger API entity relationships
 
 This diagram shows the ownership and accounting columns used by Ledger Transactions. See
-[`schema.ts`](../../src/repo/schema.ts) for the complete database schema.
+[`schema.ts`](../../src/db/schema.ts) for the complete database schema.
 
 ```mermaid
 erDiagram
     ORGANIZATION {
-        text id PK
+        uuid id PK
         text name
         text description
         timestamptz created
         timestamptz updated
     }
 
+    ASSET {
+        uuid id PK
+        uuid organization_id FK
+        text code
+        text name
+        integer minor_unit_exponent
+        text description
+        text metadata
+        timestamptz created
+        timestamptz updated
+    }
+
     LEDGER {
-        text id PK
-        text organization_id FK
+        uuid id PK
+        uuid organization_id FK
         text name
         text description
         text metadata
@@ -24,13 +36,13 @@ erDiagram
     }
 
     LEDGER_ACCOUNT {
-        text id PK
-        text organization_id FK
-        text ledger_id FK
+        uuid id PK
+        uuid organization_id FK
+        uuid ledger_id FK
         text name
         text description
         enum normal_balance
-        text currency_code
+        uuid asset_id FK
         bigint pending_amount
         bigint posted_amount
         bigint available_amount
@@ -47,10 +59,10 @@ erDiagram
     }
 
     LEDGER_TRANSACTION {
-        text id PK
-        text settlement_id FK
-        text organization_id FK
-        text ledger_id FK
+        uuid id PK
+        uuid settlement_id FK
+        uuid organization_id FK
+        uuid ledger_id FK
         text description
         enum status
         timestamptz posted_at
@@ -62,13 +74,14 @@ erDiagram
     }
 
     LEDGER_ACCOUNT_SETTLEMENT {
-        text id PK
-        text organization_id FK
-        text ledger_id FK
-        text settled_account_id FK
-        text contra_account_id FK
+        uuid id PK
+        uuid organization_id FK
+        uuid ledger_id FK
+        uuid settled_account_id FK
+        uuid contra_account_id FK
         enum status
         enum target_status
+        uuid asset_id FK
         boolean allow_either_direction
         timestamptz effective_at_upper_bound
     }
@@ -76,27 +89,29 @@ erDiagram
     LEDGER_ACCOUNT_SETTLEMENT ||--o| LEDGER_TRANSACTION : generates
 
     LEDGER_TRANSACTION_ENTRY {
-        text id PK
-        text organization_id FK
-        text ledger_id FK
-        text transaction_id FK
-        text account_id FK
+        uuid id PK
+        uuid organization_id FK
+        uuid ledger_id FK
+        uuid transaction_id FK
+        uuid account_id FK
         enum direction
         bigint amount
-        text currency
+        uuid asset_id FK
         enum status
         text metadata
         timestamptz created
     }
 
     LEDGER_ACCOUNT_SETTLEMENT {
-        text id PK
-        text organization_id FK
-        text transaction_id FK
-        text settled_account_id FK
-        text contra_account_id FK
+        uuid id PK
+        uuid organization_id FK
+        uuid transaction_id FK
+        uuid settled_account_id FK
+        uuid contra_account_id FK
     }
 
+    ORGANIZATION ||--o{ ASSET : defines
+    ASSET ||--o{ LEDGER_ACCOUNT : measures
     ORGANIZATION ||--o{ LEDGER : owns
     LEDGER ||--o{ LEDGER_ACCOUNT : contains
     LEDGER ||--o{ LEDGER_TRANSACTION : records
@@ -113,11 +128,15 @@ erDiagram
   Transaction and Account to share both owners.
 - Transaction status is `pending`, `posted`, or `voided`. `posted_at` exists only for Posted
   Transactions. Entries inherit their Transaction's `effective_at`; live balances depend on status.
-- Entries store the Transaction status and the request Currency Code alongside the Amount. Currency
-  exponent handling is deferred until the Asset model exists.
-- Entry Amounts are positive integer Minor Units no greater than JavaScript's maximum safe integer.
+- Accounts reference an Asset owned by their Organization. Entries and Settlement accounts use
+  composite foreign keys to enforce the same Asset identity.
+- Entries store the Transaction status and resolved Asset ID alongside the Amount. Transactions
+  balance independently by Asset ID. Codes are mutable lookup attributes, not accounting identity.
+- Entry Amounts are positive integer Minor Units no greater than `9223372036854775807`.
+  The API encodes quantities as decimal strings; persistence uses PostgreSQL `BIGINT`.
 - Each Account stores pending, posted, and available Amounts plus credit and debit counters for each
-  state. All nine projections are safe integers.
+  state. All nine final projections must fit signed 64-bit integers; exact intermediate arithmetic
+  may exceed that range. Overflow rejects the complete accounting mutation.
 - Transaction lists use `(ledger_id, created DESC, id DESC)`. Ownership and lookup indexes cover
   Organization, status, Transaction, and Account access paths.
 
@@ -132,6 +151,10 @@ for each new action and reuse it only for retries. Claims store resource IDs for
 claims receive a bounded wait followed by retryable 409; unavailable storage returns 503. Domain
 services explicitly claim, execute or replay, and complete or release; the idempotency service does
 not execute business operations.
+
+Asset codes are unique within an Organization. Asset IDs and Minor Unit Exponents are immutable.
+Responses display the current code and exponent by joining the Asset definition. See
+[Assets and amounts](./assets.md) for request contracts and the clean cutover requirement.
 
 ## Balance monitoring
 

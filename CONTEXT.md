@@ -29,6 +29,10 @@ _Avoid_: Nested ledger, cross-ledger transaction
 An Organization-wide, fungible instrument measured by the Ledger, such as a fiat currency, share class, option series, or Usage Credit. An Asset has an immutable Exchequer identity and Minor Unit Exponent; symbols, codes, and external identifiers are attributes rather than identity.
 _Avoid_: Currency, security, SKU when referring to every Asset
 
+**Asset Code**:
+An Organization-scoped label used to look up an Asset. Codes are unique among an Organization's current Asset definitions, but may be renamed and reassigned; accounting references retain the immutable Asset identity.
+_Avoid_: Asset identity, global ticker
+
 **Minor Unit Exponent**:
 The immutable number of decimal places used to express an Asset in Minor Units. USD commonly uses `2`; an Asset supporting six decimal places uses `6`.
 _Avoid_: Decimal precision, scale
@@ -40,7 +44,7 @@ The smallest quantity of an Asset recorded by the Ledger. Every Amount is an int
 An integer quantity of one Asset expressed in its Minor Units. An Amount never combines or values multiple Assets.
 
 **Ledger Account**:
-An atomic balance-bearing bucket for one Asset, party, and accounting purpose within one Ledger. It is not necessarily a bank account, brokerage account, or External Party.
+An atomic balance-bearing bucket permanently assigned to one Asset, party, and accounting purpose within one Ledger. It is not necessarily a bank account, brokerage account, or External Party.
 _Avoid_: Account Holder, bank account, wallet
 
 **Normal Balance**:

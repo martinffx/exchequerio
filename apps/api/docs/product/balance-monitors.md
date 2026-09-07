@@ -16,8 +16,8 @@ from the URL; Organization scope comes from authentication. Creation and updates
 	"alertCondition": {
 		"mode": "all",
 		"conditions": [
-			{ "balanceType": "availableBalance", "operator": "<", "value": 10000 },
-			{ "balanceType": "posted", "operator": ">=", "value": 0 }
+			{ "balanceType": "availableBalance", "operator": "<", "value": "10000" },
+			{ "balanceType": "posted", "operator": ">=", "value": "0" }
 		]
 	},
 	"webhook": {
@@ -29,7 +29,7 @@ from the URL; Organization scope comes from authentication. Creation and updates
 
 `mode` is `all` or `any`; the flat `conditions` list must contain at least one comparison.
 `balanceType` is `posted`, `pending`, or `availableBalance`; `operator` is `=`, `!=`, `<`, `<=`, `>`,
-or `>=`. Values are safe integer Amounts in Minor Units. Pending Balance includes Posted and
+or `>=`. Values are canonical decimal strings in signed 64-bit Minor Units, matching the Asset amount contract. Pending Balance includes Posted and
 Pending Transactions. Optional metadata follows the Ledger API's string-map metadata contract.
 
 Creation establishes the current balance as the baseline and sends no initial alert, even when
@@ -50,8 +50,9 @@ Any 2xx response succeeds; other responses and transport failures retry.
 
 The payload contains `type: "balance_monitor.triggered"`, a stable `eventId`, `monitorId`,
 `monitorVersion`, `organizationId`, `ledgerId`, `accountId`, `accountVersion`, `transactionId`,
-`occurredAt`, `currencyCode`, `before`, `after`, and `alertCondition`. Both balance snapshots contain
-`posted`, `pending`, and `availableBalance` integer Amounts. `occurredAt` is the balance change's
+`occurredAt`, `assetId`, `assetCode`, `minorUnitExponent`, `before`, `after`, and `alertCondition`. Both balance snapshots contain
+`posted`, `pending`, and `availableBalance` decimal-string Amounts. Asset details are captured with the
+balance event; renaming an Asset later does not change a queued webhook. `occurredAt` is the balance change's
 recorded timestamp, not the delivery time.
 
 The event ID combines the original Account change ID and monitor ID. Retries retain that ID.
@@ -122,7 +123,9 @@ The Compose `api` profile starts both API and worker from the same image. Export
 docker-compose --env-file apps/api/.env --profile api up -d --build
 ```
 
-Run database migrations before starting the new API and worker. The monitor migration refuses to
+Run database migrations before starting the new API and worker. The unreleased monitor migration
+now follows the UUID and Asset cutovers. Use a fresh development database to replay this history;
+there is no compatibility path for the earlier branch-only monitor migration or queue payloads. The monitor migration refuses to
 proceed when legacy monitor rows exist because those rows did not persist the new rule and webhook
 configuration. Export the old records, explicitly remove them with operator authorization, rerun the
 migration, and recreate monitors with complete configuration. Do not silently discard records or

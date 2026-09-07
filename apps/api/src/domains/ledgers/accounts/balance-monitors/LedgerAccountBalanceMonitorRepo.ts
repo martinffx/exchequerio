@@ -1,15 +1,17 @@
+import { TypeID } from "typeid-js";
+import { encodeUuid } from "@/lib/utils";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import { NotFoundError } from "@/lib/errors";
-import type { LedgerAccountBalanceMonitorID } from "@/repo/entities/types";
+import type { LedgerAccountBalanceMonitorID } from "@/lib/ids";
 import {
 	BalanceMonitorRevisionsTable as revisions,
 	LedgerAccountBalanceMonitorsTable as monitors,
 	LedgerAccountsTable as accounts,
 	type LedgerAccountBalanceMonitorRow,
 	type MonitorConfiguration,
-} from "@/repo/schema";
+} from "@/db/schema";
 import { LedgerAccountBalanceMonitor, type MonitorScope } from "./LedgerAccountBalanceMonitor";
 import {
 	LedgerAccountBalanceMonitorPersistenceDecodingFailure,
@@ -21,6 +23,11 @@ const mapError = (cause: unknown) =>
 	cause instanceof LedgerAccountBalanceMonitorPersistenceDecodingFailure
 		? cause
 		: new LedgerAccountBalanceMonitorPersistenceFailure(cause);
+const toScopeRow = (scope: MonitorScope): MonitorScope => ({
+	organizationId: encodeUuid(TypeID.fromString(scope.organizationId)),
+	ledgerId: encodeUuid(TypeID.fromString(scope.ledgerId)),
+	accountId: encodeUuid(TypeID.fromString(scope.accountId)),
+});
 const accountWhere = (scope: MonitorScope) =>
 	and(
 		eq(accounts.id, scope.accountId),
@@ -33,7 +40,7 @@ const monitorWhere = (scope: MonitorScope, id?: LedgerAccountBalanceMonitorID) =
 		eq(monitors.ledgerId, scope.ledgerId),
 		eq(monitors.organizationId, scope.organizationId),
 		isNull(monitors.deletedAt),
-		id ? eq(monitors.id, id.toString()) : undefined
+		id ? eq(monitors.id, encodeUuid(id)) : undefined
 	);
 const configuration = ({
 	description,
@@ -63,6 +70,7 @@ export class LedgerAccountBalanceMonitorRepoLive {
 			);
 	}
 	listMonitors(scope: MonitorScope, query: LedgerAccountBalanceMonitorListQuery) {
+		scope = toScopeRow(scope);
 		return this.requireAccount(scope).pipe(
 			Effect.flatMap(() =>
 				this.db
@@ -78,6 +86,7 @@ export class LedgerAccountBalanceMonitorRepoLive {
 		);
 	}
 	getMonitor(scope: MonitorScope, id: LedgerAccountBalanceMonitorID) {
+		scope = toScopeRow(scope);
 		return this.requireAccount(scope).pipe(
 			Effect.flatMap(() => this.db.select().from(monitors).where(monitorWhere(scope, id)).limit(1)),
 			Effect.flatMap(rows =>
@@ -121,6 +130,7 @@ export class LedgerAccountBalanceMonitorRepoLive {
 		changes: Partial<MonitorConfiguration>,
 		time: Date
 	) {
+		scope = toScopeRow(scope);
 		return this.db
 			.transaction(tx =>
 				Effect.gen(function* () {
@@ -151,6 +161,7 @@ export class LedgerAccountBalanceMonitorRepoLive {
 			.pipe(Effect.mapError(mapError));
 	}
 	deleteMonitor(scope: MonitorScope, id: LedgerAccountBalanceMonitorID, time: Date) {
+		scope = toScopeRow(scope);
 		return this.db
 			.transaction(tx =>
 				Effect.gen(function* () {

@@ -1,9 +1,19 @@
+import { TypeID } from "typeid-js";
+import type { AssetSummary } from "@/lib/AssetSchema";
+import { INT64_MAX } from "@/lib/amounts";
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 import { LedgerTransaction } from "../transactions/LedgerTransaction";
 import { BadRequestError, ConflictError } from "@/lib/errors";
 import type { Metadata } from "@/lib/schema";
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import {
+	encodeUuid,
+	encodeMetadata,
+	parseDate,
+	parseId,
+	parseUuid,
+	parseMetadata,
+} from "@/lib/utils";
 import {
 	newLedgerAccountSettlementID,
 	newLedgerTransactionID,
@@ -11,8 +21,8 @@ import {
 	type LedgerAccountSettlementID,
 	type LedgerID,
 	type OrgID,
-} from "@/repo/entities/types";
-import type { LedgerAccountSettlementInsert, LedgerAccountSettlementRow } from "@/repo/schema";
+} from "@/lib/ids";
+import type { LedgerAccountSettlementInsert, LedgerAccountSettlementRow } from "@/db/schema";
 import type {
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementResponse,
@@ -23,24 +33,25 @@ import type {
 import { LedgerAccountSettlementPersistenceDecodingFailure } from "./LedgerAccountSettlementErrors";
 
 /** Decoded Settlement state with optional accounting loaded by the repository. */
-type LedgerAccountSettlementEntityOptions = Readonly<{
-	id: LedgerAccountSettlementID;
-	organizationId: OrgID;
-	ledgerId: LedgerID;
-	settledAccountId: LedgerAccountID;
-	contraAccountId: LedgerAccountID;
-	currency: string;
-	status: SettlementStatus;
-	targetStatus?: SettlementTargetStatus;
-	description?: string;
-	externalReference?: string;
-	effectiveAtUpperBound?: DateTime;
-	allowEitherDirection: boolean;
-	metadata?: Metadata;
-	created: DateTime;
-	updated: DateTime;
-	transaction?: LedgerTransaction;
-}>;
+type LedgerAccountSettlementEntityOptions = Readonly<
+	AssetSummary & {
+		id: LedgerAccountSettlementID;
+		organizationId: OrgID;
+		ledgerId: LedgerID;
+		settledAccountId: LedgerAccountID;
+		contraAccountId: LedgerAccountID;
+		status: SettlementStatus;
+		targetStatus?: SettlementTargetStatus;
+		description?: string;
+		externalReference?: string;
+		effectiveAtUpperBound?: DateTime;
+		allowEitherDirection: boolean;
+		metadata?: Metadata;
+		created: DateTime;
+		updated: DateTime;
+		transaction?: LedgerTransaction;
+	}
+>;
 /**
  * Serializes a Settlement timestamp.
  *
@@ -95,7 +106,7 @@ class LedgerAccountSettlementEntity {
 	 * @param organizationId - Owning Organization.
 	 * @param ledgerId - Ledger containing the Accounts.
 	 * @param request - Validated creation fields.
-	 * @param currency - Settled Account currency.
+	 * @param asset - Settled Account Asset.
 	 * @param now - Creation time and default automatic selection cutoff.
 	 * @param id - Settlement identifier; generated when omitted.
 	 * @returns An Effect containing the draft, or a request/identifier failure.
@@ -104,7 +115,7 @@ class LedgerAccountSettlementEntity {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		request: LedgerAccountSettlementRequest,
-		currency: string,
+		asset: AssetSummary,
 		now: DateTime,
 		id = newLedgerAccountSettlementID()
 	) {
@@ -119,7 +130,7 @@ class LedgerAccountSettlementEntity {
 				ledgerId,
 				settledAccountId: yield* parseId<"lat", LedgerAccountID>("lat", request.settledAccountId),
 				contraAccountId: yield* parseId<"lat", LedgerAccountID>("lat", request.contraAccountId),
-				currency,
+				...asset,
 				status: "drafting",
 				allowEitherDirection: request.allowEitherDirection ?? false,
 				description: request.description,
@@ -143,20 +154,25 @@ class LedgerAccountSettlementEntity {
 	 * @param transaction - Accounting loaded by the repository.
 	 * @returns An Effect containing an optional Settlement, or a persistence decoding failure.
 	 */
-	static fromRow(row: LedgerAccountSettlementRow | undefined, transaction?: LedgerTransaction) {
+	static fromRow(
+		row: (LedgerAccountSettlementRow & AssetSummary) | undefined,
+		transaction?: LedgerTransaction
+	) {
 		if (row === undefined) return Effect.succeed(Option.none<LedgerAccountSettlementEntity>());
 		return Effect.gen(function* () {
 			return Option.some(
 				// oxlint-disable-next-line unicorn/no-array-callback-reference -- Wrap the decoded entity in an Option.
 				new LedgerAccountSettlementEntity({
-					id: yield* parseId<"las", LedgerAccountSettlementID>("las", row.id),
-					organizationId: yield* parseId<"org", OrgID>("org", row.organizationId),
-					ledgerId: yield* parseId<"lgr", LedgerID>("lgr", row.ledgerId),
-					settledAccountId: yield* parseId<"lat", LedgerAccountID>("lat", row.settledAccountId),
-					contraAccountId: yield* parseId<"lat", LedgerAccountID>("lat", row.contraAccountId),
+					id: yield* parseUuid<"las", LedgerAccountSettlementID>("las", row.id),
+					organizationId: yield* parseUuid<"org", OrgID>("org", row.organizationId),
+					ledgerId: yield* parseUuid<"lgr", LedgerID>("lgr", row.ledgerId),
+					settledAccountId: yield* parseUuid<"lat", LedgerAccountID>("lat", row.settledAccountId),
+					contraAccountId: yield* parseUuid<"lat", LedgerAccountID>("lat", row.contraAccountId),
 					status: row.status,
 					targetStatus: row.targetStatus ?? undefined,
-					currency: row.currency,
+					assetId: TypeID.fromUUID("ast", row.assetId).toString(),
+					assetCode: row.assetCode,
+					minorUnitExponent: row.minorUnitExponent,
 					allowEitherDirection: row.allowEitherDirection,
 					description: row.description ?? undefined,
 					externalReference: row.externalReference ?? undefined,
@@ -179,12 +195,12 @@ class LedgerAccountSettlementEntity {
 	toRow(): LedgerAccountSettlementInsert {
 		const d = this.data;
 		return {
-			id: d.id.toString(),
-			organizationId: d.organizationId.toString(),
-			ledgerId: d.ledgerId.toString(),
-			settledAccountId: d.settledAccountId.toString(),
-			contraAccountId: d.contraAccountId.toString(),
-			currency: d.currency,
+			id: encodeUuid(d.id),
+			organizationId: encodeUuid(d.organizationId),
+			ledgerId: encodeUuid(d.ledgerId),
+			settledAccountId: encodeUuid(d.settledAccountId),
+			contraAccountId: encodeUuid(d.contraAccountId),
+			assetId: encodeUuid(TypeID.fromString(d.assetId)),
 			status: d.status,
 			targetStatus: d.targetStatus,
 			allowEitherDirection: d.allowEitherDirection,
@@ -218,13 +234,15 @@ class LedgerAccountSettlementEntity {
 			// oxlint-disable-next-line unicorn/no-null -- Nullable accounting reference.
 			transactionId: d.transaction?.id.toString() ?? null,
 			// oxlint-disable-next-line unicorn/no-null -- Drafts have no accounting.
-			amount: entry?.amount ?? null,
+			amount: entry?.amount.toString() ?? null,
 			// oxlint-disable-next-line unicorn/no-null -- Drafts have no accounting.
 			settlementEntryDirection: entry?.direction ?? null,
 			status: d.status,
 			settledAccountId: d.settledAccountId.toString(),
 			contraAccountId: d.contraAccountId.toString(),
-			currency: d.currency,
+			assetId: d.assetId,
+			assetCode: d.assetCode,
+			minorUnitExponent: d.minorUnitExponent,
 			allowEitherDirection: d.allowEitherDirection,
 			// oxlint-disable-next-line unicorn/no-null -- Manual selection has no cutoff.
 			effectiveAtUpperBound: d.effectiveAtUpperBound ? toIso(d.effectiveAtUpperBound) : null,
@@ -239,7 +257,7 @@ class LedgerAccountSettlementEntity {
 	 * Nets source Entries and constructs balanced Settlement accounting.
 	 *
 	 * @remarks
-	 * The net uses exact integer arithmetic and must be nonzero and safely representable.
+	 * The net uses exact integer arithmetic and must be nonzero and within signed 64-bit range.
 	 * Negative nets require allowEitherDirection. The offset reverses the settled Account net;
 	 * the contra Entry balances it. No amount is stored separately on the Settlement.
 	 *
@@ -250,7 +268,7 @@ class LedgerAccountSettlementEntity {
 	 * @returns An Effect containing the Transaction, or a net/policy/Transaction validation failure.
 	 */
 	toTransaction(
-		entries: readonly { amount: number; direction: NormalBalance }[],
+		entries: readonly { amount: bigint; direction: NormalBalance }[],
 		normalBalance: NormalBalance,
 		status: "pending" | "posted",
 		now: DateTime
@@ -260,23 +278,18 @@ class LedgerAccountSettlementEntity {
 			if (entries.length === 0)
 				return yield* Effect.fail(new ConflictError("Settlement requires source Entries"));
 			const net = entries.reduce(
-				(sum, entry) =>
-					sum + (entry.direction === normalBalance ? BigInt(entry.amount) : -BigInt(entry.amount)),
+				(sum, entry) => sum + (entry.direction === normalBalance ? entry.amount : -entry.amount),
 				0n
 			);
-			if (
-				net === 0n ||
-				net > BigInt(Number.MAX_SAFE_INTEGER) ||
-				net < -BigInt(Number.MAX_SAFE_INTEGER)
-			)
+			if (net === 0n || net > INT64_MAX || net < -INT64_MAX)
 				return yield* Effect.fail(
-					new ConflictError("Settlement net must be nonzero and safely representable")
+					new ConflictError("Settlement net must be nonzero and within signed 64-bit range")
 				);
 			if (net < 0n && !d.allowEitherDirection)
 				return yield* Effect.fail(
 					new ConflictError("Negative Settlement net requires allowEitherDirection")
 				);
-			const amount = Number(net < 0n ? -net : net);
+			const amount = (net < 0n ? -net : net).toString();
 			const direction = net > 0n ? (normalBalance === "debit" ? "credit" : "debit") : normalBalance;
 			const transaction = yield* LedgerTransaction.fromCreateRequest(
 				newLedgerTransactionID(),
@@ -288,12 +301,21 @@ class LedgerAccountSettlementEntity {
 					metadata: { ...d.metadata, settlementId: d.id.toString() },
 					effectiveAt: toIso(d.created),
 					ledgerEntries: [
-						{ accountId: d.settledAccountId.toString(), direction, amount, currencyCode: d.currency },
+						{
+							accountId: d.settledAccountId.toString(),
+							direction,
+							amount,
+							assetId: d.assetId,
+							assetCode: d.assetCode,
+							minorUnitExponent: d.minorUnitExponent,
+						},
 						{
 							accountId: d.contraAccountId.toString(),
 							direction: direction === "debit" ? "credit" : "debit",
 							amount,
-							currencyCode: d.currency,
+							assetId: d.assetId,
+							assetCode: d.assetCode,
+							minorUnitExponent: d.minorUnitExponent,
 						},
 					],
 				},

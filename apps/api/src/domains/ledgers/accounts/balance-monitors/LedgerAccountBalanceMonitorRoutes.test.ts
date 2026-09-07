@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerAuth, signJWT } from "@/auth";
 import { Config } from "@/config";
 import { globalErrorHandler, InternalServerError } from "@/lib/errors";
-import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/repo/entities/types";
+import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/lib/ids";
 import { ServerRuntime } from "@/runtime";
 import { buildServer } from "@/server";
 
@@ -32,7 +32,7 @@ const request: LedgerAccountBalanceMonitorRequest = {
 	description: "Test balance monitor",
 	alertCondition: {
 		mode: "all",
-		conditions: [{ balanceType: "posted", operator: "<", value: 100 }],
+		conditions: [{ balanceType: "posted", operator: "<", value: "100" }],
 	},
 	webhook: { url: "https://example.com/hook", bearerToken: "secret" },
 	metadata: {},
@@ -195,8 +195,8 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 			mode: "all",
 			conditions: [{ balanceType: "posted", operator: "<", value: Number.MAX_SAFE_INTEGER + 1 }],
 		},
-		{ mode: "all", conditions: [{ balanceType: "missing", operator: "<", value: 1 }] },
-		{ mode: "nested", conditions: [{ balanceType: "posted", operator: "<", value: 1 }] },
+		{ mode: "all", conditions: [{ balanceType: "missing", operator: "<", value: "1" }] },
+		{ mode: "nested", conditions: [{ balanceType: "posted", operator: "<", value: "1" }] },
 	])("rejects invalid conditions %#", async alertCondition => {
 		const implementation = service();
 		const { server } = await buildRouteServer(implementation);

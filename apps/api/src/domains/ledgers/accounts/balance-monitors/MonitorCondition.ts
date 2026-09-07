@@ -1,21 +1,23 @@
+import { parseAmount } from "@/lib/amounts";
 import type { AlertCondition, BalanceSnapshot } from "./LedgerAccountBalanceMonitorSchema";
 
 const matches = (condition: AlertCondition, balances: BalanceSnapshot): boolean => {
 	const compare = (item: AlertCondition["conditions"][number]): boolean => {
-		const amount = balances[item.balanceType];
+		const amount = parseAmount(balances[item.balanceType]);
+		const threshold = parseAmount(item.value);
 		switch (item.operator) {
 			case "=":
-				return amount === item.value;
+				return amount === threshold;
 			case "!=":
-				return amount !== item.value;
+				return amount !== threshold;
 			case "<":
-				return amount < item.value;
+				return amount < threshold;
 			case "<=":
-				return amount <= item.value;
+				return amount <= threshold;
 			case ">":
-				return amount > item.value;
+				return amount > threshold;
 			case ">=":
-				return amount >= item.value;
+				return amount >= threshold;
 		}
 	};
 	return condition.mode === "all"

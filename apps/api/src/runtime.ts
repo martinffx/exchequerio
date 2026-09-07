@@ -1,6 +1,7 @@
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
+import { assetServiceLayer, assetRepoLayer, type AssetService } from "@/domains/assets";
 import { ledgerLayer, type LedgerService } from "@/domains/ledgers";
 import { accountLayer, type AccountService } from "@/domains/ledgers/accounts";
 import {
@@ -17,15 +18,11 @@ import {
 } from "@/domains/ledgers/settlements";
 import { transactionLayer, type TransactionService } from "@/domains/ledgers/transactions";
 import { organizationLayer, type OrganizationService } from "@/domains/organizations";
-// oxlint-disable-next-line boundaries/element-types -- The approved in-place migration composes this legacy-path repository in the runtime.
-import { ledgerAccountCategoryRepoLayer } from "@/repo/LedgerAccountCategoryRepo";
-// oxlint-disable boundaries/element-types -- The approved in-place migration composes this legacy-path service in the runtime.
 import {
-	ledgerAccountCategoryServiceLayer,
+	ledgerAccountCategoryLayer,
 	type LedgerAccountCategoryService,
-} from "@/services/LedgerAccountCategoryService";
-// oxlint-enable boundaries/element-types
-import { makeIdempotencyService, type IdempotencyService } from "@/services/IdempotencyService";
+} from "@/domains/ledgers/accounts/categories";
+import { makeIdempotencyService, type IdempotencyService } from "@/lib/IdempotencyService";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
 
@@ -41,7 +38,8 @@ type ServerRuntimeServices =
 	| TransactionService
 	| IdempotencyService
 	| LedgerAccountCategoryService
-	| OrganizationService;
+	| OrganizationService
+	| AssetService;
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
@@ -66,15 +64,17 @@ const makeServerRuntimeLayer = (
 		valkey,
 		idempotency
 	);
-	const accountWithLedger = accountLayer.pipe(Layer.provide(ledgerLayer));
-	const transactionWithLedger = transactionLayer.pipe(Layer.provide(ledgerLayer));
+	const assetLayer = assetServiceLayer.pipe(Layer.provide(assetRepoLayer));
+	const accountWithLedger = accountLayer.pipe(Layer.provide(Layer.merge(ledgerLayer, assetLayer)));
+	const transactionWithLedger = transactionLayer.pipe(
+		Layer.provide(Layer.merge(ledgerLayer, assetLayer))
+	);
 	const settlementWithServices = settlementLayer.pipe(
 		Layer.provide(Layer.mergeAll(ledgerLayer, accountWithLedger, transactionWithLedger))
 	);
-	const ledgerAccountCategory = ledgerAccountCategoryServiceLayer.pipe(
-		Layer.provide(Layer.merge(ledgerAccountCategoryRepoLayer, ledgerLayer))
-	);
+	const ledgerAccountCategory = ledgerAccountCategoryLayer.pipe(Layer.provide(ledgerLayer));
 	return Layer.mergeAll(
+		assetLayer,
 		ledgerLayer,
 		accountWithLedger,
 		settlementWithServices,

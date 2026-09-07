@@ -1,3 +1,4 @@
+import { TypeID } from "typeid-js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
@@ -6,15 +7,16 @@ import { Redis } from "ioredis";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Config } from "@/config";
 import { DatabaseTag, makeDatabaseLive, type Database } from "@/db";
-import { newOrgID, newLedgerID, newLedgerAccountID } from "@/repo/entities/types";
+import { newOrgID, newLedgerID, newLedgerAccountID } from "@/lib/ids";
 import {
+	AssetsTable,
 	BalanceMonitorOutboxTable as outbox,
 	BalanceMonitorRevisionsTable as revisions,
 	LedgerAccountBalanceMonitorsTable as monitors,
 	LedgerAccountsTable as accounts,
 	LedgersTable as ledgers,
 	OrganizationsTable as organizations,
-} from "@/repo/schema";
+} from "@/db/schema";
 import { MonitorOutboxRepoLive, type ClaimedMonitorEvent } from "./MonitorOutboxRepo";
 import { makeMonitorJobStore } from "./MonitorQueue";
 import { relayMonitorBatch } from "./MonitorRelay";
@@ -24,7 +26,7 @@ const configuration = {
 	metadata: "{}",
 	alertCondition: {
 		mode: "all" as const,
-		conditions: [{ balanceType: "posted" as const, operator: "<" as const, value: 100 }],
+		conditions: [{ balanceType: "posted" as const, operator: "<" as const, value: "100" }],
 	},
 	webhookUrl: "https://example.com/original",
 	webhookToken: "encrypted-original",
@@ -37,10 +39,11 @@ describe("Monitor relay durable handoff", () => {
 			makeMonitorJobStore(valkeyUrl, { prefix })
 		)
 	);
+	const assetId = randomUUID();
 	const scope = {
-		organizationId: newOrgID().toString(),
-		ledgerId: newLedgerID().toString(),
-		accountId: newLedgerAccountID().toString(),
+		organizationId: newOrgID().toUUID(),
+		ledgerId: newLedgerID().toUUID(),
+		accountId: newLedgerAccountID().toUUID(),
 	};
 	let database: Database;
 	let repository: MonitorOutboxRepoLive;
@@ -55,12 +58,19 @@ describe("Monitor relay durable handoff", () => {
 		await database.db
 			.insert(ledgers)
 			.values({ id: scope.ledgerId, organizationId: scope.organizationId, name: "Ledger" });
+		await database.db.insert(AssetsTable).values({
+			id: assetId,
+			organizationId: scope.organizationId,
+			code: "USD",
+			name: "US Dollar",
+			minorUnitExponent: 2,
+		});
 		await database.db.insert(accounts).values({
 			...scope,
 			id: scope.accountId,
 			name: "Account",
 			normalBalance: "debit",
-			currencyCode: "USD",
+			assetId,
 		});
 	});
 	beforeEach(async () => {
@@ -84,9 +94,11 @@ describe("Monitor relay durable handoff", () => {
 				accountVersion: 2,
 				transactionId: randomUUID(),
 				occurredAt: new Date(),
-				currencyCode: "USD",
-				before: { posted: 100, pending: 100, availableBalance: 100 },
-				after: { posted: 90, pending: 90, availableBalance: 90 },
+				assetId,
+				assetCode: "USD",
+				minorUnitExponent: 2,
+				before: { posted: "100", pending: "100", availableBalance: "100" },
+				after: { posted: "90", pending: "90", availableBalance: "90" },
 				claimToken: randomUUID(),
 			})
 			.returning();
@@ -101,6 +113,7 @@ describe("Monitor relay durable handoff", () => {
 		try {
 			await database.db.delete(accounts).where(eq(accounts.id, scope.accountId));
 			await database.db.delete(ledgers).where(eq(ledgers.id, scope.ledgerId));
+			await database.db.delete(AssetsTable).where(eq(AssetsTable.id, assetId));
 			await database.db.delete(organizations).where(eq(organizations.id, scope.organizationId));
 		} finally {
 			await runtime.dispose();
@@ -135,6 +148,7 @@ describe("Monitor relay durable handoff", () => {
 				deletedAt: new Date(),
 			})
 			.where(eq(monitors.accountId, scope.accountId));
+		await database.db.update(AssetsTable).set({ code: "RENAMED" }).where(eq(AssetsTable.id, assetId));
 		const ids: JobStore.JobId[] = [];
 		const enqueue = store.enqueue;
 		vi.spyOn(store, "enqueue").mockImplementation(request =>
@@ -154,6 +168,12 @@ describe("Monitor relay durable handoff", () => {
 			const stored = Option.getOrThrow(await runtime.runPromise(store.getJob(id)));
 			expect(stored.payload).toMatchObject({
 				eventId: event.id,
+				organizationId: TypeID.fromUUID("org", scope.organizationId).toString(),
+				ledgerId: TypeID.fromUUID("lgr", scope.ledgerId).toString(),
+				accountId: TypeID.fromUUID("lat", scope.accountId).toString(),
+				assetId: TypeID.fromUUID("ast", assetId).toString(),
+				assetCode: "USD",
+				minorUnitExponent: 2,
 				monitorVersion: 1,
 				webhookUrl: configuration.webhookUrl,
 				webhookToken: configuration.webhookToken,

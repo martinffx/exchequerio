@@ -1,3 +1,4 @@
+import { TypeID } from "typeid-js";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
@@ -5,14 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { OrganizationNotFound } from "@/domains/organizations";
-import {
-	type LedgerID,
-	newLedgerAccountID,
-	newLedgerID,
-	newOrgID,
-	type OrgID,
-} from "@/repo/entities/types";
-import { LedgersTable } from "@/repo/schema";
+import { newLedgerAccountID, newLedgerID, newOrgID, type OrgID } from "@/lib/ids";
+import { AssetsTable, LedgersTable } from "@/db/schema";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,
@@ -94,6 +89,9 @@ describe("LedgerRepoLive", () => {
 					}
 					await runtime.runPromise(repository.deleteLedger(organizationId, ledger.id));
 				}
+				await database.db
+					.delete(AssetsTable)
+					.where(eq(AssetsTable.organizationId, organizationId.toUUID()));
 				await runtime.runPromise(organizationRepository.deleteOrganization(organizationId));
 			}
 		} finally {
@@ -298,13 +296,27 @@ describe("LedgerRepoLive", () => {
 	it("maps a real dependent Ledger Account to LedgerHasDependents", async () => {
 		const organizationId = await createOrganization();
 		const created = await runtime.runPromise(repository.createLedger(ledgerWrite(organizationId)));
+		const asset = { assetId: new TypeID("ast").toString(), assetCode: "USD", minorUnitExponent: 2 };
+		await database.db.insert(AssetsTable).values({
+			id: TypeID.fromString(asset.assetId).toUUID(),
+			organizationId: organizationId.toUUID(),
+			code: asset.assetCode,
+			name: "US Dollar",
+			minorUnitExponent: asset.minorUnitExponent,
+		});
 		await runtime.runPromise(
 			accountRepository.createAccount(
-				LedgerAccount.fromCreateRequest(newLedgerAccountID(), organizationId, created.id, {
-					name: "Dependent account",
-					normalBalance: "debit",
-					currencyCode: "USD",
-				})
+				LedgerAccount.fromCreateRequest(
+					newLedgerAccountID(),
+					organizationId,
+					created.id,
+					{
+						name: "Dependent account",
+						normalBalance: "debit",
+						assetId: asset.assetId,
+					},
+					asset
+				)
 			)
 		);
 
@@ -315,27 +327,25 @@ describe("LedgerRepoLive", () => {
 	});
 
 	it.each([
-		{ label: "invalid ID", id: "not-a-ledger", metadata: undefined },
-		{ label: "invalid serialized metadata", id: undefined, metadata: "{" },
+		{ label: "invalid serialized metadata", metadata: "{" },
 		{
 			label: "non-string metadata value",
-			id: undefined,
 			metadata: JSON.stringify({ externalId: 42 }),
 		},
 	])("returns a typed decoding failure for $label", async testCase => {
 		const organizationId = await createOrganization();
-		const id = testCase.id ?? newLedgerID().toString();
+		const id = newLedgerID();
 		const db = database.db;
 		const row = ledgerWrite(organizationId).toCreateRow();
-		await db.insert(LedgersTable).values({ ...row, id, metadata: testCase.metadata ?? row.metadata });
+		await db
+			.insert(LedgersTable)
+			.values({ ...row, id: id.toUUID(), metadata: testCase.metadata ?? row.metadata });
 
 		try {
-			const error = await runtime.runPromise(
-				Effect.flip(repository.getLedger(organizationId, id as unknown as LedgerID))
-			);
+			const error = await runtime.runPromise(Effect.flip(repository.getLedger(organizationId, id)));
 			expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);
 		} finally {
-			await db.delete(LedgersTable).where(eq(LedgersTable.id, id));
+			await db.delete(LedgersTable).where(eq(LedgersTable.id, id.toUUID()));
 		}
 	});
 });

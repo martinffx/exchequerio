@@ -1,6 +1,6 @@
 import { Effect, Result } from "effect";
 import type { FastifyPluginAsync } from "fastify";
-import type { OrgID } from "../../repo/entities/types";
+import type { OrgID } from "@/lib/ids";
 import {
 	OrganizationCreateRequest,
 	OrganizationIdParameters,

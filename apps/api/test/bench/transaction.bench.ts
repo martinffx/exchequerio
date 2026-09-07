@@ -1,22 +1,29 @@
 import { randomUUID } from "node:crypto";
 
 import autocannon from "autocannon";
-import { sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import type { FastifyInstance } from "fastify";
 import { Pool } from "pg";
+import { sql } from "drizzle-orm";
+import type { FastifyInstance } from "fastify";
 import { retry } from "radash";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { TypeID } from "typeid-js";
 import { signJWT } from "@/auth";
 import { Config } from "@/config";
-import { LedgerAccountEntity, LedgerEntity, type LedgerID, type OrgID } from "@/repo/entities";
-import { LedgerAccountRepo } from "@/repo/LedgerAccountRepo";
-import { LedgerRepo } from "@/repo/LedgerRepo";
-import * as schema from "@/repo/schema";
-import { OrganizationsTable } from "@/repo/schema";
+import type { LedgerID, OrgID } from "@/lib/ids";
+import { newLedgerID, newLedgerAccountID } from "@/lib/ids";
+import { Ledger } from "@/domains/ledgers/Ledger";
+import { LedgerAccount } from "@/domains/ledgers/accounts/LedgerAccount";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { DatabaseTag, makeDatabaseLive } from "@/db";
+import {
+	type LedgerAccountRepo,
+	LedgerAccountRepoTag,
+	ledgerAccountRepoLayer,
+} from "@/domains/ledgers/accounts/LedgerAccountRepo";
+import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "@/domains/ledgers/LedgerRepo";
+import { AssetsTable, OrganizationsTable } from "@/db/schema";
 import { buildServer } from "@/server";
-import type { DrizzleDB } from "@/repo/types";
+import type { DrizzleDatabase } from "@/db";
 
 interface BenchmarkScenario {
 	name: string;
@@ -43,6 +50,7 @@ async function setupFixtures(
 	ledgerRepo: LedgerRepo,
 	accountRepo: LedgerAccountRepo,
 	orgId: OrgID,
+	assetId: string,
 	accountCount: number,
 	hotAccountCount: number = 0
 ): Promise<{
@@ -50,15 +58,12 @@ async function setupFixtures(
 	accountPairs: Array<{ debitId: string; creditId: string }>;
 }> {
 	// Create ledger
-	const ledger = await ledgerRepo.upsertLedger(
-		LedgerEntity.fromRequest(
-			{
+	const ledger = await Effect.runPromise(
+		ledgerRepo.createLedger(
+			Ledger.fromRequest(newLedgerID(), orgId, {
 				name: "Benchmark Ledger",
 				description: "Ledger for benchmarking",
-				currency: "USD",
-				currencyExponent: 2,
-			},
-			orgId
+			})
 		)
 	);
 
@@ -74,27 +79,37 @@ async function setupFixtures(
 		const hotPairCount = hotAccountCount / 2;
 
 		for (let i = 0; i < hotPairCount; i++) {
-			const hotDebit = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
-						name: `Hot Debit Account ${i}`,
-						description: `Hot debit account ${i} (high contention)`,
-					},
-					orgId,
-					ledger.id,
-					"debit"
+			const hotDebit = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Hot Debit Account ${i}`,
+							description: `Hot debit account ${i} (high contention)`,
+							normalBalance: "debit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
-			const hotCredit = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
-						name: `Hot Credit Account ${i}`,
-						description: `Hot credit account ${i} (high contention)`,
-					},
-					orgId,
-					ledger.id,
-					"credit"
+			const hotCredit = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Hot Credit Account ${i}`,
+							description: `Hot credit account ${i} (high contention)`,
+							normalBalance: "credit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
@@ -108,15 +123,20 @@ async function setupFixtures(
 		const regularAccountCount = accountCount - hotAccountCount;
 
 		for (let i = 0; i < regularAccountCount; i++) {
-			const regularAccount = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
-						name: `Regular Account ${i}`,
-						description: `Regular account ${i}`,
-					},
-					orgId,
-					ledger.id,
-					i % 2 === 0 ? "debit" : "credit"
+			const regularAccount = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Regular Account ${i}`,
+							description: `Regular account ${i}`,
+							normalBalance: i % 2 === 0 ? "debit" : "credit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
@@ -142,27 +162,37 @@ async function setupFixtures(
 		const pairCount = accountCount / 2;
 
 		for (let i = 0; i < pairCount; i++) {
-			const debitAccount = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
-						name: `Debit Account ${i}`,
-						description: `Debit account for pair ${i}`,
-					},
-					orgId,
-					ledger.id,
-					"debit"
+			const debitAccount = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Debit Account ${i}`,
+							description: `Debit account for pair ${i}`,
+							normalBalance: "debit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
-			const creditAccount = await accountRepo.upsertLedgerAccount(
-				LedgerAccountEntity.fromRequest(
-					{
-						name: `Credit Account ${i}`,
-						description: `Credit account for pair ${i}`,
-					},
-					orgId,
-					ledger.id,
-					"credit"
+			const creditAccount = await Effect.runPromise(
+				accountRepo.createAccount(
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Credit Account ${i}`,
+							description: `Credit account for pair ${i}`,
+							normalBalance: "credit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
@@ -179,7 +209,7 @@ async function setupFixtures(
 	};
 }
 
-async function cleanupFixtures(db: DrizzleDB, orgId: OrgID): Promise<void> {
+async function cleanupFixtures(db: DrizzleDatabase, orgId: OrgID): Promise<void> {
 	// Retry cleanup to handle transient failures from straggler connections
 	await retry(
 		{
@@ -194,7 +224,7 @@ async function cleanupFixtures(db: DrizzleDB, orgId: OrgID): Promise<void> {
 			try {
 				// Delete in dependency order within a single transaction
 				// This ensures atomicity even if there are straggler connections from the server
-				const orgIdStr = orgId.toString();
+				const orgIdStr = orgId.toUUID();
 
 				await db.transaction(async tx => {
 					// 1. Delete all settlements and settlement entries
@@ -234,7 +264,13 @@ async function cleanupFixtures(db: DrizzleDB, orgId: OrgID): Promise<void> {
 						WHERE organization_id = ${orgIdStr}
 					`);
 
-					// 5. Delete the organization
+					// 5. Delete organization-owned Assets after their Accounts
+					await tx.execute(sql`
+						DELETE FROM assets
+						WHERE organization_id = ${orgIdStr}
+					`);
+
+					// 6. Delete the organization
 					await tx.execute(sql`
 						DELETE FROM organizations_table
 						WHERE id = ${orgIdStr}
@@ -256,12 +292,14 @@ function createTransactionPayload(accountPair: { debitId: string; creditId: stri
 			{
 				accountId: accountPair.debitId,
 				direction: "debit",
-				amount: 10000,
+				amount: "10000",
+				assetCode: "USD",
 			},
 			{
 				accountId: accountPair.creditId,
 				direction: "credit",
-				amount: 10000,
+				amount: "10000",
+				assetCode: "USD",
 			},
 		],
 	};
@@ -310,6 +348,7 @@ async function runBenchmark(
 		})),
 	});
 
+	expect(result["2xx"]).toBeGreaterThan(0);
 	return {
 		scenario: scenario.name,
 		accountCount: scenario.accountCount,
@@ -378,28 +417,44 @@ function printResults(results: BenchmarkResult[]): void {
 
 describe("Transaction Creation Benchmarks", () => {
 	let server: FastifyInstance;
-	let pool: Pool;
-	let db: DrizzleDB;
+	const fixtureRuntime = ManagedRuntime.make(
+		Layer.mergeAll(ledgerRepoLayer, ledgerAccountRepoLayer).pipe(
+			Layer.provideMerge(
+				makeDatabaseLive(
+					new Config().databaseUrl,
+					connectionString => new Pool({ connectionString, max: 20 })
+				)
+			)
+		)
+	);
+	let db: DrizzleDatabase;
 	let ledgerRepo: LedgerRepo;
 	let accountRepo: LedgerAccountRepo;
 	let sharedOrgId: OrgID;
+	let sharedAssetId: string;
 	const results: BenchmarkResult[] = [];
 
 	beforeAll(async () => {
-		const config = new Config();
-		pool = new Pool({ connectionString: config.databaseUrl, max: 20 });
-		db = drizzle({ client: pool, relations: schema.schemaRelations });
+		db = (await fixtureRuntime.runPromise(DatabaseTag)).db;
 
-		ledgerRepo = new LedgerRepo(db);
-		accountRepo = new LedgerAccountRepo(db);
+		ledgerRepo = await fixtureRuntime.runPromise(LedgerRepoTag);
+		accountRepo = await fixtureRuntime.runPromise(LedgerAccountRepoTag);
 
 		// Create shared organization for all tests
 		console.log("Creating shared organization...");
 		sharedOrgId = new TypeID("org");
 		await db.insert(OrganizationsTable).values({
-			id: sharedOrgId.toString(),
+			id: sharedOrgId.toUUID(),
 			name: "Benchmark Organization",
 			description: "Shared organization for all benchmark tests",
+		});
+		sharedAssetId = new TypeID("ast").toString();
+		await db.insert(AssetsTable).values({
+			id: TypeID.fromString(sharedAssetId).toUUID(),
+			organizationId: sharedOrgId.toUUID(),
+			code: "USD",
+			name: "US Dollar",
+			minorUnitExponent: 2,
 		});
 		console.log(`Shared organization created: ${sharedOrgId.toString()}\n`);
 
@@ -423,8 +478,8 @@ describe("Transaction Creation Benchmarks", () => {
 		await cleanupFixtures(db, sharedOrgId);
 		console.log("Cleanup complete\n");
 
-		// Close our test pool
-		await pool.end();
+		// Close the fixture runtime and its database pools
+		await fixtureRuntime.dispose();
 
 		// Print summary of all results
 		if (results.length > 0) {
@@ -434,7 +489,13 @@ describe("Transaction Creation Benchmarks", () => {
 
 	it("should benchmark high contention (2 accounts)", async () => {
 		console.log("\nSetting up fixtures for High Contention...");
-		const { ledgerId, accountPairs } = await setupFixtures(ledgerRepo, accountRepo, sharedOrgId, 2);
+		const { ledgerId, accountPairs } = await setupFixtures(
+			ledgerRepo,
+			accountRepo,
+			sharedOrgId,
+			sharedAssetId,
+			2
+		);
 
 		const token = signJWT({ sub: sharedOrgId.toString(), scope: ["org_admin"] });
 		const scenario: BenchmarkScenario = {
@@ -453,7 +514,13 @@ describe("Transaction Creation Benchmarks", () => {
 
 	it("should benchmark medium contention (20 accounts)", async () => {
 		console.log("\nSetting up fixtures for Medium Contention...");
-		const { ledgerId, accountPairs } = await setupFixtures(ledgerRepo, accountRepo, sharedOrgId, 20);
+		const { ledgerId, accountPairs } = await setupFixtures(
+			ledgerRepo,
+			accountRepo,
+			sharedOrgId,
+			sharedAssetId,
+			20
+		);
 
 		const token = signJWT({ sub: sharedOrgId.toString(), scope: ["org_admin"] });
 		const scenario: BenchmarkScenario = {
@@ -472,7 +539,13 @@ describe("Transaction Creation Benchmarks", () => {
 
 	it("should benchmark low contention (200 accounts)", async () => {
 		console.log("\nSetting up fixtures for Low Contention...");
-		const { ledgerId, accountPairs } = await setupFixtures(ledgerRepo, accountRepo, sharedOrgId, 200);
+		const { ledgerId, accountPairs } = await setupFixtures(
+			ledgerRepo,
+			accountRepo,
+			sharedOrgId,
+			sharedAssetId,
+			200
+		);
 
 		const token = signJWT({ sub: sharedOrgId.toString(), scope: ["org_admin"] });
 		const scenario: BenchmarkScenario = {
@@ -495,6 +568,7 @@ describe("Transaction Creation Benchmarks", () => {
 			ledgerRepo,
 			accountRepo,
 			sharedOrgId,
+			sharedAssetId,
 			2002,
 			2 // 2 hot accounts
 		);
@@ -520,6 +594,7 @@ describe("Transaction Creation Benchmarks", () => {
 			ledgerRepo,
 			accountRepo,
 			sharedOrgId,
+			sharedAssetId,
 			2020,
 			20 // 20 hot accounts
 		);

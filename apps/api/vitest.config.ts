@@ -13,9 +13,8 @@ export default defineConfig({
 			exclude: [
 				"src/**/*.test.ts",
 				"src/**/*.d.ts",
-				"src/repo/schema.ts",
-				"src/repo/fixtures.ts",
-				"src/routes/ledgers/fixtures.ts",
+				"src/db/schema.ts",
+				"src/domains/ledgers/accounts/categories/fixtures.ts",
 			],
 			reporter: ["text", "lcov"],
 		},

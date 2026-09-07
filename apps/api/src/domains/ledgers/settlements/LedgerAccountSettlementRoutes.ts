@@ -13,7 +13,7 @@ import {
 } from "@/lib/errors";
 import { IdempotencyHeaders } from "@/lib/IdempotencySchema";
 import { parseId } from "@/lib/utils";
-import type { LedgerAccountSettlementID, LedgerID } from "@/repo/entities/types";
+import type { LedgerAccountSettlementID, LedgerID } from "@/lib/ids";
 import {
 	LedgerAccountSettlementCollectionParameters as LedgerIdParams,
 	LedgerAccountSettlementEntriesRequest,

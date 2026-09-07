@@ -1,3 +1,5 @@
+import { AssetSummarySchema } from "@/lib/AssetSchema";
+import { PositiveAmountSchema } from "@/lib/amounts";
 import { type Static, Type } from "@sinclair/typebox";
 import { ListQuery } from "@/lib/ListQuery";
 import { MetadataSchema } from "@/lib/schema";
@@ -69,9 +71,9 @@ const LedgerAccountSettlementResponse = Type.Object(
 		status: SettlementStatus,
 		settledAccountId: AccountIdSchema,
 		contraAccountId: AccountIdSchema,
-		amount: Type.Union([Type.Integer(), Type.Null()]),
+		amount: Type.Union([PositiveAmountSchema, Type.Null()]),
 		settlementEntryDirection: Type.Union([NormalBalance, Type.Null()]),
-		currency: Type.String(),
+		...AssetSummarySchema.properties,
 		allowEitherDirection: Type.Boolean(),
 		effectiveAtUpperBound: Type.Union([Timestamp, Type.Null()]),
 		description: Type.Optional(Type.String()),
@@ -100,8 +102,8 @@ const LedgerAccountSettlementEntryResponse = Type.Object({
 	effectiveAt: Timestamp,
 	accountId: AccountIdSchema,
 	direction: NormalBalance,
-	amount: Type.Integer(),
-	currencyCode: Type.String(),
+	amount: PositiveAmountSchema,
+	...AssetSummarySchema.properties,
 	status: Type.Literal("posted"),
 	metadata: Type.Optional(MetadataSchema),
 	created: Timestamp,

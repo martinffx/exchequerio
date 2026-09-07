@@ -17,6 +17,21 @@ const parseId = <Prefix extends string, Return extends TypeID<Prefix>>(
 		catch: cause => new InvalidId(prefix, value, { cause }),
 	});
 
+// Canonical TypeIDs can contain any 128 bits; toUUID() additionally rejects non-RFC UUIDs.
+const encodeUuid = (id: TypeID<string>): string =>
+	Buffer.from(id.toUUIDBytes())
+		.toString("hex")
+		.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+
+const parseUuid = <Prefix extends string, Return extends TypeID<Prefix>>(
+	prefix: Prefix,
+	value: string
+): Effect.Effect<Return, InvalidId> =>
+	Effect.try({
+		try: () => TypeID.fromUUID(prefix, value) as Return,
+		catch: cause => new InvalidId(prefix, value, { cause }),
+	});
+
 const parseDate = (value: Date): Effect.Effect<DateTime, Error> =>
 	Effect.try({
 		try: () => {
@@ -50,4 +65,4 @@ const encodeMetadata = (metadata: Metadata | undefined): string | undefined =>
 	metadata === undefined ? undefined : JSON.stringify(metadata);
 
 export type { Metadata } from "./schema";
-export { encodeMetadata, parseId, parseDate, parseMetadata };
+export { encodeUuid, encodeMetadata, parseId, parseUuid, parseDate, parseMetadata };

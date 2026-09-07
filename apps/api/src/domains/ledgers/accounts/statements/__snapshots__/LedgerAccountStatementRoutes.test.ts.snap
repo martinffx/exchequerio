@@ -29,17 +29,19 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                   "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                   "type": "string",
                 },
+                "assetCode": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9._:-]+$",
+                  "type": "string",
+                },
+                "assetId": {
+                  "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "type": "string",
+                },
                 "created": {
                   "description": "Timestamp of when the ledger account category was created.",
                   "type": "string",
-                },
-                "currency": {
-                  "description": "The currency of the ledger account settlement.",
-                  "type": "string",
-                },
-                "currencyExponent": {
-                  "description": "The currency exponent of the ledger account settlement.",
-                  "type": "number",
                 },
                 "description": {
                   "description": "An optional free-form description for internal use.",
@@ -48,134 +50,6 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                 "endDatetime": {
                   "description": "The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
                   "type": "string",
-                },
-                "endingBalances": {
-                  "description": "The pending, posted, and available balances.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all pending AND posted entry amounts.",
-                            "enum": [
-                              "pending",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted entry amounts.",
-                            "enum": [
-                              "posted",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                            "enum": [
-                              "availableBalance",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                    ],
-                  },
-                  "type": "array",
                 },
                 "id": {
                   "description": "The ledger account statement ID",
@@ -198,6 +72,11 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                   "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
                   "type": "object",
                 },
+                "minorUnitExponent": {
+                  "maximum": 18,
+                  "minimum": 0,
+                  "type": "integer",
+                },
                 "normalBalance": {
                   "anyOf": [
                     {
@@ -218,134 +97,6 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                   "description": "The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
                   "type": "string",
                 },
-                "startingBalances": {
-                  "description": "The pending, posted, and available balances.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all pending AND posted entry amounts.",
-                            "enum": [
-                              "pending",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted entry amounts.",
-                            "enum": [
-                              "posted",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                            "enum": [
-                              "availableBalance",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                    ],
-                  },
-                  "type": "array",
-                },
                 "updated": {
                   "description": "Timestamp of when the ledger account category was last updated.",
                   "type": "string",
@@ -359,10 +110,9 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                 "endDatetime",
                 "ledgerAccountVersion",
                 "normalBalance",
-                "startingBalances",
-                "endingBalances",
-                "currency",
-                "currencyExponent",
+                "assetId",
+                "assetCode",
+                "minorUnitExponent",
                 "created",
                 "updated",
               ],
@@ -780,17 +530,19 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                   "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                   "type": "string",
                 },
+                "assetCode": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9._:-]+$",
+                  "type": "string",
+                },
+                "assetId": {
+                  "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "type": "string",
+                },
                 "created": {
                   "description": "Timestamp of when the ledger account category was created.",
                   "type": "string",
-                },
-                "currency": {
-                  "description": "The currency of the ledger account settlement.",
-                  "type": "string",
-                },
-                "currencyExponent": {
-                  "description": "The currency exponent of the ledger account settlement.",
-                  "type": "number",
                 },
                 "description": {
                   "description": "An optional free-form description for internal use.",
@@ -799,134 +551,6 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                 "endDatetime": {
                   "description": "The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
                   "type": "string",
-                },
-                "endingBalances": {
-                  "description": "The pending, posted, and available balances.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all pending AND posted entry amounts.",
-                            "enum": [
-                              "pending",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted entry amounts.",
-                            "enum": [
-                              "posted",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                            "enum": [
-                              "availableBalance",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                    ],
-                  },
-                  "type": "array",
                 },
                 "id": {
                   "description": "The ledger account statement ID",
@@ -949,6 +573,11 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                   "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
                   "type": "object",
                 },
+                "minorUnitExponent": {
+                  "maximum": 18,
+                  "minimum": 0,
+                  "type": "integer",
+                },
                 "normalBalance": {
                   "anyOf": [
                     {
@@ -969,134 +598,6 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                   "description": "The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
                   "type": "string",
                 },
-                "startingBalances": {
-                  "description": "The pending, posted, and available balances.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all pending AND posted entry amounts.",
-                            "enum": [
-                              "pending",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted entry amounts.",
-                            "enum": [
-                              "posted",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                            "enum": [
-                              "availableBalance",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                    ],
-                  },
-                  "type": "array",
-                },
                 "updated": {
                   "description": "Timestamp of when the ledger account category was last updated.",
                   "type": "string",
@@ -1110,10 +611,9 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                 "endDatetime",
                 "ledgerAccountVersion",
                 "normalBalance",
-                "startingBalances",
-                "endingBalances",
-                "currency",
-                "currencyExponent",
+                "assetId",
+                "assetCode",
+                "minorUnitExponent",
                 "created",
                 "updated",
               ],
@@ -1246,6 +746,53 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
                 "type": {
                   "enum": [
                     "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
                   ],
                   "type": "string",
                 },

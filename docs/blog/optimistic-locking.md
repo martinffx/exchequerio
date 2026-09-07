@@ -112,7 +112,7 @@ The core of our optimistic locking approach is this pattern:
 
 Let's walk through the implementation:
 
-### Phase 1: READ - Fetch Accounts Without Locks ([source](https://github.com/martinffx/exchequerio/blob/main/apps/api/src/repo/LedgerTransactionRepo.ts#L165))
+### Phase 1: READ - Fetch Accounts Without Locks ([source](https://github.com/martinffx/exchequerio/blob/main/apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts))
 
 ```typescript
 public async createTransaction(
@@ -128,7 +128,7 @@ public async createTransaction(
 
 > **Critical:** This is a plain `SELECT`, not `SELECT FOR UPDATE`. Other transactions can read and write these accounts concurrently.
 
-### Phase 2: VALIDATE & BUILD - Calculate Balances In-Memory ([source](https://github.com/martinffx/exchequerio/blob/main/apps/api/src/repo/LedgerTransactionRepo.ts#L165))
+### Phase 2: VALIDATE & BUILD - Calculate Balances In-Memory ([source](https://github.com/martinffx/exchequerio/blob/main/apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts))
 
 ```typescript
   // 2. Update balances In-memory
@@ -196,7 +196,7 @@ public applyEntry(entry: { direction: "debit" | "credit"; amount: number }): Led
 }
 ```
 
-### Phase 3: WRITE - Atomic Transaction with Version Checks ([source](https://github.com/martinffx/exchequerio/blob/main/apps/api/src/repo/LedgerTransactionRepo.ts#L165))
+### Phase 3: WRITE - Atomic Transaction with Version Checks ([source](https://github.com/martinffx/exchequerio/blob/main/apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts))
 
 ```typescript
   // 3. Write all changes in a single DB transaction

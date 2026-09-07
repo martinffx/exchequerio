@@ -48,7 +48,7 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 		},
 		async (request: GetLedgerAccountStatementRequest) => {
 			const effect = LedgerAccountStatementServiceTag.use(service =>
-				service.getLedgerAccountStatement(request.params.statementId)
+				service.getLedgerAccountStatement(request.params.statementId, request.token.orgId)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
@@ -74,6 +74,7 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 					400: BadRequestErrorResponse,
 					401: UnauthorizedErrorResponse,
 					403: ForbiddenErrorResponse,
+					404: NotFoundErrorResponse,
 					409: ConflictErrorResponse,
 					429: TooManyRequestsErrorResponse,
 					500: InternalServerErrorResponse,
@@ -84,7 +85,7 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 		},
 		async (request: CreateLedgerAccountStatementRequest) => {
 			const effect = LedgerAccountStatementServiceTag.use(service =>
-				service.createLedgerAccountStatement(request.body)
+				service.createLedgerAccountStatement(request.body, request.token.orgId)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {

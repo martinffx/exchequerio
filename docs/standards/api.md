@@ -22,10 +22,14 @@ one representation. Routes call that method; do not create a parallel route-leve
 Treat TypeBox and Drizzle schemas as the canonical transport and row types. Derive types from them;
 do not add handwritten mirrors or intermediate option types that merely copy their fields. Entity
 `fromRequest` methods receive TypeBox-valid data and enforce only additional domain invariants.
-Entity `fromRow` methods convert real persistence representations, such as TypeID strings, JSON,
+Entity `fromRow` methods convert real persistence representations, such as UUID strings, JSON,
 timestamps, and nullable fields, and enforce only invariants not guaranteed by Drizzle or
-PostgreSQL. Entity `toRow` and response methods own the inverse conversions. Add only the methods a
-resource needs; the Organization entity is an ownership example, not a required method inventory.
+PostgreSQL. Entity `toRow` and response methods own the inverse conversions. Resource IDs and their
+references use native PostgreSQL `uuid` columns. Persist the existing TypeID UUID with the shared
+`encodeUuid()` helper and reconstruct its resource prefix with `TypeID.fromUUID(prefix, value)`
+when decoding rows. The helper preserves all 128 bits without imposing UUID-version validation
+on canonical TypeIDs. Repository query parameters use UUID strings; domain objects and API
+responses retain TypeIDs. Add only the methods a resource needs; the Organization entity is an ownership example, not a required method inventory.
 Do not repeat the same validation in routes, entities, repositories, and services.
 
 ## Persistence and consistency

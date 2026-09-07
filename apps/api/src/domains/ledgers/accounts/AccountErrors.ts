@@ -71,7 +71,11 @@ const mapAccountInfrastructureError = (cause: unknown): AccountInfrastructureErr
 
 const mapAccountCreateError = (cause: unknown, name: string) => {
 	if (isAccountInfrastructureError(cause)) return cause;
-	if (postgresErrorCode(cause) === "23503") return new LedgerNotFound();
+	if (postgresErrorCode(cause) === "23503") {
+		return postgresConstraint(cause) === "ledger_accounts_asset_ownership_fk"
+			? new NotFoundError("Asset not found")
+			: new LedgerNotFound();
+	}
 	if (
 		postgresErrorCode(cause) === "23505" &&
 		postgresConstraint(cause) === "unique_account_name_per_ledger"

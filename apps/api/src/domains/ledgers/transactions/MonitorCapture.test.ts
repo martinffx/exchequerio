@@ -1,3 +1,4 @@
+import { TypeID } from "typeid-js";
 import { asc, eq, inArray } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { DateTime } from "luxon";
@@ -11,8 +12,9 @@ import {
 	newLedgerID,
 	newLedgerTransactionID,
 	newOrgID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import {
+	AssetsTable,
 	BalanceMonitorOutboxTable,
 	LedgerAccountSettlementsTable,
 	LedgerAccountsTable,
@@ -20,7 +22,7 @@ import {
 	LedgerTransactionsTable,
 	LedgersTable,
 	OrganizationsTable,
-} from "@/repo/schema";
+} from "@/db/schema";
 import { LedgerTransaction } from "./LedgerTransaction";
 import {
 	type LedgerTransactionRepo,
@@ -59,6 +61,7 @@ describe("atomic balance monitor capture", () => {
 				.delete(LedgerAccountsTable)
 				.where(inArray(LedgerAccountsTable.organizationId, organizations));
 			await db.delete(LedgersTable).where(inArray(LedgersTable.organizationId, organizations));
+			await db.delete(AssetsTable).where(inArray(AssetsTable.organizationId, organizations));
 			await db.delete(OrganizationsTable).where(inArray(OrganizationsTable.id, organizations));
 		}
 		await runtime.dispose();
@@ -66,41 +69,67 @@ describe("atomic balance monitor capture", () => {
 	const fixture = async (monitored = true) => {
 		const organizationId = newOrgID();
 		const ledgerId = newLedgerID();
+		const assetId = new TypeID("ast");
 		const debit = newLedgerAccountID();
 		const credit = newLedgerAccountID();
-		organizations.push(organizationId.toString());
+		organizations.push(organizationId.toUUID());
 		await db
 			.insert(OrganizationsTable)
-			.values({ id: organizationId.toString(), name: "Capture organization" });
+			.values({ id: organizationId.toUUID(), name: "Capture organization" });
 		await db.insert(LedgersTable).values({
-			id: ledgerId.toString(),
-			organizationId: organizationId.toString(),
+			id: ledgerId.toUUID(),
+			organizationId: organizationId.toUUID(),
 			name: "Capture ledger",
+		});
+		await db.insert(AssetsTable).values({
+			id: assetId.toUUID(),
+			organizationId: organizationId.toUUID(),
+			code: "EUR",
+			name: "Euro",
+			minorUnitExponent: 2,
 		});
 		await db.insert(LedgerAccountsTable).values([
 			{
-				id: debit.toString(),
-				organizationId: organizationId.toString(),
-				ledgerId: ledgerId.toString(),
+				id: debit.toUUID(),
+				organizationId: organizationId.toUUID(),
+				ledgerId: ledgerId.toUUID(),
 				name: "Monitored debit",
 				normalBalance: "debit",
-				currencyCode: "EUR",
+				assetId: assetId.toUUID(),
 				balanceMonitorCount: monitored ? 1 : 0,
 			},
 			{
-				id: credit.toString(),
-				organizationId: organizationId.toString(),
-				ledgerId: ledgerId.toString(),
+				id: credit.toUUID(),
+				organizationId: organizationId.toUUID(),
+				ledgerId: ledgerId.toUUID(),
 				name: "Unmonitored credit",
 				normalBalance: "credit",
-				currencyCode: "EUR",
+				assetId: assetId.toUUID(),
 			},
 		]);
-		const entries = (amount: number) => [
-			{ accountId: debit.toString(), direction: "debit" as const, amount, currencyCode: "EUR" },
-			{ accountId: credit.toString(), direction: "credit" as const, amount, currencyCode: "EUR" },
+		const entries = (amount: number | string) => [
+			{
+				accountId: debit.toString(),
+				direction: "debit" as const,
+				amount: String(amount),
+				assetId: assetId.toString(),
+				assetCode: "EUR",
+				minorUnitExponent: 2,
+			},
+			{
+				accountId: credit.toString(),
+				direction: "credit" as const,
+				amount: String(amount),
+				assetId: assetId.toString(),
+				assetCode: "EUR",
+				minorUnitExponent: 2,
+			},
 		];
-		const create = (status: "pending" | "posted", amount = 100, id = newLedgerTransactionID()) =>
+		const create = (
+			status: "pending" | "posted",
+			amount: number | string = 100,
+			id = newLedgerTransactionID()
+		) =>
 			runtime.runPromise(
 				LedgerTransaction.fromCreateRequest(id, organizationId, ledgerId, {
 					status,
@@ -111,9 +140,9 @@ describe("atomic balance monitor capture", () => {
 			db
 				.select()
 				.from(BalanceMonitorOutboxTable)
-				.where(eq(BalanceMonitorOutboxTable.organizationId, organizationId.toString()))
+				.where(eq(BalanceMonitorOutboxTable.organizationId, organizationId.toUUID()))
 				.orderBy(asc(BalanceMonitorOutboxTable.accountVersion));
-		return { organizationId, ledgerId, debit, credit, entries, create, events };
+		return { organizationId, ledgerId, assetId, debit, credit, entries, create, events };
 	};
 
 	it.each(["pending", "posted"] as const)(
@@ -124,17 +153,19 @@ describe("atomic balance monitor capture", () => {
 			const events = await f.events();
 			expect(events).toHaveLength(1);
 			expect(events[0]).toMatchObject({
-				organizationId: f.organizationId.toString(),
-				ledgerId: f.ledgerId.toString(),
-				accountId: f.debit.toString(),
+				organizationId: f.organizationId.toUUID(),
+				ledgerId: f.ledgerId.toUUID(),
+				accountId: f.debit.toUUID(),
 				accountVersion: 2,
-				transactionId: transaction.id.toString(),
-				currencyCode: "EUR",
-				before: { posted: 0, pending: 0, availableBalance: 0 },
+				transactionId: transaction.id.toUUID(),
+				assetId: f.assetId.toUUID(),
+				assetCode: "EUR",
+				minorUnitExponent: 2,
+				before: { posted: "0", pending: "0", availableBalance: "0" },
 				after: {
-					posted: status === "posted" ? 100 : 0,
-					pending: 100,
-					availableBalance: status === "posted" ? 100 : 0,
+					posted: status === "posted" ? "100" : "0",
+					pending: "100",
+					availableBalance: status === "posted" ? "100" : "0",
 				},
 			});
 			expect(events[0]!.id).toMatch(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
@@ -160,15 +191,15 @@ describe("atomic balance monitor capture", () => {
 		expect(events).toHaveLength(3);
 		expect(events[1]).toMatchObject({
 			accountVersion: 3,
-			before: { posted: 0, pending: 100, availableBalance: 0 },
-			after: { posted: 0, pending: 40, availableBalance: 0 },
+			before: { posted: "0", pending: "100", availableBalance: "0" },
+			after: { posted: "0", pending: "40", availableBalance: "0" },
 		});
 		expect(events[2]).toMatchObject({
 			accountVersion: 4,
-			before: { posted: 0, pending: 40, availableBalance: 0 },
-			after: { posted: 40, pending: 40, availableBalance: 40 },
+			before: { posted: "0", pending: "40", availableBalance: "0" },
+			after: { posted: "40", pending: "40", availableBalance: "40" },
 		});
-		expect(events.every(event => event.transactionId === transaction.id.toString())).toBe(true);
+		expect(events.every(event => event.transactionId === transaction.id.toUUID())).toBe(true);
 	});
 
 	it("captures voiding and does not repeat an idempotent void", async () => {
@@ -184,8 +215,8 @@ describe("atomic balance monitor capture", () => {
 		expect(events).toHaveLength(2);
 		expect(events[1]).toMatchObject({
 			accountVersion: 3,
-			before: { posted: 0, pending: 100, availableBalance: 0 },
-			after: { posted: 0, pending: 0, availableBalance: 0 },
+			before: { posted: "0", pending: "100", availableBalance: "0" },
+			after: { posted: "0", pending: "0", availableBalance: "0" },
 		});
 	});
 
@@ -198,7 +229,7 @@ describe("atomic balance monitor capture", () => {
 			}).pipe(Effect.flatMap(value => repository.createTransaction(value)))
 		);
 		expect(await f.events()).toHaveLength(1);
-		expect((await f.events())[0]!.after.pending).toBe(100);
+		expect((await f.events())[0]!.after.pending).toBe("100");
 		await runtime.runPromise(
 			repository.updateTransaction(f.organizationId, f.ledgerId, transaction.id, {
 				ledgerEntries: f.entries(100),
@@ -220,12 +251,12 @@ describe("atomic balance monitor capture", () => {
 			const f = await fixture();
 			const settlementId = newLedgerAccountSettlementID();
 			await db.insert(LedgerAccountSettlementsTable).values({
-				id: settlementId.toString(),
-				organizationId: f.organizationId.toString(),
-				ledgerId: f.ledgerId.toString(),
-				settledAccountId: f.debit.toString(),
-				contraAccountId: f.credit.toString(),
-				currency: "EUR",
+				id: settlementId.toUUID(),
+				organizationId: f.organizationId.toUUID(),
+				ledgerId: f.ledgerId.toUUID(),
+				settledAccountId: f.debit.toUUID(),
+				contraAccountId: f.credit.toUUID(),
+				assetId: f.assetId.toUUID(),
 				status: "processing",
 				targetStatus: "pending",
 			});
@@ -240,7 +271,7 @@ describe("atomic balance monitor capture", () => {
 			await db
 				.update(LedgerAccountSettlementsTable)
 				.set({ targetStatus: target })
-				.where(eq(LedgerAccountSettlementsTable.id, settlementId.toString()));
+				.where(eq(LedgerAccountSettlementsTable.id, settlementId.toUUID()));
 			await runtime.runPromise(
 				target === "posted"
 					? repository.postSettlementTransaction(
@@ -259,17 +290,17 @@ describe("atomic balance monitor capture", () => {
 			const events = await f.events();
 			expect(events).toHaveLength(2);
 			expect(events[0]).toMatchObject({
-				transactionId: generated.id.toString(),
-				before: { posted: 0, pending: 0, availableBalance: 0 },
-				after: { posted: 0, pending: 100, availableBalance: 0 },
+				transactionId: generated.id.toUUID(),
+				before: { posted: "0", pending: "0", availableBalance: "0" },
+				after: { posted: "0", pending: "100", availableBalance: "0" },
 			});
 			expect(events[1]).toMatchObject({
-				transactionId: generated.id.toString(),
-				before: { posted: 0, pending: 100, availableBalance: 0 },
+				transactionId: generated.id.toUUID(),
+				before: { posted: "0", pending: "100", availableBalance: "0" },
 				after: {
-					posted: target === "posted" ? 100 : 0,
-					pending: target === "posted" ? 100 : 0,
-					availableBalance: target === "posted" ? 100 : 0,
+					posted: target === "posted" ? "100" : "0",
+					pending: target === "posted" ? "100" : "0",
+					availableBalance: target === "posted" ? "100" : "0",
 				},
 			});
 		}
@@ -287,7 +318,7 @@ describe("atomic balance monitor capture", () => {
 				const backend = await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid");
 				await client.query("UPDATE ledger_accounts SET balance_monitor_count = $1 WHERE id = $2", [
 					enabled ? 1 : 0,
-					f.debit.toString(),
+					f.debit.toUUID(),
 				]);
 				pending = f.create("pending");
 				await vi.waitFor(
@@ -316,20 +347,22 @@ describe("atomic balance monitor capture", () => {
 		await db
 			.update(LedgerAccountsTable)
 			.set({ balanceMonitorCount: 1 })
-			.where(eq(LedgerAccountsTable.id, f.credit.toString()));
+			.where(eq(LedgerAccountsTable.id, f.credit.toUUID()));
 		const transactionId = newLedgerTransactionID();
 		const existingId = crypto.randomUUID();
 		await db.insert(BalanceMonitorOutboxTable).values({
 			id: existingId,
-			organizationId: f.organizationId.toString(),
-			ledgerId: f.ledgerId.toString(),
-			accountId: f.credit.toString(),
+			organizationId: f.organizationId.toUUID(),
+			ledgerId: f.ledgerId.toUUID(),
+			accountId: f.credit.toUUID(),
 			accountVersion: 2,
-			transactionId: newLedgerTransactionID().toString(),
-			currencyCode: "EUR",
+			transactionId: newLedgerTransactionID().toUUID(),
+			assetId: f.assetId.toUUID(),
+			assetCode: "EUR",
+			minorUnitExponent: 2,
 			occurredAt: new Date(),
-			before: { posted: 0, pending: 0, availableBalance: 0 },
-			after: { posted: 0, pending: 1, availableBalance: 0 },
+			before: { posted: "0", pending: "0", availableBalance: "0" },
+			after: { posted: "0", pending: "1", availableBalance: "0" },
 		});
 		const failure: unknown = await f
 			.create("posted", 100, transactionId)
@@ -340,25 +373,54 @@ describe("atomic balance monitor capture", () => {
 			await db
 				.select()
 				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.id, transactionId.toString()))
+				.where(eq(LedgerTransactionsTable.id, transactionId.toUUID()))
 		).toHaveLength(0);
 		expect(
 			await db
 				.select()
 				.from(LedgerTransactionEntriesTable)
-				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toString()))
+				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toUUID()))
 		).toHaveLength(0);
 		const accounts = await db
 			.select()
 			.from(LedgerAccountsTable)
-			.where(eq(LedgerAccountsTable.organizationId, f.organizationId.toString()));
+			.where(eq(LedgerAccountsTable.organizationId, f.organizationId.toUUID()));
 		for (const account of accounts)
 			expect(account).toMatchObject({
 				lockVersion: 1,
-				postedAmount: 0,
-				pendingAmount: 0,
-				availableAmount: 0,
+				postedAmount: 0n,
+				pendingAmount: 0n,
+				availableAmount: 0n,
 			});
 		expect((await f.events()).map(event => event.id)).toEqual([existingId]);
+	});
+	it("captures exact large amounts and retains Asset details after renaming", async () => {
+		const f = await fixture();
+		await f.create("posted", "9007199254740993");
+		await db
+			.update(AssetsTable)
+			.set({ code: "RENAMED" })
+			.where(eq(AssetsTable.id, f.assetId.toUUID()));
+		expect((await f.events())[0]).toMatchObject({
+			assetId: f.assetId.toUUID(),
+			assetCode: "EUR",
+			minorUnitExponent: 2,
+			after: {
+				posted: "9007199254740993",
+				pending: "9007199254740993",
+				availableBalance: "9007199254740993",
+			},
+		});
+	});
+	it("does not capture or persist accounting when final int64 projections overflow", async () => {
+		const f = await fixture();
+		await f.create("posted", "9223372036854775807");
+		await expect(f.create("posted", "1")).rejects.toMatchObject({ statusCode: 409 });
+		expect(await f.events()).toHaveLength(1);
+		const [account] = await db
+			.select()
+			.from(LedgerAccountsTable)
+			.where(eq(LedgerAccountsTable.id, f.debit.toUUID()));
+		expect(account!.postedAmount).toBe(9223372036854775807n);
 	});
 });

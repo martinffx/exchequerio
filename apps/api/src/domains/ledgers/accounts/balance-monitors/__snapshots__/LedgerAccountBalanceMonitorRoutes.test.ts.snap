@@ -8,7 +8,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > creates with the existing 200 respo
       {
         "balanceType": "posted",
         "operator": "<",
-        "value": 100,
+        "value": "100",
       },
     ],
     "mode": "all",
@@ -34,7 +34,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > lists through the Effect service wi
         {
           "balanceType": "posted",
           "operator": "<",
-          "value": 100,
+          "value": "100",
         },
       ],
       "mode": "all",
@@ -178,9 +178,10 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                   ],
                                 },
                                 "value": {
-                                  "maximum": 9007199254740991,
-                                  "minimum": -9007199254740991,
-                                  "type": "integer",
+                                  "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                                  "maxLength": 20,
+                                  "pattern": "^(0|-?[1-9][0-9]*)$",
+                                  "type": "string",
                                 },
                               },
                               "required": [
@@ -663,9 +664,10 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                               ],
                             },
                             "value": {
-                              "maximum": 9007199254740991,
-                              "minimum": -9007199254740991,
-                              "type": "integer",
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
+                              "type": "string",
                             },
                           },
                           "required": [
@@ -821,9 +823,10 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                 ],
                               },
                               "value": {
-                                "maximum": 9007199254740991,
-                                "minimum": -9007199254740991,
-                                "type": "integer",
+                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                                "maxLength": 20,
+                                "pattern": "^(0|-?[1-9][0-9]*)$",
+                                "type": "string",
                               },
                             },
                             "required": [
@@ -1836,9 +1839,10 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                 ],
                               },
                               "value": {
-                                "maximum": 9007199254740991,
-                                "minimum": -9007199254740991,
-                                "type": "integer",
+                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                                "maxLength": 20,
+                                "pattern": "^(0|-?[1-9][0-9]*)$",
+                                "type": "string",
                               },
                             },
                             "required": [
@@ -2375,9 +2379,10 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                               ],
                             },
                             "value": {
-                              "maximum": 9007199254740991,
-                              "minimum": -9007199254740991,
-                              "type": "integer",
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
+                              "type": "string",
                             },
                           },
                           "required": [
@@ -2532,9 +2537,10 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                 ],
                               },
                               "value": {
-                                "maximum": 9007199254740991,
-                                "minimum": -9007199254740991,
-                                "type": "integer",
+                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                                "maxLength": 20,
+                                "pattern": "^(0|-?[1-9][0-9]*)$",
+                                "type": "string",
                               },
                             },
                             "required": [
@@ -3023,7 +3029,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > updates with the existing response 
       {
         "balanceType": "posted",
         "operator": "<",
-        "value": 100,
+        "value": "100",
       },
     ],
     "mode": "all",

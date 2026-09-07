@@ -3,10 +3,7 @@ import { Client } from "pg";
 import { describe, expect, it } from "vitest";
 import { Config } from "@/config";
 const guard = readFileSync(
-	new URL(
-		"../../migrations/20260907210540_overconfident_human_torch/migration.sql",
-		import.meta.url
-	),
+	new URL("../../migrations/20260907223239_balance-monitors/migration.sql", import.meta.url),
 	"utf8"
 ).split("--> statement-breakpoint")[0];
 describe("Balance monitor migration legacy guard", () => {

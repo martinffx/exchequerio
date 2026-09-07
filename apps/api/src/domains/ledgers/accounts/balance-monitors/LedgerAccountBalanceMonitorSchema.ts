@@ -1,6 +1,7 @@
+import { AmountSchema } from "@/lib/amounts";
 import { type Static, Type } from "@sinclair/typebox";
 import { MetadataSchema } from "@/lib/schema";
-import { PaginationQuery } from "@/routes/schema";
+import { PaginationQuery } from "@/lib/schema";
 import { AccountItemParameters, AccountIdSchema } from "../AccountSchema";
 
 const LedgerAccountBalanceMonitorId = Type.String({ pattern: "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
@@ -28,7 +29,7 @@ const AlertCondition = Type.Object(
 						Type.Literal(">"),
 						Type.Literal(">="),
 					]),
-					value: Type.Integer({ minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER }),
+					value: AmountSchema,
 				},
 				{ additionalProperties: false }
 			),
@@ -38,9 +39,9 @@ const AlertCondition = Type.Object(
 	{ additionalProperties: false }
 );
 const BalanceSnapshot = Type.Object({
-	posted: Type.Integer(),
-	pending: Type.Integer(),
-	availableBalance: Type.Integer(),
+	posted: AmountSchema,
+	pending: AmountSchema,
+	availableBalance: AmountSchema,
 });
 const LedgerAccountBalanceMonitorRequest = Type.Object(
 	{

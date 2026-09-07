@@ -1,17 +1,17 @@
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
-import type { OrgID } from "../../repo/entities/types";
+import type { OrgID } from "@/lib/ids";
 import type {
 	OrganizationInsertRow,
 	OrganizationRow,
 	OrganizationUpdateRow,
-} from "../../repo/schema";
+} from "../../db/schema";
 import type { OrganizationResponse, OrganizationUpdateRequest } from "./OrganizationSchema";
 import {
 	type OrganizationInfrastructureError,
 	OrganizationPersistenceDecodingFailure,
 } from "./OrganizationErrors";
-import { parseId } from "@/lib/utils";
+import { encodeUuid, parseUuid } from "@/lib/utils";
 
 type OrganizationOpts = {
 	id: OrgID;
@@ -64,7 +64,7 @@ class Organization {
 		if (row === undefined) return Effect.succeed(Option.none());
 
 		return Effect.gen(function* () {
-			const id = yield* parseId<"org", OrgID>("org", row.id);
+			const id = yield* parseUuid<"org", OrgID>("org", row.id);
 			const created = yield* parseDate(row.created);
 			const updated = yield* parseDate(row.updated);
 
@@ -82,7 +82,7 @@ class Organization {
 
 	toCreateRow(): OrganizationInsertRow {
 		return {
-			id: this.id.toString(),
+			id: encodeUuid(this.id),
 			name: this.name,
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			description: this.description ?? null,

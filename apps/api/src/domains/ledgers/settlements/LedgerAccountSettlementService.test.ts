@@ -7,13 +7,8 @@ import { LedgerAccount } from "../accounts/LedgerAccount";
 import type { LedgerTransactionRepo } from "../transactions/LedgerTransactionRepo";
 import { TransactionValidationFailure } from "../transactions/LedgerTransactionErrors";
 import { ConflictError, ServiceUnavailableError } from "@/lib/errors";
-import {
-	newOrgID,
-	newLedgerID,
-	newLedgerAccountID,
-	newLedgerAccountSettlementID,
-} from "@/repo/entities/types";
-import type { IdempotencyService } from "@/services/IdempotencyService";
+import { newOrgID, newLedgerID, newLedgerAccountID, newLedgerAccountSettlementID } from "@/lib/ids";
+import type { IdempotencyService } from "@/lib/IdempotencyService";
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import type { LedgerAccountSettlementRepo } from "./LedgerAccountSettlementRepo";
 import { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
@@ -30,7 +25,9 @@ const prepared = new LedgerAccountSettlementEntity({
 	ledgerId,
 	settledAccountId,
 	contraAccountId,
-	currency: "USD",
+	assetId: "ast_00000000000000000000000001",
+	assetCode: "USD",
+	minorUnitExponent: 2,
 	status: "processing",
 	targetStatus: "pending",
 	allowEitherDirection: false,
@@ -38,7 +35,7 @@ const prepared = new LedgerAccountSettlementEntity({
 	updated: now,
 });
 const accounting = Effect.runSync(
-	prepared.toTransaction([{ amount: 125, direction: "debit" }], "debit", "pending", now)
+	prepared.toTransaction([{ amount: 125n, direction: "debit" }], "debit", "pending", now)
 );
 const finalized = new LedgerAccountSettlementEntity({
 	...prepared.data,
@@ -101,11 +98,17 @@ beforeEach(() => {
 	getAccount = vi.fn();
 	getAccount.mockReturnValue(
 		Effect.succeed(
-			LedgerAccount.fromCreateRequest(settledAccountId, organizationId, ledgerId, {
-				name: "Receivable",
-				normalBalance: "debit",
-				currencyCode: "USD",
-			})
+			LedgerAccount.fromCreateRequest(
+				settledAccountId,
+				organizationId,
+				ledgerId,
+				{
+					name: "Receivable",
+					normalBalance: "debit",
+					assetCode: "USD",
+				},
+				{ assetId: prepared.data.assetId, assetCode: "USD", minorUnitExponent: 2 }
+			)
 		)
 	);
 	service = new LedgerAccountSettlementService(
@@ -168,7 +171,9 @@ describe("LedgerAccountSettlementService", () => {
 			expect.any(DateTime)
 		);
 		expect(repository.createSettlement.mock.calls[0]?.[0].data).toMatchObject({
-			currency: "USD",
+			assetId: "ast_00000000000000000000000001",
+			assetCode: "USD",
+			minorUnitExponent: 2,
 			status: "drafting",
 		});
 		expect(repository.finalizeSettlement).toHaveBeenCalledWith(

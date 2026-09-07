@@ -1,3 +1,4 @@
+import { TypeID } from "typeid-js";
 import { Effect, Queue } from "effect";
 import { Client } from "pg";
 import { MonitorDelivery } from "./MonitorDelivery";
@@ -14,15 +15,17 @@ export const relayMonitorBatch = (
 			for (const revision of revisions) {
 				yield* MonitorDelivery.enqueue({
 					eventId: event.id,
-					monitorId: revision.monitorId,
+					monitorId: TypeID.fromUUID("lbm", revision.monitorId).toString(),
 					monitorVersion: revision.version,
-					organizationId: event.organizationId,
-					ledgerId: event.ledgerId,
-					accountId: event.accountId,
+					organizationId: TypeID.fromUUID("org", event.organizationId).toString(),
+					ledgerId: TypeID.fromUUID("lgr", event.ledgerId).toString(),
+					accountId: TypeID.fromUUID("lat", event.accountId).toString(),
 					accountVersion: event.accountVersion,
-					transactionId: event.transactionId,
+					transactionId: TypeID.fromUUID("ltr", event.transactionId).toString(),
 					occurredAt: event.occurredAt.toISOString(),
-					currencyCode: event.currencyCode,
+					assetId: TypeID.fromUUID("ast", event.assetId).toString(),
+					assetCode: event.assetCode,
+					minorUnitExponent: event.minorUnitExponent,
 					before: event.before,
 					after: event.after,
 					alertCondition: revision.configuration.alertCondition,

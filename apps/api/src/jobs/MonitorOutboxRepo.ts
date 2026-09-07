@@ -6,7 +6,7 @@ import {
 	BalanceMonitorOutboxTable as outbox,
 	BalanceMonitorRevisionsTable as revisions,
 	LedgerAccountBalanceMonitorsTable as monitors,
-} from "@/repo/schema";
+} from "@/db/schema";
 
 type MonitorEvent = typeof outbox.$inferSelect;
 export type ClaimedMonitorEvent = MonitorEvent & { claimToken: string };

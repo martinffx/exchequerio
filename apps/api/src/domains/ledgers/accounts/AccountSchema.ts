@@ -1,4 +1,11 @@
 import { type Static, Type } from "@sinclair/typebox";
+import {
+	AssetIdSchema,
+	AssetCodeSchema,
+	AssetSelectorSchema,
+	AssetSummarySchema,
+} from "@/lib/AssetSchema";
+import { AmountSchema } from "@/lib/amounts";
 import { ListQuery } from "@/lib/ListQuery";
 import { MetadataSchema } from "@/lib/schema";
 import { LedgerIdSchema } from "../LedgerSchema";
@@ -10,17 +17,20 @@ const AccountItemParameters = Type.Object({ ledgerId: LedgerIdSchema, accountId:
 /** Shared pagination for Account collections. */
 const AccountListQuery = ListQuery;
 const NormalBalanceSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
-const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });
-const AccountCreateRequest = Type.Object(
-	{
-		name: Type.String(),
-		description: Type.Optional(Type.String()),
-		normalBalance: NormalBalanceSchema,
-		currencyCode: CurrencyCodeSchema,
-		metadata: Type.Optional(MetadataSchema),
-	},
-	{ additionalProperties: false }
-);
+const AccountCreateRequest = Type.Intersect([
+	Type.Object(
+		{
+			name: Type.String(),
+			description: Type.Optional(Type.String()),
+			normalBalance: NormalBalanceSchema,
+			assetId: Type.Optional(AssetIdSchema),
+			assetCode: Type.Optional(AssetCodeSchema),
+			metadata: Type.Optional(MetadataSchema),
+		},
+		{ additionalProperties: false }
+	),
+	AssetSelectorSchema,
+]);
 const AccountUpdateRequest = Type.Object(
 	{
 		name: Type.String(),
@@ -35,9 +45,9 @@ const AccountBalanceResponse = Type.Object({
 		Type.Literal("posted"),
 		Type.Literal("availableBalance"),
 	]),
-	credits: Type.Integer(),
-	debits: Type.Integer(),
-	amount: Type.Integer(),
+	credits: AmountSchema,
+	debits: AmountSchema,
+	amount: AmountSchema,
 });
 const AccountResponse = Type.Object({
 	id: AccountIdSchema,
@@ -45,7 +55,7 @@ const AccountResponse = Type.Object({
 	name: Type.String(),
 	description: Type.Optional(Type.String()),
 	normalBalance: NormalBalanceSchema,
-	currencyCode: CurrencyCodeSchema,
+	...AssetSummarySchema.properties,
 	balances: Type.Array(AccountBalanceResponse),
 	metadata: Type.Optional(MetadataSchema),
 	lockVersion: Type.Integer({ minimum: 0 }),
@@ -61,6 +71,7 @@ type AccountUpdateRequest = Static<typeof AccountUpdateRequest>;
 type AccountResponse = Static<typeof AccountResponse>;
 
 export {
+	NormalBalanceSchema,
 	AccountCollectionParameters,
 	AccountCreateRequest,
 	AccountIdSchema,

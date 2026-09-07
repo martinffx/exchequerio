@@ -1,3 +1,4 @@
+import { parseAmount } from "@/lib/amounts";
 import { validateHeaderValue } from "node:http";
 import { Clock, Context, Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
@@ -8,7 +9,7 @@ import {
 	type LedgerAccountBalanceMonitorID,
 	type LedgerAccountID,
 	type LedgerID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import { LedgerAccountBalanceMonitor, type MonitorScope } from "./LedgerAccountBalanceMonitor";
 import { LedgerAccountBalanceMonitorNotFound } from "./LedgerAccountBalanceMonitorErrors";
 import {
@@ -43,6 +44,12 @@ export class LedgerAccountBalanceMonitorService {
 	) {}
 	private webhook(request: LedgerAccountBalanceMonitorUpdateRequest) {
 		return Effect.gen({ self: this }, function* () {
+			yield* Effect.try({
+				try: () => {
+					for (const condition of request.alertCondition.conditions) parseAmount(condition.value);
+				},
+				catch: error => error as BadRequestError,
+			});
 			yield* Effect.try({
 				try: () => validateWebhookUrl(request.webhook.url),
 				catch: () => new BadRequestError("Webhook URL must be a public HTTPS destination"),

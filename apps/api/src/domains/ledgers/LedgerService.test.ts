@@ -2,7 +2,7 @@ import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { HttpError, InternalServerError, ServiceUnavailableError } from "@/lib/errors";
-import { newLedgerID, newOrgID } from "@/repo/entities/types";
+import { newLedgerID, newOrgID } from "@/lib/ids";
 import { Ledger } from "./Ledger";
 import {
 	LedgerHasDependents,

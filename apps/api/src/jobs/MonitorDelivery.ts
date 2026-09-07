@@ -1,13 +1,24 @@
+import { parseAmount } from "@/lib/amounts";
 import { Effect, Layer, Schema } from "effect";
 import { Job, Worker } from "effect-mq";
 import { crossed } from "@/domains/ledgers/accounts/balance-monitors/MonitorCondition";
 import { decryptToken } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
 import { sendWebhook } from "@/domains/ledgers/accounts/balance-monitors/MonitorWebhook";
 
+const amount = Schema.String.check(
+	Schema.makeFilter<string>(value => {
+		try {
+			parseAmount(value);
+			return true;
+		} catch {
+			return false;
+		}
+	})
+);
 const balanceSnapshot = Schema.Struct({
-	posted: Schema.Int,
-	pending: Schema.Int,
-	availableBalance: Schema.Int,
+	posted: amount,
+	pending: amount,
+	availableBalance: amount,
 });
 const alertCondition = Schema.Struct({
 	mode: Schema.Literals(["all", "any"]),
@@ -16,7 +27,7 @@ const alertCondition = Schema.Struct({
 			Schema.Struct({
 				balanceType: Schema.Literals(["posted", "pending", "availableBalance"]),
 				operator: Schema.Literals(["=", "!=", "<", "<=", ">", ">="]),
-				value: Schema.Int,
+				value: amount,
 			})
 		).check(Schema.isMinLength(1))
 	),
@@ -33,7 +44,9 @@ export class MonitorDelivery extends Job.make("balance-monitor-delivery", {
 		accountVersion: Schema.Int,
 		transactionId: Schema.String,
 		occurredAt: Schema.String,
-		currencyCode: Schema.String,
+		assetId: Schema.String,
+		assetCode: Schema.String,
+		minorUnitExponent: Schema.Int,
 		before: balanceSnapshot,
 		after: balanceSnapshot,
 		alertCondition,
@@ -69,7 +82,9 @@ export const deliverMonitorJob = (
 			accountVersion: payload.accountVersion,
 			transactionId: payload.transactionId,
 			occurredAt: payload.occurredAt,
-			currencyCode: payload.currencyCode,
+			assetId: payload.assetId,
+			assetCode: payload.assetCode,
+			minorUnitExponent: payload.minorUnitExponent,
 			before: payload.before,
 			after: payload.after,
 			alertCondition: payload.alertCondition,

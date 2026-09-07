@@ -1,10 +1,11 @@
+import { encodeUuid } from "@/lib/utils";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
-import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
-import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
-import { LedgerAccountsTable } from "@/repo/schema";
+import { NotFoundError } from "@/lib/errors";
+import type { LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
+import { AssetsTable, LedgerAccountsTable, type LedgerAccountRow } from "@/db/schema";
 
 import {
 	AccountHasDependents,
@@ -27,7 +28,7 @@ type LedgerAccountListQuery = {
 
 type LedgerAccountCreateRepositoryError =
 	| AccountInfrastructureError
-	| LedgerNotFound
+	| NotFoundError
 	| AccountNameConflict;
 type LedgerAccountUpdateRepositoryError =
 	| AccountInfrastructureError
@@ -111,6 +112,20 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 	 */
 	constructor(private readonly db: EffectDrizzleDatabase) {}
 
+	private hydrate(row: LedgerAccountRow | undefined) {
+		if (row === undefined) return Effect.succeed(Option.none<LedgerAccount>());
+		return this.db
+			.select({
+				assetId: AssetsTable.id,
+				assetCode: AssetsTable.code,
+				minorUnitExponent: AssetsTable.minorUnitExponent,
+			})
+			.from(AssetsTable)
+			.where(and(eq(AssetsTable.id, row.assetId), eq(AssetsTable.organizationId, row.organizationId)))
+			.limit(1)
+			.pipe(Effect.flatMap(assets => LedgerAccount.fromRow(row, assets[0]!)));
+	}
+
 	/**
 	 * Lists tenant-scoped Accounts by creation time with a stable identifier tie-breaker.
 	 *
@@ -125,19 +140,35 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 		query: LedgerAccountListQuery
 	): Effect.Effect<LedgerAccount[], AccountInfrastructureError> {
 		return this.db
-			.select()
+			.select({
+				account: LedgerAccountsTable,
+				asset: {
+					assetId: AssetsTable.id,
+					assetCode: AssetsTable.code,
+					minorUnitExponent: AssetsTable.minorUnitExponent,
+				},
+			})
 			.from(LedgerAccountsTable)
+			.innerJoin(
+				AssetsTable,
+				and(
+					eq(AssetsTable.id, LedgerAccountsTable.assetId),
+					eq(AssetsTable.organizationId, LedgerAccountsTable.organizationId)
+				)
+			)
 			.where(
 				and(
-					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+					eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId))
 				)
 			)
 			.orderBy(desc(LedgerAccountsTable.created), asc(LedgerAccountsTable.id))
 			.limit(query.limit)
 			.offset(query.offset)
 			.pipe(
-				Effect.flatMap(rows => Effect.all(rows.map(row => LedgerAccount.fromRow(row)))),
+				Effect.flatMap(rows =>
+					Effect.all(rows.map(row => LedgerAccount.fromRow(row.account, row.asset)))
+				),
 				Effect.map(accounts => accounts.flatMap(account => Option.toArray(account))),
 				Effect.mapError(mapAccountInfrastructureError)
 			);
@@ -157,18 +188,36 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 		accountId: LedgerAccountID
 	): Effect.Effect<Option.Option<LedgerAccount>, AccountInfrastructureError> {
 		return this.db
-			.select()
+			.select({
+				account: LedgerAccountsTable,
+				asset: {
+					assetId: AssetsTable.id,
+					assetCode: AssetsTable.code,
+					minorUnitExponent: AssetsTable.minorUnitExponent,
+				},
+			})
 			.from(LedgerAccountsTable)
+			.innerJoin(
+				AssetsTable,
+				and(
+					eq(AssetsTable.id, LedgerAccountsTable.assetId),
+					eq(AssetsTable.organizationId, LedgerAccountsTable.organizationId)
+				)
+			)
 			.where(
 				and(
-					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountsTable.id, accountId.toString())
+					eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+					eq(LedgerAccountsTable.id, encodeUuid(accountId))
 				)
 			)
 			.limit(1)
 			.pipe(
-				Effect.flatMap(rows => LedgerAccount.fromRow(rows[0])),
+				Effect.flatMap(rows =>
+					rows[0] === undefined
+						? Effect.succeed(Option.none())
+						: LedgerAccount.fromRow(rows[0].account, rows[0].asset)
+				),
 				Effect.mapError(mapAccountInfrastructureError)
 			);
 	}
@@ -187,7 +236,7 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			.values(record.toRow())
 			.returning()
 			.pipe(
-				Effect.flatMap(rows => LedgerAccount.fromRow(rows[0])),
+				Effect.flatMap(rows => this.hydrate(rows[0])),
 				Effect.flatMap(requireCreatedAccount),
 				Effect.mapError(cause => mapAccountCreateError(cause, record.name))
 			);
@@ -219,15 +268,15 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			})
 			.where(
 				and(
-					eq(LedgerAccountsTable.organizationId, record.organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, record.ledgerId.toString()),
-					eq(LedgerAccountsTable.id, record.id.toString()),
+					eq(LedgerAccountsTable.organizationId, encodeUuid(record.organizationId)),
+					eq(LedgerAccountsTable.ledgerId, encodeUuid(record.ledgerId)),
+					eq(LedgerAccountsTable.id, encodeUuid(record.id)),
 					eq(LedgerAccountsTable.lockVersion, record.lockVersion)
 				)
 			)
 			.returning()
 			.pipe(
-				Effect.flatMap(rows => LedgerAccount.fromRow(rows[0])),
+				Effect.flatMap(rows => this.hydrate(rows[0])),
 				Effect.flatMap(requireUpdatedAccount),
 				Effect.mapError(cause => mapAccountUpdateError(cause, record.name))
 			);
@@ -246,20 +295,26 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Effect.Effect<Option.Option<LedgerAccount>, LedgerAccountDeleteRepositoryError> {
-		return this.db
-			.delete(LedgerAccountsTable)
-			.where(
-				and(
-					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountsTable.id, accountId.toString())
-				)
-			)
-			.returning()
-			.pipe(
-				Effect.flatMap(rows => LedgerAccount.fromRow(rows[0])),
-				Effect.mapError(mapAccountDeleteError)
-			);
+		return this.getAccount(organizationId, ledgerId, accountId).pipe(
+			Effect.flatMap(current =>
+				Option.match(current, {
+					onNone: () => Effect.succeed(Option.none<LedgerAccount>()),
+					onSome: account =>
+						this.db
+							.delete(LedgerAccountsTable)
+							.where(
+								and(
+									eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+									eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+									eq(LedgerAccountsTable.id, encodeUuid(accountId))
+								)
+							)
+							.returning()
+							.pipe(Effect.flatMap(rows => LedgerAccount.fromRow(rows[0], account))),
+				})
+			),
+			Effect.mapError(mapAccountDeleteError)
+		);
 	}
 }
 

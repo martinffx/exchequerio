@@ -1,9 +1,10 @@
 import { AccountItemParameters } from "../AccountSchema";
 import { Type } from "@sinclair/typebox";
 import { Effect, Result } from "effect";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 
 import {
+	BadRequestError,
 	BadRequestProblem,
 	ConflictProblem,
 	ForbiddenProblem,
@@ -24,6 +25,22 @@ import {
 } from "./LedgerAccountBalanceMonitorSchema";
 import { LedgerAccountBalanceMonitorServiceTag } from "./LedgerAccountBalanceMonitorService";
 
+const requireStringAmounts = async (request: FastifyRequest) => {
+	const body = request.body as { alertCondition?: { conditions?: unknown } } | undefined;
+	const conditions = body?.alertCondition?.conditions;
+	if (
+		Array.isArray(conditions) &&
+		conditions.some(
+			(condition: unknown) =>
+				condition !== null &&
+				typeof condition === "object" &&
+				"value" in condition &&
+				typeof condition.value !== "string"
+		)
+	) {
+		throw new BadRequestError("Monitor thresholds must be decimal strings");
+	}
+};
 const tags = ["Ledger Account Balance Monitors"];
 const commonErrors = {
 	400: BadRequestProblem,
@@ -112,6 +129,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 	server.post<{ Params: AccountItemParameters; Body: LedgerAccountBalanceMonitorRequest }>(
 		"/",
 		{
+			preValidation: requireStringAmounts,
 			preHandler: [server.hasPermissions(["ledger:account:balance_monitor:write"])],
 			schema: {
 				operationId: "createLedgerAccountBalanceMonitor",
@@ -155,6 +173,7 @@ const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
 	}>(
 		"/:balanceMonitorId",
 		{
+			preValidation: requireStringAmounts,
 			preHandler: [server.hasPermissions(["ledger:account:balance_monitor:write"])],
 			schema: {
 				operationId: "updateLedgerAccountBalanceMonitor",

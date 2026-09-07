@@ -1,8 +1,16 @@
+import { TypeID } from "typeid-js";
 import { Effect } from "effect";
 import { DateTime } from "luxon";
-import { type Metadata, encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
-import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/repo/entities/types";
-import type { LedgerAccountBalanceMonitorRow } from "@/repo/schema";
+import {
+	type Metadata,
+	encodeMetadata,
+	parseDate,
+	parseUuid,
+	encodeUuid,
+	parseMetadata,
+} from "@/lib/utils";
+import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/lib/ids";
+import type { LedgerAccountBalanceMonitorRow } from "@/db/schema";
 import { LedgerAccountBalanceMonitorPersistenceDecodingFailure } from "./LedgerAccountBalanceMonitorErrors";
 import type {
 	LedgerAccountBalanceMonitorRequest,
@@ -28,8 +36,10 @@ export class LedgerAccountBalanceMonitor {
 		encryptedToken: string
 	) {
 		return LedgerAccountBalanceMonitor.fromRow({
-			...scope,
-			id: id.toString(),
+			organizationId: encodeUuid(TypeID.fromString(scope.organizationId)),
+			ledgerId: encodeUuid(TypeID.fromString(scope.ledgerId)),
+			accountId: encodeUuid(TypeID.fromString(scope.accountId)),
+			id: encodeUuid(id),
 			// oxlint-disable-next-line unicorn/no-null -- PostgreSQL nullable columns use null.
 			description: request.description ?? null,
 			alertCondition: request.alertCondition,
@@ -46,8 +56,8 @@ export class LedgerAccountBalanceMonitor {
 	}
 	static fromRow(row: LedgerAccountBalanceMonitorRow) {
 		return Effect.all({
-			id: parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", row.id),
-			accountId: parseId<"lat", LedgerAccountID>("lat", row.accountId),
+			id: parseUuid<"lbm", LedgerAccountBalanceMonitorID>("lbm", row.id),
+			accountId: parseUuid<"lat", LedgerAccountID>("lat", row.accountId),
 			created: parseDate(row.created),
 			updated: parseDate(row.updated),
 			metadata: parseMetadata(row.metadata).pipe(Effect.catch(() => Effect.succeed(undefined))),
@@ -60,9 +70,9 @@ export class LedgerAccountBalanceMonitor {
 	}
 	toResponse(): LedgerAccountBalanceMonitorResponse {
 		return {
-			id: this.row.id,
-			accountId: this.row.accountId,
-			ledgerId: this.row.ledgerId,
+			id: this.id.toString(),
+			accountId: this.accountId.toString(),
+			ledgerId: TypeID.fromUUID("lgr", this.row.ledgerId).toString(),
 			description: this.row.description ?? undefined,
 			alertCondition: this.row.alertCondition,
 			webhook: { url: this.row.webhookUrl },

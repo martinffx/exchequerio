@@ -6,7 +6,7 @@ import {
 	newLedgerID,
 	newLedgerAccountID,
 	newLedgerAccountBalanceMonitorID,
-} from "@/repo/entities/types";
+} from "@/lib/ids";
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonitorService";
 import type { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
@@ -21,7 +21,7 @@ const key = Buffer.alloc(32, 7).toString("base64");
 const request: LedgerAccountBalanceMonitorRequest = {
 	alertCondition: {
 		mode: "all",
-		conditions: [{ balanceType: "posted", operator: "<", value: 100 }],
+		conditions: [{ balanceType: "posted", operator: "<", value: "100" }],
 	},
 	webhook: { url: "https://example.com/hook", bearerToken: "secret" },
 	metadata: { team: "treasury" },
@@ -147,4 +147,44 @@ describe("Balance monitor service", () => {
 			await Effect.runPromise(Effect.flip(service.getLedgerAccountBalanceMonitor(scope, "invalid")))
 		).toMatchObject({ statusCode: 400 });
 	});
+	it.each(["9223372036854775808", "-9223372036854775809", "01", "-0", "+1", " 1", "1e3", "1.0"])(
+		"rejects invalid threshold %s on create and update",
+		async value => {
+			const repository = repo();
+			const service = new LedgerAccountBalanceMonitorService(repository, key);
+			const invalid = {
+				...request,
+				alertCondition: {
+					...request.alertCondition,
+					conditions: [{ ...request.alertCondition.conditions[0]!, value }],
+				},
+			};
+			for (const action of [
+				service.createLedgerAccountBalanceMonitor(scope, invalid),
+				service.updateLedgerAccountBalanceMonitor(scope, record.id.toString(), invalid),
+			]) {
+				expect(await Effect.runPromise(Effect.flip(action))).toMatchObject({ statusCode: 400 });
+			}
+			expect(repository.createMonitor).not.toHaveBeenCalled();
+			expect(repository.updateMonitor).not.toHaveBeenCalled();
+		}
+	);
+	it.each(["9223372036854775807", "-9223372036854775808"])(
+		"accepts int64 threshold %s",
+		async value => {
+			const repository = repo();
+			const service = new LedgerAccountBalanceMonitorService(repository, key);
+			const valid = {
+				...request,
+				alertCondition: {
+					...request.alertCondition,
+					conditions: [{ ...request.alertCondition.conditions[0]!, value }],
+				},
+			};
+			expect(
+				(await Effect.runPromise(service.createLedgerAccountBalanceMonitor(scope, valid))).toResponse()
+					.alertCondition.conditions[0]!.value
+			).toBe(value);
+		}
+	);
 });

@@ -3,6 +3,17 @@
 Drizzle's PostgreSQL migrator applies pending migrations in a transaction. Migration SQL must be
 reviewed for the locks it takes before it is applied to a populated environment.
 
+## Asset cutover
+
+`20260907213428_assets-int64` requires empty Accounts, Entries, and Settlements. It takes exclusive
+locks before checking this precondition and fails transactionally if any of those tables contain
+records. Use a fresh development database; this migration neither converts legacy currency data
+nor deletes it. The application must use the Asset and decimal-string amount API at the cutover.
+
+The migration adds organization-owned Assets, replaces currency columns with Asset references,
+enforces Account/Entry/Settlement Asset consistency, and converts remaining quantity columns to
+`BIGINT`. See [Assets and amounts](../docs/product/assets.md) for the resulting API contract.
+
 ## Organization foreign-key indexes
 
 `20260806203446_blue_kid_colt/migration.sql` creates indexes on four existing Ledger tables with transactional
@@ -23,3 +34,28 @@ Before applying this migration to production:
 If a write maintenance window is not acceptable, do not run this migration through the standard
 migrator. Use an operator-reviewed, non-transactional `CREATE INDEX CONCURRENTLY` procedure and a
 separately approved process for reconciling migration state.
+
+## UUID storage
+
+`20260907204057_uuid-storage/migration.sql` stores resource IDs and their references as native
+PostgreSQL UUIDs. The application keeps the existing TypeIDs and converts their embedded UUIDs
+at persistence boundaries. ID generation and public IDs are unchanged.
+
+Recreate the development and test databases before replaying migration history with the updated
+application. This migration has no TypeID backfill: its UUID casts cannot convert populated
+TypeID text columns. It temporarily removes and restores the existing foreign keys and
+ID-comparison checks within the migration transaction.
+
+Point `DATABASE_URL` at each recreated database and run the normal API `db:migrate` command.
+Start the updated application only after migration replay succeeds.
+
+## Balance monitors
+
+`20260907223239_balance-monitors` follows the UUID and Asset cutovers. It replaces the unreleased
+branch-only monitor migration and requires a fresh development/test database for replay. No existing
+database or queued job conversion is provided for that unreleased version.
+
+The migration locks and checks the legacy monitor table before replacing its scaffold columns.
+Existing monitor rows cause a transactional failure; export and explicitly resolve them before
+retrying. Monitor resource references use UUID columns. Before/after snapshots and condition
+thresholds use decimal-string int64 amounts in JSONB. See [Balance monitors](../docs/product/balance-monitors.md).

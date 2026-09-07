@@ -4,15 +4,16 @@ import { Effect, ManagedRuntime } from "effect";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { DatabaseTag, makeDatabaseLive, type Database } from "@/db";
-import { newLedgerAccountID, newLedgerID, newOrgID } from "@/repo/entities/types";
+import { newLedgerAccountID, newLedgerID, newOrgID } from "@/lib/ids";
 import {
+	AssetsTable,
 	BalanceMonitorOutboxTable as outbox,
 	BalanceMonitorRevisionsTable as revisions,
 	LedgerAccountBalanceMonitorsTable as monitors,
 	LedgerAccountsTable as accounts,
 	LedgersTable as ledgers,
 	OrganizationsTable as organizations,
-} from "@/repo/schema";
+} from "@/db/schema";
 import { MonitorOutboxRepoLive } from "./MonitorOutboxRepo";
 
 const configuration = {
@@ -20,7 +21,7 @@ const configuration = {
 	metadata: "{}",
 	alertCondition: {
 		mode: "all" as const,
-		conditions: [{ balanceType: "posted" as const, operator: "<" as const, value: 100 }],
+		conditions: [{ balanceType: "posted" as const, operator: "<" as const, value: "100" }],
 	},
 	webhookUrl: "https://example.com/monitor",
 	webhookToken: "encrypted-token",
@@ -28,10 +29,11 @@ const configuration = {
 
 describe("MonitorOutboxRepoLive", () => {
 	const runtime = ManagedRuntime.make(makeDatabaseLive(new Config().databaseUrl));
+	const assetId = randomUUID();
 	const scope = {
-		organizationId: newOrgID().toString(),
-		ledgerId: newLedgerID().toString(),
-		accountId: newLedgerAccountID().toString(),
+		organizationId: newOrgID().toUUID(),
+		ledgerId: newLedgerID().toUUID(),
+		accountId: newLedgerAccountID().toUUID(),
 	};
 	let database: Database;
 	let repository: MonitorOutboxRepoLive;
@@ -46,13 +48,20 @@ describe("MonitorOutboxRepoLive", () => {
 		await database.db
 			.insert(ledgers)
 			.values({ id: scope.ledgerId, organizationId: scope.organizationId, name: "Ledger" });
+		await database.db.insert(AssetsTable).values({
+			id: assetId,
+			organizationId: scope.organizationId,
+			code: "USD",
+			name: "US Dollar",
+			minorUnitExponent: 2,
+		});
 		await database.db.insert(accounts).values({
 			id: scope.accountId,
 			ledgerId: scope.ledgerId,
 			organizationId: scope.organizationId,
 			name: "Account",
 			normalBalance: "debit",
-			currencyCode: "USD",
+			assetId,
 		});
 	});
 	beforeEach(async () => {
@@ -67,6 +76,7 @@ describe("MonitorOutboxRepoLive", () => {
 		try {
 			await database.db.delete(accounts).where(eq(accounts.id, scope.accountId));
 			await database.db.delete(ledgers).where(eq(ledgers.id, scope.ledgerId));
+			await database.db.delete(AssetsTable).where(eq(AssetsTable.id, assetId));
 			await database.db.delete(organizations).where(eq(organizations.id, scope.organizationId));
 		} finally {
 			await runtime.dispose();
@@ -82,9 +92,11 @@ describe("MonitorOutboxRepoLive", () => {
 				accountVersion,
 				transactionId: randomUUID(),
 				occurredAt: new Date(),
-				currencyCode: "USD",
-				before: { posted: 100, pending: 100, availableBalance: 100 },
-				after: { posted: 90, pending: 90, availableBalance: 90 },
+				assetId,
+				assetCode: "USD",
+				minorUnitExponent: 2,
+				before: { posted: "100", pending: "100", availableBalance: "100" },
+				after: { posted: "90", pending: "90", availableBalance: "90" },
 				// Keep this test's claims ahead of concurrently produced integration fixtures.
 				created: new Date(1900, 0, accountVersion),
 			})
@@ -187,12 +199,12 @@ describe("MonitorOutboxRepoLive", () => {
 		}
 		expect(
 			await runtime.runPromise(
-				repository.revisionsFor({ ...scope, organizationId: "another-org", accountVersion: 2 })
+				repository.revisionsFor({ ...scope, organizationId: randomUUID(), accountVersion: 2 })
 			)
 		).toEqual([]);
 		expect(
 			await runtime.runPromise(
-				repository.revisionsFor({ ...scope, ledgerId: "another-ledger", accountVersion: 2 })
+				repository.revisionsFor({ ...scope, ledgerId: randomUUID(), accountVersion: 2 })
 			)
 		).toEqual([]);
 	});

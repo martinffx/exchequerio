@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Option } from "effect";
 import { ServiceUnavailableError } from "@/lib/errors";
-import { type LedgerID, newLedgerID, type OrgID } from "@/repo/entities/types";
+import { type LedgerID, newLedgerID, type OrgID } from "@/lib/ids";
 import { Ledger } from "./Ledger";
 import { LedgerNotFound, LedgerRepositoryUnavailable } from "./LedgerErrors";
 import {

@@ -1,7 +1,8 @@
 import { Effect, Result } from "effect";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 
 import {
+	BadRequestError,
 	BadRequestProblem,
 	ConflictProblem,
 	ForbiddenProblem,
@@ -11,7 +12,7 @@ import {
 	UnauthorizedProblem,
 } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
-import type { LedgerID, LedgerTransactionID } from "@/repo/entities/types";
+import type { LedgerID, LedgerTransactionID } from "@/lib/ids";
 
 import {
 	TransactionCollectionParameters,
@@ -25,6 +26,23 @@ import {
 	TransactionResponse,
 } from "./LedgerTransactionSchema";
 import { TransactionServiceTag } from "./LedgerTransactionService";
+
+const requireStringAmounts = async (request: FastifyRequest) => {
+	const body = request.body as { ledgerEntries?: unknown } | undefined;
+	if (
+		body &&
+		Array.isArray(body.ledgerEntries) &&
+		body.ledgerEntries.some(
+			(entry: unknown) =>
+				entry !== null &&
+				typeof entry === "object" &&
+				"amount" in entry &&
+				typeof entry.amount !== "string"
+		)
+	) {
+		throw new BadRequestError("Entry amounts must be decimal strings");
+	}
+};
 
 const commonErrors = {
 	400: BadRequestProblem,
@@ -109,6 +127,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 	}>(
 		"/",
 		{
+			preValidation: requireStringAmounts,
 			preHandler: [server.hasPermissions(["ledger:transaction:write"])],
 			schema: {
 				operationId: "createLedgerTransaction",
@@ -162,6 +181,7 @@ const TransactionRoutes: FastifyPluginAsync = async server => {
 	}>(
 		"/:transactionId",
 		{
+			preValidation: requireStringAmounts,
 			preHandler: [server.hasPermissions(["ledger:transaction:write"])],
 			schema: {
 				operationId: "updateLedgerTransaction",
