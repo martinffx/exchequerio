@@ -1,4 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
+import { AssetSelectorSchema, AssetSummarySchema, type AssetSummary } from "@/lib/AssetSchema";
+import { PositiveAmountSchema as AmountSchema } from "@/lib/amounts";
 import { IdempotencyHeaders } from "@/lib/IdempotencySchema";
 import { ListQuery } from "@/lib/ListQuery";
 import { MetadataSchema } from "@/lib/schema";
@@ -22,23 +24,27 @@ const TransactionListQuery = Type.Object(ListQuery.properties, {
 const TransactionCreateHeaders = IdempotencyHeaders;
 
 const EntryDirectionSchema = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
-const AmountSchema = Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
-const CurrencyCodeSchema = Type.String({ minLength: 1, pattern: "\\S" });
 const EffectiveAtSchema = Type.String({
 	format: "date-time",
 	// RFC 3339 also permits space separators and leap seconds, which Luxon cannot parse.
 	pattern: "[Tt][0-9]{2}:[0-9]{2}:[0-5][0-9]",
 });
-const TransactionRequestEntry = Type.Object(
-	{
-		accountId: AccountIdSchema,
-		direction: EntryDirectionSchema,
-		amount: AmountSchema,
-		currencyCode: CurrencyCodeSchema,
-		metadata: Type.Optional(MetadataSchema),
-	},
-	{ additionalProperties: false }
-);
+const requestEntryProperties = {
+	accountId: AccountIdSchema,
+	direction: EntryDirectionSchema,
+	amount: AmountSchema,
+	metadata: Type.Optional(MetadataSchema),
+};
+const TransactionRequestEntry = Type.Union([
+	Type.Object(
+		{ ...AssetSelectorSchema.anyOf[0].properties, ...requestEntryProperties },
+		{ additionalProperties: false }
+	),
+	Type.Object(
+		{ ...AssetSelectorSchema.anyOf[1].properties, ...requestEntryProperties },
+		{ additionalProperties: false }
+	),
+]);
 const TransactionCreateRequest = Type.Object(
 	{
 		status: Type.Union([Type.Literal("pending"), Type.Literal("posted")]),
@@ -65,7 +71,7 @@ const TransactionResponseEntry = Type.Object(
 		accountId: AccountIdSchema,
 		direction: EntryDirectionSchema,
 		amount: AmountSchema,
-		currencyCode: CurrencyCodeSchema,
+		...AssetSummarySchema.properties,
 		metadata: Type.Optional(MetadataSchema),
 	},
 	{ additionalProperties: false }
@@ -104,7 +110,6 @@ type TransactionDeleteResponse = Static<typeof TransactionDeleteResponse>;
 
 export {
 	AccountIdSchema,
-	AmountSchema,
 	EntryIdSchema,
 	TransactionCollectionParameters,
 	TransactionCreateHeaders,
@@ -119,4 +124,18 @@ export {
 	TransactionRequestEntry,
 	TransactionResponse,
 	TransactionResponseEntry,
+};
+
+export { PositiveAmountSchema as AmountSchema } from "@/lib/amounts";
+
+export type ResolvedTransactionRequestEntry = Omit<
+	TransactionRequestEntry,
+	"assetId" | "assetCode"
+> &
+	AssetSummary;
+export type ResolvedTransactionCreateRequest = Omit<TransactionCreateRequest, "ledgerEntries"> & {
+	ledgerEntries: ResolvedTransactionRequestEntry[];
+};
+export type ResolvedTransactionUpdateRequest = Omit<TransactionUpdateRequest, "ledgerEntries"> & {
+	ledgerEntries: ResolvedTransactionRequestEntry[];
 };

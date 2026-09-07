@@ -6,7 +6,6 @@ import {
 	foreignKey,
 	index,
 	integer,
-	numeric,
 	pgEnum,
 	pgTable,
 	primaryKey,
@@ -43,6 +42,35 @@ const OrganizationsTable = pgTable("organizations_table", {
 type OrganizationRow = typeof OrganizationsTable.$inferSelect;
 type OrganizationInsertRow = Required<typeof OrganizationsTable.$inferInsert>;
 type OrganizationUpdateRow = Pick<OrganizationRow, "name" | "description" | "updated">;
+
+const AssetsTable = pgTable(
+	"assets",
+	{
+		id: uuid("id").primaryKey(),
+		organizationId: uuid("organization_id")
+			.notNull()
+			.references(() => OrganizationsTable.id),
+		code: text("code").notNull(),
+		name: text("name").notNull(),
+		minorUnitExponent: integer("minor_unit_exponent").notNull(),
+		description: text("description"),
+		metadata: text("metadata"),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => ({
+		organizationIdUnique: unique("assets_organization_id_id_unique").on(
+			table.organizationId,
+			table.id
+		),
+		codeUnique: unique("assets_organization_code_unique").on(table.organizationId, table.code),
+		codeValid: check("assets_code_valid", sql`${table.code} ~ '^[A-Z0-9._:-]{1,64}$'`),
+		nameNotBlank: check("assets_name_not_blank", sql`btrim(${table.name}) <> ''`),
+		exponentValid: check("assets_exponent_valid", sql`${table.minorUnitExponent} BETWEEN 0 AND 18`),
+	})
+);
+type AssetRow = typeof AssetsTable.$inferSelect;
+type AssetInsertRow = typeof AssetsTable.$inferInsert;
 
 // Ledgers: Chart of accounts container
 const LedgersTable = pgTable(
@@ -82,17 +110,17 @@ const LedgerAccountsTable = pgTable(
 		name: text("name").notNull(),
 		description: text("description"),
 		normalBalance: ledgerNormalBalance("normal_balance").notNull(),
-		currencyCode: text("currency_code").notNull(),
+		assetId: uuid("asset_id").notNull(),
 		// Balance values as BIGINT (integer minor units)
-		pendingAmount: bigint("pending_amount", { mode: "number" }).notNull().default(0),
-		postedAmount: bigint("posted_amount", { mode: "number" }).notNull().default(0),
-		availableAmount: bigint("available_amount", { mode: "number" }).notNull().default(0),
-		pendingCredits: bigint("pending_credits", { mode: "number" }).notNull().default(0),
-		pendingDebits: bigint("pending_debits", { mode: "number" }).notNull().default(0),
-		postedCredits: bigint("posted_credits", { mode: "number" }).notNull().default(0),
-		postedDebits: bigint("posted_debits", { mode: "number" }).notNull().default(0),
-		availableCredits: bigint("available_credits", { mode: "number" }).notNull().default(0),
-		availableDebits: bigint("available_debits", { mode: "number" }).notNull().default(0),
+		pendingAmount: bigint("pending_amount", { mode: "bigint" }).notNull().default(0n),
+		postedAmount: bigint("posted_amount", { mode: "bigint" }).notNull().default(0n),
+		availableAmount: bigint("available_amount", { mode: "bigint" }).notNull().default(0n),
+		pendingCredits: bigint("pending_credits", { mode: "bigint" }).notNull().default(0n),
+		pendingDebits: bigint("pending_debits", { mode: "bigint" }).notNull().default(0n),
+		postedCredits: bigint("posted_credits", { mode: "bigint" }).notNull().default(0n),
+		postedDebits: bigint("posted_debits", { mode: "bigint" }).notNull().default(0n),
+		availableCredits: bigint("available_credits", { mode: "bigint" }).notNull().default(0n),
+		availableDebits: bigint("available_debits", { mode: "bigint" }).notNull().default(0n),
 		lockVersion: integer("lock_version").notNull().default(1),
 		metadata: text("metadata"), // TEXT for DSQL compatibility (JSON string)
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
@@ -106,21 +134,16 @@ const LedgerAccountsTable = pgTable(
 			foreignColumns: [LedgersTable.organizationId, LedgersTable.id],
 		}),
 		uniqueNamePerLedger: uniqueIndex("unique_account_name_per_ledger").on(table.ledgerId, table.name),
-		currencyCodeNotBlank: check(
-			"ledger_accounts_currency_code_not_blank",
-			sql`btrim(${table.currencyCode}) <> ''`
-		),
-		balancesSafeIntegers: check(
-			"ledger_accounts_balances_safe_integers",
-			sql`${table.pendingAmount} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.postedAmount} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.availableAmount} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.pendingCredits} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.pendingDebits} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.postedCredits} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.postedDebits} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.availableCredits} BETWEEN -9007199254740991 AND 9007199254740991
-				AND ${table.availableDebits} BETWEEN -9007199254740991 AND 9007199254740991`
+		assetOwnershipFk: foreignKey({
+			name: "ledger_accounts_asset_ownership_fk",
+			columns: [table.organizationId, table.assetId],
+			foreignColumns: [AssetsTable.organizationId, AssetsTable.id],
+		}),
+		accountAssetUnique: unique("ledger_accounts_ownership_asset_unique").on(
+			table.organizationId,
+			table.ledgerId,
+			table.id,
+			table.assetId
 		),
 		postedBalanceIdx: index("idx_ledger_accounts_posted_balance").on(
 			table.ledgerId,
@@ -203,8 +226,8 @@ const LedgerTransactionEntriesTable = pgTable(
 			.references(() => OrganizationsTable.id),
 		ledgerId: uuid("ledger_id").notNull(),
 		direction: ledgerEntryDirection("direction").notNull(),
-		amount: bigint("amount", { mode: "number" }).notNull(), // Integer minor units
-		currency: text("currency").notNull(),
+		amount: bigint("amount", { mode: "bigint" }).notNull(), // Integer minor units
+		assetId: uuid("asset_id").notNull(),
 		status: ledgerTransactionStatus("status").notNull(),
 		metadata: text("metadata"),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
@@ -225,17 +248,15 @@ const LedgerTransactionEntriesTable = pgTable(
 		}),
 		accountOwnershipFk: foreignKey({
 			name: "ledger_transaction_entries_account_ownership_fk",
-			columns: [table.organizationId, table.ledgerId, table.accountId],
+			columns: [table.organizationId, table.ledgerId, table.accountId, table.assetId],
 			foreignColumns: [
 				LedgerAccountsTable.organizationId,
 				LedgerAccountsTable.ledgerId,
 				LedgerAccountsTable.id,
+				LedgerAccountsTable.assetId,
 			],
 		}),
-		amountPositiveAndSafe: check(
-			"ledger_transaction_entries_amount_positive_and_safe",
-			sql`${table.amount} > 0 AND ${table.amount} <= 9007199254740991`
-		),
+		amountPositive: check("ledger_transaction_entries_amount_positive", sql`${table.amount} > 0`),
 	})
 );
 type LedgerTransactionEntryRow = typeof LedgerTransactionEntriesTable.$inferSelect;
@@ -363,7 +384,7 @@ const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monito
 		.references(() => LedgerAccountsTable.id),
 	name: text("name").notNull(),
 	description: text("description"),
-	alertThreshold: numeric("alert_threshold", { precision: 20, scale: 4 }).notNull().default("0"),
+	alertThreshold: bigint("alert_threshold", { mode: "bigint" }).notNull().default(0n),
 	isActive: integer("is_active").notNull().default(1), // SQLite-compatible boolean
 	metadata: text("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
@@ -384,10 +405,10 @@ const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
 		.notNull()
 		.references(() => LedgerAccountsTable.id),
 	statementDate: timestamp("statement_date", { withTimezone: true }).notNull(),
-	openingBalance: numeric("opening_balance", { precision: 20, scale: 4 }).notNull().default("0"),
-	closingBalance: numeric("closing_balance", { precision: 20, scale: 4 }).notNull().default("0"),
-	totalCredits: numeric("total_credits", { precision: 20, scale: 4 }).notNull().default("0"),
-	totalDebits: numeric("total_debits", { precision: 20, scale: 4 }).notNull().default("0"),
+	openingBalance: bigint("opening_balance", { mode: "bigint" }).notNull().default(0n),
+	closingBalance: bigint("closing_balance", { mode: "bigint" }).notNull().default(0n),
+	totalCredits: bigint("total_credits", { mode: "bigint" }).notNull().default(0n),
+	totalDebits: bigint("total_debits", { mode: "bigint" }).notNull().default(0n),
 	transactionCount: integer("transaction_count").notNull().default(0),
 	metadata: text("metadata"),
 	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
@@ -413,7 +434,7 @@ const LedgerAccountSettlementsTable = pgTable(
 		contraAccountId: uuid("contra_account_id")
 			.notNull()
 			.references(() => LedgerAccountsTable.id),
-		currency: text("currency").notNull(),
+		assetId: uuid("asset_id").notNull(),
 		status: ledgerSettlementStatus("status").notNull().default("drafting"),
 		description: text("description"),
 		externalReference: text("external_reference"),
@@ -434,19 +455,21 @@ const LedgerAccountSettlementsTable = pgTable(
 			foreignColumns: [LedgersTable.organizationId, LedgersTable.id],
 		}),
 		settledAccountFk: foreignKey({
-			columns: [table.organizationId, table.ledgerId, table.settledAccountId],
+			columns: [table.organizationId, table.ledgerId, table.settledAccountId, table.assetId],
 			foreignColumns: [
 				LedgerAccountsTable.organizationId,
 				LedgerAccountsTable.ledgerId,
 				LedgerAccountsTable.id,
+				LedgerAccountsTable.assetId,
 			],
 		}),
 		contraAccountFk: foreignKey({
-			columns: [table.organizationId, table.ledgerId, table.contraAccountId],
+			columns: [table.organizationId, table.ledgerId, table.contraAccountId, table.assetId],
 			foreignColumns: [
 				LedgerAccountsTable.organizationId,
 				LedgerAccountsTable.ledgerId,
 				LedgerAccountsTable.id,
+				LedgerAccountsTable.assetId,
 			],
 		}),
 		processingTarget: check(
@@ -487,6 +510,7 @@ type LedgerAccountSettlementEntryInsertRow = Required<
 
 const schemaRelations = defineRelations(
 	{
+		AssetsTable,
 		OrganizationsTable,
 		LedgersTable,
 		LedgerAccountsTable,
@@ -501,6 +525,12 @@ const schemaRelations = defineRelations(
 		LedgerAccountSettlementEntriesTable,
 	},
 	r => ({
+		AssetsTable: {
+			organization: r.one.OrganizationsTable({
+				from: r.AssetsTable.organizationId,
+				to: r.OrganizationsTable.id,
+			}),
+		},
 		OrganizationsTable: {
 			ledgers: r.many.LedgersTable(),
 			settlements: r.many.LedgerAccountSettlementsTable(),
@@ -516,6 +546,11 @@ const schemaRelations = defineRelations(
 			statements: r.many.LedgerAccountStatementsTable(),
 		},
 		LedgerAccountsTable: {
+			asset: r.one.AssetsTable({
+				from: r.LedgerAccountsTable.assetId,
+				to: r.AssetsTable.id,
+				optional: false,
+			}),
 			ledger: r.one.LedgersTable({
 				from: r.LedgerAccountsTable.ledgerId,
 				to: r.LedgersTable.id,
@@ -539,6 +574,11 @@ const schemaRelations = defineRelations(
 			}),
 		},
 		LedgerTransactionEntriesTable: {
+			asset: r.one.AssetsTable({
+				from: r.LedgerTransactionEntriesTable.assetId,
+				to: r.AssetsTable.id,
+				optional: false,
+			}),
 			transaction: r.one.LedgerTransactionsTable({
 				from: r.LedgerTransactionEntriesTable.transactionId,
 				to: r.LedgerTransactionsTable.id,
@@ -597,6 +637,11 @@ const schemaRelations = defineRelations(
 			}),
 		},
 		LedgerAccountSettlementsTable: {
+			asset: r.one.AssetsTable({
+				from: r.LedgerAccountSettlementsTable.assetId,
+				to: r.AssetsTable.id,
+				optional: false,
+			}),
 			organization: r.one.OrganizationsTable({
 				from: r.LedgerAccountSettlementsTable.organizationId,
 				to: r.OrganizationsTable.id,
@@ -633,11 +678,12 @@ const schemaRelations = defineRelations(
 type LedgerTransactionWithEntriesRow = BuildQueryResult<
 	typeof schemaRelations,
 	(typeof schemaRelations)["LedgerTransactionsTable"],
-	{ with: { entries: true } }
+	{ with: { entries: { with: { asset: true } } } }
 >;
 
 export {
 	// Tables
+	AssetsTable,
 	OrganizationsTable,
 	LedgersTable,
 	LedgerAccountsTable,
@@ -658,6 +704,8 @@ export {
 	ledgerSettlementStatus,
 };
 export type {
+	AssetRow,
+	AssetInsertRow,
 	LedgerAccountInsertRow,
 	LedgerAccountRow,
 	LedgerAccountBalanceMonitorInsertRow,

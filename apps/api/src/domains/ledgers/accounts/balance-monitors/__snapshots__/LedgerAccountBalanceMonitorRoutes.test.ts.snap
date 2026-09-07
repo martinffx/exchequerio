@@ -4,32 +4,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > creates with the existing 200 respo
 {
   "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "alertCondition": [],
-  "balances": [
-    {
-      "amount": 0,
-      "balanceType": "pending",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "posted",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "availableBalance",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-  ],
   "created": "2025-01-01T00:00:00.000Z",
   "description": "Test balance monitor",
   "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
@@ -42,32 +16,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > gets through the Effect service and
 {
   "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "alertCondition": [],
-  "balances": [
-    {
-      "amount": 0,
-      "balanceType": "pending",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "posted",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "availableBalance",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-  ],
   "created": "2025-01-01T00:00:00.000Z",
   "description": "Test balance monitor",
   "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
@@ -81,32 +29,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > lists through the Effect service wi
   {
     "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
     "alertCondition": [],
-    "balances": [
-      {
-        "amount": 0,
-        "balanceType": "pending",
-        "credits": 0,
-        "currency": "USD",
-        "currencyExponent": 2,
-        "debits": 0,
-      },
-      {
-        "amount": 0,
-        "balanceType": "posted",
-        "credits": 0,
-        "currency": "USD",
-        "currencyExponent": 2,
-        "debits": 0,
-      },
-      {
-        "amount": 0,
-        "balanceType": "availableBalance",
-        "credits": 0,
-        "currency": "USD",
-        "currencyExponent": 2,
-        "debits": 0,
-      },
-    ],
     "created": "2025-01-01T00:00:00.000Z",
     "description": "Test balance monitor",
     "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
@@ -174,203 +96,135 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                       },
                       "alertCondition": {
                         "items": {
-                          "properties": {
-                            "field": {
-                              "anyOf": [
-                                {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "field": {
                                   "enum": [
                                     "balance",
                                   ],
                                   "type": "string",
                                 },
-                                {
-                                  "enum": [
-                                    "created",
+                                "operator": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "=",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        "<",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        ">",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        "<=",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        ">=",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        "!=",
+                                      ],
+                                      "type": "string",
+                                    },
                                   ],
+                                },
+                                "value": {
+                                  "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                                  "maxLength": 20,
+                                  "pattern": "^(0|-?[1-9][0-9]*)$",
                                   "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "updated",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "operator": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "!=",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "value": {
-                              "type": "number",
-                            },
-                          },
-                          "required": [
-                            "field",
-                            "operator",
-                            "value",
-                          ],
-                          "type": "object",
-                        },
-                        "type": "array",
-                      },
-                      "balances": {
-                        "description": "The pending, posted, and available balances.",
-                        "items": {
-                          "anyOf": [
-                            {
-                              "properties": {
-                                "amount": {
-                                  "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                  "type": "number",
-                                },
-                                "balanceType": {
-                                  "description": "The sum of all pending AND posted entry amounts.",
-                                  "enum": [
-                                    "pending",
-                                  ],
-                                  "type": "string",
-                                },
-                                "credits": {
-                                  "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                                  "type": "number",
-                                },
-                                "currency": {
-                                  "description": "Currency of the ledger",
-                                  "type": "string",
-                                },
-                                "currencyExponent": {
-                                  "description": "Currency exponent of the ledger",
-                                  "type": "number",
-                                },
-                                "debits": {
-                                  "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                                  "type": "number",
                                 },
                               },
                               "required": [
-                                "balanceType",
-                                "credits",
-                                "debits",
-                                "amount",
-                                "currency",
-                                "currencyExponent",
+                                "field",
+                                "operator",
+                                "value",
                               ],
                               "type": "object",
                             },
                             {
                               "properties": {
-                                "amount": {
-                                  "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                  "type": "number",
-                                },
-                                "balanceType": {
-                                  "description": "The sum of all posted entry amounts.",
-                                  "enum": [
-                                    "posted",
+                                "field": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "created",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        "updated",
+                                      ],
+                                      "type": "string",
+                                    },
                                   ],
-                                  "type": "string",
                                 },
-                                "credits": {
-                                  "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                                  "type": "number",
+                                "operator": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "=",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        "<",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        ">",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        "<=",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        ">=",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        "!=",
+                                      ],
+                                      "type": "string",
+                                    },
+                                  ],
                                 },
-                                "currency": {
-                                  "description": "Currency of the ledger",
-                                  "type": "string",
-                                },
-                                "currencyExponent": {
-                                  "description": "Currency exponent of the ledger",
-                                  "type": "number",
-                                },
-                                "debits": {
-                                  "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                                "value": {
                                   "type": "number",
                                 },
                               },
                               "required": [
-                                "balanceType",
-                                "credits",
-                                "debits",
-                                "amount",
-                                "currency",
-                                "currencyExponent",
-                              ],
-                              "type": "object",
-                            },
-                            {
-                              "properties": {
-                                "amount": {
-                                  "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                  "type": "number",
-                                },
-                                "balanceType": {
-                                  "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                                  "enum": [
-                                    "availableBalance",
-                                  ],
-                                  "type": "string",
-                                },
-                                "credits": {
-                                  "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                                  "type": "number",
-                                },
-                                "currency": {
-                                  "description": "Currency of the ledger",
-                                  "type": "string",
-                                },
-                                "currencyExponent": {
-                                  "description": "Currency exponent of the ledger",
-                                  "type": "number",
-                                },
-                                "debits": {
-                                  "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                                  "type": "number",
-                                },
-                              },
-                              "required": [
-                                "balanceType",
-                                "credits",
-                                "debits",
-                                "amount",
-                                "currency",
-                                "currencyExponent",
+                                "field",
+                                "operator",
+                                "value",
                               ],
                               "type": "object",
                             },
@@ -408,7 +262,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                       "id",
                       "accountId",
                       "alertCondition",
-                      "balances",
                       "lockVersion",
                       "created",
                       "updated",
@@ -742,79 +595,139 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                   },
                   "alertCondition": {
                     "items": {
-                      "properties": {
-                        "field": {
-                          "anyOf": [
-                            {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "field": {
                               "enum": [
                                 "balance",
                               ],
                               "type": "string",
                             },
-                            {
-                              "enum": [
-                                "created",
+                            "operator": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "!=",
+                                  ],
+                                  "type": "string",
+                                },
                               ],
+                            },
+                            "value": {
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
                               "type": "string",
                             },
-                            {
-                              "enum": [
-                                "updated",
-                              ],
-                              "type": "string",
-                            },
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
                           ],
+                          "type": "object",
                         },
-                        "operator": {
-                          "anyOf": [
-                            {
-                              "enum": [
-                                "=",
+                        {
+                          "properties": {
+                            "field": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "created",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "updated",
+                                  ],
+                                  "type": "string",
+                                },
                               ],
-                              "type": "string",
                             },
-                            {
-                              "enum": [
-                                "<",
+                            "operator": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "!=",
+                                  ],
+                                  "type": "string",
+                                },
                               ],
-                              "type": "string",
                             },
-                            {
-                              "enum": [
-                                ">",
-                              ],
-                              "type": "string",
+                            "value": {
+                              "type": "number",
                             },
-                            {
-                              "enum": [
-                                "<=",
-                              ],
-                              "type": "string",
-                            },
-                            {
-                              "enum": [
-                                ">=",
-                              ],
-                              "type": "string",
-                            },
-                            {
-                              "enum": [
-                                "!=",
-                              ],
-                              "type": "string",
-                            },
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
                           ],
+                          "type": "object",
                         },
-                        "value": {
-                          "type": "number",
-                        },
-                      },
-                      "required": [
-                        "field",
-                        "operator",
-                        "value",
                       ],
-                      "type": "object",
                     },
                     "type": "array",
                   },
@@ -854,203 +767,135 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     },
                     "alertCondition": {
                       "items": {
-                        "properties": {
-                          "field": {
-                            "anyOf": [
-                              {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "field": {
                                 "enum": [
                                   "balance",
                                 ],
                                 "type": "string",
                               },
-                              {
-                                "enum": [
-                                  "created",
+                              "operator": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "!=",
+                                    ],
+                                    "type": "string",
+                                  },
                                 ],
+                              },
+                              "value": {
+                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                                "maxLength": 20,
+                                "pattern": "^(0|-?[1-9][0-9]*)$",
                                 "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "updated",
-                                ],
-                                "type": "string",
-                              },
-                            ],
-                          },
-                          "operator": {
-                            "anyOf": [
-                              {
-                                "enum": [
-                                  "=",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "<",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  ">",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "<=",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  ">=",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "!=",
-                                ],
-                                "type": "string",
-                              },
-                            ],
-                          },
-                          "value": {
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "field",
-                          "operator",
-                          "value",
-                        ],
-                        "type": "object",
-                      },
-                      "type": "array",
-                    },
-                    "balances": {
-                      "description": "The pending, posted, and available balances.",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "properties": {
-                              "amount": {
-                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                "type": "number",
-                              },
-                              "balanceType": {
-                                "description": "The sum of all pending AND posted entry amounts.",
-                                "enum": [
-                                  "pending",
-                                ],
-                                "type": "string",
-                              },
-                              "credits": {
-                                "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                                "type": "number",
-                              },
-                              "currency": {
-                                "description": "Currency of the ledger",
-                                "type": "string",
-                              },
-                              "currencyExponent": {
-                                "description": "Currency exponent of the ledger",
-                                "type": "number",
-                              },
-                              "debits": {
-                                "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                                "type": "number",
                               },
                             },
                             "required": [
-                              "balanceType",
-                              "credits",
-                              "debits",
-                              "amount",
-                              "currency",
-                              "currencyExponent",
+                              "field",
+                              "operator",
+                              "value",
                             ],
                             "type": "object",
                           },
                           {
                             "properties": {
-                              "amount": {
-                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                "type": "number",
-                              },
-                              "balanceType": {
-                                "description": "The sum of all posted entry amounts.",
-                                "enum": [
-                                  "posted",
+                              "field": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "created",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "updated",
+                                    ],
+                                    "type": "string",
+                                  },
                                 ],
-                                "type": "string",
                               },
-                              "credits": {
-                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                                "type": "number",
+                              "operator": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "!=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                ],
                               },
-                              "currency": {
-                                "description": "Currency of the ledger",
-                                "type": "string",
-                              },
-                              "currencyExponent": {
-                                "description": "Currency exponent of the ledger",
-                                "type": "number",
-                              },
-                              "debits": {
-                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                              "value": {
                                 "type": "number",
                               },
                             },
                             "required": [
-                              "balanceType",
-                              "credits",
-                              "debits",
-                              "amount",
-                              "currency",
-                              "currencyExponent",
-                            ],
-                            "type": "object",
-                          },
-                          {
-                            "properties": {
-                              "amount": {
-                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                "type": "number",
-                              },
-                              "balanceType": {
-                                "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                                "enum": [
-                                  "availableBalance",
-                                ],
-                                "type": "string",
-                              },
-                              "credits": {
-                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                                "type": "number",
-                              },
-                              "currency": {
-                                "description": "Currency of the ledger",
-                                "type": "string",
-                              },
-                              "currencyExponent": {
-                                "description": "Currency exponent of the ledger",
-                                "type": "number",
-                              },
-                              "debits": {
-                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                                "type": "number",
-                              },
-                            },
-                            "required": [
-                              "balanceType",
-                              "credits",
-                              "debits",
-                              "amount",
-                              "currency",
-                              "currencyExponent",
+                              "field",
+                              "operator",
+                              "value",
                             ],
                             "type": "object",
                           },
@@ -1088,7 +933,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     "id",
                     "accountId",
                     "alertCondition",
-                    "balances",
                     "lockVersion",
                     "created",
                     "updated",
@@ -1871,203 +1715,135 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     },
                     "alertCondition": {
                       "items": {
-                        "properties": {
-                          "field": {
-                            "anyOf": [
-                              {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "field": {
                                 "enum": [
                                   "balance",
                                 ],
                                 "type": "string",
                               },
-                              {
-                                "enum": [
-                                  "created",
+                              "operator": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "!=",
+                                    ],
+                                    "type": "string",
+                                  },
                                 ],
+                              },
+                              "value": {
+                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                                "maxLength": 20,
+                                "pattern": "^(0|-?[1-9][0-9]*)$",
                                 "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "updated",
-                                ],
-                                "type": "string",
-                              },
-                            ],
-                          },
-                          "operator": {
-                            "anyOf": [
-                              {
-                                "enum": [
-                                  "=",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "<",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  ">",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "<=",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  ">=",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "!=",
-                                ],
-                                "type": "string",
-                              },
-                            ],
-                          },
-                          "value": {
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "field",
-                          "operator",
-                          "value",
-                        ],
-                        "type": "object",
-                      },
-                      "type": "array",
-                    },
-                    "balances": {
-                      "description": "The pending, posted, and available balances.",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "properties": {
-                              "amount": {
-                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                "type": "number",
-                              },
-                              "balanceType": {
-                                "description": "The sum of all pending AND posted entry amounts.",
-                                "enum": [
-                                  "pending",
-                                ],
-                                "type": "string",
-                              },
-                              "credits": {
-                                "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                                "type": "number",
-                              },
-                              "currency": {
-                                "description": "Currency of the ledger",
-                                "type": "string",
-                              },
-                              "currencyExponent": {
-                                "description": "Currency exponent of the ledger",
-                                "type": "number",
-                              },
-                              "debits": {
-                                "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                                "type": "number",
                               },
                             },
                             "required": [
-                              "balanceType",
-                              "credits",
-                              "debits",
-                              "amount",
-                              "currency",
-                              "currencyExponent",
+                              "field",
+                              "operator",
+                              "value",
                             ],
                             "type": "object",
                           },
                           {
                             "properties": {
-                              "amount": {
-                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                "type": "number",
-                              },
-                              "balanceType": {
-                                "description": "The sum of all posted entry amounts.",
-                                "enum": [
-                                  "posted",
+                              "field": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "created",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "updated",
+                                    ],
+                                    "type": "string",
+                                  },
                                 ],
-                                "type": "string",
                               },
-                              "credits": {
-                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                                "type": "number",
+                              "operator": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "!=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                ],
                               },
-                              "currency": {
-                                "description": "Currency of the ledger",
-                                "type": "string",
-                              },
-                              "currencyExponent": {
-                                "description": "Currency exponent of the ledger",
-                                "type": "number",
-                              },
-                              "debits": {
-                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                              "value": {
                                 "type": "number",
                               },
                             },
                             "required": [
-                              "balanceType",
-                              "credits",
-                              "debits",
-                              "amount",
-                              "currency",
-                              "currencyExponent",
-                            ],
-                            "type": "object",
-                          },
-                          {
-                            "properties": {
-                              "amount": {
-                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                "type": "number",
-                              },
-                              "balanceType": {
-                                "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                                "enum": [
-                                  "availableBalance",
-                                ],
-                                "type": "string",
-                              },
-                              "credits": {
-                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                                "type": "number",
-                              },
-                              "currency": {
-                                "description": "Currency of the ledger",
-                                "type": "string",
-                              },
-                              "currencyExponent": {
-                                "description": "Currency exponent of the ledger",
-                                "type": "number",
-                              },
-                              "debits": {
-                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                                "type": "number",
-                              },
-                            },
-                            "required": [
-                              "balanceType",
-                              "credits",
-                              "debits",
-                              "amount",
-                              "currency",
-                              "currencyExponent",
+                              "field",
+                              "operator",
+                              "value",
                             ],
                             "type": "object",
                           },
@@ -2105,7 +1881,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     "id",
                     "accountId",
                     "alertCondition",
-                    "balances",
                     "lockVersion",
                     "created",
                     "updated",
@@ -2477,79 +2252,139 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                   },
                   "alertCondition": {
                     "items": {
-                      "properties": {
-                        "field": {
-                          "anyOf": [
-                            {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "field": {
                               "enum": [
                                 "balance",
                               ],
                               "type": "string",
                             },
-                            {
-                              "enum": [
-                                "created",
+                            "operator": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "!=",
+                                  ],
+                                  "type": "string",
+                                },
                               ],
+                            },
+                            "value": {
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
                               "type": "string",
                             },
-                            {
-                              "enum": [
-                                "updated",
-                              ],
-                              "type": "string",
-                            },
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
                           ],
+                          "type": "object",
                         },
-                        "operator": {
-                          "anyOf": [
-                            {
-                              "enum": [
-                                "=",
+                        {
+                          "properties": {
+                            "field": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "created",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "updated",
+                                  ],
+                                  "type": "string",
+                                },
                               ],
-                              "type": "string",
                             },
-                            {
-                              "enum": [
-                                "<",
+                            "operator": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "<=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    ">=",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "!=",
+                                  ],
+                                  "type": "string",
+                                },
                               ],
-                              "type": "string",
                             },
-                            {
-                              "enum": [
-                                ">",
-                              ],
-                              "type": "string",
+                            "value": {
+                              "type": "number",
                             },
-                            {
-                              "enum": [
-                                "<=",
-                              ],
-                              "type": "string",
-                            },
-                            {
-                              "enum": [
-                                ">=",
-                              ],
-                              "type": "string",
-                            },
-                            {
-                              "enum": [
-                                "!=",
-                              ],
-                              "type": "string",
-                            },
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
                           ],
+                          "type": "object",
                         },
-                        "value": {
-                          "type": "number",
-                        },
-                      },
-                      "required": [
-                        "field",
-                        "operator",
-                        "value",
                       ],
-                      "type": "object",
                     },
                     "type": "array",
                   },
@@ -2589,203 +2424,135 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     },
                     "alertCondition": {
                       "items": {
-                        "properties": {
-                          "field": {
-                            "anyOf": [
-                              {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "field": {
                                 "enum": [
                                   "balance",
                                 ],
                                 "type": "string",
                               },
-                              {
-                                "enum": [
-                                  "created",
+                              "operator": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "!=",
+                                    ],
+                                    "type": "string",
+                                  },
                                 ],
+                              },
+                              "value": {
+                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                                "maxLength": 20,
+                                "pattern": "^(0|-?[1-9][0-9]*)$",
                                 "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "updated",
-                                ],
-                                "type": "string",
-                              },
-                            ],
-                          },
-                          "operator": {
-                            "anyOf": [
-                              {
-                                "enum": [
-                                  "=",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "<",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  ">",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "<=",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  ">=",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "!=",
-                                ],
-                                "type": "string",
-                              },
-                            ],
-                          },
-                          "value": {
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "field",
-                          "operator",
-                          "value",
-                        ],
-                        "type": "object",
-                      },
-                      "type": "array",
-                    },
-                    "balances": {
-                      "description": "The pending, posted, and available balances.",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "properties": {
-                              "amount": {
-                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                "type": "number",
-                              },
-                              "balanceType": {
-                                "description": "The sum of all pending AND posted entry amounts.",
-                                "enum": [
-                                  "pending",
-                                ],
-                                "type": "string",
-                              },
-                              "credits": {
-                                "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                                "type": "number",
-                              },
-                              "currency": {
-                                "description": "Currency of the ledger",
-                                "type": "string",
-                              },
-                              "currencyExponent": {
-                                "description": "Currency exponent of the ledger",
-                                "type": "number",
-                              },
-                              "debits": {
-                                "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                                "type": "number",
                               },
                             },
                             "required": [
-                              "balanceType",
-                              "credits",
-                              "debits",
-                              "amount",
-                              "currency",
-                              "currencyExponent",
+                              "field",
+                              "operator",
+                              "value",
                             ],
                             "type": "object",
                           },
                           {
                             "properties": {
-                              "amount": {
-                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                "type": "number",
-                              },
-                              "balanceType": {
-                                "description": "The sum of all posted entry amounts.",
-                                "enum": [
-                                  "posted",
+                              "field": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "created",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "updated",
+                                    ],
+                                    "type": "string",
+                                  },
                                 ],
-                                "type": "string",
                               },
-                              "credits": {
-                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                                "type": "number",
+                              "operator": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "<=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      ">=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "!=",
+                                    ],
+                                    "type": "string",
+                                  },
+                                ],
                               },
-                              "currency": {
-                                "description": "Currency of the ledger",
-                                "type": "string",
-                              },
-                              "currencyExponent": {
-                                "description": "Currency exponent of the ledger",
-                                "type": "number",
-                              },
-                              "debits": {
-                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
+                              "value": {
                                 "type": "number",
                               },
                             },
                             "required": [
-                              "balanceType",
-                              "credits",
-                              "debits",
-                              "amount",
-                              "currency",
-                              "currencyExponent",
-                            ],
-                            "type": "object",
-                          },
-                          {
-                            "properties": {
-                              "amount": {
-                                "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                                "type": "number",
-                              },
-                              "balanceType": {
-                                "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                                "enum": [
-                                  "availableBalance",
-                                ],
-                                "type": "string",
-                              },
-                              "credits": {
-                                "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                                "type": "number",
-                              },
-                              "currency": {
-                                "description": "Currency of the ledger",
-                                "type": "string",
-                              },
-                              "currencyExponent": {
-                                "description": "Currency exponent of the ledger",
-                                "type": "number",
-                              },
-                              "debits": {
-                                "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                                "type": "number",
-                              },
-                            },
-                            "required": [
-                              "balanceType",
-                              "credits",
-                              "debits",
-                              "amount",
-                              "currency",
-                              "currencyExponent",
+                              "field",
+                              "operator",
+                              "value",
                             ],
                             "type": "object",
                           },
@@ -2823,7 +2590,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     "id",
                     "accountId",
                     "alertCondition",
-                    "balances",
                     "lockVersion",
                     "created",
                     "updated",
@@ -3225,32 +2991,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > updates with the existing response 
 {
   "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
   "alertCondition": [],
-  "balances": [
-    {
-      "amount": 0,
-      "balanceType": "pending",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "posted",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-    {
-      "amount": 0,
-      "balanceType": "availableBalance",
-      "credits": 0,
-      "currency": "USD",
-      "currencyExponent": 2,
-      "debits": 0,
-    },
-  ],
   "created": "2025-01-01T00:00:00.000Z",
   "description": "Test balance monitor",
   "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",

@@ -99,6 +99,35 @@ afterEach(async () => {
 });
 
 describe("LedgerAccountBalanceMonitorRoutes", () => {
+	it.each(["POST", "PUT"] as const)("validates exact balance amounts for %s", async method => {
+		const implementation = service();
+		const { server } = await buildRouteServer(implementation);
+		const url = method === "POST" ? collectionUrl : itemUrl;
+		for (const value of [1000, "01", "1.5", "9223372036854775808", "-9223372036854775809"]) {
+			const response = await server.inject({
+				method,
+				url,
+				headers: authorize(),
+				payload: { ...request, alertCondition: [{ field: "balance", operator: "<", value }] },
+			});
+			expect(response.statusCode).toBe(400);
+		}
+		for (const condition of [
+			{ field: "balance", operator: "<", value: "9007199254740993" },
+			{ field: "balance", operator: "<", value: "-9223372036854775808" },
+			{ field: "created", operator: "<", value: 1000 },
+		]) {
+			const response = await server.inject({
+				method,
+				url,
+				headers: authorize(),
+				payload: { ...request, alertCondition: [condition] },
+			});
+			expect(response.statusCode).toBe(200);
+			expect(response.json()).not.toHaveProperty("balances");
+		}
+	});
+
 	it.each([
 		['{"period":"monthly"}', { period: "monthly" }],
 		["{}", {}],
@@ -117,7 +146,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 				accountId: encodeUuid(accountId),
 				name: monitor.name,
 				description: "Historical monitor",
-				alertThreshold: "0",
+				alertThreshold: 0n,
 				isActive: 1,
 				created: monitor.created.toJSDate(),
 				updated: monitor.updated.toJSDate(),

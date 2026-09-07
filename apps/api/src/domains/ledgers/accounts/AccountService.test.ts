@@ -1,3 +1,5 @@
+import { TypeID } from "typeid-js";
+import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +13,10 @@ import { LedgerAccountRepoTag } from "./LedgerAccountRepo";
 import { AccountService, AccountServiceTag, accountServiceLayer } from "./AccountService";
 import { LedgerAccount } from "./LedgerAccount";
 
+const asset = { assetId: new TypeID("ast").toString(), assetCode: "USD", minorUnitExponent: 2 };
+const assetService = {
+	resolveAssets: vi.fn(() => Effect.succeed([asset])),
+} as unknown as AssetService;
 const organizationId = newOrgID();
 const ledgerId = newLedgerID();
 const accountId = newLedgerAccountID();
@@ -31,8 +37,9 @@ const account = LedgerAccount.fromCreateRequest(
 	{
 		name: "Cash",
 		normalBalance: "debit",
-		currencyCode: "USD",
+		assetCode: "USD",
 	},
+	asset,
 	created
 );
 // oxlint-disable-next-line unicorn/no-array-callback-reference -- Effect Option constructor, not an iterator.
@@ -55,7 +62,11 @@ const parent = vi.mocked<LedgerService>({
 const runtime = ManagedRuntime.make(
 	accountServiceLayer.pipe(
 		Layer.provide(
-			Layer.merge(Layer.succeed(LedgerAccountRepoTag, repo), Layer.succeed(LedgerServiceTag, parent))
+			Layer.mergeAll(
+				Layer.succeed(LedgerAccountRepoTag, repo),
+				Layer.succeed(LedgerServiceTag, parent),
+				Layer.succeed(AssetServiceTag, assetService)
+			)
 		)
 	)
 );
@@ -88,7 +99,7 @@ describe("AccountService", () => {
 				name: "Broker position",
 				description: "Custody",
 				normalBalance: "credit" as const,
-				currencyCode: "US0378331005",
+				assetCode: "US0378331005",
 				metadata: { externalId: "position-42" },
 			},
 		},
@@ -98,17 +109,17 @@ describe("AccountService", () => {
 				name: "Cash",
 				description: undefined,
 				normalBalance: "debit" as const,
-				currencyCode: "USD",
+				assetCode: "USD",
 				metadata: undefined,
 			},
 		},
 		{
-			name: "case-preserved currency code",
+			name: "resolved Asset code",
 			request: {
 				name: "Lowercase code",
 				description: undefined,
 				normalBalance: "debit" as const,
-				currencyCode: "usd",
+				assetCode: "usd",
 				metadata: undefined,
 			},
 		},
@@ -125,7 +136,7 @@ describe("AccountService", () => {
 			name: request.name,
 			description: request.description,
 			normalBalance: request.normalBalance,
-			currency: request.currencyCode,
+			...asset,
 			metadata: request.metadata,
 			lockVersion: 1,
 		});
@@ -134,11 +145,12 @@ describe("AccountService", () => {
 		expect(DateTime.isDateTime(created.updated)).toBe(true);
 		expect(created.updated).toEqual(created.created);
 		expect(created.balances).toEqual([
-			{ balanceType: "pending", amount: 0, credits: 0, debits: 0 },
-			{ balanceType: "posted", amount: 0, credits: 0, debits: 0 },
-			{ balanceType: "availableBalance", amount: 0, credits: 0, debits: 0 },
+			{ balanceType: "pending", amount: 0n, credits: 0n, debits: 0n },
+			{ balanceType: "posted", amount: 0n, credits: 0n, debits: 0n },
+			{ balanceType: "availableBalance", amount: 0n, credits: 0n, debits: 0n },
 		]);
 		expect(parent.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
+		expect(assetService.resolveAssets).toHaveBeenCalledWith(organizationId, [request]);
 		expect(repo.createAccount).toHaveBeenCalledWith(created);
 		expect(vi.mocked(repo.createAccount).mock.calls[0]?.[0]).toBeInstanceOf(LedgerAccount);
 	});
@@ -158,7 +170,7 @@ describe("AccountService", () => {
 				ledgerId,
 				name: "Operating Cash",
 				normalBalance: account.normalBalance,
-				currency: account.currency,
+				assetId: account.assetId,
 				created: account.created,
 				lockVersion: 1,
 			})

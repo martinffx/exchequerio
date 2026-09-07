@@ -32,6 +32,7 @@ describe("LedgerAccountCategoryEntity ownership", () => {
 		expect(record.ledgerId).toBe(ledgerId.toUUID());
 		expect(restored.toResponse().id).toBe(entity.id.toString());
 		expect(restored.toResponse()).not.toHaveProperty("organizationId");
+		expect(restored.toResponse()).not.toHaveProperty("balances");
 	});
 });
 

@@ -4,27 +4,31 @@ import { describe, expect, it } from "vitest";
 
 import { newLedgerAccountID, newLedgerID, newLedgerTransactionID, newOrgID } from "@/lib/ids";
 import { LedgerTransaction } from "./LedgerTransaction";
-import type { TransactionCreateRequest } from "./LedgerTransactionSchema";
+import type { ResolvedTransactionCreateRequest } from "./LedgerTransactionSchema";
 
 const created = DateTime.fromISO("2026-09-01T12:00:00Z");
-const request: TransactionCreateRequest = {
+const request: ResolvedTransactionCreateRequest = {
 	status: "pending",
 	ledgerEntries: [
 		{
 			accountId: newLedgerAccountID().toString(),
 			direction: "debit",
-			amount: 100,
-			currencyCode: "EUR",
+			amount: "100",
+			assetId: "ast_00000000000000000000000001",
+			assetCode: "EUR",
+			minorUnitExponent: 2,
 		},
 		{
 			accountId: newLedgerAccountID().toString(),
 			direction: "credit",
-			amount: 100,
-			currencyCode: "EUR",
+			amount: "100",
+			assetId: "ast_00000000000000000000000001",
+			assetCode: "EUR",
+			minorUnitExponent: 2,
 		},
 	],
 };
-const create = (overrides: Partial<TransactionCreateRequest> = {}) =>
+const create = (overrides: Partial<ResolvedTransactionCreateRequest> = {}) =>
 	Effect.runSync(
 		LedgerTransaction.fromCreateRequest(
 			newLedgerTransactionID(),
@@ -75,4 +79,29 @@ describe("Transaction effective time", () => {
 		);
 		expect(decoded.effectiveAt.toMillis()).toBe(updated.effectiveAt.toMillis());
 	});
+});
+
+it("preserves exact entry amounts above the safe integer limit and balances by Asset identity", () => {
+	const transaction = create({
+		ledgerEntries: request.ledgerEntries.map(entry => ({ ...entry, amount: "9007199254740993" })),
+	});
+	expect(transaction.toResponse().ledgerEntries.map(entry => entry.amount)).toEqual([
+		"9007199254740993",
+		"9007199254740993",
+	]);
+	expect(() =>
+		create({
+			ledgerEntries: request.ledgerEntries.map((entry, index) => ({
+				...entry,
+				assetId: `ast_0000000000000000000000000${index + 1}`,
+			})),
+		})
+	).toThrow("balance by Asset");
+});
+
+it("balances exact intermediate totals larger than int64 across distinct Accounts", () => {
+	const entries = request.ledgerEntries
+		.flatMap(entry => [entry, { ...entry, accountId: newLedgerAccountID().toString() }])
+		.map(entry => ({ ...entry, amount: "9223372036854775807" }));
+	expect(create({ ledgerEntries: entries }).toResponse().ledgerEntries).toHaveLength(4);
 });

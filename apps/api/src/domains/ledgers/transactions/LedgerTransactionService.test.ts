@@ -1,3 +1,5 @@
+import { NotFoundError } from "@/lib/errors";
+import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { Settings } from "luxon";
 import { TypeID } from "typeid-js";
@@ -47,8 +49,8 @@ const createRequest: TransactionCreateRequest = {
 	status: "pending",
 	description: "Transfer",
 	ledgerEntries: [
-		{ accountId: debitAccountId.toString(), direction: "debit", amount: 100, currencyCode: "EUR" },
-		{ accountId: creditAccountId.toString(), direction: "credit", amount: 100, currencyCode: "EUR" },
+		{ accountId: debitAccountId.toString(), direction: "debit", amount: "100", assetCode: "EUR" },
+		{ accountId: creditAccountId.toString(), direction: "credit", amount: "100", assetCode: "EUR" },
 	],
 };
 
@@ -62,7 +64,15 @@ const transaction = (() => {
 	Settings.now = () => Date.parse("2026-08-15T08:00:00.000Z");
 	try {
 		return Effect.runSync(
-			LedgerTransaction.fromCreateRequest(transactionId, organizationId, ledgerId, createRequest)
+			LedgerTransaction.fromCreateRequest(transactionId, organizationId, ledgerId, {
+				...createRequest,
+				ledgerEntries: createRequest.ledgerEntries.map(entry => ({
+					...entry,
+					assetId: "ast_00000000000000000000000001",
+					assetCode: "EUR",
+					minorUnitExponent: 2,
+				})),
+			})
 		);
 	} finally {
 		Settings.now = previousNow;
@@ -113,7 +123,19 @@ const idempotency = {
 const ledgerService = {
 	getLedger: vi.fn<LedgerService["getLedger"]>(() => Effect.succeed({} as never)),
 } as unknown as LedgerService;
+const assets = {
+	resolveAssets: vi.fn<AssetService["resolveAssets"]>((_org, selectors) =>
+		Effect.succeed(
+			selectors.map(() => ({
+				assetId: "ast_00000000000000000000000001",
+				assetCode: "EUR",
+				minorUnitExponent: 2,
+			}))
+		)
+	),
+};
 const dependencies = Layer.mergeAll(
+	Layer.succeed(AssetServiceTag, assets as unknown as AssetService),
 	Layer.succeed(LedgerTransactionRepoTag, repository),
 	Layer.succeed(IdempotencyServiceTag, idempotency),
 	Layer.succeed(LedgerServiceTag, ledgerService)
@@ -153,6 +175,7 @@ describe("TransactionService", () => {
 		);
 
 		expect(found).toBe(transaction);
+		expect(assets.resolveAssets).not.toHaveBeenCalled();
 		expect(repository.getTransaction).toHaveBeenCalledWith(organizationId, ledgerId, transactionId);
 		expect(repository.createTransaction).not.toHaveBeenCalled();
 	});
@@ -242,6 +265,7 @@ describe("TransactionService", () => {
 			)
 		).resolves.toBe(transaction);
 		expect(repository.createTransaction).toHaveBeenCalledTimes(5);
+		expect(assets.resolveAssets).toHaveBeenCalledOnce();
 		const calls = repository.createTransaction.mock.calls;
 		expect(calls.every(call => call[0] === calls[0]?.[0])).toBe(true);
 	});
@@ -263,8 +287,8 @@ describe("TransactionService", () => {
 		const ledgerEntries = Array.from({ length: 201 }, (_, index) => ({
 			accountId: newLedgerAccountID().toString(),
 			direction: index === 0 ? ("debit" as const) : ("credit" as const),
-			amount: 1,
-			currencyCode: "EUR",
+			amount: "1",
+			assetCode: "EUR",
 		}));
 
 		await expect(
@@ -288,7 +312,14 @@ describe("TransactionService", () => {
 			organizationId,
 			ledgerId,
 			transactionId,
-			updateRequest,
+			{
+				...updateRequest,
+				ledgerEntries: updateRequest.ledgerEntries.map(entry => ({
+					...entry,
+					assetId: "ast_00000000000000000000000001",
+					minorUnitExponent: 2,
+				})),
+			},
 			expect.anything(),
 			expect.any(Array)
 		);
@@ -335,4 +366,20 @@ describe("TransactionService", () => {
 		expect(repository.getTransaction).toHaveBeenCalledWith(organizationId, ledgerId, transactionId);
 		expect(idempotency.claim).not.toHaveBeenCalled();
 	});
+});
+
+it("releases a fresh claim when Asset resolution fails", async () => {
+	const failure = new NotFoundError("Asset not found");
+	assets.resolveAssets.mockReturnValueOnce(Effect.fail(failure));
+	await expect(
+		runtime.runPromise(
+			service.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest)
+		)
+	).rejects.toBe(failure);
+	expect(idempotency.release).toHaveBeenCalledWith(
+		organizationId,
+		"transactions.create",
+		idempotencyKey
+	);
+	expect(repository.createTransaction).not.toHaveBeenCalled();
 });

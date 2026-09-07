@@ -1,6 +1,9 @@
+import { TypeID } from "typeid-js";
 import { Effect } from "effect";
 import { DateTime } from "luxon";
 
+import { parseAmount } from "@/lib/amounts";
+import type { AssetSummary } from "@/lib/AssetSchema";
 import type { Metadata } from "@/lib/schema";
 import {
 	encodeUuid,
@@ -22,7 +25,7 @@ import type { LedgerTransactionEntryInsertRow, LedgerTransactionEntryRow } from 
 
 import { TransactionValidationFailure } from "./LedgerTransactionErrors";
 import type {
-	TransactionRequestEntry as LedgerTransactionEntryRequest,
+	ResolvedTransactionRequestEntry as LedgerTransactionEntryRequest,
 	TransactionResponseEntry,
 } from "./LedgerTransactionSchema";
 
@@ -32,8 +35,10 @@ type LedgerTransactionEntryOptions = Readonly<{
 	id: LedgerTransactionEntryID;
 	accountId: LedgerAccountID;
 	direction: LedgerTransactionEntryDirection;
-	amount: number;
-	currency: string;
+	amount: bigint;
+	assetId: string;
+	assetCode: string;
+	minorUnitExponent: number;
 	status: LedgerTransactionEntryStatus;
 	metadata?: Metadata;
 	created: DateTime;
@@ -54,8 +59,10 @@ class LedgerTransactionEntry {
 	readonly id: LedgerTransactionEntryID;
 	readonly accountId: LedgerAccountID;
 	readonly direction: LedgerTransactionEntryDirection;
-	readonly amount: number;
-	readonly currency: string;
+	readonly amount: bigint;
+	readonly assetId: string;
+	readonly assetCode: string;
+	readonly minorUnitExponent: number;
 	readonly status: LedgerTransactionEntryStatus;
 	readonly metadata?: Metadata;
 	readonly created: DateTime;
@@ -65,7 +72,9 @@ class LedgerTransactionEntry {
 		this.accountId = options.accountId;
 		this.direction = options.direction;
 		this.amount = options.amount;
-		this.currency = options.currency;
+		this.assetId = options.assetId;
+		this.assetCode = options.assetCode;
+		this.minorUnitExponent = options.minorUnitExponent;
 		this.status = options.status;
 		this.metadata = options.metadata;
 		this.created = options.created;
@@ -93,18 +102,23 @@ class LedgerTransactionEntry {
 			Effect.mapError(
 				() => new TransactionValidationFailure(`Invalid Account ID: ${request.accountId}`)
 			),
-			Effect.map(
-				accountId =>
-					new LedgerTransactionEntry({
-						id,
-						accountId,
-						direction: request.direction,
-						amount: request.amount,
-						currency: request.currencyCode,
-						status,
-						metadata: request.metadata,
-						created,
-					})
+			Effect.flatMap(accountId =>
+				Effect.try({
+					try: () =>
+						new LedgerTransactionEntry({
+							id,
+							accountId,
+							direction: request.direction,
+							amount: parseAmount(request.amount),
+							assetId: request.assetId,
+							assetCode: request.assetCode,
+							minorUnitExponent: request.minorUnitExponent,
+							status,
+							metadata: request.metadata,
+							created,
+						}),
+					catch: cause => new TransactionValidationFailure("Invalid Entry amount", { cause }),
+				})
 			)
 		);
 	}
@@ -115,7 +129,10 @@ class LedgerTransactionEntry {
 	 * @param row - Entry row inferred from the Drizzle schema.
 	 * @returns An Effect containing the Entry or a persistence decoding error.
 	 */
-	static fromRow(row: LedgerTransactionEntryRow): Effect.Effect<LedgerTransactionEntry, Error> {
+	static fromRow(
+		row: LedgerTransactionEntryRow,
+		asset: AssetSummary
+	): Effect.Effect<LedgerTransactionEntry, Error> {
 		return Effect.all({
 			id: parseUuid<"lte", LedgerTransactionEntryID>("lte", row.id),
 			accountId: parseUuid<"lat", LedgerAccountID>("lat", row.accountId),
@@ -128,7 +145,8 @@ class LedgerTransactionEntry {
 						...decoded,
 						direction: row.direction,
 						amount: row.amount,
-						currency: row.currency,
+						...asset,
+						assetId: TypeID.fromUUID("ast", row.assetId).toString(),
 						status: row.status,
 					})
 			)
@@ -150,7 +168,7 @@ class LedgerTransactionEntry {
 			ledgerId: encodeUuid(transaction.ledgerId),
 			direction: this.direction,
 			amount: this.amount,
-			currency: this.currency,
+			assetId: encodeUuid(TypeID.fromString(this.assetId)),
 			status: this.status,
 			metadata: encodeMetadata(this.metadata),
 			created: this.created.toJSDate(),
@@ -162,8 +180,10 @@ class LedgerTransactionEntry {
 			id: this.id.toString(),
 			accountId: this.accountId.toString(),
 			direction: this.direction,
-			amount: this.amount,
-			currencyCode: this.currency,
+			amount: this.amount.toString(),
+			assetId: this.assetId,
+			assetCode: this.assetCode,
+			minorUnitExponent: this.minorUnitExponent,
 			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
 		};
 	}

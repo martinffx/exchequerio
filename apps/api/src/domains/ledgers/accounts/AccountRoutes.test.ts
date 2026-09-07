@@ -16,6 +16,7 @@ import { LedgerAccount } from "./LedgerAccount";
 const organizationId = new TypeID("org") as OrgID;
 const ledgerId = new TypeID("lgr") as LedgerID;
 const accountId = new TypeID("lat") as LedgerAccountID;
+const asset = { assetId: new TypeID("ast").toString(), assetCode: "USD", minorUnitExponent: 2 };
 const accountRow: LedgerAccountRow = {
 	id: accountId.toUUID(),
 	organizationId: organizationId.toUUID(),
@@ -23,38 +24,41 @@ const accountRow: LedgerAccountRow = {
 	name: "Cash",
 	description: "Operating cash",
 	normalBalance: "debit",
-	currencyCode: "USD",
-	pendingAmount: -5,
-	postedAmount: 20,
-	availableAmount: 15,
-	pendingCredits: 10,
-	pendingDebits: 5,
-	postedCredits: 5,
-	postedDebits: 25,
-	availableCredits: 10,
-	availableDebits: 25,
+	assetId: TypeID.fromString(asset.assetId).toUUID(),
+	pendingAmount: -5n,
+	postedAmount: 20n,
+	availableAmount: 15n,
+	pendingCredits: 10n,
+	pendingDebits: 5n,
+	postedCredits: 5n,
+	postedDebits: 25n,
+	availableCredits: 10n,
+	availableDebits: 25n,
 	lockVersion: 1,
 	metadata: JSON.stringify({ externalId: "cash-42" }),
 	created: new Date("2026-08-09T10:00:00.000Z"),
 	updated: new Date("2026-08-09T11:00:00.000Z"),
 };
-const account = Option.getOrThrow(Effect.runSync(LedgerAccount.fromRow(accountRow)));
+const account = Option.getOrThrow(Effect.runSync(LedgerAccount.fromRow(accountRow, asset)));
 
 const creditNormalAccount = Option.getOrThrow(
 	Effect.runSync(
-		LedgerAccount.fromRow({
-			...accountRow,
-			normalBalance: "credit",
-			pendingAmount: -15,
-			postedAmount: -20,
-			availableAmount: -10,
-			pendingCredits: 5,
-			pendingDebits: 20,
-			postedCredits: 10,
-			postedDebits: 30,
-			availableCredits: 10,
-			availableDebits: 20,
-		})
+		LedgerAccount.fromRow(
+			{
+				...accountRow,
+				normalBalance: "credit",
+				pendingAmount: -15n,
+				postedAmount: -20n,
+				availableAmount: -10n,
+				pendingCredits: 5n,
+				pendingDebits: 20n,
+				postedCredits: 10n,
+				postedDebits: 30n,
+				availableCredits: 10n,
+				availableDebits: 20n,
+			},
+			asset
+		)
 	)
 );
 
@@ -110,7 +114,7 @@ describe("AccountRoutes", () => {
 		]);
 	});
 
-	it("returns Account-owned Currency once and forwards list pagination", async () => {
+	it("returns Account-owned Asset once and forwards list pagination", async () => {
 		const implementation = service();
 		const { server } = await buildRouteServer(implementation);
 		const response = await server.inject({
@@ -123,11 +127,11 @@ describe("AccountRoutes", () => {
 			{
 				id: accountId.toString(),
 				ledgerId: ledgerId.toString(),
-				currencyCode: "USD",
+				assetId: asset.assetId,
 				balances: [
-					{ balanceType: "pending", amount: -5, credits: 10, debits: 5 },
-					{ balanceType: "posted", amount: 20, credits: 5, debits: 25 },
-					{ balanceType: "availableBalance", amount: 15, credits: 10, debits: 25 },
+					{ balanceType: "pending", amount: "-5", credits: "10", debits: "5" },
+					{ balanceType: "posted", amount: "20", credits: "5", debits: "25" },
+					{ balanceType: "availableBalance", amount: "15", credits: "10", debits: "25" },
 				],
 				created: "2026-08-09T10:00:00.000Z",
 				updated: "2026-08-09T11:00:00.000Z",
@@ -150,9 +154,9 @@ describe("AccountRoutes", () => {
 		expect(response.statusCode).toBe(200);
 		expect(response.json()).toMatchObject({
 			balances: [
-				{ balanceType: "pending", amount: -15, credits: 5, debits: 20 },
-				{ balanceType: "posted", amount: -20, credits: 10, debits: 30 },
-				{ balanceType: "availableBalance", amount: -10, credits: 10, debits: 20 },
+				{ balanceType: "pending", amount: "-15", credits: "5", debits: "20" },
+				{ balanceType: "posted", amount: "-20", credits: "10", debits: "30" },
+				{ balanceType: "availableBalance", amount: "-10", credits: "10", debits: "20" },
 			],
 		});
 	});
@@ -167,7 +171,7 @@ describe("AccountRoutes", () => {
 			payload: {
 				name: "Cash",
 				normalBalance: "debit",
-				currencyCode: "US0378331005",
+				assetCode: "US0378331005",
 				ignored: true,
 			},
 		});
@@ -177,12 +181,46 @@ describe("AccountRoutes", () => {
 		expect(implementation.createAccount).toHaveBeenCalledWith(organizationId, ledgerId, {
 			name: "Cash",
 			normalBalance: "debit",
-			currencyCode: "US0378331005",
+			assetCode: "US0378331005",
 		});
 
 		const invalid = await server.inject({ method: "POST", url, payload: { name: "Cash" } });
 		expect(invalid.statusCode).toBe(400);
 	});
+
+	it.each([{ assetId: asset.assetId }, { assetCode: "usd" }])(
+		"accepts one Asset selector %j",
+		async selector => {
+			const implementation = service();
+			const { server } = await buildRouteServer(implementation);
+			const response = await server.inject({
+				method: "POST",
+				url: `/api/ledgers/${ledgerId.toString()}/accounts`,
+				payload: { name: "Cash", normalBalance: "debit", ...selector },
+			});
+			expect(response.statusCode).toBe(201);
+			expect(implementation.createAccount).toHaveBeenCalledWith(organizationId, ledgerId, {
+				name: "Cash",
+				normalBalance: "debit",
+				...selector,
+			});
+		}
+	);
+
+	it.each([{}, { assetId: asset.assetId, assetCode: "USD" }])(
+		"rejects ambiguous or missing selector %j",
+		async selector => {
+			const implementation = service();
+			const { server } = await buildRouteServer(implementation);
+			const response = await server.inject({
+				method: "POST",
+				url: `/api/ledgers/${ledgerId.toString()}/accounts`,
+				payload: { name: "Cash", normalBalance: "debit", ...selector },
+			});
+			expect(response.statusCode).toBe(400);
+			expect(implementation.createAccount).not.toHaveBeenCalled();
+		}
+	);
 
 	it("strips immutable update fields", async () => {
 		const implementation = service();
@@ -193,7 +231,7 @@ describe("AccountRoutes", () => {
 			payload: {
 				name: "Operating Cash",
 				normalBalance: "credit",
-				currencyCode: "EUR",
+				assetCode: "EUR",
 			},
 		});
 

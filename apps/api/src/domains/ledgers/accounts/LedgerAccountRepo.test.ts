@@ -1,3 +1,4 @@
+import { TypeID } from "typeid-js";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
@@ -6,7 +7,7 @@ import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { LedgerNotFound } from "@/domains/ledgers";
 import { type LedgerID, newLedgerAccountID, newLedgerID, newOrgID, type OrgID } from "@/lib/ids";
-import { type LedgerAccountRow, LedgerAccountsTable } from "@/db/schema";
+import { type LedgerAccountRow, LedgerAccountsTable, AssetsTable } from "@/db/schema";
 import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "../LedgerRepo";
 import { Ledger } from "../Ledger";
 import {
@@ -28,14 +29,20 @@ import {
 } from "./LedgerAccountRepo";
 import { LedgerAccount } from "./LedgerAccount";
 
+const assets = new Map<string, { assetId: string; assetCode: string; minorUnitExponent: number }>();
+const fallbackAsset = {
+	assetId: new TypeID("ast").toString(),
+	assetCode: "USD",
+	minorUnitExponent: 2,
+};
 const ledgerAccountCreate = (
 	organizationId: OrgID,
 	ledgerId: LedgerID,
 	overrides: Partial<
-		Pick<LedgerAccount, "id" | "name" | "description" | "normalBalance" | "currency" | "metadata">
+		Pick<LedgerAccount, "id" | "name" | "description" | "normalBalance" | "assetCode" | "metadata">
 	> = {}
 ): LedgerAccount => {
-	const currency = overrides.currency ?? "USD";
+	const asset = assets.get(organizationId.toString()) ?? fallbackAsset;
 	return LedgerAccount.fromCreateRequest(
 		overrides.id ?? newLedgerAccountID(),
 		organizationId,
@@ -44,9 +51,10 @@ const ledgerAccountCreate = (
 			name: overrides.name ?? "Cash",
 			description: overrides.description,
 			normalBalance: overrides.normalBalance ?? "debit",
-			currencyCode: currency,
+			assetId: asset.assetId,
 			metadata: overrides.metadata,
-		}
+		},
+		asset
 	);
 };
 
@@ -89,6 +97,15 @@ describe("LedgerAccountRepoLive", () => {
 		await runtime.runPromise(
 			ledgerRepository.createLedger(Ledger.fromRequest(ledgerId, organizationId, { name: "Ledger" }))
 		);
+		const asset = { assetId: new TypeID("ast").toString(), assetCode: "USD", minorUnitExponent: 2 };
+		await database.db.insert(AssetsTable).values({
+			id: TypeID.fromString(asset.assetId).toUUID(),
+			organizationId: organizationId.toUUID(),
+			code: asset.assetCode,
+			name: "Dollar",
+			minorUnitExponent: asset.minorUnitExponent,
+		});
+		assets.set(organizationId.toString(), asset);
 		resources.push({ organizationId, ledgerId });
 		return { organizationId, ledgerId };
 	};
@@ -103,6 +120,9 @@ describe("LedgerAccountRepoLive", () => {
 					await runtime.runPromise(repository.deleteAccount(organizationId, ledgerId, account.id));
 				}
 				await runtime.runPromise(ledgerRepository.deleteLedger(organizationId, ledgerId));
+				await database.db
+					.delete(AssetsTable)
+					.where(eq(AssetsTable.organizationId, organizationId.toUUID()));
 				await runtime.runPromise(organizationRepository.deleteOrganization(organizationId));
 			}
 		} finally {
@@ -222,7 +242,7 @@ describe("LedgerAccountRepoLive", () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const record = ledgerAccountCreate(organizationId, ledgerId, {
 			description,
-			currency: "US0378331005",
+			assetCode: "USD",
 			metadata,
 		});
 		const created = await runtime.runPromise(repository.createAccount(record));
@@ -235,24 +255,54 @@ describe("LedgerAccountRepoLive", () => {
 		expect(created.created).toEqual(record.created);
 		expect(created.updated).toEqual(record.updated);
 		expect(created.description).toBe(description);
-		expect(created.currency).toBe("US0378331005");
+		expect(created.assetCode).toBe("USD");
 		expect(created.metadata).toEqual(metadata);
-		expect(created.balances.every(balance => balance.amount === 0)).toBe(true);
+		expect(created.balances.every(balance => balance.amount === 0n)).toBe(true);
+	});
+
+	it("hydrates the current Asset code and exact large balances", async () => {
+		const { organizationId, ledgerId } = await createOrganizationAndLedger();
+		const record = ledgerAccountCreate(organizationId, ledgerId);
+		const amount = 9007199254740993n;
+		await database.db.insert(LedgerAccountsTable).values({
+			...record.toRow(),
+			pendingAmount: amount,
+			postedAmount: amount,
+			availableAmount: amount,
+			pendingDebits: amount,
+			postedDebits: amount,
+			availableDebits: amount,
+		});
+		await database.db
+			.update(AssetsTable)
+			.set({ code: "RENAMED" })
+			.where(eq(AssetsTable.id, TypeID.fromString(record.assetId).toUUID()));
+		const loaded = Option.getOrThrow(
+			await runtime.runPromise(repository.getAccount(organizationId, ledgerId, record.id))
+		);
+		expect(loaded.assetId).toBe(record.assetId);
+		expect(loaded.assetCode).toBe("RENAMED");
+		expect(loaded.postedAmount).toBe(amount);
+		expect(loaded.toResponse().balances[1]?.amount).toBe("9007199254740993");
+		const listed = await runtime.runPromise(
+			repository.listAccounts(organizationId, ledgerId, { offset: 0, limit: 10 })
+		);
+		expect(listed[0]?.assetCode).toBe("RENAMED");
 	});
 
 	it("encodes all stored Balances on creation", () => {
 		const row = ledgerAccountCreate(newOrgID(), newLedgerID()).toRow() as LedgerAccountRow;
 
 		expect(row).toMatchObject({
-			pendingAmount: 0,
-			postedAmount: 0,
-			availableAmount: 0,
-			pendingCredits: 0,
-			pendingDebits: 0,
-			postedCredits: 0,
-			postedDebits: 0,
-			availableCredits: 0,
-			availableDebits: 0,
+			pendingAmount: 0n,
+			postedAmount: 0n,
+			availableAmount: 0n,
+			pendingCredits: 0n,
+			pendingDebits: 0n,
+			postedCredits: 0n,
+			postedDebits: 0n,
+			availableCredits: 0n,
+			availableDebits: 0n,
 		});
 	});
 
@@ -261,40 +311,40 @@ describe("LedgerAccountRepoLive", () => {
 			label: "debit-normal balances",
 			normalBalance: "debit" as const,
 			stored: {
-				pendingAmount: 11,
-				postedAmount: 12,
-				availableAmount: 13,
-				pendingCredits: 20,
-				pendingDebits: 5,
-				postedCredits: 30,
-				postedDebits: 10,
-				availableCredits: 40,
-				availableDebits: 15,
+				pendingAmount: 11n,
+				postedAmount: 12n,
+				availableAmount: 13n,
+				pendingCredits: 20n,
+				pendingDebits: 5n,
+				postedCredits: 30n,
+				postedDebits: 10n,
+				availableCredits: 40n,
+				availableDebits: 15n,
 			},
 			expected: [
-				{ balanceType: "pending", amount: 11, credits: 20, debits: 5 },
-				{ balanceType: "posted", amount: 12, credits: 30, debits: 10 },
-				{ balanceType: "availableBalance", amount: 13, credits: 40, debits: 15 },
+				{ balanceType: "pending", amount: 11n, credits: 20n, debits: 5n },
+				{ balanceType: "posted", amount: 12n, credits: 30n, debits: 10n },
+				{ balanceType: "availableBalance", amount: 13n, credits: 40n, debits: 15n },
 			],
 		},
 		{
 			label: "credit-normal balances",
 			normalBalance: "credit" as const,
 			stored: {
-				pendingAmount: -11,
-				postedAmount: -12,
-				availableAmount: -13,
-				pendingCredits: 5,
-				pendingDebits: 20,
-				postedCredits: 10,
-				postedDebits: 30,
-				availableCredits: 15,
-				availableDebits: 40,
+				pendingAmount: -11n,
+				postedAmount: -12n,
+				availableAmount: -13n,
+				pendingCredits: 5n,
+				pendingDebits: 20n,
+				postedCredits: 10n,
+				postedDebits: 30n,
+				availableCredits: 15n,
+				availableDebits: 40n,
 			},
 			expected: [
-				{ balanceType: "pending", amount: -11, credits: 5, debits: 20 },
-				{ balanceType: "posted", amount: -12, credits: 10, debits: 30 },
-				{ balanceType: "availableBalance", amount: -13, credits: 15, debits: 40 },
+				{ balanceType: "pending", amount: -11n, credits: 5n, debits: 20n },
+				{ balanceType: "posted", amount: -12n, credits: 10n, debits: 30n },
+				{ balanceType: "availableBalance", amount: -13n, credits: 15n, debits: 40n },
 			],
 		},
 	])("preserves stored $label when decoding rows", async testCase => {
@@ -319,7 +369,7 @@ describe("LedgerAccountRepoLive", () => {
 	it("returns a typed decoding failure for an invalid timestamp", async () => {
 		const row = ledgerAccountCreate(newOrgID(), newLedgerID()).toRow() as LedgerAccountRow;
 		const error = await Effect.runPromise(
-			Effect.flip(LedgerAccount.fromRow({ ...row, created: new Date(Number.NaN) }))
+			Effect.flip(LedgerAccount.fromRow({ ...row, created: new Date(Number.NaN) }, fallbackAsset))
 		);
 
 		expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
@@ -407,7 +457,7 @@ describe("LedgerAccountRepoLive", () => {
 		expect(updated.organizationId).toEqual(created.organizationId);
 		expect(updated.ledgerId).toEqual(created.ledgerId);
 		expect(updated.normalBalance).toBe(created.normalBalance);
-		expect(updated.currency).toEqual(created.currency);
+		expect(updated.assetId).toEqual(created.assetId);
 		expect(updated.created).toEqual(created.created);
 		expect(updated.lockVersion).toBe(2);
 		expect(updated.updated).toEqual(replacement.updated);

@@ -1,3 +1,4 @@
+import { TypeID } from "typeid-js";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
@@ -6,7 +7,7 @@ import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { OrganizationNotFound } from "@/domains/organizations";
 import { newLedgerAccountID, newLedgerID, newOrgID, type OrgID } from "@/lib/ids";
-import { LedgersTable } from "@/db/schema";
+import { AssetsTable, LedgersTable } from "@/db/schema";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,
@@ -88,6 +89,9 @@ describe("LedgerRepoLive", () => {
 					}
 					await runtime.runPromise(repository.deleteLedger(organizationId, ledger.id));
 				}
+				await database.db
+					.delete(AssetsTable)
+					.where(eq(AssetsTable.organizationId, organizationId.toUUID()));
 				await runtime.runPromise(organizationRepository.deleteOrganization(organizationId));
 			}
 		} finally {
@@ -292,13 +296,27 @@ describe("LedgerRepoLive", () => {
 	it("maps a real dependent Ledger Account to LedgerHasDependents", async () => {
 		const organizationId = await createOrganization();
 		const created = await runtime.runPromise(repository.createLedger(ledgerWrite(organizationId)));
+		const asset = { assetId: new TypeID("ast").toString(), assetCode: "USD", minorUnitExponent: 2 };
+		await database.db.insert(AssetsTable).values({
+			id: TypeID.fromString(asset.assetId).toUUID(),
+			organizationId: organizationId.toUUID(),
+			code: asset.assetCode,
+			name: "US Dollar",
+			minorUnitExponent: asset.minorUnitExponent,
+		});
 		await runtime.runPromise(
 			accountRepository.createAccount(
-				LedgerAccount.fromCreateRequest(newLedgerAccountID(), organizationId, created.id, {
-					name: "Dependent account",
-					normalBalance: "debit",
-					currencyCode: "USD",
-				})
+				LedgerAccount.fromCreateRequest(
+					newLedgerAccountID(),
+					organizationId,
+					created.id,
+					{
+						name: "Dependent account",
+						normalBalance: "debit",
+						assetId: asset.assetId,
+					},
+					asset
+				)
 			)
 		);
 

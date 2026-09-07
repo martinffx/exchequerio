@@ -1,8 +1,9 @@
 import { CloneType, type Static, Type } from "@sinclair/typebox";
 
+import { AmountSchema } from "@/lib/amounts";
 import { MetadataSchema } from "@/lib/schema";
 import { PaginationQuery } from "@/lib/schema";
-import { Balances, AccountIdSchema } from "@/domains/ledgers/accounts/AccountSchema";
+import { AccountIdSchema } from "@/domains/ledgers/accounts/AccountSchema";
 
 const LedgerAccountBalanceMonitorId = Type.String({
 	description: "Unique identifier for the ledger account balance monitor.",
@@ -20,16 +21,14 @@ const AlertOperator = Type.Union([
 	Type.Literal(">="),
 	Type.Literal("!="),
 ]);
-const AlertField = Type.Union([
-	Type.Literal("balance"),
-	Type.Literal("created"),
-	Type.Literal("updated"),
+const AlertCondition = Type.Union([
+	Type.Object({ field: Type.Literal("balance"), operator: AlertOperator, value: AmountSchema }),
+	Type.Object({
+		field: Type.Union([Type.Literal("created"), Type.Literal("updated")]),
+		operator: AlertOperator,
+		value: Type.Number(),
+	}),
 ]);
-const AlertCondition = Type.Object({
-	field: AlertField,
-	operator: AlertOperator,
-	value: Type.Number(),
-});
 
 const LedgerAccountBalanceMonitorResponse = Type.Object(
 	{
@@ -41,7 +40,6 @@ const LedgerAccountBalanceMonitorResponse = Type.Object(
 			})
 		),
 		alertCondition: Type.Array(AlertCondition),
-		balances: Balances,
 		metadata: Type.Optional(MetadataSchema),
 		lockVersion: Type.Number(),
 		created: Type.String(),

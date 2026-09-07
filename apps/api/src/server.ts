@@ -13,6 +13,7 @@ import {
 	type ServerRuntimeLayer,
 	type ServerRuntimeServices,
 } from "@/runtime";
+import { AssetRoutes } from "@/domains/assets";
 import { OrganizationRoutes } from "@/domains/organizations";
 import { LedgerRoutes } from "@/domains/ledgers";
 import { AccountRoutes } from "@/domains/ledgers/accounts";
@@ -45,6 +46,7 @@ const LedgerRouterPlugin: FastifyPluginAsync = async server => {
 const RouterPlugin: FastifyPluginAsync = async server => {
 	server.addHook("preHandler", server.auth([server.verifyJWT]));
 
+	await server.register(AssetRoutes, { prefix: "/assets" });
 	await server.register(OrganizationRoutes, { prefix: "/organizations" });
 	await server.register(LedgerRouterPlugin, { prefix: "/ledgers" });
 };

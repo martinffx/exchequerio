@@ -1,6 +1,11 @@
 import { Clock, Context, Effect, Layer, Option, Schedule } from "effect";
 import { DateTime } from "luxon";
 
+import {
+	AssetServiceTag,
+	type AssetService,
+	type AssetResolveError,
+} from "@/domains/assets/AssetService";
 import { AccountVersionConflict } from "@/domains/ledgers/accounts";
 import {
 	type LedgerGetError,
@@ -65,6 +70,7 @@ type TransactionListError = LedgerGetError | TransactionInfrastructureError;
 type TransactionGetError = TransactionNotFound | TransactionInfrastructureError;
 /** Claim, validation, and persistence failures returned by creation. */
 type TransactionCreateError =
+	| AssetResolveError
 	| IdempotencyPending
 	| IdempotencyUnavailable
 	| TransactionNotFound
@@ -72,6 +78,7 @@ type TransactionCreateError =
 	| TransactionInfrastructureError;
 /** Claim and accounting failures returned by replacement. */
 type TransactionUpdateError =
+	| AssetResolveError
 	| IdempotencyPending
 	| IdempotencyUnavailable
 	| TransactionGetError
@@ -226,7 +233,8 @@ class TransactionServiceLive implements TransactionService {
 	constructor(
 		private readonly repository: LedgerTransactionRepo,
 		private readonly idempotency: IdempotencyService,
-		private readonly ledgerService: LedgerService
+		private readonly ledgerService: LedgerService,
+		private readonly assetService: Pick<AssetService, "resolveAssets">
 	) {}
 
 	/**
@@ -283,21 +291,40 @@ class TransactionServiceLive implements TransactionService {
 		idempotencyKey: string,
 		request: TransactionCreateRequest
 	): Effect.Effect<LedgerTransaction, TransactionCreateError> {
-		return this.validateAccountLimit(request.ledgerEntries).pipe(
-			Effect.andThen(serverTime),
-			Effect.flatMap(created => {
-				const entryIds = request.ledgerEntries.map(() => newLedgerTransactionEntryID());
-				return LedgerTransaction.fromCreateRequest(
+		return Effect.gen({ self: this }, function* () {
+			yield* this.validateAccountLimit(request.ledgerEntries);
+			const action = "transactions.create";
+			const claim = yield* this.idempotency.claim(organizationId, action, idempotencyKey);
+			if (Option.isSome(claim)) {
+				const storedId = yield* parseId<"ltr", LedgerTransactionID>("ltr", claim.value);
+				return yield* this.getTransaction(organizationId, ledgerId, storedId);
+			}
+			const execute = Effect.gen({ self: this }, function* () {
+				const assets = yield* this.assetService.resolveAssets(organizationId, request.ledgerEntries);
+				const created = yield* serverTime;
+				const transaction = yield* LedgerTransaction.fromCreateRequest(
 					newLedgerTransactionID(),
 					organizationId,
 					ledgerId,
-					request,
+					{
+						...request,
+						ledgerEntries: request.ledgerEntries.map((entry, index) => ({ ...entry, ...assets[index]! })),
+					},
 					created as DateTime<true>,
-					entryIds
+					request.ledgerEntries.map(() => newLedgerTransactionEntryID())
 				);
-			}),
-			Effect.flatMap(transaction => this.createTransactionEntity(idempotencyKey, transaction))
-		);
+				return yield* retryMutation(
+					Effect.suspend(() => this.repository.createTransaction(transaction))
+				);
+			});
+			const result = yield* execute.pipe(
+				Effect.tapError(error =>
+					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
+				)
+			);
+			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
+			return result;
+		});
 	}
 
 	/**
@@ -361,8 +388,9 @@ class TransactionServiceLive implements TransactionService {
 			}
 
 			const execute = this.validateAccountLimit(request.ledgerEntries).pipe(
-				Effect.andThen(serverTime),
-				Effect.flatMap(updated => {
+				Effect.andThen(this.assetService.resolveAssets(organizationId, request.ledgerEntries)),
+				Effect.flatMap(assets => serverTime.pipe(Effect.map(updated => ({ updated, assets })))),
+				Effect.flatMap(({ updated, assets }) => {
 					const entryIds = request.ledgerEntries.map(() => newLedgerTransactionEntryID());
 					return retryMutation(
 						Effect.suspend(() =>
@@ -370,7 +398,13 @@ class TransactionServiceLive implements TransactionService {
 								organizationId,
 								ledgerId,
 								transactionId,
-								request,
+								{
+									...request,
+									ledgerEntries: request.ledgerEntries.map((entry, index) => ({
+										...entry,
+										...assets[index]!,
+									})),
+								},
 								updated,
 								entryIds
 							)
@@ -516,10 +550,10 @@ const transactionServiceLayer = Layer.effect(
 	TransactionServiceTag,
 	LedgerTransactionRepoTag.pipe(
 		Effect.flatMap(repository =>
-			Effect.all([IdempotencyServiceTag, LedgerServiceTag]).pipe(
+			Effect.all([IdempotencyServiceTag, LedgerServiceTag, AssetServiceTag]).pipe(
 				Effect.map(
-					([idempotency, ledgerService]) =>
-						new TransactionServiceLive(repository, idempotency, ledgerService)
+					([idempotency, ledgerService, assetService]) =>
+						new TransactionServiceLive(repository, idempotency, ledgerService, assetService)
 				)
 			)
 		)

@@ -1,62 +1,9 @@
 import { type Static, Type } from "@sinclair/typebox";
 import type { FastifyRequest } from "fastify";
 
+import { AssetSummarySchema } from "@/lib/AssetSchema";
 import { MetadataSchema } from "@/lib/schema";
 const NormalBalance = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
-const Balance = Type.Union([
-	Type.Object({
-		balanceType: Type.Literal("pending", {
-			description: "The sum of all pending AND posted entry amounts.",
-		}),
-		credits: Type.Number({
-			description: "Summed amounts of all posted and pending ledger entries with `credit` direction.",
-		}),
-		debits: Type.Number({
-			description: "Summed amounts of all posted and pending ledger entries with `debit` direction.",
-		}),
-		amount: Type.Number({
-			description: "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-		}),
-		currency: Type.String({ description: "Currency of the ledger" }),
-		currencyExponent: Type.Number({ description: "Currency exponent of the ledger" }),
-	}),
-	Type.Object({
-		balanceType: Type.Literal("posted", {
-			description: "The sum of all posted entry amounts.",
-		}),
-		credits: Type.Number({
-			description: "Summed amounts of all posted ledger entries with `credit` direction.",
-		}),
-		debits: Type.Number({
-			description: "Summed amounts of all posted ledger entries with `debit` direction.",
-		}),
-		amount: Type.Number({
-			description: "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-		}),
-		currency: Type.String({ description: "Currency of the ledger" }),
-		currencyExponent: Type.Number({ description: "Currency exponent of the ledger" }),
-	}),
-	Type.Object({
-		balanceType: Type.Literal("availableBalance", {
-			description:
-				"The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-		}),
-		credits: Type.Number({
-			description: "Summed amounts of all posted ledger entries with `credit` direction.",
-		}),
-		debits: Type.Number({
-			description: "Summed amounts of all posted ledger entries with `debit` direction.",
-		}),
-		amount: Type.Number({
-			description: "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-		}),
-		currency: Type.String({ description: "Currency of the ledger" }),
-		currencyExponent: Type.Number({ description: "Currency exponent of the ledger" }),
-	}),
-]);
-const Balances = Type.Array(Balance, {
-	description: "The pending, posted, and available balances.",
-});
 const LedgerId = Type.String({
 	description: "The ledger's ID",
 	pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
@@ -92,12 +39,7 @@ const LedgerAccountStatementResponse = Type.Object(
 			description: "Version of the ledger account at the time of statement generation.",
 		}),
 		normalBalance: NormalBalance,
-		startingBalances: Balances,
-		endingBalances: Balances,
-		currency: Type.String({ description: "The currency of the ledger account settlement." }),
-		currencyExponent: Type.Number({
-			description: "The currency exponent of the ledger account settlement.",
-		}),
+		...AssetSummarySchema.properties,
 		metadata: Type.Optional(MetadataSchema),
 		created: Type.String({
 			description: "Timestamp of when the ledger account category was created.",

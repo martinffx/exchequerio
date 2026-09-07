@@ -111,7 +111,11 @@ class LedgerAccountSettlementService {
 					org,
 					ledger,
 					request,
-					account.currency,
+					{
+						assetId: account.assetId,
+						assetCode: account.assetCode,
+						minorUnitExponent: account.minorUnitExponent,
+					},
 					now
 				);
 				return yield* this.repository.createSettlement(

@@ -72,16 +72,23 @@ export function createLedgerAccountEntity(
 		>
 	> = {}
 ): LedgerAccount {
+	const orgId = options.organizationId ?? newOrgID();
+	const asset = {
+		assetId: `ast_${orgId.toString().slice(4)}`,
+		assetCode: "USD",
+		minorUnitExponent: 2,
+	};
 	return LedgerAccount.fromCreateRequest(
 		options.id ?? newLedgerAccountID(),
-		options.organizationId ?? newOrgID(),
+		orgId,
 		options.ledgerId ?? newLedgerID(),
 		{
 			name: options.name ?? "Ledger Account",
 			description: options.description,
 			normalBalance: options.normalBalance ?? "credit",
-			currencyCode: "USD",
+			assetId: asset.assetId,
 			metadata: options.metadata,
-		}
+		},
+		asset
 	);
 }

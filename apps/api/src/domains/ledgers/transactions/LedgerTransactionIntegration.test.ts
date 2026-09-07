@@ -16,6 +16,7 @@ import {
 	type OrgID,
 } from "@/lib/ids";
 import {
+	AssetsTable,
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
 	LedgerTransactionsTable,
@@ -29,6 +30,8 @@ import {
 	type IdempotencyService,
 	IdempotencyServiceTag,
 } from "@/lib/IdempotencyService";
+
+import type { TransactionResponse } from "./LedgerTransactionSchema";
 
 type JsonObject = Record<string, unknown>;
 
@@ -111,6 +114,7 @@ describe("Transaction assembled journeys", () => {
 			.where(inArray(LedgerTransactionsTable.organizationId, ids));
 		await db.delete(LedgerAccountsTable).where(inArray(LedgerAccountsTable.organizationId, ids));
 		await db.delete(LedgersTable).where(inArray(LedgersTable.organizationId, ids));
+		await db.delete(AssetsTable).where(inArray(AssetsTable.organizationId, ids));
 		await db.delete(OrganizationsTable).where(inArray(OrganizationsTable.id, ids));
 		organizationIds.clear();
 	});
@@ -120,7 +124,14 @@ describe("Transaction assembled journeys", () => {
 		organizationIds.add(id);
 		await db
 			.insert(OrganizationsTable)
-			.values({ id: TypeID.fromString(id, "org").toUUID(), name: `Integration ${id}` });
+			.values({ id: TypeID.fromString(id).toUUID(), name: `Integration ${id}` });
+		await db.insert(AssetsTable).values({
+			id: newOrgID().toUUID(),
+			organizationId: TypeID.fromString(id).toUUID(),
+			code: "EUR",
+			name: "Euro",
+			minorUnitExponent: 2,
+		});
 		return id;
 	};
 
@@ -149,7 +160,7 @@ describe("Transaction assembled journeys", () => {
 		const response = await inject(organizationId, {
 			method: "POST",
 			url: `/api/ledgers/${ledgerId}/accounts`,
-			payload: { name, normalBalance, currencyCode: "EUR", minorUnitExponent: 2 },
+			payload: { name, normalBalance, assetCode: "EUR" },
 		});
 		expect(response.statusCode).toBe(201);
 		return response.json<JsonObject>();
@@ -182,8 +193,8 @@ describe("Transaction assembled journeys", () => {
 				status: "pending",
 				description: "Initial pending transfer",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 100, currencyCode: "EUR" },
-					{ accountId: creditId, direction: "credit", amount: 100, currencyCode: "EUR" },
+					{ accountId: debitId, direction: "debit", amount: "100", assetCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: "100", assetCode: "EUR" },
 				],
 			},
 		});
@@ -197,21 +208,21 @@ describe("Transaction assembled journeys", () => {
 		const pendingDebit = await getAccount(organizationId, ledgerId, debitId);
 		expect(balance(pendingDebit, "pending")).toEqual({
 			balanceType: "pending",
-			credits: 0,
-			debits: 100,
-			amount: 100,
+			credits: "0",
+			debits: "100",
+			amount: "100",
 		});
 		expect(balance(pendingDebit, "posted")).toEqual({
 			balanceType: "posted",
-			credits: 0,
-			debits: 0,
-			amount: 0,
+			credits: "0",
+			debits: "0",
+			amount: "0",
 		});
 		expect(balance(pendingDebit, "availableBalance")).toEqual({
 			balanceType: "availableBalance",
-			credits: 0,
-			debits: 0,
-			amount: 0,
+			credits: "0",
+			debits: "0",
+			amount: "0",
 		});
 
 		const transactionId = created.id as string;
@@ -221,8 +232,8 @@ describe("Transaction assembled journeys", () => {
 			payload: {
 				description: "Expanded pending transfer",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 175, currencyCode: "EUR" },
-					{ accountId: creditId, direction: "credit", amount: 175, currencyCode: "EUR" },
+					{ accountId: debitId, direction: "debit", amount: "175", assetCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: "175", assetCode: "EUR" },
 				],
 			},
 		});
@@ -235,21 +246,21 @@ describe("Transaction assembled journeys", () => {
 		const replacedDebit = await getAccount(organizationId, ledgerId, debitId);
 		expect(balance(replacedDebit, "pending")).toEqual({
 			balanceType: "pending",
-			credits: 0,
-			debits: 175,
-			amount: 175,
+			credits: "0",
+			debits: "175",
+			amount: "175",
 		});
 		expect(balance(replacedDebit, "posted")).toEqual({
 			balanceType: "posted",
-			credits: 0,
-			debits: 0,
-			amount: 0,
+			credits: "0",
+			debits: "0",
+			amount: "0",
 		});
 		expect(balance(replacedDebit, "availableBalance")).toEqual({
 			balanceType: "availableBalance",
-			credits: 0,
-			debits: 0,
-			amount: 0,
+			credits: "0",
+			debits: "0",
+			amount: "0",
 		});
 
 		const postedResponse = await inject(organizationId, {
@@ -263,21 +274,21 @@ describe("Transaction assembled journeys", () => {
 		const postedDebit = await getAccount(organizationId, ledgerId, debitId);
 		expect(balance(postedDebit, "pending")).toEqual({
 			balanceType: "pending",
-			credits: 0,
-			debits: 175,
-			amount: 175,
+			credits: "0",
+			debits: "175",
+			amount: "175",
 		});
 		expect(balance(postedDebit, "posted")).toEqual({
 			balanceType: "posted",
-			credits: 0,
-			debits: 175,
-			amount: 175,
+			credits: "0",
+			debits: "175",
+			amount: "175",
 		});
 		expect(balance(postedDebit, "availableBalance")).toEqual({
 			balanceType: "availableBalance",
-			credits: 0,
-			debits: 175,
-			amount: 175,
+			credits: "0",
+			debits: "175",
+			amount: "175",
 		});
 		const fetchedPosted = await inject(organizationId, {
 			method: "GET",
@@ -294,8 +305,8 @@ describe("Transaction assembled journeys", () => {
 				status: "pending",
 				description: "Void this pending transaction",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 25, currencyCode: "EUR" },
-					{ accountId: creditId, direction: "credit", amount: 25, currencyCode: "EUR" },
+					{ accountId: debitId, direction: "debit", amount: "25", assetCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: "25", assetCode: "EUR" },
 				],
 			},
 		});
@@ -305,21 +316,21 @@ describe("Transaction assembled journeys", () => {
 		const beforeVoid = await getAccount(organizationId, ledgerId, debitId);
 		expect(balance(beforeVoid, "pending")).toEqual({
 			balanceType: "pending",
-			credits: 0,
-			debits: 200,
-			amount: 200,
+			credits: "0",
+			debits: "200",
+			amount: "200",
 		});
 		expect(balance(beforeVoid, "posted")).toEqual({
 			balanceType: "posted",
-			credits: 0,
-			debits: 175,
-			amount: 175,
+			credits: "0",
+			debits: "175",
+			amount: "175",
 		});
 		expect(balance(beforeVoid, "availableBalance")).toEqual({
 			balanceType: "availableBalance",
-			credits: 0,
-			debits: 175,
-			amount: 175,
+			credits: "0",
+			debits: "175",
+			amount: "175",
 		});
 		const voidResponse = await inject(organizationId, {
 			method: "DELETE",
@@ -339,21 +350,21 @@ describe("Transaction assembled journeys", () => {
 		const afterVoid = await getAccount(organizationId, ledgerId, debitId);
 		expect(balance(afterVoid, "pending")).toEqual({
 			balanceType: "pending",
-			credits: 0,
-			debits: 175,
-			amount: 175,
+			credits: "0",
+			debits: "175",
+			amount: "175",
 		});
 		expect(balance(afterVoid, "posted")).toEqual({
 			balanceType: "posted",
-			credits: 0,
-			debits: 175,
-			amount: 175,
+			credits: "0",
+			debits: "175",
+			amount: "175",
 		});
 		expect(balance(afterVoid, "availableBalance")).toEqual({
 			balanceType: "availableBalance",
-			credits: 0,
-			debits: 175,
-			amount: 175,
+			credits: "0",
+			debits: "175",
+			amount: "175",
 		});
 	});
 
@@ -376,8 +387,8 @@ describe("Transaction assembled journeys", () => {
 				status: "posted",
 				description: "First body wins",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 240, currencyCode: "EUR" },
-					{ accountId: creditId, direction: "credit", amount: 240, currencyCode: "EUR" },
+					{ accountId: debitId, direction: "debit", amount: "240", assetCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: "240", assetCode: "EUR" },
 				],
 			},
 		});
@@ -395,8 +406,8 @@ describe("Transaction assembled journeys", () => {
 				status: "pending",
 				description: "Ignored second body",
 				ledgerEntries: [
-					{ accountId: debitId, direction: "debit", amount: 999, currencyCode: "EUR" },
-					{ accountId: creditId, direction: "credit", amount: 999, currencyCode: "EUR" },
+					{ accountId: debitId, direction: "debit", amount: "999", assetCode: "EUR" },
+					{ accountId: creditId, direction: "credit", amount: "999", assetCode: "EUR" },
 				],
 			},
 		});
@@ -425,15 +436,15 @@ describe("Transaction assembled journeys", () => {
 		const postedDebit = await getAccount(organizationId, ledgerId, debitId);
 		expect(balance(postedDebit, "pending")).toEqual({
 			balanceType: "pending",
-			credits: 0,
-			debits: 240,
-			amount: 240,
+			credits: "0",
+			debits: "240",
+			amount: "240",
 		});
 		expect(balance(postedDebit, "posted")).toEqual({
 			balanceType: "posted",
-			credits: 0,
-			debits: 240,
-			amount: 240,
+			credits: "0",
+			debits: "240",
+			amount: "240",
 		});
 	});
 
@@ -456,8 +467,8 @@ describe("Transaction assembled journeys", () => {
 					payload: {
 						status: "pending",
 						ledgerEntries: [
-							{ accountId: debitId, direction: "debit", amount: 1, currencyCode: "EUR" },
-							{ accountId: creditId, direction: "credit", amount: 1, currencyCode: "EUR" },
+							{ accountId: debitId, direction: "debit", amount: "1", assetCode: "EUR" },
+							{ accountId: creditId, direction: "credit", amount: "1", assetCode: "EUR" },
 						],
 					},
 				})
@@ -468,9 +479,9 @@ describe("Transaction assembled journeys", () => {
 		const hotDebit = await getAccount(organizationId, ledgerId, debitId);
 		expect(balance(hotDebit, "pending")).toEqual({
 			balanceType: "pending",
-			credits: 0,
-			debits: writes,
-			amount: writes,
+			credits: "0",
+			debits: writes.toString(),
+			amount: writes.toString(),
 		});
 	});
 
@@ -490,8 +501,8 @@ describe("Transaction assembled journeys", () => {
 			payload: {
 				status: "pending",
 				ledgerEntries: [
-					{ accountId: ownerDebit.id, direction: "debit", amount: 10, currencyCode: "EUR" },
-					{ accountId: ownerCredit.id, direction: "credit", amount: 10, currencyCode: "EUR" },
+					{ accountId: ownerDebit.id, direction: "debit", amount: "10", assetCode: "EUR" },
+					{ accountId: ownerCredit.id, direction: "credit", amount: "10", assetCode: "EUR" },
 				],
 			},
 		});
@@ -530,5 +541,107 @@ describe("Transaction assembled journeys", () => {
 		] as const) {
 			expect(Object.keys(missing.json()).sort()).toEqual(Object.keys(crossTenant.json()).sort());
 		}
+	});
+	it("round trips exact amounts, rejects overflow atomically, and replays after Asset code reuse", async () => {
+		const organizationId = await createOrganization();
+		const ledger = await createLedger(organizationId, "Exact accounting");
+		const ledgerId = ledger.id as string;
+		const debit = await createAccount(organizationId, ledgerId, "Debit", "debit");
+		const credit = await createAccount(organizationId, ledgerId, "Credit", "credit");
+		const assetId = debit.assetId as string;
+		const collection = `/api/ledgers/${ledgerId}/transactions`;
+		const body = {
+			status: "pending",
+			ledgerEntries: [
+				{ accountId: debit.id, direction: "debit", amount: "9007199254740993", assetCode: "eur" },
+				{ accountId: credit.id, direction: "credit", amount: "9007199254740993", assetId },
+			],
+		};
+		const first = await inject(organizationId, {
+			method: "POST",
+			url: collection,
+			headers: { "idempotency-key": "exact" },
+			payload: body,
+		});
+		expect(first.statusCode).toBe(201);
+		expect(first.json<TransactionResponse>().ledgerEntries).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					amount: "9007199254740993",
+					assetId,
+					assetCode: "EUR",
+					minorUnitExponent: 2,
+				}),
+			])
+		);
+		const maximum = {
+			...body,
+			ledgerEntries: body.ledgerEntries.map(entry => ({ ...entry, amount: "9223372036854775807" })),
+		};
+		const updated = await inject(organizationId, {
+			method: "PUT",
+			url: `${collection}/${first.json<TransactionResponse>().id}`,
+			payload: { ledgerEntries: maximum.ledgerEntries },
+		});
+		expect(updated.statusCode).toBe(200);
+		const overflow = await inject(organizationId, {
+			method: "POST",
+			url: collection,
+			headers: { "idempotency-key": "overflow" },
+			payload: {
+				...body,
+				ledgerEntries: body.ledgerEntries.map(entry => ({ ...entry, amount: "1" })),
+			},
+		});
+		expect(overflow.statusCode).toBe(409);
+		expect(overflow.json()).toMatchObject({ retryable: false });
+		expect(
+			balance(await getAccount(organizationId, ledgerId, debit.id as string), "pending")?.amount
+		).toBe("9223372036854775807");
+		expect(
+			await db
+				.select()
+				.from(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.organizationId, TypeID.fromString(organizationId).toUUID()))
+		).toHaveLength(1);
+		await db
+			.update(AssetsTable)
+			.set({ code: "RENAMED" })
+			.where(eq(AssetsTable.id, TypeID.fromString(assetId).toUUID()));
+		await db.insert(AssetsTable).values({
+			id: newOrgID().toUUID(),
+			organizationId: TypeID.fromString(organizationId).toUUID(),
+			code: "EUR",
+			name: "Reused",
+			minorUnitExponent: 6,
+		});
+		const replay = await inject(organizationId, {
+			method: "POST",
+			url: collection,
+			headers: { "idempotency-key": "exact" },
+			payload: body,
+		});
+		expect(replay.statusCode).toBe(201);
+		expect(replay.json<TransactionResponse>().id).toBe(first.json<TransactionResponse>().id);
+		for (const entry of replay.json<TransactionResponse>().ledgerEntries)
+			expect(entry).toMatchObject({
+				assetId,
+				assetCode: "RENAMED",
+				minorUnitExponent: 2,
+				amount: "9223372036854775807",
+			});
+		const tooLarge = await inject(organizationId, {
+			method: "POST",
+			url: collection,
+			payload: {
+				...body,
+				ledgerEntries: body.ledgerEntries.map(({ assetCode: _code, ...entry }) => ({
+					...entry,
+					assetId,
+					amount: "9223372036854775808",
+				})),
+			},
+		});
+		expect(tooLarge.statusCode).toBe(400);
 	});
 });

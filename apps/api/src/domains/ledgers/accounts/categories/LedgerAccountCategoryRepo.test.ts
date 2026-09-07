@@ -1,3 +1,4 @@
+import { AssetsTable } from "@/db/schema";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,
@@ -75,6 +76,13 @@ describe("LedgerAccountCategoryRepo", () => {
 			name: "Category Test Org",
 		});
 		await runtime.runPromise(organizationRepo.createOrganization(orgEntity));
+		await db.insert(AssetsTable).values({
+			id: testOrgId.toUUID(),
+			organizationId: testOrgId.toUUID(),
+			code: "USD",
+			name: "Dollar",
+			minorUnitExponent: 2,
+		});
 
 		// Create test ledger
 		testLedgerId = new TypeID("lgr") as LedgerID;
@@ -92,6 +100,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				.delete(LedgerAccountCategoriesTable)
 				.where(eq(LedgerAccountCategoriesTable.ledgerId, testLedgerId.toUUID()));
 			await runtime.runPromise(ledgerRepo.deleteLedgerFixtures(testOrgId, testLedgerId));
+			await db.delete(AssetsTable).where(eq(AssetsTable.organizationId, testOrgId.toUUID()));
 			await runtime.runPromise(organizationRepo.deleteOrganization(testOrgId));
 		} finally {
 			await runtime.dispose();

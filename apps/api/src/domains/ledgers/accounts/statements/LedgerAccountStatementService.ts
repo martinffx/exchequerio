@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
 
-import type { LedgerAccountStatementID } from "@/lib/ids";
+import type { LedgerAccountStatementID, OrgID } from "@/lib/ids";
 
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import {
@@ -13,18 +13,26 @@ import type { LedgerAccountStatementRequest } from "./LedgerAccountStatementSche
 class LedgerAccountStatementService {
 	constructor(private readonly repository: LedgerAccountStatementRepo) {}
 
-	getLedgerAccountStatement(id: string): Effect.Effect<LedgerAccountStatement, unknown> {
+	getLedgerAccountStatement(
+		id: string,
+		orgId: OrgID
+	): Effect.Effect<LedgerAccountStatement, unknown> {
 		return Effect.sync(() => TypeID.fromString<"lst">(id) as LedgerAccountStatementID).pipe(
-			Effect.flatMap(statementId => this.repository.getStatement(statementId))
+			Effect.flatMap(statementId => this.repository.getStatement(statementId, orgId))
 		);
 	}
 
 	createLedgerAccountStatement(
-		request: LedgerAccountStatementRequest
+		request: LedgerAccountStatementRequest,
+		orgId: OrgID
 	): Effect.Effect<LedgerAccountStatement, unknown> {
-		return Effect.sync(() => LedgerAccountStatement.fromRequest(request)).pipe(
-			Effect.flatMap(statement => this.repository.createStatement(statement))
-		);
+		return this.repository
+			.getAccountAsset(orgId, request.accountId, request.ledgerId)
+			.pipe(
+				Effect.flatMap(asset =>
+					this.repository.createStatement(LedgerAccountStatement.fromRequest(request, asset), orgId)
+				)
+			);
 	}
 }
 
