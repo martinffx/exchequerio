@@ -173,7 +173,7 @@
 			},
 			{
 				"type": "idempotency-capability",
-				"pattern": "src/services/IdempotencyService.ts",
+				"pattern": "src/lib/IdempotencyService.ts",
 				"mode": "full"
 			},
 			{
@@ -256,11 +256,6 @@
 			{
 				"type": "legacy-routes",
 				"pattern": "src/routes/**/*",
-				"mode": "full"
-			},
-			{
-				"type": "legacy-services",
-				"pattern": "src/services/**/*",
 				"mode": "full"
 			},
 			{
@@ -365,23 +360,12 @@
 							"legacy-routes",
 							"legacy-route-contracts",
 							"legacy-ledger-route-contracts",
-							"legacy-services",
 							"shared-ids",
 							"ledger-composition",
 							"account-composition",
 							"transaction-composition",
 							"organization-composition",
 							"category-composition"
-						]
-					},
-					{
-						"from": ["legacy-services"],
-						"allow": [
-							"legacy-services",
-							"shared-ids",
-							"legacy-route-contracts",
-							"legacy-ledger-route-contracts",
-							"transaction-composition"
 						]
 					},
 					{
@@ -633,7 +617,6 @@
 						"from": ["server"],
 						"allow": [
 							"legacy-routes",
-							"legacy-services",
 							"config",
 							"database",
 							"http",

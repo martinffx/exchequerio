@@ -22,7 +22,7 @@ import {
 	type IdempotencyService,
 	IdempotencyServiceTag,
 	IdempotencyUnavailable,
-} from "@/services/IdempotencyService";
+} from "@/lib/IdempotencyService";
 import {
 	TransactionConcurrencyFailure,
 	type TransactionInfrastructureError,

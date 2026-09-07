@@ -21,7 +21,7 @@ import {
 	ledgerAccountCategoryLayer,
 	type LedgerAccountCategoryService,
 } from "@/domains/ledgers/accounts/categories";
-import { makeIdempotencyService, type IdempotencyService } from "@/services/IdempotencyService";
+import { makeIdempotencyService, type IdempotencyService } from "@/lib/IdempotencyService";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
 

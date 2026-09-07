@@ -28,7 +28,7 @@ import {
 	IdempotencyPending,
 	type IdempotencyService,
 	IdempotencyServiceTag,
-} from "@/services/IdempotencyService";
+} from "@/lib/IdempotencyService";
 
 type JsonObject = Record<string, unknown>;
 

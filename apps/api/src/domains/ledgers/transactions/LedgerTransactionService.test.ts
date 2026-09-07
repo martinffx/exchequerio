@@ -27,7 +27,7 @@ import {
 	type IdempotencyService,
 	IdempotencyServiceTag,
 	IdempotencyUnavailable,
-} from "@/services/IdempotencyService";
+} from "@/lib/IdempotencyService";
 import { type LedgerTransactionRepo, LedgerTransactionRepoTag } from "./LedgerTransactionRepo";
 import type { TransactionCreateRequest, TransactionUpdateRequest } from "./LedgerTransactionSchema";
 import {
