@@ -4,7 +4,7 @@ import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
-import { DatabaseTag, makeDatabaseLive } from "@/db";
+import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { NotFoundError } from "@/lib/errors";
 import type {
 	LedgerAccountID,
@@ -36,12 +36,12 @@ describe("LedgerAccountStatementRepoLive", () => {
 		ledgerAccountStatementRepoLayer.pipe(Layer.provide(databaseLayer))
 	);
 	const runtime = ManagedRuntime.make(layer);
-	const run = <A, E>(use: (repository: LedgerAccountStatementRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(LedgerAccountStatementRepoTag.pipe(Effect.flatMap(use)));
-	const database = () => runtime.runPromise(DatabaseTag.pipe(Effect.map(value => value.db)));
+	let repository: LedgerAccountStatementRepo;
+	let db: Database["db"];
 
 	beforeAll(async () => {
-		const db = await database();
+		repository = await runtime.runPromise(LedgerAccountStatementRepoTag);
+		db = (await runtime.runPromise(DatabaseTag)).db;
 		await db.insert(OrganizationsTable).values({
 			id: organizationId.toString(),
 			name: "Statement repository organization",
@@ -63,7 +63,6 @@ describe("LedgerAccountStatementRepoLive", () => {
 
 	afterAll(async () => {
 		try {
-			const db = await database();
 			await db
 				.delete(LedgerAccountStatementsTable)
 				.where(eq(LedgerAccountStatementsTable.ledgerId, ledgerId.toString()));
@@ -93,8 +92,8 @@ describe("LedgerAccountStatementRepoLive", () => {
 
 	it("creates and gets a Statement by Statement ID alone", async () => {
 		const input = statement();
-		const created = await run(repository => repository.createStatement(input));
-		const found = await run(repository => repository.getStatement(input.id));
+		const created = await runtime.runPromise(repository.createStatement(input));
+		const found = await runtime.runPromise(repository.getStatement(input.id));
 
 		expect(created).toMatchObject({
 			id: input.id,
@@ -113,7 +112,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 	});
 
 	it("fails with the existing Not Found error when the Statement is absent", async () => {
-		const error = await run(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(repository.getStatement(new TypeID("lst") as LedgerAccountStatementID))
 		);
 
@@ -123,8 +122,8 @@ describe("LedgerAccountStatementRepoLive", () => {
 
 	it("keeps duplicate-key failures on the generic Effect error channel", async () => {
 		const input = statement();
-		await run(repository => repository.createStatement(input));
-		const error = await run(repository => Effect.flip(repository.createStatement(input)));
+		await runtime.runPromise(repository.createStatement(input));
+		const error = await runtime.runPromise(Effect.flip(repository.createStatement(input)));
 
 		expect(error).not.toBeInstanceOf(NotFoundError);
 	});
@@ -135,7 +134,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 			...input,
 			ledgerId: new TypeID("lgr") as LedgerID,
 		});
-		const error = await run(repository => Effect.flip(repository.createStatement(invalid)));
+		const error = await runtime.runPromise(Effect.flip(repository.createStatement(invalid)));
 
 		expect(error).not.toBeInstanceOf(NotFoundError);
 	});

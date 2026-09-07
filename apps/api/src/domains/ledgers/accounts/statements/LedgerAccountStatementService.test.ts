@@ -1,6 +1,6 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { TypeID } from "typeid-js";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/repo/entities/types";
@@ -33,51 +33,46 @@ const stored = new LedgerAccountStatement({
 	updated: new Date("2025-01-01T00:00:00.000Z"),
 });
 
-const run = <A, E>(
-	repository: LedgerAccountStatementRepo,
-	use: (service: LedgerAccountStatementService) => Effect.Effect<A, E>
-) =>
-	Effect.runPromise(
-		LedgerAccountStatementServiceTag.pipe(Effect.flatMap(use)).pipe(
-			Effect.provide(
-				ledgerAccountStatementServiceLayer.pipe(
-					Layer.provide(Layer.succeed(LedgerAccountStatementRepoTag, repository))
-				)
-			)
-		)
-	);
+const repository = vi.mocked<LedgerAccountStatementRepo>({
+	getStatement: vi.fn(() => Effect.succeed(stored)),
+	createStatement: vi.fn(statement => Effect.succeed(statement)),
+});
+const runtime = ManagedRuntime.make(
+	ledgerAccountStatementServiceLayer.pipe(
+		Layer.provide(Layer.succeed(LedgerAccountStatementRepoTag, repository))
+	)
+);
+let service: LedgerAccountStatementService;
+beforeAll(async () => {
+	service = await runtime.runPromise(LedgerAccountStatementServiceTag);
+});
+beforeEach(() => {
+	vi.resetAllMocks();
+});
+afterAll(() => runtime.dispose());
 
 describe("LedgerAccountStatementService", () => {
 	it("parses the Statement ID and delegates get exactly once", async () => {
-		const getStatement = vi.fn(() => Effect.succeed(stored));
-		const repository: LedgerAccountStatementRepo = {
-			getStatement,
-			createStatement: vi.fn(() => Effect.succeed(stored)),
-		};
-
-		const result = await run(repository, service =>
+		const result = await runtime.runPromise(
 			service.getLedgerAccountStatement(statementId.toString())
 		);
 
 		expect(result).toBe(stored);
-		expect(getStatement).toHaveBeenCalledOnce();
-		expect(getStatement).toHaveBeenCalledWith(statementId);
+		expect(repository.getStatement).toHaveBeenCalledOnce();
+		expect(repository.getStatement).toHaveBeenCalledWith(statementId);
 	});
 
 	it("builds the placeholder Statement from body identifiers and start time", async () => {
 		let received: LedgerAccountStatement | undefined;
-		const repository: LedgerAccountStatementRepo = {
-			getStatement: vi.fn(() => Effect.succeed(stored)),
-			createStatement: vi.fn((statement: LedgerAccountStatement) => {
-				received = statement;
-				return Effect.succeed(statement);
-			}),
-		};
+		repository.createStatement.mockImplementation(statement => {
+			received = statement;
+			return Effect.succeed(statement);
+		});
 		const bodyLedgerId = new TypeID("lgr");
 		const bodyAccountId = new TypeID("lat");
 		const startDatetime = "2025-02-01T00:00:00.000Z";
 
-		const result = await run(repository, service =>
+		const result = await runtime.runPromise(
 			service.createLedgerAccountStatement({
 				ledgerId: bodyLedgerId.toString(),
 				accountId: bodyAccountId.toString(),
@@ -104,18 +99,14 @@ describe("LedgerAccountStatementService", () => {
 	it.each([new NotFoundError("Statement not found"), new Error("unexpected repository failure")])(
 		"preserves the repository failure %#",
 		async error => {
-			const repository: LedgerAccountStatementRepo = {
-				getStatement: vi.fn(() => Effect.fail(error)),
-				createStatement: vi.fn(() => Effect.fail(error)),
-			};
+			repository.getStatement.mockReturnValue(Effect.fail(error));
+			repository.createStatement.mockReturnValue(Effect.fail(error));
 
 			expect(
-				await run(repository, service =>
-					Effect.flip(service.getLedgerAccountStatement(statementId.toString()))
-				)
+				await runtime.runPromise(Effect.flip(service.getLedgerAccountStatement(statementId.toString())))
 			).toBe(error);
 			expect(
-				await run(repository, service =>
+				await runtime.runPromise(
 					Effect.flip(
 						service.createLedgerAccountStatement({
 							ledgerId: ledgerId.toString(),
