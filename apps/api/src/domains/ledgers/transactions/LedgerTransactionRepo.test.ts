@@ -1,10 +1,10 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
-import { DatabaseTag, makeDatabaseLive } from "@/db";
+import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { AccountNotFound, LedgerAccountCurrencyMismatch } from "@/domains/ledgers/accounts";
 import {
 	newLedgerAccountID,
@@ -83,15 +83,18 @@ describe("LedgerTransactionRepoLive", () => {
 	const runtime = ManagedRuntime.make(layer);
 	const organizationIds: string[] = [];
 
-	const runRepo = <A, E>(use: (repository: LedgerTransactionRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(LedgerTransactionRepoTag.pipe(Effect.flatMap(use)));
+	let repository: LedgerTransactionRepo;
+	let database: Database["db"];
 
-	const database = () => runtime.runPromise(DatabaseTag.pipe(Effect.map(value => value.db)));
+	beforeAll(async () => {
+		repository = await runtime.runPromise(LedgerTransactionRepoTag);
+		database = (await runtime.runPromise(DatabaseTag)).db;
+	});
 
 	const createLedger = async () => {
 		const organizationId = newOrgID();
 		const ledgerId = newLedgerID();
-		const db = await database();
+		const db = database;
 		organizationIds.push(organizationId.toString());
 		await db.insert(OrganizationsTable).values({
 			id: organizationId.toString(),
@@ -112,7 +115,7 @@ describe("LedgerTransactionRepoLive", () => {
 		currencyCode = "EUR"
 	) => {
 		const id = newLedgerAccountID();
-		const db = await database();
+		const db = database;
 		await db.insert(LedgerAccountsTable).values({
 			id: id.toString(),
 			organizationId: organizationId.toString(),
@@ -129,7 +132,7 @@ describe("LedgerTransactionRepoLive", () => {
 		ledgerId: LedgerID,
 		accountIds: readonly AccountId[]
 	) => {
-		const db = await database();
+		const db = database;
 		const rows = await db
 			.select()
 			.from(LedgerAccountsTable)
@@ -148,7 +151,7 @@ describe("LedgerTransactionRepoLive", () => {
 
 	afterAll(async () => {
 		if (organizationIds.length > 0) {
-			const db = await database();
+			const db = database;
 			await db
 				.delete(LedgerTransactionEntriesTable)
 				.where(inArray(LedgerTransactionEntriesTable.organizationId, organizationIds));
@@ -182,7 +185,9 @@ describe("LedgerTransactionRepoLive", () => {
 				settlementId: newLedgerAccountSettlementID(),
 			})
 		);
-		const failure = await runRepo(repo => repo.createTransaction(generated).pipe(Effect.flip));
+		const failure = await runtime.runPromise(
+			repository.createTransaction(generated).pipe(Effect.flip)
+		);
 		expect(failure).toBeInstanceOf(TransactionSettlementConflict);
 	});
 
@@ -195,21 +200,23 @@ describe("LedgerTransactionRepoLive", () => {
 			{ accountId: credit, direction: "credit", amount: 100 },
 		]);
 		const id = newLedgerTransactionID();
-		await runRepo(repo => persist(repo, organizationId, ledgerId, id, body));
+		await runtime.runPromise(persist(repository, organizationId, ledgerId, id, body));
 		const effectiveAt = "2027-01-01T00:00:00.000Z";
-		await runRepo(repo =>
-			repo.updateTransaction(organizationId, ledgerId, id, { ...body, effectiveAt })
+		await runtime.runPromise(
+			repository.updateTransaction(organizationId, ledgerId, id, { ...body, effectiveAt })
 		);
-		await runRepo(repo => repo.updateTransaction(organizationId, ledgerId, id, body));
-		await runRepo(repo => repo.postTransaction(organizationId, ledgerId, id, DateTime.utc()));
+		await runtime.runPromise(repository.updateTransaction(organizationId, ledgerId, id, body));
+		await runtime.runPromise(
+			repository.postTransaction(organizationId, ledgerId, id, DateTime.utc())
+		);
 		const loaded = Option.getOrThrow(
-			await runRepo(repo => repo.getTransaction(organizationId, ledgerId, id))
+			await runtime.runPromise(repository.getTransaction(organizationId, ledgerId, id))
 		);
 		expect(loaded.toResponse().effectiveAt).toBe(effectiveAt);
 		const balances = await accounts(organizationId, ledgerId, [debit]);
 		expect(balances.get(debit.toString())?.postedAmount).toBe(100);
 		await expect(
-			runRepo(repo => repo.updateTransaction(organizationId, ledgerId, id, body))
+			runtime.runPromise(repository.updateTransaction(organizationId, ledgerId, id, body))
 		).rejects.toBeInstanceOf(TransactionLifecycleConflict);
 	});
 
@@ -221,7 +228,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 
-		const transaction = await runRepo(repository =>
+		const transaction = await runtime.runPromise(
 			persist(
 				repository,
 				organizationId,
@@ -269,7 +276,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const other = await createLedger();
 		const debit = await createAccount(owner.organizationId, owner.ledgerId, "debit");
 		const credit = await createAccount(owner.organizationId, owner.ledgerId, "credit");
-		const first = await runRepo(repository =>
+		const first = await runtime.runPromise(
 			persist(
 				repository,
 				owner.organizationId,
@@ -282,7 +289,7 @@ describe("LedgerTransactionRepoLive", () => {
 			)
 		);
 		await new Promise(resolve => setTimeout(resolve, 2));
-		const second = await runRepo(repository =>
+		const second = await runtime.runPromise(
 			persist(
 				repository,
 				owner.organizationId,
@@ -295,7 +302,7 @@ describe("LedgerTransactionRepoLive", () => {
 			)
 		);
 
-		const listed = await runRepo(repository =>
+		const listed = await runtime.runPromise(
 			repository.listTransactions(owner.organizationId, owner.ledgerId, {
 				offset: 0,
 				limit: 20,
@@ -308,13 +315,13 @@ describe("LedgerTransactionRepoLive", () => {
 		]);
 		expect(listed.every(transaction => Option.isNone(transaction.entries))).toBe(true);
 		expect(
-			await runRepo(repository =>
+			await runtime.runPromise(
 				repository.getTransaction(other.organizationId, owner.ledgerId, first.id)
 			)
 		).toEqual(Option.none());
 		expect(
 			Option.getOrThrow(
-				await runRepo(repository =>
+				await runtime.runPromise(
 					repository.getTransaction(owner.organizationId, owner.ledgerId, first.id)
 				)
 			).metadata
@@ -325,7 +332,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const { organizationId, ledgerId } = await createLedger();
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const missing = newLedgerAccountID();
-		const error = await runRepo(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(
 				persist(
 					repository,
@@ -346,7 +353,7 @@ describe("LedgerTransactionRepoLive", () => {
 			lockVersion: 1,
 		});
 		expect(
-			await runRepo(repository =>
+			await runtime.runPromise(
 				repository.listTransactions(organizationId, ledgerId, { offset: 0, limit: 20 })
 			)
 		).toHaveLength(0);
@@ -357,7 +364,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 		const transactionId = newLedgerTransactionID();
-		const db = await database();
+		const db = database;
 		const suffix = crypto.randomUUID().replaceAll("-", "");
 		const functionName = `fail_account_update_${suffix}`;
 		const triggerName = `fail_account_update_${suffix}`;
@@ -379,7 +386,7 @@ describe("LedgerTransactionRepoLive", () => {
 		);
 
 		try {
-			const error = await runRepo(repository =>
+			const error = await runtime.runPromise(
 				Effect.flip(
 					persist(
 						repository,
@@ -423,7 +430,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const usdDebit = await createAccount(organizationId, ledgerId, "debit", "USD");
 		const usdCredit = await createAccount(organizationId, ledgerId, "debit", "USD");
 
-		await runRepo(repository =>
+		await runtime.runPromise(
 			persist(repository, organizationId, ledgerId, newLedgerTransactionID(), {
 				status: "posted",
 				ledgerEntries: [
@@ -446,7 +453,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const { organizationId, ledgerId } = await createLedger();
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
-		const transaction = await runRepo(repository =>
+		const transaction = await runtime.runPromise(
 			persist(
 				repository,
 				organizationId,
@@ -460,7 +467,7 @@ describe("LedgerTransactionRepoLive", () => {
 		);
 		const originalEntryIds = Option.getOrThrow(transaction.entries).map(entry => entry.id.toString());
 
-		const updated = await runRepo(repository =>
+		const updated = await runtime.runPromise(
 			repository.updateTransaction(organizationId, ledgerId, transaction.id, {
 				description: "Updated",
 				ledgerEntries: [
@@ -485,7 +492,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 		const createPending = () =>
-			runRepo(repository =>
+			runtime.runPromise(
 				persist(
 					repository,
 					organizationId,
@@ -500,17 +507,17 @@ describe("LedgerTransactionRepoLive", () => {
 
 		const pendingToPost = await createPending();
 		const postedAt = DateTime.utc();
-		const posted = await runRepo(repository =>
+		const posted = await runtime.runPromise(
 			repository.postTransaction(organizationId, ledgerId, pendingToPost.id, postedAt)
 		);
-		const postedAgain = await runRepo(repository =>
+		const postedAgain = await runtime.runPromise(
 			repository.postTransaction(organizationId, ledgerId, pendingToPost.id, postedAt)
 		);
 		const pendingToVoid = await createPending();
-		const voided = await runRepo(repository =>
+		const voided = await runtime.runPromise(
 			repository.voidTransaction(organizationId, ledgerId, pendingToVoid.id, DateTime.utc())
 		);
-		const voidedAgain = await runRepo(repository =>
+		const voidedAgain = await runtime.runPromise(
 			repository.voidTransaction(organizationId, ledgerId, pendingToVoid.id, DateTime.utc())
 		);
 		const byId = await accounts(organizationId, ledgerId, [debit, credit]);
@@ -533,7 +540,7 @@ describe("LedgerTransactionRepoLive", () => {
 			availableAmount: 25,
 			lockVersion: 5,
 		});
-		const error = await runRepo(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(
 				repository.voidTransaction(organizationId, ledgerId, pendingToPost.id, DateTime.utc())
 			)
@@ -552,7 +559,7 @@ describe("LedgerTransactionRepoLive", () => {
 		transactionRequest.ledgerEntries[0]!.currencyCode = "USD";
 		transactionRequest.ledgerEntries[1]!.currencyCode = "USD";
 
-		const error = await runRepo(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(
 				persist(repository, organizationId, ledgerId, newLedgerTransactionID(), transactionRequest)
 			)
@@ -560,7 +567,7 @@ describe("LedgerTransactionRepoLive", () => {
 
 		expect(error).toBeInstanceOf(LedgerAccountCurrencyMismatch);
 		expect(
-			await runRepo(repository =>
+			await runtime.runPromise(
 				repository.listTransactions(organizationId, ledgerId, { offset: 0, limit: 20 })
 			)
 		).toHaveLength(0);

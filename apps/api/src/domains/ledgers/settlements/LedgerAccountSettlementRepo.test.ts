@@ -8,15 +8,21 @@ import { makeDatabaseLive } from "@/db";
 import { Organization } from "@/domains/organizations/Organization";
 import {
 	organizationRepoLayer,
+	type OrganizationRepo,
 	OrganizationRepoTag,
 } from "@/domains/organizations/OrganizationRepo";
 import { Ledger } from "../Ledger";
-import { ledgerRepoLayer, LedgerRepoTag } from "../LedgerRepo";
+import { type LedgerRepo, ledgerRepoLayer, LedgerRepoTag } from "../LedgerRepo";
 import { LedgerAccount } from "../accounts/LedgerAccount";
-import { ledgerAccountRepoLayer, LedgerAccountRepoTag } from "../accounts/LedgerAccountRepo";
+import {
+	type LedgerAccountRepo,
+	ledgerAccountRepoLayer,
+	LedgerAccountRepoTag,
+} from "../accounts/LedgerAccountRepo";
 import { LedgerTransaction } from "../transactions/LedgerTransaction";
 import {
 	ledgerTransactionRepoLayer,
+	type LedgerTransactionRepo,
 	LedgerTransactionRepoTag,
 } from "../transactions/LedgerTransactionRepo";
 import {
@@ -29,6 +35,7 @@ import {
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import {
 	ledgerAccountSettlementRepoLayer,
+	type LedgerAccountSettlementRepo,
 	LedgerAccountSettlementRepoTag,
 } from "./LedgerAccountSettlementRepo";
 
@@ -40,20 +47,28 @@ const layers = Layer.mergeAll(
 	ledgerTransactionRepoLayer,
 	ledgerAccountSettlementRepoLayer
 );
-/** Services required by repository fixture Effects. */
+
+/** Repository services supplied by the test runtime. */
 type Services = Layer.Success<typeof layers>;
 let runtime: ManagedRuntime.ManagedRuntime<Services, never>;
+let organizations: OrganizationRepo;
+let ledgers: LedgerRepo;
+let accounts: LedgerAccountRepo;
+let transactions: LedgerTransactionRepo;
+let repo: LedgerAccountSettlementRepo;
 const config = new Config();
+
 /** Tracks scoped Ledger fixtures before creation so partial setup can be cleaned up. */
 const fixtureLedgers: Array<{
 	organizationId: ReturnType<typeof newOrgID>;
 	ledgerId: ReturnType<typeof newLedgerID>;
 }> = [];
+
 /** Tracks Organizations created by this suite for repository-owned cleanup. */
 const fixtureOrganizations = new Set<ReturnType<typeof newOrgID>>();
-/** Runs repository Effects against the configured test database runtime. */
-const run = <A, E>(effect: Effect.Effect<A, E, Services>) => runtime.runPromise(effect);
+
 const now = () => DateTime.utc();
+
 /**
  * Creates a Ledger and opposing USD Accounts through repositories.
  *
@@ -63,9 +78,6 @@ const now = () => DateTime.utc();
  */
 const context = (organizationId = newOrgID(), createOrganization = true) =>
 	Effect.gen(function* () {
-		const organizations = yield* OrganizationRepoTag,
-			ledgers = yield* LedgerRepoTag,
-			accounts = yield* LedgerAccountRepoTag;
 		const ledgerId = newLedgerID(),
 			settledAccountId = newLedgerAccountID(),
 			contraAccountId = newLedgerAccountID();
@@ -90,8 +102,10 @@ const context = (organizationId = newOrgID(), createOrganization = true) =>
 			);
 		return { organizationId, ledgerId, settledAccountId, contraAccountId };
 	});
+
 /** Organization, Ledger, and Account identifiers created by the fixture. */
 type Owner = Effect.Success<ReturnType<typeof context>>;
+
 /**
  * Persists a balanced source Transaction through the Transaction repository.
  *
@@ -110,7 +124,6 @@ const source = (
 	status: "pending" | "posted" = "posted"
 ) =>
 	Effect.gen(function* () {
-		const repo = yield* LedgerTransactionRepoTag;
 		const transaction = yield* LedgerTransaction.fromCreateRequest(
 			newLedgerTransactionID(),
 			owner.organizationId,
@@ -131,7 +144,7 @@ const source = (
 			now(),
 			[newLedgerTransactionEntryID(), newLedgerTransactionEntryID()]
 		);
-		const created = yield* repo.createTransaction(transaction);
+		const created = yield* transactions.createTransaction(transaction);
 		return { transaction: created, entry: Option.getOrThrow(created.entries)[0] };
 	});
 /**
@@ -143,7 +156,6 @@ const source = (
  */
 const draft = (owner: Owner, allowEitherDirection = false) =>
 	Effect.gen(function* () {
-		const repo = yield* LedgerAccountSettlementRepoTag;
 		const entity = yield* LedgerAccountSettlementEntity.fromRequest(
 			owner.organizationId,
 			owner.ledgerId,
@@ -159,16 +171,20 @@ const draft = (owner: Owner, allowEitherDirection = false) =>
 		return yield* repo.createSettlement(entity, undefined, now());
 	});
 
-beforeAll(() => {
+beforeAll(async () => {
 	runtime = ManagedRuntime.make(layers.pipe(Layer.provide(makeDatabaseLive(config.databaseUrl))));
+	organizations = await runtime.runPromise(OrganizationRepoTag);
+	ledgers = await runtime.runPromise(LedgerRepoTag);
+	accounts = await runtime.runPromise(LedgerAccountRepoTag);
+	transactions = await runtime.runPromise(LedgerTransactionRepoTag);
+	repo = await runtime.runPromise(LedgerAccountSettlementRepoTag);
 });
 afterAll(async () => {
 	try {
-		const ledgers = await run(LedgerRepoTag),
-			organizations = await run(OrganizationRepoTag);
 		for (const fixture of fixtureLedgers)
-			await run(ledgers.deleteLedgerFixtures(fixture.organizationId, fixture.ledgerId));
-		for (const id of fixtureOrganizations) await run(organizations.deleteOrganization(id));
+			await runtime.runPromise(ledgers.deleteLedgerFixtures(fixture.organizationId, fixture.ledgerId));
+		for (const id of fixtureOrganizations)
+			await runtime.runPromise(organizations.deleteOrganization(id));
 	} finally {
 		await runtime.dispose();
 	}
@@ -176,15 +192,13 @@ afterAll(async () => {
 
 describe("Settlement repository processing", () => {
 	it("deletes only the requested fixture Ledger and supports repeated cleanup", async () => {
-		const owner = await run(context()),
-			sibling = await run(context(owner.organizationId, false)),
-			other = await run(context());
-		const entry = await run(source(owner)),
-			settlement = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag),
-			ledgers = await run(LedgerRepoTag),
-			transactions = await run(LedgerTransactionRepoTag);
-		await run(
+		const owner = await runtime.runPromise(context()),
+			sibling = await runtime.runPromise(context(owner.organizationId, false)),
+			other = await runtime.runPromise(context());
+		const entry = await runtime.runPromise(source(owner)),
+			settlement = await runtime.runPromise(draft(owner));
+
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -193,7 +207,7 @@ describe("Settlement repository processing", () => {
 				true
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -202,44 +216,49 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			transactions.createSettlementTransaction(
-				await run(repo.buildTransaction(owner.organizationId, owner.ledgerId, settlement.id, now()))
+				await runtime.runPromise(
+					repo.buildTransaction(owner.organizationId, owner.ledgerId, settlement.id, now())
+				)
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, settlement.id, "posted", now())
 		);
-		await run(ledgers.deleteLedgerFixtures(other.organizationId, owner.ledgerId));
-		expect(Option.isSome(await run(ledgers.getLedger(owner.organizationId, owner.ledgerId)))).toBe(
-			true
-		);
-		await run(ledgers.deleteLedgerFixtures(owner.organizationId, owner.ledgerId));
-		await run(ledgers.deleteLedgerFixtures(owner.organizationId, owner.ledgerId));
-		expect(Option.isNone(await run(ledgers.getLedger(owner.organizationId, owner.ledgerId)))).toBe(
-			true
-		);
-		expect(await run(repo.listSettlements(owner.organizationId, owner.ledgerId, 0, 20))).toEqual([]);
+		await runtime.runPromise(ledgers.deleteLedgerFixtures(other.organizationId, owner.ledgerId));
 		expect(
-			await run(
+			Option.isSome(await runtime.runPromise(ledgers.getLedger(owner.organizationId, owner.ledgerId)))
+		).toBe(true);
+		await runtime.runPromise(ledgers.deleteLedgerFixtures(owner.organizationId, owner.ledgerId));
+		await runtime.runPromise(ledgers.deleteLedgerFixtures(owner.organizationId, owner.ledgerId));
+		expect(
+			Option.isNone(await runtime.runPromise(ledgers.getLedger(owner.organizationId, owner.ledgerId)))
+		).toBe(true);
+		expect(
+			await runtime.runPromise(repo.listSettlements(owner.organizationId, owner.ledgerId, 0, 20))
+		).toEqual([]);
+		expect(
+			await runtime.runPromise(
 				transactions.listTransactions(owner.organizationId, owner.ledgerId, { offset: 0, limit: 20 })
 			)
 		).toEqual([]);
 		expect(
-			Option.isSome(await run(ledgers.getLedger(sibling.organizationId, sibling.ledgerId)))
+			Option.isSome(
+				await runtime.runPromise(ledgers.getLedger(sibling.organizationId, sibling.ledgerId))
+			)
 		).toBe(true);
-		expect(Option.isSome(await run(ledgers.getLedger(other.organizationId, other.ledgerId)))).toBe(
-			true
-		);
+		expect(
+			Option.isSome(await runtime.runPromise(ledgers.getLedger(other.organizationId, other.ledgerId)))
+		).toBe(true);
 	});
 
 	it("rolls back fixture cleanup if a dependent record cannot be deleted", async () => {
-		const owner = await run(context()),
-			entry = await run(source(owner)),
-			settlement = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag),
-			transactions = await run(LedgerTransactionRepoTag);
-		await run(
+		const owner = await runtime.runPromise(context()),
+			entry = await runtime.runPromise(source(owner)),
+			settlement = await runtime.runPromise(draft(owner));
+
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -265,13 +284,19 @@ describe("Settlement repository processing", () => {
 				limitedRuntime.runPromise(ledgers.deleteLedgerFixtures(owner.organizationId, owner.ledgerId))
 			).rejects.toThrow();
 			expect(
-				(await run(repo.getSettlement(owner.organizationId, owner.ledgerId, settlement.id))).status
+				(
+					await runtime.runPromise(
+						repo.getSettlement(owner.organizationId, owner.ledgerId, settlement.id)
+					)
+				).status
 			).toBe("drafting");
 			expect(
-				await run(repo.listEntries(owner.organizationId, owner.ledgerId, settlement.id, 0, 20))
+				await runtime.runPromise(
+					repo.listEntries(owner.organizationId, owner.ledgerId, settlement.id, 0, 20)
+				)
 			).toHaveLength(1);
 			expect(
-				await run(
+				await runtime.runPromise(
 					transactions.listTransactions(owner.organizationId, owner.ledgerId, { offset: 0, limit: 20 })
 				)
 			).toHaveLength(1);
@@ -283,23 +308,26 @@ describe("Settlement repository processing", () => {
 	});
 
 	it("filters list and item reads by Organization and Ledger", async () => {
-		const owner = await run(context()),
-			other = await run(context(owner.organizationId, false));
-		const entity = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag);
-		expect(await run(repo.listSettlements(owner.organizationId, other.ledgerId, 0, 20))).toEqual([]);
-		expect(await run(repo.listSettlements(newOrgID(), owner.ledgerId, 0, 20))).toEqual([]);
+		const owner = await runtime.runPromise(context()),
+			other = await runtime.runPromise(context(owner.organizationId, false));
+		const entity = await runtime.runPromise(draft(owner));
+
+		expect(
+			await runtime.runPromise(repo.listSettlements(owner.organizationId, other.ledgerId, 0, 20))
+		).toEqual([]);
+		expect(await runtime.runPromise(repo.listSettlements(newOrgID(), owner.ledgerId, 0, 20))).toEqual(
+			[]
+		);
 		await expect(
-			run(repo.getSettlement(owner.organizationId, other.ledgerId, entity.id))
+			runtime.runPromise(repo.getSettlement(owner.organizationId, other.ledgerId, entity.id))
 		).rejects.toThrow("not found");
 	});
 	it("freezes sources, creates accounting once, and finalizes separately", async () => {
-		const owner = await run(context()),
-			entry = await run(source(owner));
-		const entity = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag),
-			transactions = await run(LedgerTransactionRepoTag);
-		await run(
+		const owner = await runtime.runPromise(context()),
+			entry = await runtime.runPromise(source(owner));
+		const entity = await runtime.runPromise(draft(owner));
+
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -308,7 +336,7 @@ describe("Settlement repository processing", () => {
 				true
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -318,10 +346,11 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		expect(
-			(await run(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id))).status
+			(await runtime.runPromise(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id)))
+				.status
 		).toBe("processing");
 		await expect(
-			run(
+			runtime.runPromise(
 				repo.changeEntries(
 					owner.organizationId,
 					owner.ledgerId,
@@ -332,17 +361,19 @@ describe("Settlement repository processing", () => {
 			)
 		).rejects.toThrow("drafting");
 		await expect(
-			run(repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "pending", now()))
+			runtime.runPromise(
+				repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "pending", now())
+			)
 		).rejects.toThrow("not completed");
-		const accounting = await run(
+		const accounting = await runtime.runPromise(
 			repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
 		);
 		const [first, second] = await Promise.all([
-			run(transactions.createSettlementTransaction(accounting)),
-			run(transactions.createSettlementTransaction(accounting)),
+			runtime.runPromise(transactions.createSettlementTransaction(accounting)),
+			runtime.runPromise(transactions.createSettlementTransaction(accounting)),
 		]);
 		expect(first.id).toEqual(second.id);
-		const pending = await run(
+		const pending = await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "pending", now())
 		);
 		expect(pending.toResponse()).toMatchObject({
@@ -351,24 +382,32 @@ describe("Settlement repository processing", () => {
 			settlementEntryDirection: "credit",
 			transactionId: first.id.toString(),
 		});
-		const listed = await run(repo.listSettlements(owner.organizationId, owner.ledgerId, 0, 1));
+		const listed = await runtime.runPromise(
+			repo.listSettlements(owner.organizationId, owner.ledgerId, 0, 1)
+		);
 		expect(listed.map(value => value.toResponse())).toEqual([pending.toResponse()]);
-		expect(await run(repo.listSettlements(owner.organizationId, owner.ledgerId, 1, 1))).toEqual([]);
+		expect(
+			await runtime.runPromise(repo.listSettlements(owner.organizationId, owner.ledgerId, 1, 1))
+		).toEqual([]);
 
 		await expect(
-			run(transactions.postTransaction(owner.organizationId, owner.ledgerId, first.id, now()))
+			runtime.runPromise(
+				transactions.postTransaction(owner.organizationId, owner.ledgerId, first.id, now())
+			)
 		).rejects.toThrow(/Settlement/);
 		await expect(
-			run(transactions.voidTransaction(owner.organizationId, owner.ledgerId, first.id, now()))
+			runtime.runPromise(
+				transactions.voidTransaction(owner.organizationId, owner.ledgerId, first.id, now())
+			)
 		).rejects.toThrow(/Settlement/);
 		await expect(
-			run(
+			runtime.runPromise(
 				transactions.updateTransaction(owner.organizationId, owner.ledgerId, first.id, {
 					ledgerEntries: [],
 				})
 			)
 		).rejects.toThrow(/Settlement/);
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -377,26 +416,27 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		const posted = await run(
+		const posted = await runtime.runPromise(
 			transactions.postSettlementTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
 		);
 		expect(posted.id).toEqual(first.id);
-		await run(
+		await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "posted", now())
 		);
-		const accounts = await run(LedgerAccountRepoTag);
+
 		const account = Option.getOrThrow(
-			await run(accounts.getAccount(owner.organizationId, owner.ledgerId, owner.settledAccountId))
+			await runtime.runPromise(
+				accounts.getAccount(owner.organizationId, owner.ledgerId, owner.settledAccountId)
+			)
 		);
 		expect(account.postedAmount).toBe(0);
 	});
 	it("retains accounting across voiding and releases sources only on finalization", async () => {
-		const owner = await run(context()),
-			entry = await run(source(owner)),
-			entity = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag),
-			transactions = await run(LedgerTransactionRepoTag);
-		await run(
+		const owner = await runtime.runPromise(context()),
+			entry = await runtime.runPromise(source(owner)),
+			entity = await runtime.runPromise(draft(owner));
+
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -405,7 +445,7 @@ describe("Settlement repository processing", () => {
 				true
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -414,15 +454,17 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		const accounting = await run(
+		const accounting = await runtime.runPromise(
 			transactions.createSettlementTransaction(
-				await run(repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now()))
+				await runtime.runPromise(
+					repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+				)
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "pending", now())
 		);
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -431,13 +473,15 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			transactions.voidSettlementTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
 		);
 		expect(
-			await run(repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20))
+			await runtime.runPromise(
+				repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20)
+			)
 		).toHaveLength(1);
-		const voided = await run(
+		const voided = await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "voided", now())
 		);
 		expect(voided.toResponse()).toMatchObject({
@@ -446,10 +490,12 @@ describe("Settlement repository processing", () => {
 			transactionId: accounting.id.toString(),
 		});
 		expect(
-			await run(repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20))
+			await runtime.runPromise(
+				repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20)
+			)
 		).toEqual([]);
-		const next = await run(draft(owner));
-		await run(
+		const next = await runtime.runPromise(draft(owner));
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -460,12 +506,12 @@ describe("Settlement repository processing", () => {
 		);
 	});
 	it("nets mixed directions and requires permission for negative nets", async () => {
-		const owner = await run(context()),
-			debit = await run(source(owner, 40)),
-			credit = await run(source(owner, 100, "credit"));
-		const entity = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag);
-		await run(
+		const owner = await runtime.runPromise(context()),
+			debit = await runtime.runPromise(source(owner, 40)),
+			credit = await runtime.runPromise(source(owner, 100, "credit"));
+		const entity = await runtime.runPromise(draft(owner));
+
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -475,7 +521,7 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		await expect(
-			run(
+			runtime.runPromise(
 				repo.prepareSettlement(
 					owner.organizationId,
 					owner.ledgerId,
@@ -486,9 +532,10 @@ describe("Settlement repository processing", () => {
 			)
 		).rejects.toThrow("allowEitherDirection");
 		expect(
-			(await run(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id))).status
+			(await runtime.runPromise(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id)))
+				.status
 		).toBe("drafting");
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -497,8 +544,8 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		const allowed = await run(draft(owner, true));
-		await run(
+		const allowed = await runtime.runPromise(draft(owner, true));
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -507,7 +554,7 @@ describe("Settlement repository processing", () => {
 				true
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -516,7 +563,7 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		const transaction = await run(
+		const transaction = await runtime.runPromise(
 			repo.buildTransaction(owner.organizationId, owner.ledgerId, allowed.id, now())
 		);
 		expect(Option.getOrThrow(transaction.entries)[0]).toMatchObject({
@@ -525,11 +572,11 @@ describe("Settlement repository processing", () => {
 		});
 	});
 	it("rejects empty and zero nets without advancing state", async () => {
-		const owner = await run(context()),
-			entity = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag);
+		const owner = await runtime.runPromise(context()),
+			entity = await runtime.runPromise(draft(owner));
+
 		await expect(
-			run(
+			runtime.runPromise(
 				repo.prepareSettlement(
 					owner.organizationId,
 					owner.ledgerId,
@@ -539,9 +586,9 @@ describe("Settlement repository processing", () => {
 				)
 			)
 		).rejects.toThrow("source Entries");
-		const debit = await run(source(owner)),
-			credit = await run(source(owner, 125, "credit"));
-		await run(
+		const debit = await runtime.runPromise(source(owner)),
+			credit = await runtime.runPromise(source(owner, 125, "credit"));
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -551,7 +598,7 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		await expect(
-			run(
+			runtime.runPromise(
 				repo.prepareSettlement(
 					owner.organizationId,
 					owner.ledgerId,
@@ -563,14 +610,14 @@ describe("Settlement repository processing", () => {
 		).rejects.toThrow("nonzero");
 	});
 	it("selects backdated sources through cutoff equality and excludes future/pending sources", async () => {
-		const owner = await run(context()),
+		const owner = await runtime.runPromise(context()),
 			cutoff = DateTime.fromISO("2026-08-01T00:00:00Z");
-		const equal = await run(source(owner, 50, "debit", cutoff));
-		await run(source(owner, 20, "debit", cutoff.minus({ days: 3 })));
-		await run(source(owner, 30, "debit", cutoff.plus({ milliseconds: 1 })));
-		await run(source(owner, 10, "debit", cutoff, "pending"));
-		const repo = await run(LedgerAccountSettlementRepoTag);
-		const entity = await run(
+		const equal = await runtime.runPromise(source(owner, 50, "debit", cutoff));
+		await runtime.runPromise(source(owner, 20, "debit", cutoff.minus({ days: 3 })));
+		await runtime.runPromise(source(owner, 30, "debit", cutoff.plus({ milliseconds: 1 })));
+		await runtime.runPromise(source(owner, 10, "debit", cutoff, "pending"));
+
+		const entity = await runtime.runPromise(
 			LedgerAccountSettlementEntity.fromRequest(
 				owner.organizationId,
 				owner.ledgerId,
@@ -584,31 +631,38 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		const prepared = await run(repo.createSettlement(entity, "pending", now()));
+		const prepared = await runtime.runPromise(repo.createSettlement(entity, "pending", now()));
 		expect(
-			await run(repo.listEntries(owner.organizationId, owner.ledgerId, prepared.id, 0, 20))
+			await runtime.runPromise(
+				repo.listEntries(owner.organizationId, owner.ledgerId, prepared.id, 0, 20)
+			)
 		).toHaveLength(2);
 		expect(
-			(await run(repo.listEntries(owner.organizationId, owner.ledgerId, prepared.id, 0, 20))).map(
-				e => e.id
-			)
+			(
+				await runtime.runPromise(
+					repo.listEntries(owner.organizationId, owner.ledgerId, prepared.id, 0, 20)
+				)
+			).map(e => e.id)
 		).toContain(equal.entry.id.toString());
 		expect(
 			Option.getOrThrow(
-				(await run(repo.buildTransaction(owner.organizationId, owner.ledgerId, prepared.id, now())))
-					.entries
+				(
+					await runtime.runPromise(
+						repo.buildTransaction(owner.organizationId, owner.ledgerId, prepared.id, now())
+					)
+				).entries
 			)[0].amount
 		).toBe(70);
 	});
 	it("allows only one concurrent owner of a source Entry", async () => {
-		const owner = await run(context()),
-			entry = await run(source(owner)),
-			first = await run(draft(owner)),
-			second = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag);
+		const owner = await runtime.runPromise(context()),
+			entry = await runtime.runPromise(source(owner)),
+			first = await runtime.runPromise(draft(owner)),
+			second = await runtime.runPromise(draft(owner));
+
 		const results = await Promise.allSettled(
 			[first, second].map(entity =>
-				run(
+				runtime.runPromise(
 					repo.changeEntries(
 						owner.organizationId,
 						owner.ledgerId,
@@ -622,11 +676,11 @@ describe("Settlement repository processing", () => {
 		expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
 	});
 	it("serializes source removal against processing without partial membership changes", async () => {
-		const owner = await run(context()),
-			entry = await run(source(owner)),
-			entity = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag);
-		await run(
+		const owner = await runtime.runPromise(context()),
+			entry = await runtime.runPromise(source(owner)),
+			entity = await runtime.runPromise(draft(owner));
+
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -636,7 +690,7 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		const results = await Promise.allSettled([
-			run(
+			runtime.runPromise(
 				repo.prepareSettlement(
 					owner.organizationId,
 					owner.ledgerId,
@@ -645,7 +699,7 @@ describe("Settlement repository processing", () => {
 					now()
 				)
 			),
-			run(
+			runtime.runPromise(
 				repo.changeEntries(
 					owner.organizationId,
 					owner.ledgerId,
@@ -656,20 +710,21 @@ describe("Settlement repository processing", () => {
 			),
 		]);
 		expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
-		const stored = await run(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id));
-		const entries = await run(
+		const stored = await runtime.runPromise(
+			repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id)
+		);
+		const entries = await runtime.runPromise(
 			repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20)
 		);
 		expect(entries).toHaveLength(stored.status === "processing" ? 1 : 0);
 		expect(["processing", "drafting"]).toContain(stored.status);
 	});
 	it("excludes generated settled offsets while allowing their contra Entries as sources", async () => {
-		const owner = await run(context()),
-			entry = await run(source(owner)),
-			entity = await run(draft(owner));
-		const repo = await run(LedgerAccountSettlementRepoTag),
-			transactions = await run(LedgerTransactionRepoTag);
-		await run(
+		const owner = await runtime.runPromise(context()),
+			entry = await runtime.runPromise(source(owner)),
+			entity = await runtime.runPromise(draft(owner));
+
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -678,7 +733,7 @@ describe("Settlement repository processing", () => {
 				true
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -687,12 +742,14 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		const accounting = await run(
+		const accounting = await runtime.runPromise(
 			transactions.createSettlementTransaction(
-				await run(repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now()))
+				await runtime.runPromise(
+					repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+				)
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "posted", now())
 		);
 		const entries = Option.getOrThrow(accounting.entries);
@@ -702,19 +759,19 @@ describe("Settlement repository processing", () => {
 		const contra = entries.find(
 			value => value.accountId.toString() === owner.contraAccountId.toString()
 		)!;
-		const next = await run(draft(owner));
+		const next = await runtime.runPromise(draft(owner));
 		await expect(
-			run(
+			runtime.runPromise(
 				repo.changeEntries(owner.organizationId, owner.ledgerId, next.id, [settled.id.toString()], true)
 			)
 		).rejects.toThrow(/eligible/);
-		const reverse = await run(
+		const reverse = await runtime.runPromise(
 			draft(
 				{ ...owner, settledAccountId: owner.contraAccountId, contraAccountId: owner.settledAccountId },
 				true
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -724,16 +781,18 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		expect(
-			await run(repo.listEntries(owner.organizationId, owner.ledgerId, reverse.id, 0, 20))
+			await runtime.runPromise(
+				repo.listEntries(owner.organizationId, owner.ledgerId, reverse.id, 0, 20)
+			)
 		).toHaveLength(1);
 	});
 
 	it("rolls back creation and automatic source reservation when the net is invalid", async () => {
-		const owner = await run(context());
-		const debit = await run(source(owner)),
-			credit = await run(source(owner, 125, "credit"));
-		const repo = await run(LedgerAccountSettlementRepoTag);
-		const entity = await run(
+		const owner = await runtime.runPromise(context());
+		const debit = await runtime.runPromise(source(owner)),
+			credit = await runtime.runPromise(source(owner, 125, "credit"));
+
+		const entity = await runtime.runPromise(
 			LedgerAccountSettlementEntity.fromRequest(
 				owner.organizationId,
 				owner.ledgerId,
@@ -747,12 +806,14 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		await expect(run(repo.createSettlement(entity, "pending", now()))).rejects.toThrow(/nonzero/);
+		await expect(runtime.runPromise(repo.createSettlement(entity, "pending", now()))).rejects.toThrow(
+			/nonzero/
+		);
 		await expect(
-			run(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id))
+			runtime.runPromise(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id))
 		).rejects.toThrow(/not found/);
-		const manual = await run(draft(owner));
-		await run(
+		const manual = await runtime.runPromise(draft(owner));
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -762,14 +823,15 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		expect(
-			await run(repo.listEntries(owner.organizationId, owner.ledgerId, manual.id, 0, 20))
+			await runtime.runPromise(
+				repo.listEntries(owner.organizationId, owner.ledgerId, manual.id, 0, 20)
+			)
 		).toHaveLength(2);
 	});
 	it("preserves omitted metadata, replaces supplied metadata, and restricts terminal edits", async () => {
-		const owner = await run(context()),
-			entity = await run(draft(owner)),
-			repo = await run(LedgerAccountSettlementRepoTag);
-		await run(
+		const owner = await runtime.runPromise(context()),
+			entity = await runtime.runPromise(draft(owner));
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -778,7 +840,7 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		const omitted = await run(
+		const omitted = await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -788,7 +850,7 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		expect(omitted.toResponse().metadata).toEqual({ first: "one", second: "two" });
-		const replaced = await run(
+		const replaced = await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -798,7 +860,7 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		expect(replaced.toResponse().metadata).toEqual({ third: "three" });
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -808,7 +870,7 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		await expect(
-			run(
+			runtime.runPromise(
 				repo.prepareSettlement(
 					owner.organizationId,
 					owner.ledgerId,
@@ -818,7 +880,7 @@ describe("Settlement repository processing", () => {
 				)
 			)
 		).rejects.toThrow(/metadata/);
-		const cleared = await run(
+		const cleared = await runtime.runPromise(
 			repo.prepareSettlement(owner.organizationId, owner.ledgerId, entity.id, { metadata: {} }, now())
 		);
 		expect(cleared.toResponse()).toMatchObject({
@@ -828,21 +890,20 @@ describe("Settlement repository processing", () => {
 		});
 	});
 	it("rejects Account ownership mismatches at creation", async () => {
-		const owner = await run(context()),
-			otherLedger = await run(context(owner.organizationId, false)),
-			otherOrganization = await run(context());
+		const owner = await runtime.runPromise(context()),
+			otherLedger = await runtime.runPromise(context(owner.organizationId, false)),
+			otherOrganization = await runtime.runPromise(context());
 		for (const other of [otherLedger, otherOrganization]) {
-			await expect(run(draft({ ...owner, contraAccountId: other.contraAccountId }))).rejects.toThrow(
-				/Accounts.*Ledger/
-			);
+			await expect(
+				runtime.runPromise(draft({ ...owner, contraAccountId: other.contraAccountId }))
+			).rejects.toThrow(/Accounts.*Ledger/);
 		}
 	});
 	it("rejects membership requests larger than 500 without changing membership", async () => {
-		const owner = await run(context()),
-			entity = await run(draft(owner)),
-			repo = await run(LedgerAccountSettlementRepoTag);
+		const owner = await runtime.runPromise(context()),
+			entity = await runtime.runPromise(draft(owner));
 		await expect(
-			run(
+			runtime.runPromise(
 				repo.changeEntries(
 					owner.organizationId,
 					owner.ledgerId,
@@ -853,17 +914,17 @@ describe("Settlement repository processing", () => {
 			)
 		).rejects.toThrow(/500/);
 		expect(
-			await run(repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20))
+			await runtime.runPromise(
+				repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20)
+			)
 		).toEqual([]);
 	});
 	it("accepts 10000 manual sources and rejects larger manual and automatic selections", async () => {
-		const owner = await run(context()),
-			repo = await run(LedgerAccountSettlementRepoTag),
-			transactions = await run(LedgerTransactionRepoTag);
+		const owner = await runtime.runPromise(context());
 		const ids: string[] = [];
 		for (let remaining = 10001; remaining > 0;) {
 			const count = Math.min(199, remaining);
-			const transaction = await run(
+			const transaction = await runtime.runPromise(
 				LedgerTransaction.fromCreateRequest(
 					newLedgerTransactionID(),
 					owner.organizationId,
@@ -887,7 +948,7 @@ describe("Settlement repository processing", () => {
 					}
 				)
 			);
-			const created = await run(transactions.createTransaction(transaction));
+			const created = await runtime.runPromise(transactions.createTransaction(transaction));
 			ids.push(
 				...Option.getOrThrow(created.entries)
 					.filter(entry => entry.accountId.toString() === owner.settledAccountId.toString())
@@ -895,7 +956,7 @@ describe("Settlement repository processing", () => {
 			);
 			remaining -= count;
 		}
-		const automatic = await run(
+		const automatic = await runtime.runPromise(
 			LedgerAccountSettlementEntity.fromRequest(
 				owner.organizationId,
 				owner.ledgerId,
@@ -909,10 +970,12 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		await expect(run(repo.createSettlement(automatic, "pending", now()))).rejects.toThrow(/10000/);
-		const entity = await run(draft(owner));
+		await expect(
+			runtime.runPromise(repo.createSettlement(automatic, "pending", now()))
+		).rejects.toThrow(/10000/);
+		const entity = await runtime.runPromise(draft(owner));
 		for (let offset = 0; offset < 10000; offset += 500)
-			await run(
+			await runtime.runPromise(
 				repo.changeEntries(
 					owner.organizationId,
 					owner.ledgerId,
@@ -922,9 +985,11 @@ describe("Settlement repository processing", () => {
 				)
 			);
 		await expect(
-			run(repo.changeEntries(owner.organizationId, owner.ledgerId, entity.id, [ids[10000]], true))
+			runtime.runPromise(
+				repo.changeEntries(owner.organizationId, owner.ledgerId, entity.id, [ids[10000]], true)
+			)
 		).rejects.toThrow(/10000/);
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -933,25 +998,22 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		const accounting = await run(
+		const accounting = await runtime.runPromise(
 			repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
 		);
 		expect(Option.getOrThrow(accounting.entries)[0].amount).toBe(10000);
 	}, 30_000);
 	it("rolls back generated accounting and projections when an Account write violates its limit", async () => {
-		const owner = await run(context());
-		await run(source(owner, Number.MAX_SAFE_INTEGER, "credit"));
-		const selected = await run(source(owner, 125));
-		const entity = await run(draft(owner)),
-			repo = await run(LedgerAccountSettlementRepoTag),
-			transactions = await run(LedgerTransactionRepoTag),
-			accounts = await run(LedgerAccountRepoTag);
+		const owner = await runtime.runPromise(context());
+		await runtime.runPromise(source(owner, Number.MAX_SAFE_INTEGER, "credit"));
+		const selected = await runtime.runPromise(source(owner, 125));
+		const entity = await runtime.runPromise(draft(owner));
 		const before = await Promise.all(
 			[owner.settledAccountId, owner.contraAccountId].map(id =>
-				run(accounts.getAccount(owner.organizationId, owner.ledgerId, id))
+				runtime.runPromise(accounts.getAccount(owner.organizationId, owner.ledgerId, id))
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.changeEntries(
 				owner.organizationId,
 				owner.ledgerId,
@@ -960,7 +1022,7 @@ describe("Settlement repository processing", () => {
 				true
 			)
 		);
-		await run(
+		await runtime.runPromise(
 			repo.prepareSettlement(
 				owner.organizationId,
 				owner.ledgerId,
@@ -969,30 +1031,31 @@ describe("Settlement repository processing", () => {
 				now()
 			)
 		);
-		const accounting = await run(
+		const accounting = await runtime.runPromise(
 			repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
 		);
-		await expect(run(transactions.createSettlementTransaction(accounting))).rejects.toThrow(
-			/persistence/
-		);
+		await expect(
+			runtime.runPromise(transactions.createSettlementTransaction(accounting))
+		).rejects.toThrow(/persistence/);
 		expect(
 			Option.isNone(
-				await run(
+				await runtime.runPromise(
 					transactions.getSettlementTransaction(owner.organizationId, owner.ledgerId, entity.id)
 				)
 			)
 		).toBe(true);
 		expect(
-			await run(
+			await runtime.runPromise(
 				transactions.listTransactions(owner.organizationId, owner.ledgerId, { offset: 0, limit: 20 })
 			)
 		).toHaveLength(2);
 		expect(
-			(await run(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id))).status
+			(await runtime.runPromise(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id)))
+				.status
 		).toBe("processing");
 		const after = await Promise.all(
 			[owner.settledAccountId, owner.contraAccountId].map(id =>
-				run(accounts.getAccount(owner.organizationId, owner.ledgerId, id))
+				runtime.runPromise(accounts.getAccount(owner.organizationId, owner.ledgerId, id))
 			)
 		);
 		expect(after).toEqual(before);
@@ -1002,12 +1065,11 @@ describe("Settlement repository processing", () => {
 		async withMembership => {
 			const client = new pg.Client({ connectionString: config.databaseUrl });
 			try {
-				const owner = await run(context()),
-					entity = await run(draft(owner)),
-					repo = await run(LedgerAccountSettlementRepoTag);
+				const owner = await runtime.runPromise(context()),
+					entity = await runtime.runPromise(draft(owner));
 				if (withMembership) {
-					const entry = await run(source(owner));
-					await run(
+					const entry = await runtime.runPromise(source(owner));
+					await runtime.runPromise(
 						repo.changeEntries(
 							owner.organizationId,
 							owner.ledgerId,
@@ -1030,10 +1092,13 @@ describe("Settlement repository processing", () => {
 					"Settlement corrections require empty Settlement tables"
 				);
 				expect(
-					(await run(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id))).status
+					(await runtime.runPromise(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id)))
+						.status
 				).toBe("drafting");
 				expect(
-					await run(repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20))
+					await runtime.runPromise(
+						repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20)
+					)
 				).toHaveLength(withMembership ? 1 : 0);
 			} finally {
 				await client.end();

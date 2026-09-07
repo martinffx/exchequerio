@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { LedgerNotFound } from "@/domains/ledgers";
@@ -68,13 +68,17 @@ describe("LedgerAccountRepoLive", () => {
 	const runtime: ManagedRuntime.ManagedRuntime<TestRepos, never> = ManagedRuntime.make(reposLayer);
 	const resources: Array<{ organizationId: OrgID; ledgerId: LedgerID }> = [];
 
-	const runLedgerAccountRepo = <A, E>(use: (repository: LedgerAccountRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(LedgerAccountRepoTag.pipe(Effect.flatMap(use)));
-	const runLedgerRepo = <A, E>(use: (repository: LedgerRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(LedgerRepoTag.pipe(Effect.flatMap(use)));
-	const runOrganizationRepo = <A, E>(use: (repository: OrganizationRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(OrganizationRepoTag.pipe(Effect.flatMap(use)));
-	const database = () => runtime.runPromise(DatabaseTag);
+	let repository: LedgerAccountRepo;
+	let ledgerRepository: LedgerRepo;
+	let organizationRepository: OrganizationRepo;
+	let database: Database;
+
+	beforeAll(async () => {
+		repository = await runtime.runPromise(LedgerAccountRepoTag);
+		ledgerRepository = await runtime.runPromise(LedgerRepoTag);
+		organizationRepository = await runtime.runPromise(OrganizationRepoTag);
+		database = await runtime.runPromise(DatabaseTag);
+	});
 
 	const createOrganizationAndLedger = async (): Promise<{
 		organizationId: OrgID;
@@ -82,15 +86,15 @@ describe("LedgerAccountRepoLive", () => {
 	}> => {
 		const organizationId = newOrgID();
 		const ledgerId = newLedgerID();
-		await runOrganizationRepo(repository =>
-			repository.createOrganization(
+		await runtime.runPromise(
+			organizationRepository.createOrganization(
 				Organization.fromRequest(organizationId, {
 					name: `LedgerAccount test ${organizationId.toString()}`,
 				})
 			)
 		);
-		await runLedgerRepo(repository =>
-			repository.createLedger(Ledger.fromRequest(ledgerId, organizationId, { name: "Ledger" }))
+		await runtime.runPromise(
+			ledgerRepository.createLedger(Ledger.fromRequest(ledgerId, organizationId, { name: "Ledger" }))
 		);
 		resources.push({ organizationId, ledgerId });
 		return { organizationId, ledgerId };
@@ -99,16 +103,14 @@ describe("LedgerAccountRepoLive", () => {
 	afterAll(async () => {
 		try {
 			for (const { organizationId, ledgerId } of resources) {
-				const accounts = await runLedgerAccountRepo(repository =>
+				const accounts = await runtime.runPromise(
 					repository.listAccounts(organizationId, ledgerId, { offset: 0, limit: 100 })
 				);
 				for (const account of accounts) {
-					await runLedgerAccountRepo(repository =>
-						repository.deleteAccount(organizationId, ledgerId, account.id)
-					);
+					await runtime.runPromise(repository.deleteAccount(organizationId, ledgerId, account.id));
 				}
-				await runLedgerRepo(repository => repository.deleteLedger(organizationId, ledgerId));
-				await runOrganizationRepo(repository => repository.deleteOrganization(organizationId));
+				await runtime.runPromise(ledgerRepository.deleteLedger(organizationId, ledgerId));
+				await runtime.runPromise(organizationRepository.deleteOrganization(organizationId));
 			}
 		} finally {
 			await runtime.dispose();
@@ -117,7 +119,7 @@ describe("LedgerAccountRepoLive", () => {
 
 	it("orders by creation descending with LedgerAccount ID as a stable tie-breaker", async () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const created = await runLedgerAccountRepo(repository =>
+		const created = await runtime.runPromise(
 			Effect.all(
 				["A", "B", "C"].map(name =>
 					repository.createAccount(ledgerAccountCreate(organizationId, ledgerId, { name }))
@@ -125,7 +127,7 @@ describe("LedgerAccountRepoLive", () => {
 			)
 		);
 
-		const accounts = await runLedgerAccountRepo(repository =>
+		const accounts = await runtime.runPromise(
 			repository.listAccounts(organizationId, ledgerId, { offset: 0, limit: 100 })
 		);
 		const expected = [...created].sort(
@@ -139,24 +141,18 @@ describe("LedgerAccountRepoLive", () => {
 	it("enforces Organization and Ledger scope", async () => {
 		const owner = await createOrganizationAndLedger();
 		const other = await createOrganizationAndLedger();
-		const created = await runLedgerAccountRepo(repository =>
+		const created = await runtime.runPromise(
 			repository.createAccount(ledgerAccountCreate(owner.organizationId, owner.ledgerId))
 		);
 
 		expect(
-			await runLedgerAccountRepo(repository =>
-				repository.getAccount(owner.organizationId, owner.ledgerId, created.id)
-			)
+			await runtime.runPromise(repository.getAccount(owner.organizationId, owner.ledgerId, created.id))
 		).toSatisfy(Option.isSome);
 		expect(
-			await runLedgerAccountRepo(repository =>
-				repository.getAccount(other.organizationId, owner.ledgerId, created.id)
-			)
+			await runtime.runPromise(repository.getAccount(other.organizationId, owner.ledgerId, created.id))
 		).toEqual(Option.none());
 		expect(
-			await runLedgerAccountRepo(repository =>
-				repository.getAccount(owner.organizationId, other.ledgerId, created.id)
-			)
+			await runtime.runPromise(repository.getAccount(owner.organizationId, other.ledgerId, created.id))
 		).toEqual(Option.none());
 	});
 
@@ -174,7 +170,7 @@ describe("LedgerAccountRepoLive", () => {
 			currency: "US0378331005",
 			metadata,
 		});
-		const created = await runLedgerAccountRepo(repository => repository.createAccount(record));
+		const created = await runtime.runPromise(repository.createAccount(record));
 
 		expect(created.lockVersion).toBe(1);
 		expect(record.toRow().created).toBeInstanceOf(Date);
@@ -252,13 +248,13 @@ describe("LedgerAccountRepoLive", () => {
 			name: testCase.label,
 			normalBalance: testCase.normalBalance,
 		});
-		const db = (await database()).db;
+		const db = database.db;
 		await db.insert(LedgerAccountsTable).values({
 			...record.toRow(),
 			...testCase.stored,
 		});
 
-		const decoded = await runLedgerAccountRepo(repository =>
+		const decoded = await runtime.runPromise(
 			repository.getAccount(organizationId, ledgerId, record.id)
 		);
 
@@ -277,14 +273,14 @@ describe("LedgerAccountRepoLive", () => {
 	it("maps duplicate names but not ID collisions to their public Conflict", async () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const first = ledgerAccountCreate(organizationId, ledgerId);
-		await runLedgerAccountRepo(repository => repository.createAccount(first));
+		await runtime.runPromise(repository.createAccount(first));
 
-		const duplicateName = await runLedgerAccountRepo(repository =>
+		const duplicateName = await runtime.runPromise(
 			Effect.flip(repository.createAccount(ledgerAccountCreate(organizationId, ledgerId)))
 		);
 		expect(duplicateName).toBeInstanceOf(AccountNameConflict);
 
-		const idCollision = await runLedgerAccountRepo(repository =>
+		const idCollision = await runtime.runPromise(
 			Effect.flip(
 				repository.createAccount(
 					ledgerAccountCreate(organizationId, ledgerId, { id: first.id, name: "Other" })
@@ -297,7 +293,7 @@ describe("LedgerAccountRepoLive", () => {
 	it("maps a missing or cross-Organization Ledger to LedgerNotFound", async () => {
 		const owner = await createOrganizationAndLedger();
 		const other = await createOrganizationAndLedger();
-		const error = await runLedgerAccountRepo(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(repository.createAccount(ledgerAccountCreate(other.organizationId, owner.ledgerId)))
 		);
 
@@ -308,7 +304,7 @@ describe("LedgerAccountRepoLive", () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const accountId = newLedgerAccountID();
 
-		const result = await runLedgerAccountRepo(repository =>
+		const result = await runtime.runPromise(
 			operation === "get"
 				? repository.getAccount(organizationId, ledgerId, accountId)
 				: repository.deleteAccount(organizationId, ledgerId, accountId)
@@ -321,9 +317,7 @@ describe("LedgerAccountRepoLive", () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const missing = ledgerAccountCreate(organizationId, ledgerId);
 
-		const error = await runLedgerAccountRepo(repository =>
-			Effect.flip(repository.updateAccount(missing))
-		);
+		const error = await runtime.runPromise(Effect.flip(repository.updateAccount(missing)));
 
 		expect(error).toBeInstanceOf(AccountVersionConflict);
 	});
@@ -337,7 +331,7 @@ describe("LedgerAccountRepoLive", () => {
 		{ label: "clears optional values", description: undefined, metadata: undefined },
 	])("$label on the first update and rejects a stale version", async testCase => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const created = await runLedgerAccountRepo(repository =>
+		const created = await runtime.runPromise(
 			repository.createAccount(
 				ledgerAccountCreate(organizationId, ledgerId, {
 					description: "Before",
@@ -350,7 +344,7 @@ describe("LedgerAccountRepoLive", () => {
 			description: testCase.description,
 			metadata: testCase.metadata,
 		});
-		const updated = await runLedgerAccountRepo(repository => repository.updateAccount(replacement));
+		const updated = await runtime.runPromise(repository.updateAccount(replacement));
 
 		expect(updated.name).toBe("Operating Cash");
 		expect(updated.description).toBe(testCase.description);
@@ -362,7 +356,7 @@ describe("LedgerAccountRepoLive", () => {
 		expect(updated.created).toEqual(created.created);
 		expect(updated.lockVersion).toBe(2);
 		expect(updated.updated).toEqual(replacement.updated);
-		const error = await runLedgerAccountRepo(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(
 				repository.updateAccount(
 					created.fromUpdateRequest({
@@ -376,13 +370,11 @@ describe("LedgerAccountRepoLive", () => {
 
 	it("deletes an unused LedgerAccount", async () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const unused = await runLedgerAccountRepo(repository =>
+		const unused = await runtime.runPromise(
 			repository.createAccount(ledgerAccountCreate(organizationId, ledgerId, { name: "Unused" }))
 		);
 		expect(
-			await runLedgerAccountRepo(repository =>
-				repository.deleteAccount(organizationId, ledgerId, unused.id)
-			)
+			await runtime.runPromise(repository.deleteAccount(organizationId, ledgerId, unused.id))
 		).toSatisfy(Option.isSome);
 	});
 
@@ -398,7 +390,7 @@ describe("LedgerAccountRepoLive", () => {
 	])("returns a typed decoding failure for $label", async testCase => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const id = testCase.id ?? newLedgerAccountID().toString();
-		const db = (await database()).db;
+		const db = database.db;
 		const row = ledgerAccountCreate(organizationId, ledgerId, {
 			name: `Malformed ${testCase.label}`,
 		}).toRow();
@@ -410,7 +402,7 @@ describe("LedgerAccountRepoLive", () => {
 		});
 
 		try {
-			const error = await runLedgerAccountRepo(repository =>
+			const error = await runtime.runPromise(
 				Effect.flip(repository.getAccount(organizationId, ledgerId, id as unknown as LedgerAccountID))
 			);
 			expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);

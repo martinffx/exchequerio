@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { OrganizationNotFound } from "@/domains/organizations";
@@ -54,19 +54,23 @@ describe("LedgerRepoLive", () => {
 	const runtime: ManagedRuntime.ManagedRuntime<TestRepos, never> = ManagedRuntime.make(reposLayer);
 	const organizationIds = new Set<OrgID>();
 
-	const runRepo = <A, E>(use: (repository: LedgerRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(LedgerRepoTag.pipe(Effect.flatMap(use)));
-	const runLedgerAccountRepo = <A, E>(use: (repository: LedgerAccountRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(LedgerAccountRepoTag.pipe(Effect.flatMap(use)));
-	const runOrganizationRepo = <A, E>(use: (repository: OrganizationRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(OrganizationRepoTag.pipe(Effect.flatMap(use)));
-	const database = () => runtime.runPromise(DatabaseTag);
+	let repository: LedgerRepo;
+	let accountRepository: LedgerAccountRepo;
+	let organizationRepository: OrganizationRepo;
+	let database: Database;
+
+	beforeAll(async () => {
+		repository = await runtime.runPromise(LedgerRepoTag);
+		accountRepository = await runtime.runPromise(LedgerAccountRepoTag);
+		organizationRepository = await runtime.runPromise(OrganizationRepoTag);
+		database = await runtime.runPromise(DatabaseTag);
+	});
 
 	const createOrganization = async (): Promise<OrgID> => {
 		const id = newOrgID();
 		organizationIds.add(id);
-		await runOrganizationRepo(repository =>
-			repository.createOrganization(
+		await runtime.runPromise(
+			organizationRepository.createOrganization(
 				Organization.fromRequest(id, { name: `Ledger test ${id.toString()}` })
 			)
 		);
@@ -76,21 +80,21 @@ describe("LedgerRepoLive", () => {
 	afterAll(async () => {
 		try {
 			for (const organizationId of organizationIds) {
-				const ledgers = await runRepo(repository =>
+				const ledgers = await runtime.runPromise(
 					repository.listLedgers(organizationId, { offset: 0, limit: 100 })
 				);
 				for (const ledger of ledgers) {
-					const accounts = await runLedgerAccountRepo(repository =>
-						repository.listAccounts(organizationId, ledger.id, { offset: 0, limit: 100 })
+					const accounts = await runtime.runPromise(
+						accountRepository.listAccounts(organizationId, ledger.id, { offset: 0, limit: 100 })
 					);
 					for (const account of accounts) {
-						await runLedgerAccountRepo(repository =>
-							repository.deleteAccount(organizationId, ledger.id, account.id)
+						await runtime.runPromise(
+							accountRepository.deleteAccount(organizationId, ledger.id, account.id)
 						);
 					}
-					await runRepo(repository => repository.deleteLedger(organizationId, ledger.id));
+					await runtime.runPromise(repository.deleteLedger(organizationId, ledger.id));
 				}
-				await runOrganizationRepo(repository => repository.deleteOrganization(organizationId));
+				await runtime.runPromise(organizationRepository.deleteOrganization(organizationId));
 			}
 		} finally {
 			await runtime.dispose();
@@ -101,16 +105,16 @@ describe("LedgerRepoLive", () => {
 		const organizationId = await createOrganization();
 		const ids = [newLedgerID(), newLedgerID(), newLedgerID()];
 		for (const id of ids) {
-			await runRepo(repository => repository.createLedger(ledgerWrite(organizationId, { id })));
+			await runtime.runPromise(repository.createLedger(ledgerWrite(organizationId, { id })));
 		}
 
-		const all = await runRepo(repository =>
+		const all = await runtime.runPromise(
 			repository.listLedgers(organizationId, { offset: 0, limit: 100 })
 		);
 		const expected = ids.map(id => id.toString()).sort();
 		expect(all.map(ledger => ledger.id.toString())).toEqual(expected);
 
-		const page = await runRepo(repository =>
+		const page = await runtime.runPromise(
 			repository.listLedgers(organizationId, { offset: 1, limit: 1 })
 		);
 		expect(page.map(ledger => ledger.id.toString())).toEqual(expected.slice(1, 2));
@@ -120,26 +124,24 @@ describe("LedgerRepoLive", () => {
 		const ownerId = await createOrganization();
 		const otherId = await createOrganization();
 		const ledgerId = newLedgerID();
-		await runRepo(repository =>
+		await runtime.runPromise(
 			repository.createLedger(ledgerWrite(ownerId, { id: ledgerId, name: "Owned" }))
 		);
-		await runRepo(repository => repository.createLedger(ledgerWrite(otherId, { name: "Other" })));
+		await runtime.runPromise(repository.createLedger(ledgerWrite(otherId, { name: "Other" })));
 
-		const listed = await runRepo(repository =>
+		const listed = await runtime.runPromise(
 			repository.listLedgers(ownerId, { offset: 0, limit: 100 })
 		);
 		expect(listed.map(ledger => ledger.name)).toEqual(["Owned"]);
-		const found = await runRepo(repository => repository.getLedger(ownerId, ledgerId));
+		const found = await runtime.runPromise(repository.getLedger(ownerId, ledgerId));
 		expect(Option.getOrUndefined(found)?.name).toBe("Owned");
-		expect(await runRepo(repository => repository.getLedger(otherId, ledgerId))).toEqual(
-			Option.none()
-		);
+		expect(await runtime.runPromise(repository.getLedger(otherId, ledgerId))).toEqual(Option.none());
 	});
 
 	it("returns explicit absence for a missing Ledger", async () => {
 		const organizationId = await createOrganization();
 
-		expect(await runRepo(repository => repository.getLedger(organizationId, newLedgerID()))).toEqual(
+		expect(await runtime.runPromise(repository.getLedger(organizationId, newLedgerID()))).toEqual(
 			Option.none()
 		);
 	});
@@ -159,9 +161,9 @@ describe("LedgerRepoLive", () => {
 			description,
 			metadata,
 		});
-		await runRepo(repository => repository.createLedger(record));
+		await runtime.runPromise(repository.createLedger(record));
 
-		const found = await runRepo(repository => repository.getLedger(organizationId, ledgerId));
+		const found = await runtime.runPromise(repository.getLedger(organizationId, ledgerId));
 		const value = Option.getOrThrow(found);
 		expect(value.description).toBe(description);
 		expect(value.metadata).toEqual(metadata);
@@ -187,8 +189,8 @@ describe("LedgerRepoLive", () => {
 		const organizationId = await createOrganization();
 		const firstRecord = ledgerWrite(organizationId);
 		const secondRecord = ledgerWrite(organizationId);
-		const first = await runRepo(repository => repository.createLedger(firstRecord));
-		const second = await runRepo(repository => repository.createLedger(secondRecord));
+		const first = await runtime.runPromise(repository.createLedger(firstRecord));
+		const second = await runtime.runPromise(repository.createLedger(secondRecord));
 
 		expect(first.id).not.toBe(second.id);
 		expect(first.created).toEqual(firstRecord.created);
@@ -199,7 +201,7 @@ describe("LedgerRepoLive", () => {
 
 	it("maps a missing parent Organization to OrganizationNotFound", async () => {
 		const organizationId = newOrgID();
-		const error = await runRepo(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(repository.createLedger(ledgerWrite(organizationId)))
 		);
 
@@ -209,9 +211,9 @@ describe("LedgerRepoLive", () => {
 	it("maps a generated Ledger ID collision to LedgerPersistenceFailure", async () => {
 		const organizationId = await createOrganization();
 		const write = ledgerWrite(organizationId);
-		await runRepo(repository => repository.createLedger(write));
+		await runtime.runPromise(repository.createLedger(write));
 
-		const error = await runRepo(repository => Effect.flip(repository.createLedger(write)));
+		const error = await runtime.runPromise(Effect.flip(repository.createLedger(write)));
 		expect(error).toBeInstanceOf(LedgerPersistenceFailure);
 	});
 
@@ -226,7 +228,7 @@ describe("LedgerRepoLive", () => {
 		"$label optional mutable fields while preserving created",
 		async ({ description, metadata }) => {
 			const organizationId = await createOrganization();
-			const created = await runRepo(repository =>
+			const created = await runtime.runPromise(
 				repository.createLedger(
 					ledgerWrite(organizationId, {
 						name: "Before",
@@ -241,7 +243,7 @@ describe("LedgerRepoLive", () => {
 				description,
 				metadata,
 			});
-			const updated = await runRepo(repository => repository.updateLedger(replacement));
+			const updated = await runtime.runPromise(repository.updateLedger(replacement));
 			const value = Option.getOrUndefined(updated);
 			expect(value).toMatchObject({ name: "After" });
 			expect(value?.description).toBe(description);
@@ -255,21 +257,20 @@ describe("LedgerRepoLive", () => {
 		const ownerId = await createOrganization();
 		const otherId = await createOrganization();
 		const missing = ledgerWrite(ownerId);
-		expect(await runRepo(repository => repository.updateLedger(missing))).toEqual(Option.none());
-		expect(await runRepo(repository => repository.getLedger(ownerId, missing.id))).toEqual(
+		expect(await runtime.runPromise(repository.updateLedger(missing))).toEqual(Option.none());
+		expect(await runtime.runPromise(repository.getLedger(ownerId, missing.id))).toEqual(
 			Option.none()
 		);
 
-		const created = await runRepo(repository =>
+		const created = await runtime.runPromise(
 			repository.createLedger(ledgerWrite(ownerId, { name: "Owned" }))
 		);
 		const crossed = ledgerWrite(otherId, { id: created.id, name: "Crossed" });
-		expect(await runRepo(repository => repository.updateLedger(crossed))).toEqual(Option.none());
+		expect(await runtime.runPromise(repository.updateLedger(crossed))).toEqual(Option.none());
 		expect(
-			Option.getOrUndefined(await runRepo(repository => repository.getLedger(ownerId, created.id)))
-				?.name
+			Option.getOrUndefined(await runtime.runPromise(repository.getLedger(ownerId, created.id)))?.name
 		).toBe("Owned");
-		expect(await runRepo(repository => repository.getLedger(otherId, created.id))).toEqual(
+		expect(await runtime.runPromise(repository.getLedger(otherId, created.id))).toEqual(
 			Option.none()
 		);
 	});
@@ -278,27 +279,27 @@ describe("LedgerRepoLive", () => {
 		const ownerId = await createOrganization();
 		const otherId = await createOrganization();
 		const missingId = newLedgerID();
-		expect(await runRepo(repository => repository.deleteLedger(ownerId, missingId))).toEqual(
+		expect(await runtime.runPromise(repository.deleteLedger(ownerId, missingId))).toEqual(
 			Option.none()
 		);
 
-		const created = await runRepo(repository => repository.createLedger(ledgerWrite(ownerId)));
-		expect(await runRepo(repository => repository.deleteLedger(otherId, created.id))).toEqual(
+		const created = await runtime.runPromise(repository.createLedger(ledgerWrite(ownerId)));
+		expect(await runtime.runPromise(repository.deleteLedger(otherId, created.id))).toEqual(
 			Option.none()
 		);
+		expect(Option.isSome(await runtime.runPromise(repository.getLedger(ownerId, created.id)))).toBe(
+			true
+		);
 		expect(
-			Option.isSome(await runRepo(repository => repository.getLedger(ownerId, created.id)))
-		).toBe(true);
-		expect(
-			Option.isSome(await runRepo(repository => repository.deleteLedger(ownerId, created.id)))
+			Option.isSome(await runtime.runPromise(repository.deleteLedger(ownerId, created.id)))
 		).toBe(true);
 	});
 
 	it("maps a real dependent Ledger Account to LedgerHasDependents", async () => {
 		const organizationId = await createOrganization();
-		const created = await runRepo(repository => repository.createLedger(ledgerWrite(organizationId)));
-		await runLedgerAccountRepo(repository =>
-			repository.createAccount(
+		const created = await runtime.runPromise(repository.createLedger(ledgerWrite(organizationId)));
+		await runtime.runPromise(
+			accountRepository.createAccount(
 				LedgerAccount.fromCreateRequest(newLedgerAccountID(), organizationId, created.id, {
 					name: "Dependent account",
 					normalBalance: "debit",
@@ -307,7 +308,7 @@ describe("LedgerRepoLive", () => {
 			)
 		);
 
-		const error = await runRepo(repository =>
+		const error = await runtime.runPromise(
 			Effect.flip(repository.deleteLedger(organizationId, created.id))
 		);
 		expect(error).toBeInstanceOf(LedgerHasDependents);
@@ -324,12 +325,12 @@ describe("LedgerRepoLive", () => {
 	])("returns a typed decoding failure for $label", async testCase => {
 		const organizationId = await createOrganization();
 		const id = testCase.id ?? newLedgerID().toString();
-		const db = (await database()).db;
+		const db = database.db;
 		const row = ledgerWrite(organizationId).toCreateRow();
 		await db.insert(LedgersTable).values({ ...row, id, metadata: testCase.metadata ?? row.metadata });
 
 		try {
-			const error = await runRepo(repository =>
+			const error = await runtime.runPromise(
 				Effect.flip(repository.getLedger(organizationId, id as unknown as LedgerID))
 			);
 			expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);

@@ -1,6 +1,6 @@
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { TypeID } from "typeid-js";
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { HttpError, InternalServerError, ServiceUnavailableError } from "@/lib/errors";
 import type { OrgID } from "../../repo/entities/types";
 import { Organization } from "./Organization";
@@ -11,7 +11,7 @@ import {
 	OrganizationPersistenceFailure,
 	OrganizationRepositoryUnavailable,
 } from "./OrganizationErrors";
-import type { OrganizationInfrastructureError, OrganizationRepo } from "./OrganizationRepo";
+import type { OrganizationRepo } from "./OrganizationRepo";
 import { OrganizationRepoTag } from "./OrganizationRepo";
 import type { OrganizationIdGenerator } from "./OrganizationIdGenerator";
 import { OrganizationIdGeneratorTag } from "./OrganizationIdGenerator";
@@ -34,53 +34,43 @@ const organization = Organization.fromRequest(targetId, {
 });
 const someOrganization = Option.fromNullishOr(organization);
 
-const repository = (overrides: Partial<OrganizationRepo> = {}): OrganizationRepo =>
-	vi.mocked<OrganizationRepo>({
-		listOrganizations: vi.fn(() => Effect.succeed([organization])),
-		getOrganization: vi.fn(() => Effect.succeed(someOrganization)),
-		createOrganization: vi.fn(record => Effect.succeed(record)),
-		updateOrganization: vi.fn(() => Effect.succeed(someOrganization)),
-		deleteOrganization: vi.fn(() => Effect.succeed(someOrganization)),
-		...overrides,
-	});
+const repo = vi.mocked<OrganizationRepo>({
+	listOrganizations: vi.fn(() => Effect.succeed([organization])),
+	getOrganization: vi.fn(() => Effect.succeed(someOrganization)),
+	createOrganization: vi.fn(record => Effect.succeed(record)),
+	updateOrganization: vi.fn(() => Effect.succeed(someOrganization)),
+	deleteOrganization: vi.fn(() => Effect.succeed(someOrganization)),
+});
+const idGenerator = vi.mocked<OrganizationIdGenerator>({
+	generate: vi.fn(() => Effect.succeed(generatedId)),
+});
+const runtime = ManagedRuntime.make(
+	organizationServiceLayer.pipe(
+		Layer.provide(
+			Layer.merge(
+				Layer.succeed(OrganizationRepoTag, repo),
+				Layer.succeed(OrganizationIdGeneratorTag, idGenerator)
+			)
+		)
+	)
+);
+let service: OrganizationService;
+beforeAll(async () => {
+	service = await runtime.runPromise(OrganizationServiceTag);
+});
+beforeEach(() => {
+	vi.resetAllMocks();
+});
+afterAll(() => runtime.dispose());
 
-const runService = <A, E>(
-	repositoryImplementation: OrganizationRepo,
-	use: (service: OrganizationService) => Effect.Effect<A, E>
-) => {
-	const idGenerator = vi.mocked<OrganizationIdGenerator>({
-		generate: vi.fn(() => Effect.succeed(generatedId)),
-	});
-	const dependencies = Layer.merge(
-		Layer.succeed(OrganizationRepoTag, repositoryImplementation),
-		Layer.succeed(OrganizationIdGeneratorTag, idGenerator)
-	);
-	return Effect.runPromise(
-		Effect.gen(function* () {
-			return yield* use(yield* OrganizationServiceTag);
-		}).pipe(Effect.provide(organizationServiceLayer.pipe(Layer.provide(dependencies))))
-	);
-};
-
-type Operation = "list" | "get" | "create" | "update" | "delete";
-
-const failingRepository = (
-	operation: Operation,
-	failure: OrganizationInfrastructureError
-): OrganizationRepo => {
-	switch (operation) {
-		case "list":
-			return repository({ listOrganizations: vi.fn(() => Effect.fail(failure)) });
-		case "get":
-			return repository({ getOrganization: vi.fn(() => Effect.fail(failure)) });
-		case "create":
-			return repository({ createOrganization: vi.fn(() => Effect.fail(failure)) });
-		case "update":
-			return repository({ updateOrganization: vi.fn(() => Effect.fail(failure)) });
-		case "delete":
-			return repository({ deleteOrganization: vi.fn(() => Effect.fail(failure)) });
-	}
-};
+const repositoryMethods = {
+	list: "listOrganizations",
+	get: "getOrganization",
+	create: "createOrganization",
+	update: "updateOrganization",
+	delete: "deleteOrganization",
+} as const;
+type Operation = keyof typeof repositoryMethods;
 
 const invoke = (
 	service: OrganizationService,
@@ -102,20 +92,14 @@ const invoke = (
 
 describe("OrganizationService", () => {
 	it("forwards list pagination to the repository", async () => {
-		const repo = repository();
-
-		const result = await runService(repo, service =>
-			service.listOrganizations({ offset: 10, limit: 5 })
-		);
+		const result = await runtime.runPromise(service.listOrganizations({ offset: 10, limit: 5 }));
 
 		expect(result).toEqual([organization]);
 		expect(repo.listOrganizations).toHaveBeenCalledWith({ offset: 10, limit: 5 });
 	});
 
 	it("returns an existing Organization", async () => {
-		const repo = repository();
-
-		const result = await runService(repo, service => service.getOrganization(targetId));
+		const result = await runtime.runPromise(service.getOrganization(targetId));
 
 		expect(result).toBe(organization);
 		expect(repo.getOrganization).toHaveBeenCalledWith(targetId);
@@ -124,15 +108,9 @@ describe("OrganizationService", () => {
 	it.each(["get", "update", "delete"] as const)(
 		"maps missing %s results to OrganizationNotFound",
 		async operation => {
-			const repo = repository(
-				operation === "get"
-					? { getOrganization: vi.fn(() => Effect.succeed(Option.none())) }
-					: operation === "update"
-						? { updateOrganization: vi.fn(() => Effect.succeed(Option.none())) }
-						: { deleteOrganization: vi.fn(() => Effect.succeed(Option.none())) }
-			);
+			repo[repositoryMethods[operation]].mockReturnValue(Effect.succeed(Option.none()));
 
-			const error = await runService(repo, service => Effect.flip(invoke(service, operation)));
+			const error = await runtime.runPromise(Effect.flip(invoke(service, operation)));
 
 			expect(error).toEqual(new OrganizationNotFound());
 		}
@@ -150,12 +128,12 @@ describe("OrganizationService", () => {
 			expectedId: targetId,
 		},
 	])("maps $operation requests to Organization domain values", async testCase => {
-		const repo = repository({
-			createOrganization: vi.fn(record => Effect.succeed(record)),
-			updateOrganization: vi.fn(record => Effect.succeed(Option.fromNullishOr(record))),
-		});
+		repo.createOrganization.mockImplementation(record => Effect.succeed(record));
+		repo.updateOrganization.mockImplementation(record =>
+			Effect.succeed(Option.fromNullishOr(record))
+		);
 
-		const result = await runService(repo, service =>
+		const result = await runtime.runPromise(
 			testCase.operation === "create"
 				? service.createOrganization(testCase.request)
 				: service.updateOrganization(targetId, testCase.request)
@@ -175,9 +153,8 @@ describe("OrganizationService", () => {
 		"preserves repository unavailability from %s",
 		async operation => {
 			const failure = new OrganizationRepositoryUnavailable(new Error("unavailable"));
-			const error = await runService(failingRepository(operation, failure), service =>
-				Effect.flip(invoke(service, operation))
-			);
+			repo[repositoryMethods[operation]].mockReturnValue(Effect.fail(failure));
+			const error = await runtime.runPromise(Effect.flip(invoke(service, operation)));
 
 			expect(error).toBe(failure);
 			expect(error).toBeInstanceOf(ServiceUnavailableError);
@@ -191,9 +168,8 @@ describe("OrganizationService", () => {
 				operation === "get"
 					? new OrganizationPersistenceDecodingFailure(new Error("invalid row"))
 					: new OrganizationPersistenceFailure(new Error("query failed"));
-			const error = await runService(failingRepository(operation, failure), service =>
-				Effect.flip(invoke(service, operation))
-			);
+			repo[repositoryMethods[operation]].mockReturnValue(Effect.fail(failure));
+			const error = await runtime.runPromise(Effect.flip(invoke(service, operation)));
 
 			expect(error).toBe(failure);
 			expect(error).toBeInstanceOf(InternalServerError);
@@ -202,11 +178,9 @@ describe("OrganizationService", () => {
 
 	it("preserves OrganizationHasDependents from delete", async () => {
 		const failure = new OrganizationHasDependents();
-		const repo = repository({ deleteOrganization: vi.fn(() => Effect.fail(failure)) });
+		repo.deleteOrganization.mockImplementation(() => Effect.fail(failure));
 
-		const error = await runService(repo, service =>
-			Effect.flip(service.deleteOrganization(targetId))
-		);
+		const error = await runtime.runPromise(Effect.flip(service.deleteOrganization(targetId)));
 
 		expect(error).toBe(failure);
 	});

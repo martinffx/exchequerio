@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { TypeID } from "typeid-js";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import type { OrgID } from "../../repo/entities/types";
@@ -26,9 +26,13 @@ describe("OrganizationRepoLive", () => {
 	const runtime: ManagedRuntime.ManagedRuntime<Database | OrganizationRepo, never> =
 		ManagedRuntime.make(organizationRepoLive);
 
-	const run = <A, E>(use: (repository: OrganizationRepo) => Effect.Effect<A, E>) =>
-		runtime.runPromise(OrganizationRepoTag.pipe(Effect.flatMap(use)));
-	const database = () => runtime.runPromise(DatabaseTag);
+	let repository: OrganizationRepo;
+	let database: Database;
+
+	beforeAll(async () => {
+		repository = await runtime.runPromise(OrganizationRepoTag);
+		database = await runtime.runPromise(DatabaseTag);
+	});
 
 	const create = (name: string, description?: string) => {
 		const id = newOrganizationId();
@@ -37,12 +41,12 @@ describe("OrganizationRepoLive", () => {
 			name,
 			description,
 		});
-		return run(repository => repository.createOrganization(organization));
+		return runtime.runPromise(repository.createOrganization(organization));
 	};
 
 	afterAll(async () => {
 		try {
-			await run(repository =>
+			await runtime.runPromise(
 				Effect.forEach(organizationIds, id => repository.deleteOrganization(id), { discard: true })
 			);
 		} finally {
@@ -54,10 +58,10 @@ describe("OrganizationRepoLive", () => {
 		await create("Ordered A");
 		await create("Ordered B");
 
-		const all = await run(repository => repository.listOrganizations({ offset: 0, limit: 100 }));
+		const all = await runtime.runPromise(repository.listOrganizations({ offset: 0, limit: 100 }));
 		const allIds = all.map(organization => organization.id.toString());
 		expect(allIds).toEqual([...allIds].sort());
-		const page = await run(repository => repository.listOrganizations({ offset: 1, limit: 1 }));
+		const page = await runtime.runPromise(repository.listOrganizations({ offset: 1, limit: 1 }));
 		expect(page).toHaveLength(1);
 	});
 
@@ -70,8 +74,8 @@ describe("OrganizationRepoLive", () => {
 		});
 		organizationIds.add(firstRecord.id);
 		organizationIds.add(secondRecord.id);
-		const first = await run(repository => repository.createOrganization(firstRecord));
-		const second = await run(repository => repository.createOrganization(secondRecord));
+		const first = await runtime.runPromise(repository.createOrganization(firstRecord));
+		const second = await runtime.runPromise(repository.createOrganization(secondRecord));
 
 		expect(first.id).not.toBe(second.id);
 		expect(first.created.toMillis()).toBe(firstRecord.created.toMillis());
@@ -90,7 +94,7 @@ describe("OrganizationRepoLive", () => {
 		});
 		organizationIds.add(record.id);
 
-		const created = await run(repository => repository.createOrganization(record));
+		const created = await runtime.runPromise(repository.createOrganization(record));
 
 		expect(created.description).toBe(description);
 		expect(created.created.toMillis()).toBe(record.created.toMillis());
@@ -108,7 +112,7 @@ describe("OrganizationRepoLive", () => {
 		});
 
 		const updated = Option.getOrThrow(
-			await run(repository => repository.updateOrganization(replacement))
+			await runtime.runPromise(repository.updateOrganization(replacement))
 		);
 
 		expect(updated.description).toBe(description);
@@ -119,7 +123,7 @@ describe("OrganizationRepoLive", () => {
 	it("returns explicit absence for missing get, update, and delete", async () => {
 		const id = newOrganizationId();
 		const update = Organization.fromRequest(id, { name: "Missing" });
-		const [found, updated, deleted] = await run(repository =>
+		const [found, updated, deleted] = await runtime.runPromise(
 			Effect.all([
 				repository.getOrganization(id),
 				repository.updateOrganization(update),
@@ -132,12 +136,12 @@ describe("OrganizationRepoLive", () => {
 	it("gets an existing Organization and returns the deleted row before it becomes absent", async () => {
 		const organization = await create("Get and delete", "Stored description");
 
-		const found = await run(repository => repository.getOrganization(organization.id));
+		const found = await runtime.runPromise(repository.getOrganization(organization.id));
 		expect(Option.getOrUndefined(found)).toEqual(organization);
 
-		const deleted = await run(repository => repository.deleteOrganization(organization.id));
+		const deleted = await runtime.runPromise(repository.deleteOrganization(organization.id));
 		expect(Option.getOrUndefined(deleted)).toEqual(organization);
-		expect(await run(repository => repository.getOrganization(organization.id))).toEqual(
+		expect(await runtime.runPromise(repository.getOrganization(organization.id))).toEqual(
 			Option.none()
 		);
 	});
@@ -145,7 +149,7 @@ describe("OrganizationRepoLive", () => {
 	it.each(["not-an-organization", "lgr_01h2x3y4z5a6b7c8d9e0f1g2h3"])(
 		"returns a typed decoding failure for schema-valid Organization ID %s",
 		async invalidId => {
-			const db = (await database()).db;
+			const db = database.db;
 			await db.insert(OrganizationsTable).values({
 				id: invalidId,
 				name: "Malformed Organization",
@@ -154,7 +158,7 @@ describe("OrganizationRepoLive", () => {
 			});
 
 			try {
-				const error = await run(repository =>
+				const error = await runtime.runPromise(
 					Effect.flip(repository.getOrganization(invalidId as unknown as OrgID))
 				);
 				expect(error).toBeInstanceOf(OrganizationPersistenceDecodingFailure);
