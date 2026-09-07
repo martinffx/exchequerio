@@ -126,7 +126,7 @@ _Avoid_: Invalid balance, insufficient-funds error
 ## Operational ledger concepts
 
 **Ledger Account Statement**:
-An immutable, versioned snapshot of an Account for a defined period. It copies the included Posted and Pending Entry data and all three Balance views so the statement remains reproducible after Pending Transactions change.
+An immutable accounting snapshot of an Account for an Effective Time period, using the Ledger state known at generation. It captures the Account version, included Posted and Pending Entry data, and opening and closing values for all three Balance views. Each generation creates an independent snapshot that survives later Transaction changes. Its description and metadata are mutable annotations.
 _Avoid_: Live account report
 
 **Ledger Account Settlement**:

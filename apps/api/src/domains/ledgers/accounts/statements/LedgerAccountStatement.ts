@@ -1,156 +1,114 @@
-import { encodeUuid } from "@/lib/utils";
-import type { InferInsertModel } from "drizzle-orm";
+import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
-
+import type { LedgerAccountStatementRow } from "@/db/schema";
 import type { AssetSummary } from "@/lib/AssetSchema";
-import type { Metadata } from "@/lib/schema";
-import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/lib/ids";
-import type { LedgerAccountStatementRow, LedgerAccountStatementsTable } from "@/db/schema";
-
+import { assertInt64 } from "@/lib/amounts";
+import { BadRequestError } from "@/lib/errors";
 import type {
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,
+	StatementEntry,
+	StatementSnapshot,
 } from "./LedgerAccountStatementSchema";
 
-type LedgerAccountStatementInsert = InferInsertModel<typeof LedgerAccountStatementsTable>;
-
-type LedgerAccountStatementOptions = {
-	readonly id: LedgerAccountStatementID;
-	readonly ledgerId: LedgerID;
-	readonly accountId: LedgerAccountID;
-	readonly statementDate: Date;
-	readonly asset: AssetSummary;
-	readonly openingBalance: bigint;
-	readonly closingBalance: bigint;
-	readonly totalCredits: bigint;
-	readonly totalDebits: bigint;
-	readonly transactionCount: number;
-	readonly metadata?: Metadata;
-	readonly created: Date;
-	readonly updated: Date;
+type StatementRecord = Omit<LedgerAccountStatementRow, "snapshot"> & {
+	snapshot: Omit<StatementSnapshot, "entries">;
+};
+type StatementTotals = {
+	postedCredits: bigint;
+	postedDebits: bigint;
+	unpostedCredits: bigint;
+	unpostedDebits: bigint;
 };
 
+const calculateStatementBalances = (
+	normalBalance: StatementSnapshot["normalBalance"],
+	totals: StatementTotals
+): StatementSnapshot["startingBalances"] => {
+	const { postedCredits, postedDebits, unpostedCredits, unpostedDebits } = totals;
+	const pendingCredits = postedCredits + unpostedCredits;
+	const pendingDebits = postedDebits + unpostedDebits;
+	const counters = [
+		{ balanceType: "pending" as const, credits: pendingCredits, debits: pendingDebits },
+		{ balanceType: "posted" as const, credits: postedCredits, debits: postedDebits },
+		{
+			balanceType: "availableBalance" as const,
+			credits: normalBalance === "debit" ? pendingCredits : postedCredits,
+			debits: normalBalance === "debit" ? postedDebits : pendingDebits,
+		},
+	];
+	return counters.map(balance => ({
+		balanceType: balance.balanceType,
+		credits: assertInt64(balance.credits).toString(),
+		debits: assertInt64(balance.debits).toString(),
+		amount: assertInt64(
+			normalBalance === "debit" ? balance.debits - balance.credits : balance.credits - balance.debits
+		).toString(),
+	}));
+};
+
+const validateStatementPeriod = (
+	request: Pick<LedgerAccountStatementRequest, "startDatetime" | "endDatetime">
+): { startDatetime: Date; endDatetime: Date } => {
+	const start = DateTime.fromISO(request.startDatetime, { zone: "utc" });
+	const end = DateTime.fromISO(request.endDatetime, { zone: "utc" });
+	if (!start.isValid || !end.isValid || start.toMillis() >= end.toMillis()) {
+		throw new BadRequestError(
+			"Statement startDatetime must precede endDatetime and both must be valid timestamps"
+		);
+	}
+	return { startDatetime: start.toJSDate(), endDatetime: end.toJSDate() };
+};
+
+const typeId = (prefix: string, uuid: string): string => TypeID.fromUUID(prefix, uuid).toString();
+const toAssetSummary = (asset: AssetSummary): AssetSummary => ({
+	assetId: typeId("ast", asset.assetId),
+	assetCode: asset.assetCode,
+	minorUnitExponent: asset.minorUnitExponent,
+});
+
+/** Snapshots store native UUIDs; responses expose prefixed TypeIDs. */
+const toEntryResponse = (entry: StatementEntry): StatementEntry => ({
+	...entry,
+	id: typeId("lte", entry.id),
+	accountId: typeId("lat", entry.accountId),
+	assetId: typeId("ast", entry.assetId),
+	transaction: { ...entry.transaction, id: typeId("ltr", entry.transaction.id) },
+});
+
 class LedgerAccountStatement {
-	readonly id: LedgerAccountStatementID;
-	readonly ledgerId: LedgerID;
-	readonly accountId: LedgerAccountID;
-	readonly statementDate: Date;
-	readonly asset: AssetSummary;
-	readonly openingBalance: bigint;
-	readonly closingBalance: bigint;
-	readonly totalCredits: bigint;
-	readonly totalDebits: bigint;
-	readonly transactionCount: number;
-	readonly metadata?: Metadata;
-	readonly created: Date;
-	readonly updated: Date;
-
-	constructor(options: LedgerAccountStatementOptions) {
-		this.id = options.id;
-		this.ledgerId = options.ledgerId;
-		this.accountId = options.accountId;
-		this.statementDate = options.statementDate;
-		this.asset = options.asset;
-		this.openingBalance = options.openingBalance;
-		this.closingBalance = options.closingBalance;
-		this.totalCredits = options.totalCredits;
-		this.totalDebits = options.totalDebits;
-		this.transactionCount = options.transactionCount;
-		this.metadata = options.metadata;
-		this.created = options.created;
-		this.updated = options.updated;
+	private constructor(private readonly record: StatementRecord) {}
+	static fromRow(record: StatementRecord): LedgerAccountStatement {
+		return new LedgerAccountStatement(record);
 	}
-
-	static fromRequest(
-		request: LedgerAccountStatementRequest,
-		asset: AssetSummary
-	): LedgerAccountStatement {
-		const now = new Date();
-		return new LedgerAccountStatement({
-			asset,
-			id: new TypeID("lst") as LedgerAccountStatementID,
-			ledgerId: TypeID.fromString<"lgr">(request.ledgerId) as LedgerID,
-			accountId: TypeID.fromString<"lat">(request.accountId) as LedgerAccountID,
-			statementDate: new Date(request.startDatetime),
-			openingBalance: 0n,
-			closingBalance: 0n,
-			totalCredits: 0n,
-			totalDebits: 0n,
-			transactionCount: 0,
-			metadata: undefined,
-			created: now,
-			updated: now,
-		});
+	get id(): string {
+		return typeId("lst", this.record.id);
 	}
-
-	static fromRow(row: LedgerAccountStatementRow, asset: AssetSummary): LedgerAccountStatement {
-		let metadata: Metadata | undefined;
-		if (row.metadata) {
-			try {
-				const parsed: unknown = JSON.parse(row.metadata);
-				if (
-					typeof parsed === "object" &&
-					parsed !== null &&
-					!Array.isArray(parsed) &&
-					Object.values(parsed).every(value => typeof value === "string")
-				) {
-					metadata = parsed as Metadata;
-				}
-			} catch {
-				metadata = undefined;
-			}
-		}
-
-		return new LedgerAccountStatement({
-			asset,
-			id: TypeID.fromUUID("lst", row.id) as LedgerAccountStatementID,
-			ledgerId: TypeID.fromUUID("lgr", row.ledgerId) as LedgerID,
-			accountId: TypeID.fromUUID("lat", row.accountId) as LedgerAccountID,
-			statementDate: row.statementDate,
-			openingBalance: row.openingBalance,
-			closingBalance: row.closingBalance,
-			totalCredits: row.totalCredits,
-			totalDebits: row.totalDebits,
-			transactionCount: row.transactionCount,
-			metadata,
-			created: row.created,
-			updated: row.updated,
-		});
-	}
-
-	toRow(): LedgerAccountStatementInsert {
-		return {
-			id: encodeUuid(this.id),
-			ledgerId: encodeUuid(this.ledgerId),
-			accountId: encodeUuid(this.accountId),
-			statementDate: this.statementDate,
-			openingBalance: this.openingBalance,
-			closingBalance: this.closingBalance,
-			totalCredits: this.totalCredits,
-			totalDebits: this.totalDebits,
-			transactionCount: this.transactionCount,
-			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,
-			updated: new Date(),
-		};
-	}
-
 	toResponse(): LedgerAccountStatementResponse {
+		const row = this.record;
 		return {
-			id: this.id.toString(),
-			ledgerId: this.ledgerId.toString(),
-			accountId: this.accountId.toString(),
-			description: undefined,
-			startDatetime: this.statementDate.toISOString(),
-			endDatetime: this.statementDate.toISOString(),
-			ledgerAccountVersion: 0,
-			normalBalance: "debit",
-			...this.asset,
-			metadata: this.metadata,
-			created: this.created.toISOString(),
-			updated: this.updated.toISOString(),
+			id: typeId("lst", row.id),
+			ledgerId: typeId("lgr", row.ledgerId),
+			accountId: typeId("lat", row.accountId),
+			startDatetime: row.startDatetime.toISOString(),
+			endDatetime: row.endDatetime.toISOString(),
+			ledgerAccountVersion: row.ledgerAccountVersion,
+			normalBalance: row.snapshot.normalBalance,
+			...toAssetSummary(row.snapshot),
+			startingBalances: row.snapshot.startingBalances,
+			endingBalances: row.snapshot.endingBalances,
+			description: row.description ?? undefined,
+			metadata: row.metadata ?? undefined,
+			lockVersion: row.lockVersion,
+			created: row.created.toISOString(),
+			updated: row.updated.toISOString(),
 		};
 	}
 }
-
-export type { LedgerAccountStatementInsert, LedgerAccountStatementOptions };
-export { LedgerAccountStatement };
+export {
+	LedgerAccountStatement,
+	calculateStatementBalances,
+	toEntryResponse,
+	validateStatementPeriod,
+};
+export type { StatementRecord, StatementTotals };
