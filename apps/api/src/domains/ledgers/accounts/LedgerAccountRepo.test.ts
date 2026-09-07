@@ -6,7 +6,6 @@ import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { LedgerNotFound } from "@/domains/ledgers";
 import {
-	type LedgerAccountID,
 	type LedgerID,
 	newLedgerAccountID,
 	newLedgerID,
@@ -379,35 +378,33 @@ describe("LedgerAccountRepoLive", () => {
 	});
 
 	it.each([
-		{ label: "invalid ID", id: "not-an-account", metadata: undefined, lockVersion: 1 },
-		{ label: "invalid serialized metadata", id: undefined, metadata: "{", lockVersion: 1 },
+		{ label: "invalid serialized metadata", metadata: "{", lockVersion: 1 },
 		{
 			label: "non-string metadata value",
-			id: undefined,
 			metadata: JSON.stringify({ source: 42 }),
 			lockVersion: 1,
 		},
 	])("returns a typed decoding failure for $label", async testCase => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
-		const id = testCase.id ?? newLedgerAccountID().toString();
+		const id = newLedgerAccountID();
 		const db = database.db;
 		const row = ledgerAccountCreate(organizationId, ledgerId, {
 			name: `Malformed ${testCase.label}`,
 		}).toRow();
 		await db.insert(LedgerAccountsTable).values({
 			...row,
-			id,
+			id: id.toUUID(),
 			metadata: testCase.metadata ?? row.metadata,
 			lockVersion: testCase.lockVersion,
 		});
 
 		try {
 			const error = await runtime.runPromise(
-				Effect.flip(repository.getAccount(organizationId, ledgerId, id as unknown as LedgerAccountID))
+				Effect.flip(repository.getAccount(organizationId, ledgerId, id))
 			);
 			expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
 		} finally {
-			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, id));
+			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, id.toUUID()));
 		}
 	});
 });

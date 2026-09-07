@@ -17,9 +17,9 @@ const organizationId = new TypeID("org") as OrgID;
 const ledgerId = new TypeID("lgr") as LedgerID;
 const accountId = new TypeID("lat") as LedgerAccountID;
 const accountRow: LedgerAccountRow = {
-	id: accountId.toString(),
-	organizationId: organizationId.toString(),
-	ledgerId: ledgerId.toString(),
+	id: accountId.toUUID(),
+	organizationId: organizationId.toUUID(),
+	ledgerId: ledgerId.toUUID(),
 	name: "Cash",
 	description: "Operating cash",
 	normalBalance: "debit",

@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 import type { Metadata } from "@/lib/schema";
@@ -108,9 +109,9 @@ class LedgerAccountEntity {
 		}
 
 		return new LedgerAccountEntity({
-			id: TypeID.fromString<"lat">(record.id),
-			organizationId: TypeID.fromString<"org">(record.organizationId),
-			ledgerId: TypeID.fromString<"lgr">(record.ledgerId),
+			id: TypeID.fromUUID("lat", record.id),
+			organizationId: TypeID.fromUUID("org", record.organizationId),
+			ledgerId: TypeID.fromUUID("lgr", record.ledgerId),
 			name: record.name,
 			description: record.description ?? undefined,
 			normalBalance: record.normalBalance as NormalBalance,
@@ -128,9 +129,9 @@ class LedgerAccountEntity {
 
 	public toRecord(): LedgerAccountInsert {
 		return {
-			id: this.id.toString(),
-			organizationId: this.organizationId.toString(),
-			ledgerId: this.ledgerId.toString(),
+			id: encodeUuid(this.id),
+			organizationId: encodeUuid(this.organizationId),
+			ledgerId: encodeUuid(this.ledgerId),
 			name: this.name,
 			description: this.description ?? undefined,
 			normalBalance: this.normalBalance,

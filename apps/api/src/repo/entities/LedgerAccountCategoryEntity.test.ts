@@ -27,7 +27,10 @@ describe("LedgerAccountCategoryEntity ownership", () => {
 
 		expect(restored.organizationId).toEqual(organizationId);
 		expect(restored.ledgerId).toEqual(ledgerId);
-		expect(record.organizationId).toBe(organizationId.toString());
+		expect(record.id).toBe(entity.id.toUUID());
+		expect(record.organizationId).toBe(organizationId.toUUID());
+		expect(record.ledgerId).toBe(ledgerId.toUUID());
+		expect(restored.toResponse().id).toBe(entity.id.toString());
 		expect(restored.toResponse()).not.toHaveProperty("organizationId");
 	});
 });
@@ -35,9 +38,9 @@ describe("LedgerAccountCategoryEntity ownership", () => {
 /* oxlint-disable unicorn/no-null -- Stored rows use SQL null for nullable columns. */
 describe("LedgerAccountCategoryEntity stored metadata", () => {
 	const record = {
-		id: new TypeID("lac").toString(),
-		organizationId: new TypeID("org").toString(),
-		ledgerId: new TypeID("lgr").toString(),
+		id: new TypeID("lac").toUUID(),
+		organizationId: new TypeID("org").toUUID(),
+		ledgerId: new TypeID("lgr").toUUID(),
 		name: "Assets",
 		description: null,
 		normalBalance: "debit" as const,

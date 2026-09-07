@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import { asc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
@@ -130,7 +131,7 @@ class OrganizationRepoLive implements OrganizationRepo {
 				this.db
 					.select()
 					.from(OrganizationsTable)
-					.where(eq(OrganizationsTable.id, id.toString()))
+					.where(eq(OrganizationsTable.id, encodeUuid(id)))
 					.limit(1),
 			catch: mapInfrastructureError,
 		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
@@ -174,7 +175,7 @@ class OrganizationRepoLive implements OrganizationRepo {
 				this.db
 					.update(OrganizationsTable)
 					.set(record.toUpdateRow())
-					.where(eq(OrganizationsTable.id, record.id.toString()))
+					.where(eq(OrganizationsTable.id, encodeUuid(record.id)))
 					.returning(),
 			catch: mapInfrastructureError,
 		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
@@ -191,7 +192,10 @@ class OrganizationRepoLive implements OrganizationRepo {
 	): Effect.Effect<Option.Option<Organization>, OrganizationDeleteRepositoryError> {
 		return Effect.tryPromise({
 			try: () =>
-				this.db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id.toString())).returning(),
+				this.db
+					.delete(OrganizationsTable)
+					.where(eq(OrganizationsTable.id, encodeUuid(id)))
+					.returning(),
 			catch: mapDeleteError,
 		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
 	}

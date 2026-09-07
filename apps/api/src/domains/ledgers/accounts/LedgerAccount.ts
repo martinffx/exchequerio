@@ -3,7 +3,7 @@ import { DateTime } from "luxon";
 
 import { BadRequestError } from "@/lib/errors";
 import type { Metadata } from "@/lib/schema";
-import { encodeMetadata, parseDate, parseId, parseMetadata } from "@/lib/utils";
+import { encodeUuid, encodeMetadata, parseDate, parseUuid, parseMetadata } from "@/lib/utils";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/repo/entities/types";
 import type {
 	LedgerAccountInsertRow,
@@ -185,9 +185,9 @@ class LedgerAccount {
 		if (row === undefined) return Effect.succeed(Option.none());
 
 		return Effect.all({
-			id: parseId<"lat", LedgerAccountID>("lat", row.id),
-			organizationId: parseId<"org", OrgID>("org", row.organizationId),
-			ledgerId: parseId<"lgr", LedgerID>("lgr", row.ledgerId),
+			id: parseUuid<"lat", LedgerAccountID>("lat", row.id),
+			organizationId: parseUuid<"org", OrgID>("org", row.organizationId),
+			ledgerId: parseUuid<"lgr", LedgerID>("lgr", row.ledgerId),
 			metadata: parseMetadata(row.metadata),
 			created: parseDate(row.created),
 			updated: parseDate(row.updated),
@@ -225,9 +225,9 @@ class LedgerAccount {
 	 */
 	toRow(): LedgerAccountInsertRow {
 		return {
-			id: this.id.toString(),
-			organizationId: this.organizationId.toString(),
-			ledgerId: this.ledgerId.toString(),
+			id: encodeUuid(this.id),
+			organizationId: encodeUuid(this.organizationId),
+			ledgerId: encodeUuid(this.ledgerId),
 			name: this.name,
 			description: this.description,
 			normalBalance: this.normalBalance,

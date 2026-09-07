@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { DateTime } from "luxon";
@@ -38,7 +39,7 @@ function getRepos(): TestRepos {
 	const organizationRepo: OrganizationFixtureRepo = {
 		createOrganization: async record => {
 			await db.insert(schema.OrganizationsTable).values({
-				id: record.id.toString(),
+				id: encodeUuid(record.id),
 				name: record.name,
 				description: record.description,
 				created: record.created?.toJSDate(),
@@ -49,7 +50,7 @@ function getRepos(): TestRepos {
 		deleteOrganization: async id => {
 			await db
 				.delete(schema.OrganizationsTable)
-				.where(eq(schema.OrganizationsTable.id, id.toString()));
+				.where(eq(schema.OrganizationsTable.id, encodeUuid(id)));
 		},
 	};
 	const ledgerRepo = new LedgerRepo(db);

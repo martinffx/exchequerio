@@ -1,6 +1,8 @@
+import { encodeUuid } from "@/lib/utils";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
+import { TypeID } from "typeid-js";
 
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import {
@@ -257,8 +259,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.from(LedgerTransactionsTable)
 			.where(
 				and(
-					eq(LedgerTransactionsTable.organizationId, organizationId.toString()),
-					eq(LedgerTransactionsTable.ledgerId, ledgerId.toString())
+					eq(LedgerTransactionsTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerTransactionsTable.ledgerId, encodeUuid(ledgerId))
 				)
 			)
 			.orderBy(desc(LedgerTransactionsTable.created), desc(LedgerTransactionsTable.id))
@@ -285,9 +287,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	): Effect.Effect<Option.Option<LedgerTransaction>, TransactionInfrastructureError> {
 		return this.db.query.LedgerTransactionsTable.findMany({
 			where: {
-				organizationId: organizationId.toString(),
-				ledgerId: ledgerId.toString(),
-				id: transactionId.toString(),
+				organizationId: encodeUuid(organizationId),
+				ledgerId: encodeUuid(ledgerId),
+				id: encodeUuid(transactionId),
 			},
 			with: {
 				entries: {
@@ -387,9 +389,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	) {
 		return db.query.LedgerTransactionsTable.findMany({
 			where: {
-				organizationId: organizationId.toString(),
-				ledgerId: ledgerId.toString(),
-				settlementId: settlementId.toString(),
+				organizationId: encodeUuid(organizationId),
+				ledgerId: encodeUuid(ledgerId),
+				settlementId: encodeUuid(settlementId),
 			},
 			with: { entries: { orderBy: { created: "asc", id: "asc" } } },
 		}).pipe(Effect.flatMap(rows => LedgerTransaction.fromRows(rows)));
@@ -415,9 +417,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.from(LedgerAccountSettlementsTable)
 			.where(
 				and(
-					eq(LedgerAccountSettlementsTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountSettlementsTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountSettlementsTable.id, settlementId.toString())
+					eq(LedgerAccountSettlementsTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountSettlementsTable.ledgerId, encodeUuid(ledgerId)),
+					eq(LedgerAccountSettlementsTable.id, encodeUuid(settlementId))
 				)
 			)
 			.for("update")
@@ -763,9 +765,12 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.from(LedgerAccountsTable)
 			.where(
 				and(
-					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					inArray(LedgerAccountsTable.id, accountIds)
+					eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+					inArray(
+						LedgerAccountsTable.id,
+						accountIds.map(id => encodeUuid(TypeID.fromString(id, "lat")))
+					)
 				)
 			)
 			.orderBy(asc(LedgerAccountsTable.id))
@@ -870,9 +875,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			})
 			.where(
 				and(
-					eq(LedgerTransactionsTable.organizationId, current.organizationId.toString()),
-					eq(LedgerTransactionsTable.ledgerId, current.ledgerId.toString()),
-					eq(LedgerTransactionsTable.id, current.id.toString()),
+					eq(LedgerTransactionsTable.organizationId, encodeUuid(current.organizationId)),
+					eq(LedgerTransactionsTable.ledgerId, encodeUuid(current.ledgerId)),
+					eq(LedgerTransactionsTable.id, encodeUuid(current.id)),
 					eq(LedgerTransactionsTable.lockVersion, current.lockVersion)
 				)
 			)
@@ -897,9 +902,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.delete(LedgerTransactionEntriesTable)
 			.where(
 				and(
-					eq(LedgerTransactionEntriesTable.organizationId, transaction.organizationId.toString()),
-					eq(LedgerTransactionEntriesTable.ledgerId, transaction.ledgerId.toString()),
-					eq(LedgerTransactionEntriesTable.transactionId, transaction.id.toString())
+					eq(LedgerTransactionEntriesTable.organizationId, encodeUuid(transaction.organizationId)),
+					eq(LedgerTransactionEntriesTable.ledgerId, encodeUuid(transaction.ledgerId)),
+					eq(LedgerTransactionEntriesTable.transactionId, encodeUuid(transaction.id))
 				)
 			)
 			.pipe(
@@ -922,9 +927,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.set({ status: transaction.status })
 			.where(
 				and(
-					eq(LedgerTransactionEntriesTable.organizationId, transaction.organizationId.toString()),
-					eq(LedgerTransactionEntriesTable.ledgerId, transaction.ledgerId.toString()),
-					eq(LedgerTransactionEntriesTable.transactionId, transaction.id.toString())
+					eq(LedgerTransactionEntriesTable.organizationId, encodeUuid(transaction.organizationId)),
+					eq(LedgerTransactionEntriesTable.ledgerId, encodeUuid(transaction.ledgerId)),
+					eq(LedgerTransactionEntriesTable.transactionId, encodeUuid(transaction.id))
 				)
 			);
 	}
@@ -970,9 +975,9 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 					})
 					.where(
 						and(
-							eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-							eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-							eq(LedgerAccountsTable.id, accountId),
+							eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+							eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+							eq(LedgerAccountsTable.id, encodeUuid(account.id)),
 							eq(LedgerAccountsTable.lockVersion, account.lockVersion)
 						)
 					)

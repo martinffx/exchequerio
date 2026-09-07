@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 // oxlint-disable-next-line boundaries/element-types -- The in-place migration uses the shared Effect database.
@@ -138,8 +139,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 			.from(LedgerAccountCategoriesTable)
 			.where(
 				and(
-					eq(LedgerAccountCategoriesTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountCategoriesTable.ledgerId, ledgerId.toString())
+					eq(LedgerAccountCategoriesTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountCategoriesTable.ledgerId, encodeUuid(ledgerId))
 				)
 			)
 			.orderBy(desc(LedgerAccountCategoriesTable.created))
@@ -161,9 +162,9 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 			.from(LedgerAccountCategoriesTable)
 			.where(
 				and(
-					eq(LedgerAccountCategoriesTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountCategoriesTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountCategoriesTable.id, categoryId.toString())
+					eq(LedgerAccountCategoriesTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountCategoriesTable.ledgerId, encodeUuid(ledgerId)),
+					eq(LedgerAccountCategoriesTable.id, encodeUuid(categoryId))
 				)
 			)
 			.limit(1)
@@ -194,8 +195,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 							updated: record.updated,
 						},
 						where: and(
-							eq(LedgerAccountCategoriesTable.organizationId, entity.organizationId.toString()),
-							eq(LedgerAccountCategoriesTable.ledgerId, entity.ledgerId.toString())
+							eq(LedgerAccountCategoriesTable.organizationId, encodeUuid(entity.organizationId)),
+							eq(LedgerAccountCategoriesTable.ledgerId, encodeUuid(entity.ledgerId))
 						),
 					})
 					.returning()
@@ -220,9 +221,9 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 			.delete(LedgerAccountCategoriesTable)
 			.where(
 				and(
-					eq(LedgerAccountCategoriesTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountCategoriesTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountCategoriesTable.id, categoryId.toString())
+					eq(LedgerAccountCategoriesTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountCategoriesTable.ledgerId, encodeUuid(ledgerId)),
+					eq(LedgerAccountCategoriesTable.id, encodeUuid(categoryId))
 				)
 			)
 			.returning({ id: LedgerAccountCategoriesTable.id })
@@ -247,10 +248,10 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 				this.db
 					.insert(LedgerAccountCategoryAccountsTable)
 					.values({
-						organizationId: organizationId.toString(),
-						ledgerId: ledgerId.toString(),
-						categoryId: categoryId.toString(),
-						accountId: accountId.toString(),
+						organizationId: encodeUuid(organizationId),
+						ledgerId: encodeUuid(ledgerId),
+						categoryId: encodeUuid(categoryId),
+						accountId: encodeUuid(accountId),
 					})
 					.onConflictDoNothing()
 					.pipe(
@@ -282,10 +283,10 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 					.delete(LedgerAccountCategoryAccountsTable)
 					.where(
 						and(
-							eq(LedgerAccountCategoryAccountsTable.organizationId, organizationId.toString()),
-							eq(LedgerAccountCategoryAccountsTable.ledgerId, ledgerId.toString()),
-							eq(LedgerAccountCategoryAccountsTable.categoryId, categoryId.toString()),
-							eq(LedgerAccountCategoryAccountsTable.accountId, accountId.toString())
+							eq(LedgerAccountCategoryAccountsTable.organizationId, encodeUuid(organizationId)),
+							eq(LedgerAccountCategoryAccountsTable.ledgerId, encodeUuid(ledgerId)),
+							eq(LedgerAccountCategoryAccountsTable.categoryId, encodeUuid(categoryId)),
+							eq(LedgerAccountCategoryAccountsTable.accountId, encodeUuid(accountId))
 						)
 					)
 					.returning({ categoryId: LedgerAccountCategoryAccountsTable.categoryId })
@@ -317,10 +318,10 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 			yield* this.db
 				.insert(LedgerAccountCategoryParentsTable)
 				.values({
-					organizationId: organizationId.toString(),
-					ledgerId: ledgerId.toString(),
-					categoryId: categoryId.toString(),
-					parentCategoryId: parentCategoryId.toString(),
+					organizationId: encodeUuid(organizationId),
+					ledgerId: encodeUuid(ledgerId),
+					categoryId: encodeUuid(categoryId),
+					parentCategoryId: encodeUuid(parentCategoryId),
 				})
 				.onConflictDoNothing()
 				.pipe(
@@ -354,10 +355,10 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 					.delete(LedgerAccountCategoryParentsTable)
 					.where(
 						and(
-							eq(LedgerAccountCategoryParentsTable.organizationId, organizationId.toString()),
-							eq(LedgerAccountCategoryParentsTable.ledgerId, ledgerId.toString()),
-							eq(LedgerAccountCategoryParentsTable.categoryId, categoryId.toString()),
-							eq(LedgerAccountCategoryParentsTable.parentCategoryId, parentCategoryId.toString())
+							eq(LedgerAccountCategoryParentsTable.organizationId, encodeUuid(organizationId)),
+							eq(LedgerAccountCategoryParentsTable.ledgerId, encodeUuid(ledgerId)),
+							eq(LedgerAccountCategoryParentsTable.categoryId, encodeUuid(categoryId)),
+							eq(LedgerAccountCategoryParentsTable.parentCategoryId, encodeUuid(parentCategoryId))
 						)
 					)
 					.returning({ categoryId: LedgerAccountCategoryParentsTable.categoryId })

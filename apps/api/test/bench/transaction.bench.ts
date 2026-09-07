@@ -194,7 +194,7 @@ async function cleanupFixtures(db: DrizzleDB, orgId: OrgID): Promise<void> {
 			try {
 				// Delete in dependency order within a single transaction
 				// This ensures atomicity even if there are straggler connections from the server
-				const orgIdStr = orgId.toString();
+				const orgIdStr = orgId.toUUID();
 
 				await db.transaction(async tx => {
 					// 1. Delete all settlements and settlement entries
@@ -397,7 +397,7 @@ describe("Transaction Creation Benchmarks", () => {
 		console.log("Creating shared organization...");
 		sharedOrgId = new TypeID("org");
 		await db.insert(OrganizationsTable).values({
-			id: sharedOrgId.toString(),
+			id: sharedOrgId.toUUID(),
 			name: "Benchmark Organization",
 			description: "Shared organization for all benchmark tests",
 		});

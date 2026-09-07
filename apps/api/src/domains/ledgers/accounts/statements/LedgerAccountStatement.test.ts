@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import { TypeID } from "typeid-js";
 import { describe, expect, it } from "vitest";
 
@@ -13,9 +14,9 @@ const updated = new Date("2025-01-03T00:00:00.000Z");
 
 const row = (metadata: string | null = JSON.stringify({ period: "monthly" })) =>
 	({
-		id: statementId,
-		ledgerId,
-		accountId,
+		id: encodeUuid(TypeID.fromString(statementId)),
+		ledgerId: encodeUuid(TypeID.fromString(ledgerId)),
+		accountId: encodeUuid(TypeID.fromString(accountId)),
 		statementDate,
 		openingBalance: "10.5000",
 		closingBalance: "20.2500",
@@ -85,9 +86,9 @@ describe("LedgerAccountStatement", () => {
 		const insert = statement.toRow();
 
 		expect(insert).toMatchObject({
-			id: statementId,
-			ledgerId,
-			accountId,
+			id: encodeUuid(TypeID.fromString(statementId)),
+			ledgerId: encodeUuid(TypeID.fromString(ledgerId)),
+			accountId: encodeUuid(TypeID.fromString(accountId)),
 			statementDate,
 			openingBalance: "10.5",
 			closingBalance: "20.25",

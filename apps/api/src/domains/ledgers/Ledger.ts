@@ -3,7 +3,7 @@ import { DateTime } from "luxon";
 import type { Metadata } from "@/lib/schema";
 import type { LedgerID, OrgID } from "@/repo/entities/types";
 import type { LedgerInsertRow, LedgerRow, LedgerUpdateRow } from "@/repo/schema";
-import { parseId } from "@/lib/utils";
+import { encodeUuid, parseUuid } from "@/lib/utils";
 import type { LedgerCreateRequest, LedgerResponse, LedgerUpdateRequest } from "./LedgerSchema";
 import { LedgerPersistenceDecodingFailure } from "./LedgerErrors";
 
@@ -75,8 +75,8 @@ class Ledger {
 		if (row === undefined) return Effect.succeed(Option.none());
 
 		return Effect.gen(function* () {
-			const id = yield* parseId<"lgr", LedgerID>("lgr", row.id);
-			const organizationId = yield* parseId<"org", OrgID>("org", row.organizationId);
+			const id = yield* parseUuid<"lgr", LedgerID>("lgr", row.id);
+			const organizationId = yield* parseUuid<"org", OrgID>("org", row.organizationId);
 			const decoded = yield* Effect.try({
 				try: () => ({
 					created: decodeDate(row.created),
@@ -101,8 +101,8 @@ class Ledger {
 
 	toCreateRow(): LedgerInsertRow {
 		return {
-			id: this.id.toString(),
-			organizationId: this.organizationId.toString(),
+			id: encodeUuid(this.id),
+			organizationId: encodeUuid(this.organizationId),
 			name: this.name,
 			// eslint-disable-next-line unicorn/no-null -- Drizzle represents SQL NULL as null.
 			description: this.description ?? null,

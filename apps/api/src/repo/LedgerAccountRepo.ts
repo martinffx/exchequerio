@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import { and, desc, eq, getTableColumns, like } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID } from "@/repo/entities/LedgerAccountEntity";
@@ -38,9 +39,9 @@ class LedgerAccountRepo {
 			.innerJoin(LedgersTable, eq(LedgerAccountsTable.ledgerId, LedgersTable.id))
 			.where(
 				and(
-					eq(LedgerAccountsTable.id, accountId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgersTable.organizationId, organizationId.toString())
+					eq(LedgerAccountsTable.id, encodeUuid(accountId)),
+					eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+					eq(LedgersTable.organizationId, encodeUuid(organizationId))
 				)
 			)
 			.limit(1);
@@ -78,8 +79,8 @@ class LedgerAccountRepo {
 	): Promise<LedgerAccountEntity[]> {
 		// Build where conditions with organization tenancy validation via inner join
 		const whereConditions = [
-			eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-			eq(LedgersTable.organizationId, organizationId.toString()),
+			eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+			eq(LedgersTable.organizationId, encodeUuid(organizationId)),
 		];
 
 		if (nameFilter) {
@@ -103,8 +104,8 @@ class LedgerAccountRepo {
 				.from(LedgersTable)
 				.where(
 					and(
-						eq(LedgersTable.id, ledgerId.toString()),
-						eq(LedgersTable.organizationId, organizationId.toString())
+						eq(LedgersTable.id, encodeUuid(ledgerId)),
+						eq(LedgersTable.organizationId, encodeUuid(organizationId))
 					)
 				)
 				.limit(1);
@@ -177,8 +178,8 @@ class LedgerAccountRepo {
 						updated: record.updated,
 					},
 					where: and(
-						eq(LedgerAccountsTable.organizationId, entity.organizationId.toString()),
-						eq(LedgerAccountsTable.ledgerId, entity.ledgerId.toString()),
+						eq(LedgerAccountsTable.organizationId, encodeUuid(entity.organizationId)),
+						eq(LedgerAccountsTable.ledgerId, encodeUuid(entity.ledgerId)),
 						eq(LedgerAccountsTable.lockVersion, currentLockVersion)
 					),
 				})
@@ -242,9 +243,9 @@ class LedgerAccountRepo {
 				.delete(LedgerAccountsTable)
 				.where(
 					and(
-						eq(LedgerAccountsTable.id, accountId.toString()),
-						eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-						eq(LedgerAccountsTable.organizationId, organizationId.toString())
+						eq(LedgerAccountsTable.id, encodeUuid(accountId)),
+						eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+						eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId))
 					)
 				)
 				.returning({ id: LedgerAccountsTable.id });

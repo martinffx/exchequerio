@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
+import { TypeID } from "typeid-js";
 import {
 	DatabaseTag,
 	type EffectDrizzleDatabase,
@@ -15,7 +16,7 @@ import {
 	NotFoundError,
 	ServiceUnavailableError,
 } from "@/lib/errors";
-import { encodeMetadata, parseMetadata } from "@/lib/utils";
+import { encodeUuid, encodeMetadata, parseMetadata } from "@/lib/utils";
 import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/repo/entities/types";
 import {
 	LedgerAccountSettlementEntriesTable as Links,
@@ -37,9 +38,9 @@ type Connection = Pick<EffectDrizzleDatabase, "select" | "insert" | "update" | "
 /** Builds the Organization, Ledger, and Settlement ownership predicate. */
 const scope = (organizationId: OrgID, ledgerId: LedgerID, id: LedgerAccountSettlementID) =>
 	and(
-		eq(Settlements.organizationId, organizationId.toString()),
-		eq(Settlements.ledgerId, ledgerId.toString()),
-		eq(Settlements.id, id.toString())
+		eq(Settlements.organizationId, encodeUuid(organizationId)),
+		eq(Settlements.ledgerId, encodeUuid(ledgerId)),
+		eq(Settlements.id, encodeUuid(id))
 	);
 /** Preserves HTTP failures and translates PostgreSQL failures at the repository boundary. */
 const mapError = (cause: unknown): HttpError => {
@@ -95,9 +96,9 @@ class LedgerAccountSettlementRepoLive {
 			if (!row) return yield* Effect.fail(new NotFoundError("Settlement not found"));
 			const transactions = yield* db.query.LedgerTransactionsTable.findMany({
 				where: {
-					organizationId: organizationId.toString(),
-					ledgerId: ledgerId.toString(),
-					settlementId: id.toString(),
+					organizationId: encodeUuid(organizationId),
+					ledgerId: encodeUuid(ledgerId),
+					settlementId: encodeUuid(id),
 				},
 				with: { entries: true },
 			});
@@ -131,7 +132,7 @@ class LedgerAccountSettlementRepoLive {
 	 */
 	listSettlements(organizationId: OrgID, ledgerId: LedgerID, offset: number, limit: number) {
 		return this.db.query.LedgerAccountSettlementsTable.findMany({
-			where: { organizationId: organizationId.toString(), ledgerId: ledgerId.toString() },
+			where: { organizationId: encodeUuid(organizationId), ledgerId: encodeUuid(ledgerId) },
 			orderBy: { created: "desc", id: "desc" },
 			offset,
 			limit,
@@ -163,7 +164,7 @@ class LedgerAccountSettlementRepoLive {
 			.from(Links)
 			.innerJoin(Entries, eq(Entries.id, Links.entryId))
 			.innerJoin(Transactions, eq(Transactions.id, Entries.transactionId))
-			.where(eq(Links.settlementId, settlement.id.toString()))
+			.where(eq(Links.settlementId, encodeUuid(settlement.id)))
 			.orderBy(desc(Entries.created), desc(Entries.id));
 	}
 	/**
@@ -186,9 +187,9 @@ class LedgerAccountSettlementRepoLive {
 			.innerJoin(Transactions, eq(Transactions.id, Entries.transactionId))
 			.where(
 				and(
-					eq(Entries.organizationId, d.organizationId.toString()),
-					eq(Entries.ledgerId, d.ledgerId.toString()),
-					eq(Entries.accountId, d.settledAccountId.toString()),
+					eq(Entries.organizationId, encodeUuid(d.organizationId)),
+					eq(Entries.ledgerId, encodeUuid(d.ledgerId)),
+					eq(Entries.accountId, encodeUuid(d.settledAccountId)),
 					eq(Transactions.status, "posted"),
 					ids
 						? inArray(Entries.id, ids)
@@ -217,9 +218,9 @@ class LedgerAccountSettlementRepoLive {
 				.from(Accounts)
 				.where(
 					and(
-						eq(Accounts.id, settlement.data.settledAccountId.toString()),
-						eq(Accounts.organizationId, settlement.organizationId.toString()),
-						eq(Accounts.ledgerId, settlement.ledgerId.toString())
+						eq(Accounts.id, encodeUuid(settlement.data.settledAccountId)),
+						eq(Accounts.organizationId, encodeUuid(settlement.organizationId)),
+						eq(Accounts.ledgerId, encodeUuid(settlement.ledgerId))
 					)
 				);
 			if (!accounts[0]) return yield* Effect.fail(new NotFoundError("Settled Account not found"));
@@ -280,7 +281,7 @@ class LedgerAccountSettlementRepoLive {
 			)
 				return yield* Effect.fail(new ConflictError("Invalid Settlement transition"));
 			if (settlement.status === "drafting" && target === "voided") {
-				yield* db.delete(Links).where(eq(Links.settlementId, settlement.id.toString()));
+				yield* db.delete(Links).where(eq(Links.settlementId, encodeUuid(settlement.id)));
 				yield* db
 					.update(Settlements)
 					.set({ status: "voided", updated: now.toJSDate() })
@@ -301,7 +302,7 @@ class LedgerAccountSettlementRepoLive {
 						yield* db
 							.insert(Links)
 							.values(
-								selected.map(entry => ({ settlementId: settlement.id.toString(), entryId: entry.id }))
+								selected.map(entry => ({ settlementId: encodeUuid(settlement.id), entryId: entry.id }))
 							);
 				}
 				yield* this.accounting(db, settlement, now);
@@ -339,11 +340,11 @@ class LedgerAccountSettlementRepoLive {
 						.from(Accounts)
 						.where(
 							and(
-								eq(Accounts.organizationId, entity.organizationId.toString()),
-								eq(Accounts.ledgerId, entity.ledgerId.toString()),
+								eq(Accounts.organizationId, encodeUuid(entity.organizationId)),
+								eq(Accounts.ledgerId, encodeUuid(entity.ledgerId)),
 								inArray(Accounts.id, [
-									entity.data.settledAccountId.toString(),
-									entity.data.contraAccountId.toString(),
+									encodeUuid(entity.data.settledAccountId),
+									encodeUuid(entity.data.contraAccountId),
 								])
 							)
 						);
@@ -451,7 +452,7 @@ class LedgerAccountSettlementRepoLive {
 						return yield* Effect.fail(
 							new ConflictError("Settlement accounting has not completed the intended transition")
 						);
-					if (target === "voided") yield* db.delete(Links).where(eq(Links.settlementId, id.toString()));
+					if (target === "voided") yield* db.delete(Links).where(eq(Links.settlementId, encodeUuid(id)));
 					yield* db
 						.update(Settlements)
 						// oxlint-disable-next-line unicorn/no-null -- Clear the persisted processing target.
@@ -495,7 +496,11 @@ class LedgerAccountSettlementRepoLive {
 							new ConflictError("Only drafting Settlement membership can change")
 						);
 					if (add) {
-						const selected = yield* this.eligible(db, settlement, entryIds);
+						const selected = yield* this.eligible(
+							db,
+							settlement,
+							entryIds.map(id => encodeUuid(TypeID.fromString(id, "lte")))
+						);
 						if (selected.length !== entryIds.length)
 							return yield* Effect.fail(new ConflictError("Entries must be eligible and unassigned"));
 						const existing = yield* this.sources(db, settlement);
@@ -503,11 +508,17 @@ class LedgerAccountSettlementRepoLive {
 							return yield* Effect.fail(new ConflictError("Settlement exceeds 10000 source Entries"));
 						yield* db
 							.insert(Links)
-							.values(selected.map(entry => ({ settlementId: id.toString(), entryId: entry.id })));
+							.values(selected.map(entry => ({ settlementId: encodeUuid(id), entryId: entry.id })));
 					} else
-						yield* db
-							.delete(Links)
-							.where(and(eq(Links.settlementId, id.toString()), inArray(Links.entryId, entryIds)));
+						yield* db.delete(Links).where(
+							and(
+								eq(Links.settlementId, encodeUuid(id)),
+								inArray(
+									Links.entryId,
+									entryIds.map(id => encodeUuid(TypeID.fromString(id, "lte")))
+								)
+							)
+						);
 				})
 			)
 			.pipe(Effect.mapError(mapError));
@@ -535,9 +546,9 @@ class LedgerAccountSettlementRepoLive {
 			return yield* Effect.forEach(rows, row =>
 				parseMetadata(row.entry.metadata).pipe(
 					Effect.map(metadata => ({
-						id: row.entry.id,
-						transactionId: row.entry.transactionId,
-						accountId: row.entry.accountId,
+						id: TypeID.fromUUID("lte", row.entry.id).toString(),
+						transactionId: TypeID.fromUUID("ltr", row.entry.transactionId).toString(),
+						accountId: TypeID.fromUUID("lat", row.entry.accountId).toString(),
 						effectiveAt: row.effectiveAt.toISOString(),
 						direction: row.entry.direction,
 						amount: row.entry.amount,

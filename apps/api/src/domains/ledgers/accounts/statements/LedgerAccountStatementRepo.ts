@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import { eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 
@@ -28,7 +29,7 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		return this.db
 			.select()
 			.from(LedgerAccountStatementsTable)
-			.where(eq(LedgerAccountStatementsTable.id, id.toString()))
+			.where(eq(LedgerAccountStatementsTable.id, encodeUuid(id)))
 			.limit(1)
 			.pipe(
 				Effect.flatMap(rows =>

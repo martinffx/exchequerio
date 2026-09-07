@@ -277,7 +277,7 @@ describe("Settlement repository processing", () => {
 			await connection.connect();
 			await connection.query("BEGIN");
 			await connection.query("SELECT id FROM ledger_accounts WHERE id = $1 FOR UPDATE", [
-				owner.settledAccountId.toString(),
+				owner.settledAccountId.toUUID(),
 			]);
 			const ledgers = await limitedRuntime.runPromise(LedgerRepoTag);
 			await expect(

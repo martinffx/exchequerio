@@ -78,7 +78,7 @@ describe("LedgerAccountCategoryRepo", () => {
 		try {
 			await db
 				.delete(LedgerAccountCategoriesTable)
-				.where(eq(LedgerAccountCategoriesTable.ledgerId, testLedgerId.toString()));
+				.where(eq(LedgerAccountCategoriesTable.ledgerId, testLedgerId.toUUID()));
 			await ledgerRepo.deleteLedger(testOrgId, testLedgerId);
 			await organizationRepo.deleteOrganization(testOrgId);
 		} finally {
@@ -160,9 +160,9 @@ describe("LedgerAccountCategoryRepo", () => {
 			] as LedgerAccountCategoryID[];
 			await db.insert(LedgerAccountCategoriesTable).values(
 				ids.map((id, index) => ({
-					id: id.toString(),
-					organizationId: testOrgId.toString(),
-					ledgerId: testLedgerId.toString(),
+					id: id.toUUID(),
+					organizationId: testOrgId.toUUID(),
+					ledgerId: testLedgerId.toUUID(),
 					name: "Ordered Category",
 					normalBalance: "debit" as const,
 					created: new Date(["2024-01-03", "2024-01-01", "2024-01-02"][index]),
@@ -192,9 +192,9 @@ describe("LedgerAccountCategoryRepo", () => {
 		it("should treat malformed stored metadata as absent", async () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			await db.insert(LedgerAccountCategoriesTable).values({
-				id: categoryId.toString(),
-				organizationId: testOrgId.toString(),
-				ledgerId: testLedgerId.toString(),
+				id: categoryId.toUUID(),
+				organizationId: testOrgId.toUUID(),
+				ledgerId: testLedgerId.toUUID(),
 				name: "Malformed metadata",
 				normalBalance: "debit",
 				metadata: "{not-json",
@@ -215,9 +215,9 @@ describe("LedgerAccountCategoryRepo", () => {
 			async field => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 				await db.insert(LedgerAccountCategoriesTable).values({
-					id: categoryId.toString(),
-					organizationId: testOrgId.toString(),
-					ledgerId: testLedgerId.toString(),
+					id: categoryId.toUUID(),
+					organizationId: testOrgId.toUUID(),
+					ledgerId: testLedgerId.toUUID(),
 					name: "Infinite timestamp",
 					normalBalance: "debit",
 					[field]: sql`'infinity'::timestamptz`,
@@ -242,7 +242,7 @@ describe("LedgerAccountCategoryRepo", () => {
 					await db
 						.select()
 						.from(LedgerAccountCategoriesTable)
-						.where(eq(LedgerAccountCategoriesTable.id, categoryId.toString()))
+						.where(eq(LedgerAccountCategoriesTable.id, categoryId.toUUID()))
 				).toEqual([]);
 			}
 		);
@@ -2192,18 +2192,18 @@ describe("LedgerAccountCategoryRepo", () => {
 			const [accountLink] = await db
 				.select()
 				.from(LedgerAccountCategoryAccountsTable)
-				.where(eq(LedgerAccountCategoryAccountsTable.categoryId, childId.toString()));
+				.where(eq(LedgerAccountCategoryAccountsTable.categoryId, childId.toUUID()));
 			const [parentLink] = await db
 				.select()
 				.from(LedgerAccountCategoryParentsTable)
-				.where(eq(LedgerAccountCategoryParentsTable.categoryId, childId.toString()));
+				.where(eq(LedgerAccountCategoryParentsTable.categoryId, childId.toUUID()));
 			expect(accountLink).toMatchObject({
-				organizationId: testOrgId.toString(),
-				ledgerId: testLedgerId.toString(),
+				organizationId: testOrgId.toUUID(),
+				ledgerId: testLedgerId.toUUID(),
 			});
 			expect(parentLink).toMatchObject({
-				organizationId: testOrgId.toString(),
-				ledgerId: testLedgerId.toString(),
+				organizationId: testOrgId.toUUID(),
+				ledgerId: testLedgerId.toUUID(),
 			});
 
 			await runtime.runPromise(

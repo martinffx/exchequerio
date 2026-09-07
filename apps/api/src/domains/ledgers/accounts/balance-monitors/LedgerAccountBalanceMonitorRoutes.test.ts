@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import { Effect, Layer } from "effect";
 import fastifySwagger from "@fastify/swagger";
 import fastify, { type FastifyInstance } from "fastify";
@@ -112,8 +113,8 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 	])("safely returns stored metadata %s on GET and list", async (metadata, expected) => {
 		const stored = await Effect.runPromise(
 			LedgerAccountBalanceMonitor.fromRow({
-				id: monitorId.toString(),
-				accountId: accountId.toString(),
+				id: encodeUuid(monitorId),
+				accountId: encodeUuid(accountId),
 				name: monitor.name,
 				description: "Historical monitor",
 				alertThreshold: "0",

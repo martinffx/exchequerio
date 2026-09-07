@@ -5,13 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import { OrganizationNotFound } from "@/domains/organizations";
-import {
-	type LedgerID,
-	newLedgerAccountID,
-	newLedgerID,
-	newOrgID,
-	type OrgID,
-} from "@/repo/entities/types";
+import { newLedgerAccountID, newLedgerID, newOrgID, type OrgID } from "@/repo/entities/types";
 import { LedgersTable } from "@/repo/schema";
 import {
 	type OrganizationRepo,
@@ -315,27 +309,25 @@ describe("LedgerRepoLive", () => {
 	});
 
 	it.each([
-		{ label: "invalid ID", id: "not-a-ledger", metadata: undefined },
-		{ label: "invalid serialized metadata", id: undefined, metadata: "{" },
+		{ label: "invalid serialized metadata", metadata: "{" },
 		{
 			label: "non-string metadata value",
-			id: undefined,
 			metadata: JSON.stringify({ externalId: 42 }),
 		},
 	])("returns a typed decoding failure for $label", async testCase => {
 		const organizationId = await createOrganization();
-		const id = testCase.id ?? newLedgerID().toString();
+		const id = newLedgerID();
 		const db = database.db;
 		const row = ledgerWrite(organizationId).toCreateRow();
-		await db.insert(LedgersTable).values({ ...row, id, metadata: testCase.metadata ?? row.metadata });
+		await db
+			.insert(LedgersTable)
+			.values({ ...row, id: id.toUUID(), metadata: testCase.metadata ?? row.metadata });
 
 		try {
-			const error = await runtime.runPromise(
-				Effect.flip(repository.getLedger(organizationId, id as unknown as LedgerID))
-			);
+			const error = await runtime.runPromise(Effect.flip(repository.getLedger(organizationId, id)));
 			expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);
 		} finally {
-			await db.delete(LedgersTable).where(eq(LedgersTable.id, id));
+			await db.delete(LedgersTable).where(eq(LedgersTable.id, id.toUUID()));
 		}
 	});
 });

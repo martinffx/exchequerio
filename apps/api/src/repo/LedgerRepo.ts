@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import { and, desc, eq } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { LedgerEntity, type LedgerID, type OrgID } from "@/repo/entities";
@@ -25,7 +26,7 @@ class LedgerRepo {
 			.select()
 			.from(LedgersTable)
 			.where(
-				and(eq(LedgersTable.id, id.toString()), eq(LedgersTable.organizationId, orgId.toString()))
+				and(eq(LedgersTable.id, encodeUuid(id)), eq(LedgersTable.organizationId, encodeUuid(orgId)))
 			)
 			.limit(1);
 
@@ -52,7 +53,7 @@ class LedgerRepo {
 		const results = await this.db
 			.select()
 			.from(LedgersTable)
-			.where(eq(LedgersTable.organizationId, orgId.toString()))
+			.where(eq(LedgersTable.organizationId, encodeUuid(orgId)))
 			.orderBy(desc(LedgersTable.created))
 			.limit(limit)
 			.offset(offset);
@@ -111,7 +112,7 @@ class LedgerRepo {
 						metadata: record.metadata,
 						updated: record.updated,
 					},
-					where: and(eq(LedgersTable.organizationId, entity.organizationId.toString())),
+					where: and(eq(LedgersTable.organizationId, encodeUuid(entity.organizationId))),
 				})
 				.returning();
 
@@ -163,7 +164,7 @@ class LedgerRepo {
 			const deleteResult = await this.db
 				.delete(LedgersTable)
 				.where(
-					and(eq(LedgersTable.id, id.toString()), eq(LedgersTable.organizationId, orgId.toString()))
+					and(eq(LedgersTable.id, encodeUuid(id)), eq(LedgersTable.organizationId, encodeUuid(orgId)))
 				)
 				.returning({ id: LedgersTable.id });
 

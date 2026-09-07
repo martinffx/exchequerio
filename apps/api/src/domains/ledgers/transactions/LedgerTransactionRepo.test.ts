@@ -1,3 +1,4 @@
+import { TypeID } from "typeid-js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
@@ -95,15 +96,15 @@ describe("LedgerTransactionRepoLive", () => {
 		const organizationId = newOrgID();
 		const ledgerId = newLedgerID();
 		const db = database;
-		organizationIds.push(organizationId.toString());
+		organizationIds.push(organizationId.toUUID());
 		await db.insert(OrganizationsTable).values({
-			id: organizationId.toString(),
-			name: `Organization ${organizationId.toString()}`,
+			id: organizationId.toUUID(),
+			name: `Organization ${organizationId.toUUID()}`,
 		});
 		await db.insert(LedgersTable).values({
-			id: ledgerId.toString(),
-			organizationId: organizationId.toString(),
-			name: `Ledger ${ledgerId.toString()}`,
+			id: ledgerId.toUUID(),
+			organizationId: organizationId.toUUID(),
+			name: `Ledger ${ledgerId.toUUID()}`,
 		});
 		return { organizationId, ledgerId };
 	};
@@ -117,10 +118,10 @@ describe("LedgerTransactionRepoLive", () => {
 		const id = newLedgerAccountID();
 		const db = database;
 		await db.insert(LedgerAccountsTable).values({
-			id: id.toString(),
-			organizationId: organizationId.toString(),
-			ledgerId: ledgerId.toString(),
-			name: `Account ${id.toString()}`,
+			id: id.toUUID(),
+			organizationId: organizationId.toUUID(),
+			ledgerId: ledgerId.toUUID(),
+			name: `Account ${id.toUUID()}`,
 			normalBalance,
 			currencyCode,
 		});
@@ -138,15 +139,15 @@ describe("LedgerTransactionRepoLive", () => {
 			.from(LedgerAccountsTable)
 			.where(
 				and(
-					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
+					eq(LedgerAccountsTable.organizationId, organizationId.toUUID()),
+					eq(LedgerAccountsTable.ledgerId, ledgerId.toUUID()),
 					inArray(
 						LedgerAccountsTable.id,
-						accountIds.map(accountId => accountId.toString())
+						accountIds.map(accountId => accountId.toUUID())
 					)
 				)
 			);
-		return new Map(rows.map(account => [account.id, account]));
+		return new Map(rows.map(account => [TypeID.fromUUID("lat", account.id).toString(), account]));
 	};
 
 	afterAll(async () => {
@@ -373,7 +374,7 @@ describe("LedgerTransactionRepoLive", () => {
 			sql.raw(`
 			CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
 			BEGIN
-				IF NEW.id = '${credit.toString()}' THEN
+				IF NEW.id = '${credit.toUUID()}' THEN
 					RAISE EXCEPTION 'forced Account update failure';
 				END IF;
 				RETURN NEW;
@@ -410,13 +411,13 @@ describe("LedgerTransactionRepoLive", () => {
 			await db
 				.select()
 				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.id, transactionId.toString()))
+				.where(eq(LedgerTransactionsTable.id, transactionId.toUUID()))
 		).toHaveLength(0);
 		expect(
 			await db
 				.select()
 				.from(LedgerTransactionEntriesTable)
-				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toString()))
+				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toUUID()))
 		).toHaveLength(0);
 		for (const account of (await accounts(organizationId, ledgerId, [debit, credit])).values()) {
 			expect(account).toMatchObject({ pendingAmount: 0, lockVersion: 1 });

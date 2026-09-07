@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import type { InferInsertModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 
@@ -93,9 +94,9 @@ class LedgerAccountStatement {
 		}
 
 		return new LedgerAccountStatement({
-			id: TypeID.fromString<"lst">(row.id) as LedgerAccountStatementID,
-			ledgerId: TypeID.fromString<"lgr">(row.ledgerId) as LedgerID,
-			accountId: TypeID.fromString<"lat">(row.accountId) as LedgerAccountID,
+			id: TypeID.fromUUID("lst", row.id) as LedgerAccountStatementID,
+			ledgerId: TypeID.fromUUID("lgr", row.ledgerId) as LedgerID,
+			accountId: TypeID.fromUUID("lat", row.accountId) as LedgerAccountID,
 			statementDate: row.statementDate,
 			openingBalance: Number.parseFloat(row.openingBalance),
 			closingBalance: Number.parseFloat(row.closingBalance),
@@ -110,9 +111,9 @@ class LedgerAccountStatement {
 
 	toRow(): LedgerAccountStatementInsert {
 		return {
-			id: this.id.toString(),
-			ledgerId: this.ledgerId.toString(),
-			accountId: this.accountId.toString(),
+			id: encodeUuid(this.id),
+			ledgerId: encodeUuid(this.ledgerId),
+			accountId: encodeUuid(this.accountId),
 			statementDate: this.statementDate,
 			openingBalance: this.openingBalance.toString(),
 			closingBalance: this.closingBalance.toString(),

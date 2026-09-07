@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 import type { Metadata } from "@/lib/schema";
@@ -65,8 +66,8 @@ class LedgerEntity {
 		}
 
 		return new LedgerEntity({
-			id: TypeID.fromString<"lgr">(record.id),
-			organizationId: TypeID.fromString<"org">(record.organizationId),
+			id: TypeID.fromUUID("lgr", record.id),
+			organizationId: TypeID.fromUUID("org", record.organizationId),
 			name: record.name,
 			description: record.description ?? undefined,
 			metadata,
@@ -78,8 +79,8 @@ class LedgerEntity {
 	// Convert entity to database record for insert/update
 	public toRecord(): LedgerInsert {
 		return {
-			id: this.id.toString(),
-			organizationId: this.organizationId.toString(),
+			id: encodeUuid(this.id),
+			organizationId: encodeUuid(this.organizationId),
 			name: this.name,
 			description: this.description ?? undefined,
 			metadata: this.metadata ? JSON.stringify(this.metadata) : undefined,

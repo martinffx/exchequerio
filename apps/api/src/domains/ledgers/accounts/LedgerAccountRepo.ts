@@ -1,3 +1,4 @@
+import { encodeUuid } from "@/lib/utils";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
@@ -129,8 +130,8 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			.from(LedgerAccountsTable)
 			.where(
 				and(
-					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString())
+					eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId))
 				)
 			)
 			.orderBy(desc(LedgerAccountsTable.created), asc(LedgerAccountsTable.id))
@@ -161,9 +162,9 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			.from(LedgerAccountsTable)
 			.where(
 				and(
-					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountsTable.id, accountId.toString())
+					eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+					eq(LedgerAccountsTable.id, encodeUuid(accountId))
 				)
 			)
 			.limit(1)
@@ -219,9 +220,9 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			})
 			.where(
 				and(
-					eq(LedgerAccountsTable.organizationId, record.organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, record.ledgerId.toString()),
-					eq(LedgerAccountsTable.id, record.id.toString()),
+					eq(LedgerAccountsTable.organizationId, encodeUuid(record.organizationId)),
+					eq(LedgerAccountsTable.ledgerId, encodeUuid(record.ledgerId)),
+					eq(LedgerAccountsTable.id, encodeUuid(record.id)),
 					eq(LedgerAccountsTable.lockVersion, record.lockVersion)
 				)
 			)
@@ -250,9 +251,9 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 			.delete(LedgerAccountsTable)
 			.where(
 				and(
-					eq(LedgerAccountsTable.organizationId, organizationId.toString()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toString()),
-					eq(LedgerAccountsTable.id, accountId.toString())
+					eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+					eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+					eq(LedgerAccountsTable.id, encodeUuid(accountId))
 				)
 			)
 			.returning()

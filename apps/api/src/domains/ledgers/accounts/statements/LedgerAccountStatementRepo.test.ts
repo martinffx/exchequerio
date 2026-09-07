@@ -43,18 +43,18 @@ describe("LedgerAccountStatementRepoLive", () => {
 		repository = await runtime.runPromise(LedgerAccountStatementRepoTag);
 		db = (await runtime.runPromise(DatabaseTag)).db;
 		await db.insert(OrganizationsTable).values({
-			id: organizationId.toString(),
+			id: organizationId.toUUID(),
 			name: "Statement repository organization",
 		});
 		await db.insert(LedgersTable).values({
-			id: ledgerId.toString(),
-			organizationId: organizationId.toString(),
+			id: ledgerId.toUUID(),
+			organizationId: organizationId.toUUID(),
 			name: "Statement repository ledger",
 		});
 		await db.insert(LedgerAccountsTable).values({
-			id: accountId.toString(),
-			organizationId: organizationId.toString(),
-			ledgerId: ledgerId.toString(),
+			id: accountId.toUUID(),
+			organizationId: organizationId.toUUID(),
+			ledgerId: ledgerId.toUUID(),
 			name: "Statement repository account",
 			normalBalance: "debit",
 			currencyCode: "USD",
@@ -65,10 +65,10 @@ describe("LedgerAccountStatementRepoLive", () => {
 		try {
 			await db
 				.delete(LedgerAccountStatementsTable)
-				.where(eq(LedgerAccountStatementsTable.ledgerId, ledgerId.toString()));
-			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, accountId.toString()));
-			await db.delete(LedgersTable).where(eq(LedgersTable.id, ledgerId.toString()));
-			await db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, organizationId.toString()));
+				.where(eq(LedgerAccountStatementsTable.ledgerId, ledgerId.toUUID()));
+			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, accountId.toUUID()));
+			await db.delete(LedgersTable).where(eq(LedgersTable.id, ledgerId.toUUID()));
+			await db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, organizationId.toUUID()));
 		} finally {
 			await runtime.dispose();
 		}

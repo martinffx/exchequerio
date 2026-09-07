@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -7,7 +7,6 @@ import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import type { OrgID } from "../../repo/entities/types";
 import { OrganizationsTable } from "../../repo/schema";
 import { Organization } from "./Organization";
-import { OrganizationPersistenceDecodingFailure } from "./OrganizationErrors";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,
@@ -52,6 +51,29 @@ describe("OrganizationRepoLive", () => {
 		} finally {
 			await runtime.dispose();
 		}
+	});
+
+	it("stores the embedded UUID and restores the same public TypeID", async () => {
+		const organization = await create("UUID storage");
+		const rows = await database.db
+			.select()
+			.from(OrganizationsTable)
+			.where(eq(OrganizationsTable.id, organization.id.toUUID()));
+		expect(rows[0]?.id).toBe(organization.id.toUUID());
+		const restored = Option.getOrThrow(
+			await runtime.runPromise(repository.getOrganization(organization.id))
+		);
+		expect(restored.toResponse().id).toBe(organization.id.toString());
+		const columns = await database.db.execute<{
+			table_name: string;
+			column_name: string;
+			data_type: string;
+		}>(sql`
+			SELECT table_name, column_name, data_type FROM information_schema.columns
+			WHERE table_schema = 'public' AND (column_name = 'id' OR right(column_name, 3) = '_id')
+		`);
+		expect(columns.rows.length).toBeGreaterThan(0);
+		expect(columns.rows.filter(column => column.data_type !== "uuid")).toEqual([]);
 	});
 
 	it("orders lists by ID and applies pagination limits in PostgreSQL", async () => {
@@ -147,24 +169,14 @@ describe("OrganizationRepoLive", () => {
 	});
 
 	it.each(["not-an-organization", "lgr_01h2x3y4z5a6b7c8d9e0f1g2h3"])(
-		"returns a typed decoding failure for schema-valid Organization ID %s",
+		"rejects non-UUID ID %s in PostgreSQL",
 		async invalidId => {
-			const db = database.db;
-			await db.insert(OrganizationsTable).values({
-				id: invalidId,
-				name: "Malformed Organization",
-				created: new Date("2026-08-04T10:00:00.000Z"),
-				updated: new Date("2026-08-04T11:00:00.000Z"),
-			});
-
-			try {
-				const error = await runtime.runPromise(
-					Effect.flip(repository.getOrganization(invalidId as unknown as OrgID))
-				);
-				expect(error).toBeInstanceOf(OrganizationPersistenceDecodingFailure);
-			} finally {
-				await db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, invalidId));
-			}
+			await expect(
+				database.db.insert(OrganizationsTable).values({
+					id: invalidId,
+					name: "Malformed Organization",
+				})
+			).rejects.toMatchObject({ cause: { code: "22P02" } });
 		}
 	);
 });
