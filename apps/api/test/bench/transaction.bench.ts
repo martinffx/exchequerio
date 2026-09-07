@@ -21,7 +21,7 @@ import {
 	ledgerAccountRepoLayer,
 } from "@/domains/ledgers/accounts/LedgerAccountRepo";
 import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "@/domains/ledgers/LedgerRepo";
-import { OrganizationsTable } from "@/db/schema";
+import { AssetsTable, OrganizationsTable } from "@/db/schema";
 import { buildServer } from "@/server";
 import type { DrizzleDatabase } from "@/db";
 
@@ -50,6 +50,7 @@ async function setupFixtures(
 	ledgerRepo: LedgerRepo,
 	accountRepo: LedgerAccountRepo,
 	orgId: OrgID,
+	assetId: string,
 	accountCount: number,
 	hotAccountCount: number = 0
 ): Promise<{
@@ -80,23 +81,35 @@ async function setupFixtures(
 		for (let i = 0; i < hotPairCount; i++) {
 			const hotDebit = await Effect.runPromise(
 				accountRepo.createAccount(
-					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
-						name: `Hot Debit Account ${i}`,
-						description: `Hot debit account ${i} (high contention)`,
-						normalBalance: "debit",
-						currencyCode: "USD",
-					})
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Hot Debit Account ${i}`,
+							description: `Hot debit account ${i} (high contention)`,
+							normalBalance: "debit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
 			const hotCredit = await Effect.runPromise(
 				accountRepo.createAccount(
-					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
-						name: `Hot Credit Account ${i}`,
-						description: `Hot credit account ${i} (high contention)`,
-						normalBalance: "credit",
-						currencyCode: "USD",
-					})
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Hot Credit Account ${i}`,
+							description: `Hot credit account ${i} (high contention)`,
+							normalBalance: "credit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
@@ -112,12 +125,18 @@ async function setupFixtures(
 		for (let i = 0; i < regularAccountCount; i++) {
 			const regularAccount = await Effect.runPromise(
 				accountRepo.createAccount(
-					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
-						name: `Regular Account ${i}`,
-						description: `Regular account ${i}`,
-						normalBalance: i % 2 === 0 ? "debit" : "credit",
-						currencyCode: "USD",
-					})
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Regular Account ${i}`,
+							description: `Regular account ${i}`,
+							normalBalance: i % 2 === 0 ? "debit" : "credit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
@@ -145,23 +164,35 @@ async function setupFixtures(
 		for (let i = 0; i < pairCount; i++) {
 			const debitAccount = await Effect.runPromise(
 				accountRepo.createAccount(
-					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
-						name: `Debit Account ${i}`,
-						description: `Debit account for pair ${i}`,
-						normalBalance: "debit",
-						currencyCode: "USD",
-					})
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Debit Account ${i}`,
+							description: `Debit account for pair ${i}`,
+							normalBalance: "debit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
 			const creditAccount = await Effect.runPromise(
 				accountRepo.createAccount(
-					LedgerAccount.fromCreateRequest(newLedgerAccountID(), orgId, ledger.id, {
-						name: `Credit Account ${i}`,
-						description: `Credit account for pair ${i}`,
-						normalBalance: "credit",
-						currencyCode: "USD",
-					})
+					LedgerAccount.fromCreateRequest(
+						newLedgerAccountID(),
+						orgId,
+						ledger.id,
+						{
+							name: `Credit Account ${i}`,
+							description: `Credit account for pair ${i}`,
+							normalBalance: "credit",
+							assetId,
+						},
+						{ assetId, assetCode: "USD", minorUnitExponent: 2 }
+					)
 				)
 			);
 
@@ -233,7 +264,13 @@ async function cleanupFixtures(db: DrizzleDatabase, orgId: OrgID): Promise<void>
 						WHERE organization_id = ${orgIdStr}
 					`);
 
-					// 5. Delete the organization
+					// 5. Delete organization-owned Assets after their Accounts
+					await tx.execute(sql`
+						DELETE FROM assets
+						WHERE organization_id = ${orgIdStr}
+					`);
+
+					// 6. Delete the organization
 					await tx.execute(sql`
 						DELETE FROM organizations_table
 						WHERE id = ${orgIdStr}
@@ -255,14 +292,14 @@ function createTransactionPayload(accountPair: { debitId: string; creditId: stri
 			{
 				accountId: accountPair.debitId,
 				direction: "debit",
-				amount: 10000,
-				currencyCode: "USD",
+				amount: "10000",
+				assetCode: "USD",
 			},
 			{
 				accountId: accountPair.creditId,
 				direction: "credit",
-				amount: 10000,
-				currencyCode: "USD",
+				amount: "10000",
+				assetCode: "USD",
 			},
 		],
 	};
@@ -394,6 +431,7 @@ describe("Transaction Creation Benchmarks", () => {
 	let ledgerRepo: LedgerRepo;
 	let accountRepo: LedgerAccountRepo;
 	let sharedOrgId: OrgID;
+	let sharedAssetId: string;
 	const results: BenchmarkResult[] = [];
 
 	beforeAll(async () => {
@@ -409,6 +447,14 @@ describe("Transaction Creation Benchmarks", () => {
 			id: sharedOrgId.toUUID(),
 			name: "Benchmark Organization",
 			description: "Shared organization for all benchmark tests",
+		});
+		sharedAssetId = new TypeID("ast").toString();
+		await db.insert(AssetsTable).values({
+			id: TypeID.fromString(sharedAssetId).toUUID(),
+			organizationId: sharedOrgId.toUUID(),
+			code: "USD",
+			name: "US Dollar",
+			minorUnitExponent: 2,
 		});
 		console.log(`Shared organization created: ${sharedOrgId.toString()}\n`);
 
@@ -443,7 +489,13 @@ describe("Transaction Creation Benchmarks", () => {
 
 	it("should benchmark high contention (2 accounts)", async () => {
 		console.log("\nSetting up fixtures for High Contention...");
-		const { ledgerId, accountPairs } = await setupFixtures(ledgerRepo, accountRepo, sharedOrgId, 2);
+		const { ledgerId, accountPairs } = await setupFixtures(
+			ledgerRepo,
+			accountRepo,
+			sharedOrgId,
+			sharedAssetId,
+			2
+		);
 
 		const token = signJWT({ sub: sharedOrgId.toString(), scope: ["org_admin"] });
 		const scenario: BenchmarkScenario = {
@@ -462,7 +514,13 @@ describe("Transaction Creation Benchmarks", () => {
 
 	it("should benchmark medium contention (20 accounts)", async () => {
 		console.log("\nSetting up fixtures for Medium Contention...");
-		const { ledgerId, accountPairs } = await setupFixtures(ledgerRepo, accountRepo, sharedOrgId, 20);
+		const { ledgerId, accountPairs } = await setupFixtures(
+			ledgerRepo,
+			accountRepo,
+			sharedOrgId,
+			sharedAssetId,
+			20
+		);
 
 		const token = signJWT({ sub: sharedOrgId.toString(), scope: ["org_admin"] });
 		const scenario: BenchmarkScenario = {
@@ -481,7 +539,13 @@ describe("Transaction Creation Benchmarks", () => {
 
 	it("should benchmark low contention (200 accounts)", async () => {
 		console.log("\nSetting up fixtures for Low Contention...");
-		const { ledgerId, accountPairs } = await setupFixtures(ledgerRepo, accountRepo, sharedOrgId, 200);
+		const { ledgerId, accountPairs } = await setupFixtures(
+			ledgerRepo,
+			accountRepo,
+			sharedOrgId,
+			sharedAssetId,
+			200
+		);
 
 		const token = signJWT({ sub: sharedOrgId.toString(), scope: ["org_admin"] });
 		const scenario: BenchmarkScenario = {
@@ -504,6 +568,7 @@ describe("Transaction Creation Benchmarks", () => {
 			ledgerRepo,
 			accountRepo,
 			sharedOrgId,
+			sharedAssetId,
 			2002,
 			2 // 2 hot accounts
 		);
@@ -529,6 +594,7 @@ describe("Transaction Creation Benchmarks", () => {
 			ledgerRepo,
 			accountRepo,
 			sharedOrgId,
+			sharedAssetId,
 			2020,
 			20 // 20 hot accounts
 		);

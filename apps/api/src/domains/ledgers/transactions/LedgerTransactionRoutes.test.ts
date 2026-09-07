@@ -37,14 +37,14 @@ const createBody = {
 		{
 			accountId: debitAccountId.toString(),
 			direction: "debit" as const,
-			amount: 500,
-			currencyCode: "EUR",
+			amount: "500",
+			assetCode: "EUR",
 		},
 		{
 			accountId: creditAccountId.toString(),
 			direction: "credit" as const,
-			amount: 500,
-			currencyCode: "EUR",
+			amount: "500",
+			assetCode: "EUR",
 		},
 	],
 };
@@ -54,7 +54,14 @@ const transaction = (() => {
 	Settings.now = () => Date.parse("2026-08-15T08:00:00.000Z");
 	try {
 		return Effect.runSync(
-			LedgerTransaction.fromCreateRequest(transactionId, organizationId, ledgerId, createBody)
+			LedgerTransaction.fromCreateRequest(transactionId, organizationId, ledgerId, {
+				...createBody,
+				ledgerEntries: createBody.ledgerEntries.map(entry => ({
+					...entry,
+					assetId: "ast_00000000000000000000000001",
+					minorUnitExponent: 2,
+				})),
+			})
 		);
 	} finally {
 		Settings.now = previousNow;
@@ -195,13 +202,13 @@ describe("TransactionRoutes", () => {
 			method: "POST",
 			url: `/api/ledgers/${ledgerId.toString()}/transactions`,
 			headers: { "idempotency-key": "create-42" },
-			payload: { ...createBody, ignored: true },
+			payload: createBody,
 		});
 		await server.inject({
 			method: "PUT",
 			url: `/api/ledgers/${ledgerId.toString()}/transactions/${transactionId.toString()}`,
 			headers: { "idempotency-key": "update-42" },
-			payload: { ...updateBody, ignored: true },
+			payload: updateBody,
 		});
 		await server.inject({
 			method: "GET",
@@ -403,7 +410,10 @@ describe("TransactionRoutes", () => {
 		const accepted = await server.inject({
 			method,
 			url: `/api/ledgers/${ledgerId.toString()}/transactions${suffix}`,
-			payload: { ...createBody, ledgerEntries: ledgerEntries.slice(0, 200) },
+			payload: {
+				...(method === "POST" ? createBody : updateBody),
+				ledgerEntries: ledgerEntries.slice(0, 200),
+			},
 			...(headers === undefined ? {} : { headers }),
 		});
 		const response = await server.inject({
@@ -568,4 +578,23 @@ describe("TransactionRoutes", () => {
 		});
 		expect(specification).not.toContain('"429"');
 	});
+});
+
+it("rejects numeric amounts and ambiguous asset selectors before the service", async () => {
+	const implementation = service();
+	const { server } = await buildRouteServer(implementation);
+	for (const entry of [
+		{ ...createBody.ledgerEntries[0], amount: 500 },
+		{ ...createBody.ledgerEntries[0], assetId: "ast_00000000000000000000000001" },
+		{ accountId: debitAccountId.toString(), direction: "debit", amount: "500" },
+	]) {
+		const response = await server.inject({
+			method: "POST",
+			url: `/api/ledgers/${ledgerId.toString()}/transactions`,
+			headers: { "idempotency-key": "invalid" },
+			payload: { ...createBody, ledgerEntries: [entry, createBody.ledgerEntries[1]] },
+		});
+		expect(response.statusCode).toBe(400);
+	}
+	expect(implementation.createTransaction).not.toHaveBeenCalled();
 });

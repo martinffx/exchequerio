@@ -19,6 +19,7 @@ import {
 import { encodeUuid, encodeMetadata, parseMetadata } from "@/lib/utils";
 import type { LedgerAccountSettlementID, LedgerID, OrgID } from "@/lib/ids";
 import {
+	AssetsTable as Assets,
 	LedgerAccountSettlementEntriesTable as Links,
 	LedgerAccountSettlementsTable as Settlements,
 	LedgerAccountsTable as Accounts,
@@ -102,9 +103,18 @@ class LedgerAccountSettlementRepoLive {
 				},
 				with: { entries: true },
 			});
-			const accounting = yield* LedgerTransaction.fromRows(transactions);
+			const [asset] = yield* db.select().from(Assets).where(eq(Assets.id, row.assetId));
+			const accounting = yield* LedgerTransaction.fromRows(
+				transactions.map(transaction => ({
+					...transaction,
+					entries: transaction.entries.map(entry => ({
+						...entry,
+						asset,
+					})),
+				}))
+			);
 			const entity = yield* LedgerAccountSettlementEntity.fromRow(
-				row,
+				{ ...row, assetCode: asset.code, minorUnitExponent: asset.minorUnitExponent },
 				Option.getOrUndefined(accounting)
 			);
 			return Option.getOrThrow(entity);
@@ -136,15 +146,30 @@ class LedgerAccountSettlementRepoLive {
 			orderBy: { created: "desc", id: "desc" },
 			offset,
 			limit,
-			with: { transaction: { with: { entries: true } } },
+			with: { asset: true, transaction: { with: { entries: true } } },
 		}).pipe(
 			Effect.flatMap(rows =>
 				Effect.forEach(rows, row =>
 					Effect.gen(function* () {
 						const accounting = row.transaction
-							? Option.getOrUndefined(yield* LedgerTransaction.fromRows([row.transaction]))
+							? Option.getOrUndefined(
+									yield* LedgerTransaction.fromRows([
+										{
+											...row.transaction,
+											entries: row.transaction.entries.map(entry => ({
+												...entry,
+												asset: row.asset,
+											})),
+										},
+									])
+								)
 							: undefined;
-						return Option.getOrThrow(yield* LedgerAccountSettlementEntity.fromRow(row, accounting));
+						return Option.getOrThrow(
+							yield* LedgerAccountSettlementEntity.fromRow(
+								{ ...row, assetCode: row.asset.code, minorUnitExponent: row.asset.minorUnitExponent },
+								accounting
+							)
+						);
 					})
 				)
 			),
@@ -352,10 +377,12 @@ class LedgerAccountSettlementRepoLive {
 						return yield* Effect.fail(
 							new ConflictError("Settlement requires two distinct Accounts in its Ledger")
 						);
-					if (accounts.some(account => account.currencyCode !== entity.data.currency))
-						return yield* Effect.fail(
-							new ConflictError("Settlement Accounts must use the same Currency")
-						);
+					if (
+						accounts.some(
+							account => account.assetId !== encodeUuid(TypeID.fromString(entity.data.assetId))
+						)
+					)
+						return yield* Effect.fail(new BadRequestError("Settlement Accounts must use the same Asset"));
 					yield* db.insert(Settlements).values(entity.toRow());
 					return target ? yield* this.prepare(db, entity, target, now) : entity;
 				})
@@ -551,8 +578,10 @@ class LedgerAccountSettlementRepoLive {
 						accountId: TypeID.fromUUID("lat", row.entry.accountId).toString(),
 						effectiveAt: row.effectiveAt.toISOString(),
 						direction: row.entry.direction,
-						amount: row.entry.amount,
-						currencyCode: row.entry.currency,
+						amount: row.entry.amount.toString(),
+						assetId: TypeID.fromUUID("ast", row.entry.assetId).toString(),
+						assetCode: settlement.data.assetCode,
+						minorUnitExponent: settlement.data.minorUnitExponent,
 						status: "posted" as const,
 						metadata,
 						created: row.entry.created.toISOString(),

@@ -1,5 +1,10 @@
 import { TypeID } from "typeid-js";
 
+type AssetID = TypeID<"ast">;
+function newAssetID(): AssetID {
+	return new TypeID("ast");
+}
+
 // Shared type definitions for all entities
 type LedgerID = TypeID<"lgr">;
 function newLedgerID(): LedgerID {
@@ -47,6 +52,7 @@ function newLedgerAccountStatementID(): LedgerAccountStatementID {
 }
 
 export type {
+	AssetID,
 	LedgerID,
 	OrgID,
 	LedgerAccountID,
@@ -58,6 +64,7 @@ export type {
 	LedgerAccountStatementID,
 };
 export {
+	newAssetID,
 	newLedgerAccountBalanceMonitorID,
 	newLedgerAccountCategoryID,
 	newLedgerAccountID,

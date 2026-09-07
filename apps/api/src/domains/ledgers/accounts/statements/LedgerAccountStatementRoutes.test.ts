@@ -18,6 +18,7 @@ import { LedgerAccountStatementServiceTag } from "./LedgerAccountStatementServic
 const ledgerId = TypeID.fromString<"lgr">("lgr_01h2x3y4z5a6b7c8d9e0f1g2h4") as LedgerID;
 const pathAccountId = TypeID.fromString<"lat">("lat_01h2x3y4z5a6b7c8d9e0f1g2h6") as LedgerAccountID;
 const bodyAccountId = TypeID.fromString<"lat">("lat_01h2x3y4z5a6b7c8d9e0f1g2h8") as LedgerAccountID;
+const asset = { assetId: new TypeID("ast").toString(), assetCode: "AAPL", minorUnitExponent: 6 };
 const statementId = TypeID.fromString<"lst">(
 	"lst_01h2x3y4z5a6b7c8d9e0f1g2h5"
 ) as LedgerAccountStatementID;
@@ -25,14 +26,15 @@ const fixedDate = new Date("2025-01-01T00:00:00.000Z");
 const orgId = TypeID.fromString<"org">("org_01h2x3y4z5a6b7c8d9e0f1g2h3") as OrgID;
 
 const statement = new LedgerAccountStatement({
+	asset,
 	id: statementId,
 	ledgerId,
 	accountId: bodyAccountId,
 	statementDate: fixedDate,
-	openingBalance: 0,
-	closingBalance: 0,
-	totalCredits: 0,
-	totalDebits: 0,
+	openingBalance: 0n,
+	closingBalance: 0n,
+	totalCredits: 0n,
+	totalDebits: 0n,
 	transactionCount: 0,
 	created: fixedDate,
 	updated: fixedDate,
@@ -50,6 +52,9 @@ const buildRouteServer = async (implementation: LedgerAccountStatementService) =
 	const server = fastify();
 	const hasPermissions = vi.fn(() => async () => undefined);
 	server.setErrorHandler(globalErrorHandler);
+	server.addHook("onRequest", async request => {
+		request.token = { orgId } as typeof request.token;
+	});
 	const runtime = new ServerRuntime(Layer.succeed(LedgerAccountStatementServiceTag, implementation));
 	server.decorate("runtime", runtime as never);
 	server.decorate("hasPermissions", hasPermissions);
@@ -90,7 +95,10 @@ describe("LedgerAccountStatementRoutes", () => {
 
 		expect(response.statusCode).toBe(200);
 		expect(response.json()).toEqual(statement.toResponse());
-		expect(implementation.getLedgerAccountStatement).toHaveBeenCalledWith(statementId.toString());
+		expect(implementation.getLedgerAccountStatement).toHaveBeenCalledWith(
+			statementId.toString(),
+			orgId
+		);
 		expect(runPromise).toHaveBeenCalledOnce();
 	});
 
@@ -114,7 +122,7 @@ describe("LedgerAccountStatementRoutes", () => {
 
 		expect(response.statusCode).toBe(200);
 		expect(response.json()).toEqual(statement.toResponse());
-		expect(implementation.createLedgerAccountStatement).toHaveBeenCalledWith(request);
+		expect(implementation.createLedgerAccountStatement).toHaveBeenCalledWith(request, orgId);
 		expect(runPromise).toHaveBeenCalledOnce();
 	});
 
@@ -268,6 +276,7 @@ describe("LedgerAccountStatementRoutes", () => {
 			"400",
 			"401",
 			"403",
+			"404",
 			"409",
 			"429",
 			"500",

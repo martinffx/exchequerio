@@ -37,7 +37,7 @@ const now = DateTime.fromISO("2026-08-29T15:45:00.000Z", { zone: "utc" });
 const request: LedgerAccountBalanceMonitorRequest = {
 	accountId: accountId.toString(),
 	description: "Low balance",
-	alertCondition: [{ field: "balance", operator: "<", value: 1000 }],
+	alertCondition: [{ field: "balance", operator: "<", value: "1000" }],
 	metadata: { team: "treasury" },
 };
 const existing = LedgerAccountBalanceMonitor.fromRequest(monitorId, accountId, request, now);
@@ -120,7 +120,7 @@ describe("LedgerAccountBalanceMonitorService", () => {
 			accountId,
 			name: "Low balance",
 			description: "Low balance",
-			alertThreshold: 0,
+			alertThreshold: 0n,
 			isActive: true,
 			metadata: request.metadata,
 		});
@@ -142,7 +142,7 @@ describe("LedgerAccountBalanceMonitorService", () => {
 			name: "Balance Monitor",
 			description: undefined,
 			metadata: undefined,
-			alertThreshold: 0,
+			alertThreshold: 0n,
 			isActive: true,
 		});
 		expect(updated).not.toHaveProperty("alertCondition");

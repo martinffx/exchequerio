@@ -28,7 +28,7 @@ type LedgerAccountBalanceMonitorOptions = Readonly<{
 	accountId: LedgerAccountID;
 	name: string;
 	description?: string;
-	alertThreshold: number;
+	alertThreshold: bigint;
 	isActive: boolean;
 	metadata?: Metadata;
 	created: DateTime;
@@ -46,7 +46,7 @@ class LedgerAccountBalanceMonitor {
 	readonly accountId: LedgerAccountID;
 	readonly name: string;
 	readonly description?: string;
-	readonly alertThreshold: number;
+	readonly alertThreshold: bigint;
 	readonly isActive: boolean;
 	readonly metadata?: Metadata;
 	readonly created: DateTime;
@@ -75,7 +75,7 @@ class LedgerAccountBalanceMonitor {
 			accountId,
 			name: request.description || "Balance Monitor",
 			description: request.description,
-			alertThreshold: 0,
+			alertThreshold: 0n,
 			isActive: true,
 			metadata: request.metadata,
 			created: applicationTime,
@@ -102,7 +102,7 @@ class LedgerAccountBalanceMonitor {
 						...decoded,
 						name: row.name,
 						description: row.description ?? undefined,
-						alertThreshold: Number.parseFloat(row.alertThreshold),
+						alertThreshold: row.alertThreshold,
 						isActive: row.isActive === 1,
 					})
 			),
@@ -124,32 +124,6 @@ class LedgerAccountBalanceMonitor {
 			accountId: this.accountId.toString(),
 			description: this.description,
 			alertCondition: [],
-			balances: [
-				{
-					balanceType: "pending",
-					amount: 0,
-					currency: "USD",
-					currencyExponent: 2,
-					credits: 0,
-					debits: 0,
-				},
-				{
-					balanceType: "posted",
-					amount: 0,
-					currency: "USD",
-					currencyExponent: 2,
-					credits: 0,
-					debits: 0,
-				},
-				{
-					balanceType: "availableBalance",
-					amount: 0,
-					currency: "USD",
-					currencyExponent: 2,
-					credits: 0,
-					debits: 0,
-				},
-			],
 			metadata: this.metadata,
 			lockVersion: 0,
 			created: toIso(this.created),
@@ -163,7 +137,7 @@ class LedgerAccountBalanceMonitor {
 			accountId: encodeUuid(this.accountId),
 			name: this.name,
 			description: this.description,
-			alertThreshold: this.alertThreshold.toString(),
+			alertThreshold: this.alertThreshold,
 			isActive: this.isActive ? 1 : 0,
 			metadata: encodeMetadata(this.metadata),
 			updated: this.updated.toJSDate(),

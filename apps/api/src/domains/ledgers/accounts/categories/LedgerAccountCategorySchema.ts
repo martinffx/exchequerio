@@ -6,7 +6,6 @@ import { LedgerIdSchema } from "@/domains/ledgers/LedgerSchema";
 import {
 	AccountIdSchema,
 	NormalBalanceSchema as NormalBalance,
-	Balances,
 } from "@/domains/ledgers/accounts/AccountSchema";
 
 const LedgerId = CloneType(LedgerIdSchema, { description: "The ledger's ID" });
@@ -49,7 +48,6 @@ const LedgerAccountCategoryResponse = Type.Object(
 			})
 		),
 		normalBalance: NormalBalance,
-		balances: Balances,
 		metadata: Type.Optional(MetadataSchema),
 		created: Type.String({
 			description: "Timestamp of when the ledger account category was created.",
@@ -61,7 +59,7 @@ const LedgerAccountCategoryResponse = Type.Object(
 	{
 		$id: "LedgerAccountCategoryResponse",
 		description:
-			"A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+			"A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
 	}
 );
 type LedgerAccountCategoryResponse = Static<typeof LedgerAccountCategoryResponse>;

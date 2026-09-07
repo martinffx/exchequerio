@@ -1,6 +1,9 @@
+import { TypeID } from "typeid-js";
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
 
+import type { AssetSummary } from "@/lib/AssetSchema";
+import { assertInt64 } from "@/lib/amounts";
 import { BadRequestError } from "@/lib/errors";
 import type { Metadata } from "@/lib/schema";
 import { encodeUuid, encodeMetadata, parseDate, parseUuid, parseMetadata } from "@/lib/utils";
@@ -20,7 +23,7 @@ import type {
 
 type LedgerAccountEntry = Pick<
 	LedgerTransactionEntryRow,
-	"amount" | "currency" | "direction" | "status"
+	"amount" | "assetId" | "direction" | "status"
 >;
 
 type LedgerAccountOptions = Readonly<{
@@ -30,16 +33,18 @@ type LedgerAccountOptions = Readonly<{
 	name: string;
 	description?: string;
 	normalBalance: "debit" | "credit";
-	currency: string;
-	pendingAmount: number;
-	postedAmount: number;
-	availableAmount: number;
-	pendingCredits: number;
-	pendingDebits: number;
-	postedCredits: number;
-	postedDebits: number;
-	availableCredits: number;
-	availableDebits: number;
+	assetId: string;
+	assetCode: string;
+	minorUnitExponent: number;
+	pendingAmount: bigint;
+	postedAmount: bigint;
+	availableAmount: bigint;
+	pendingCredits: bigint;
+	pendingDebits: bigint;
+	postedCredits: bigint;
+	postedDebits: bigint;
+	availableCredits: bigint;
+	availableDebits: bigint;
 	lockVersion: number;
 	metadata?: Metadata;
 	created: DateTime;
@@ -48,9 +53,9 @@ type LedgerAccountOptions = Readonly<{
 
 type LedgerAccountBalance = Readonly<{
 	balanceType: "pending" | "posted" | "availableBalance";
-	credits: number;
-	debits: number;
-	amount: number;
+	credits: bigint;
+	debits: bigint;
+	amount: bigint;
 }>;
 
 const toIso = (value: DateTime): string => {
@@ -59,9 +64,9 @@ const toIso = (value: DateTime): string => {
 	return encoded;
 };
 
-class LedgerAccountCurrencyMismatch extends BadRequestError {
-	constructor(accountCurrency: string, entryCurrency: string) {
-		super(`Entry Currency ${entryCurrency} does not match Account Currency ${accountCurrency}`);
+class LedgerAccountAssetMismatch extends BadRequestError {
+	constructor(accountAssetId: string, entryAssetId: string) {
+		super(`Entry Asset ${entryAssetId} does not match Account Asset ${accountAssetId}`);
 	}
 }
 
@@ -77,16 +82,18 @@ class LedgerAccount {
 	readonly name: string;
 	readonly description?: string;
 	readonly normalBalance: LedgerAccountOptions["normalBalance"];
-	readonly currency: string;
-	readonly pendingAmount: number;
-	readonly postedAmount: number;
-	readonly availableAmount: number;
-	readonly pendingCredits: number;
-	readonly pendingDebits: number;
-	readonly postedCredits: number;
-	readonly postedDebits: number;
-	readonly availableCredits: number;
-	readonly availableDebits: number;
+	readonly assetId: string;
+	readonly assetCode: string;
+	readonly minorUnitExponent: number;
+	readonly pendingAmount: bigint;
+	readonly postedAmount: bigint;
+	readonly availableAmount: bigint;
+	readonly pendingCredits: bigint;
+	readonly pendingDebits: bigint;
+	readonly postedCredits: bigint;
+	readonly postedDebits: bigint;
+	readonly availableCredits: bigint;
+	readonly availableDebits: bigint;
 	readonly lockVersion: number;
 	readonly metadata?: Metadata;
 	readonly created: DateTime;
@@ -99,7 +106,9 @@ class LedgerAccount {
 		this.name = options.name;
 		this.description = options.description;
 		this.normalBalance = options.normalBalance;
-		this.currency = options.currency;
+		this.assetId = options.assetId;
+		this.assetCode = options.assetCode;
+		this.minorUnitExponent = options.minorUnitExponent;
 		this.pendingAmount = options.pendingAmount;
 		this.postedAmount = options.postedAmount;
 		this.availableAmount = options.availableAmount;
@@ -122,6 +131,7 @@ class LedgerAccount {
 	 * @param organizationId - Organization that owns the Account.
 	 * @param ledgerId - Ledger that contains the Account.
 	 * @param request - TypeBox-validated creation request.
+	 * @param asset - Resolved Asset identity and current display attributes.
 	 * @param created - Account creation time, defaulting to the current UTC time.
 	 * @returns The new Account with every Balance initialized to zero.
 	 */
@@ -130,6 +140,7 @@ class LedgerAccount {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		request: LedgerAccountCreateRequest,
+		asset: AssetSummary,
 		created = DateTime.utc()
 	): LedgerAccount {
 		return new LedgerAccount({
@@ -139,16 +150,18 @@ class LedgerAccount {
 			name: request.name,
 			description: request.description,
 			normalBalance: request.normalBalance,
-			currency: request.currencyCode,
-			pendingAmount: 0,
-			postedAmount: 0,
-			availableAmount: 0,
-			pendingCredits: 0,
-			pendingDebits: 0,
-			postedCredits: 0,
-			postedDebits: 0,
-			availableCredits: 0,
-			availableDebits: 0,
+			assetId: asset.assetId,
+			assetCode: asset.assetCode,
+			minorUnitExponent: asset.minorUnitExponent,
+			pendingAmount: 0n,
+			postedAmount: 0n,
+			availableAmount: 0n,
+			pendingCredits: 0n,
+			pendingDebits: 0n,
+			postedCredits: 0n,
+			postedDebits: 0n,
+			availableCredits: 0n,
+			availableDebits: 0n,
 			lockVersion: 1,
 			metadata: request.metadata,
 			created,
@@ -177,10 +190,12 @@ class LedgerAccount {
 	 * Hydrates an Account from its Drizzle row.
 	 *
 	 * @param row - Account row inferred from the Drizzle schema, or no row.
+	 * @param asset - Current attributes of the Account's Asset.
 	 * @returns An Effect containing no Account, the hydrated Account, or a decoding failure.
 	 */
 	static fromRow(
-		row: LedgerAccountRow | undefined
+		row: LedgerAccountRow | undefined,
+		asset: AssetSummary
 	): Effect.Effect<Option.Option<LedgerAccount>, AccountPersistenceDecodingFailure> {
 		if (row === undefined) return Effect.succeed(Option.none());
 
@@ -200,7 +215,9 @@ class LedgerAccount {
 						name: row.name,
 						description: row.description ?? undefined,
 						normalBalance: row.normalBalance,
-						currency: row.currencyCode,
+						assetCode: asset.assetCode,
+						minorUnitExponent: asset.minorUnitExponent,
+						assetId: TypeID.fromUUID("ast", row.assetId).toString(),
 						pendingAmount: row.pendingAmount,
 						postedAmount: row.postedAmount,
 						availableAmount: row.availableAmount,
@@ -231,7 +248,7 @@ class LedgerAccount {
 			name: this.name,
 			description: this.description,
 			normalBalance: this.normalBalance,
-			currencyCode: this.currency,
+			assetId: encodeUuid(TypeID.fromString(this.assetId)),
 			pendingAmount: this.pendingAmount,
 			postedAmount: this.postedAmount,
 			availableAmount: this.availableAmount,
@@ -255,8 +272,15 @@ class LedgerAccount {
 			name: this.name,
 			...(this.description === undefined ? {} : { description: this.description }),
 			normalBalance: this.normalBalance,
-			currencyCode: this.currency,
-			balances: this.balances.map(balance => ({ ...balance })),
+			assetId: this.assetId,
+			assetCode: this.assetCode,
+			minorUnitExponent: this.minorUnitExponent,
+			balances: this.balances.map(balance => ({
+				...balance,
+				amount: balance.amount.toString(),
+				credits: balance.credits.toString(),
+				debits: balance.debits.toString(),
+			})),
 			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
 			lockVersion: this.lockVersion,
 			created: toIso(this.created),
@@ -269,14 +293,14 @@ class LedgerAccount {
 	 *
 	 * @param entry - Entry whose status and direction determine the affected Balances.
 	 * @param updated - Account update time, defaulting to the current UTC time.
-	 * @returns An Effect containing the updated Account or a Currency mismatch.
+	 * @returns An Effect containing the updated Account or an Asset mismatch.
 	 */
 	record(
 		entry: LedgerAccountEntry,
 		updated = DateTime.utc()
-	): Effect.Effect<LedgerAccount, LedgerAccountCurrencyMismatch> {
-		if (entry.currency !== this.currency) {
-			return Effect.fail(new LedgerAccountCurrencyMismatch(this.currency, entry.currency));
+	): Effect.Effect<LedgerAccount, LedgerAccountAssetMismatch> {
+		if (entry.assetId !== this.assetId) {
+			return Effect.fail(new LedgerAccountAssetMismatch(this.assetId, entry.assetId));
 		}
 
 		return Effect.succeed(this.applyEntry(entry, "record", updated));
@@ -290,6 +314,9 @@ class LedgerAccount {
 	 * @returns The Account with the Entry's Balance effects removed.
 	 */
 	remove(entry: LedgerAccountEntry, updated = DateTime.utc()): LedgerAccount {
+		if (entry.assetId !== this.assetId) {
+			throw new LedgerAccountAssetMismatch(this.assetId, entry.assetId);
+		}
 		return this.applyEntry(entry, "remove", updated);
 	}
 
@@ -317,6 +344,15 @@ class LedgerAccount {
 		];
 	}
 
+	/** Validates final projections immediately before the complete mutation is persisted. */
+	assertBalancesInRange(): void {
+		for (const balance of this.balances) {
+			assertInt64(balance.amount);
+			assertInt64(balance.credits);
+			assertInt64(balance.debits);
+		}
+	}
+
 	private applyEntry(
 		entry: LedgerAccountEntry,
 		operation: "record" | "remove",
@@ -332,19 +368,19 @@ class LedgerAccount {
 		return new LedgerAccount({
 			...this,
 			pendingAmount: this.pendingAmount + balanceAmount,
-			postedAmount: this.postedAmount + (posted ? balanceAmount : 0),
-			availableAmount: this.availableAmount + (available ? balanceAmount : 0),
-			pendingCredits: this.pendingCredits + (entry.direction === "credit" ? amount : 0),
-			pendingDebits: this.pendingDebits + (entry.direction === "debit" ? amount : 0),
-			postedCredits: this.postedCredits + (posted && entry.direction === "credit" ? amount : 0),
-			postedDebits: this.postedDebits + (posted && entry.direction === "debit" ? amount : 0),
+			postedAmount: this.postedAmount + (posted ? balanceAmount : 0n),
+			availableAmount: this.availableAmount + (available ? balanceAmount : 0n),
+			pendingCredits: this.pendingCredits + (entry.direction === "credit" ? amount : 0n),
+			pendingDebits: this.pendingDebits + (entry.direction === "debit" ? amount : 0n),
+			postedCredits: this.postedCredits + (posted && entry.direction === "credit" ? amount : 0n),
+			postedDebits: this.postedDebits + (posted && entry.direction === "debit" ? amount : 0n),
 			availableCredits:
-				this.availableCredits + (available && entry.direction === "credit" ? amount : 0),
-			availableDebits: this.availableDebits + (available && entry.direction === "debit" ? amount : 0),
+				this.availableCredits + (available && entry.direction === "credit" ? amount : 0n),
+			availableDebits: this.availableDebits + (available && entry.direction === "debit" ? amount : 0n),
 			updated,
 		});
 	}
 }
 
 export type { LedgerAccountBalance, LedgerAccountOptions };
-export { LedgerAccount, LedgerAccountCurrencyMismatch };
+export { LedgerAccount, LedgerAccountAssetMismatch };

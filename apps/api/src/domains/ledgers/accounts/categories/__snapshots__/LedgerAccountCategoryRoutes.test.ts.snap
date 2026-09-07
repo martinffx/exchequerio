@@ -69,136 +69,8 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+              "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
               "properties": {
-                "balances": {
-                  "description": "The pending, posted, and available balances.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all pending AND posted entry amounts.",
-                            "enum": [
-                              "pending",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted entry amounts.",
-                            "enum": [
-                              "posted",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                            "enum": [
-                              "availableBalance",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                    ],
-                  },
-                  "type": "array",
-                },
                 "created": {
                   "description": "Timestamp of when the ledger account category was created.",
                   "type": "string",
@@ -254,7 +126,6 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
                 "ledgerId",
                 "name",
                 "normalBalance",
-                "balances",
                 "created",
                 "updated",
               ],
@@ -262,7 +133,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
             },
           },
         },
-        "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+        "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
       },
       "400": {
         "content": {
@@ -1092,136 +963,8 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+              "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
               "properties": {
-                "balances": {
-                  "description": "The pending, posted, and available balances.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all pending AND posted entry amounts.",
-                            "enum": [
-                              "pending",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted entry amounts.",
-                            "enum": [
-                              "posted",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                            "enum": [
-                              "availableBalance",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                    ],
-                  },
-                  "type": "array",
-                },
                 "created": {
                   "description": "Timestamp of when the ledger account category was created.",
                   "type": "string",
@@ -1277,7 +1020,6 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
                 "ledgerId",
                 "name",
                 "normalBalance",
-                "balances",
                 "created",
                 "updated",
               ],
@@ -1285,7 +1027,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
             },
           },
         },
-        "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+        "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
       },
       "400": {
         "content": {
@@ -2513,136 +2255,8 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
           "application/json": {
             "schema": {
               "items": {
-                "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+                "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
                 "properties": {
-                  "balances": {
-                    "description": "The pending, posted, and available balances.",
-                    "items": {
-                      "anyOf": [
-                        {
-                          "properties": {
-                            "amount": {
-                              "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                              "type": "number",
-                            },
-                            "balanceType": {
-                              "description": "The sum of all pending AND posted entry amounts.",
-                              "enum": [
-                                "pending",
-                              ],
-                              "type": "string",
-                            },
-                            "credits": {
-                              "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                              "type": "number",
-                            },
-                            "currency": {
-                              "description": "Currency of the ledger",
-                              "type": "string",
-                            },
-                            "currencyExponent": {
-                              "description": "Currency exponent of the ledger",
-                              "type": "number",
-                            },
-                            "debits": {
-                              "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                              "type": "number",
-                            },
-                          },
-                          "required": [
-                            "balanceType",
-                            "credits",
-                            "debits",
-                            "amount",
-                            "currency",
-                            "currencyExponent",
-                          ],
-                          "type": "object",
-                        },
-                        {
-                          "properties": {
-                            "amount": {
-                              "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                              "type": "number",
-                            },
-                            "balanceType": {
-                              "description": "The sum of all posted entry amounts.",
-                              "enum": [
-                                "posted",
-                              ],
-                              "type": "string",
-                            },
-                            "credits": {
-                              "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                              "type": "number",
-                            },
-                            "currency": {
-                              "description": "Currency of the ledger",
-                              "type": "string",
-                            },
-                            "currencyExponent": {
-                              "description": "Currency exponent of the ledger",
-                              "type": "number",
-                            },
-                            "debits": {
-                              "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                              "type": "number",
-                            },
-                          },
-                          "required": [
-                            "balanceType",
-                            "credits",
-                            "debits",
-                            "amount",
-                            "currency",
-                            "currencyExponent",
-                          ],
-                          "type": "object",
-                        },
-                        {
-                          "properties": {
-                            "amount": {
-                              "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                              "type": "number",
-                            },
-                            "balanceType": {
-                              "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                              "enum": [
-                                "availableBalance",
-                              ],
-                              "type": "string",
-                            },
-                            "credits": {
-                              "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                              "type": "number",
-                            },
-                            "currency": {
-                              "description": "Currency of the ledger",
-                              "type": "string",
-                            },
-                            "currencyExponent": {
-                              "description": "Currency exponent of the ledger",
-                              "type": "number",
-                            },
-                            "debits": {
-                              "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                              "type": "number",
-                            },
-                          },
-                          "required": [
-                            "balanceType",
-                            "credits",
-                            "debits",
-                            "amount",
-                            "currency",
-                            "currencyExponent",
-                          ],
-                          "type": "object",
-                        },
-                      ],
-                    },
-                    "type": "array",
-                  },
                   "created": {
                     "description": "Timestamp of when the ledger account category was created.",
                     "type": "string",
@@ -2698,7 +2312,6 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
                   "ledgerId",
                   "name",
                   "normalBalance",
-                  "balances",
                   "created",
                   "updated",
                 ],
@@ -3975,136 +3588,8 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+              "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
               "properties": {
-                "balances": {
-                  "description": "The pending, posted, and available balances.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all pending AND posted entry amounts.",
-                            "enum": [
-                              "pending",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted and pending ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted entry amounts.",
-                            "enum": [
-                              "posted",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                      {
-                        "properties": {
-                          "amount": {
-                            "description": "Credit Normal: Credits - Debits, Debit Normal: Debits - Credits",
-                            "type": "number",
-                          },
-                          "balanceType": {
-                            "description": "The sum of all posted inbound entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.",
-                            "enum": [
-                              "availableBalance",
-                            ],
-                            "type": "string",
-                          },
-                          "credits": {
-                            "description": "Summed amounts of all posted ledger entries with \`credit\` direction.",
-                            "type": "number",
-                          },
-                          "currency": {
-                            "description": "Currency of the ledger",
-                            "type": "string",
-                          },
-                          "currencyExponent": {
-                            "description": "Currency exponent of the ledger",
-                            "type": "number",
-                          },
-                          "debits": {
-                            "description": "Summed amounts of all posted ledger entries with \`debit\` direction.",
-                            "type": "number",
-                          },
-                        },
-                        "required": [
-                          "balanceType",
-                          "credits",
-                          "debits",
-                          "amount",
-                          "currency",
-                          "currencyExponent",
-                        ],
-                        "type": "object",
-                      },
-                    ],
-                  },
-                  "type": "array",
-                },
                 "created": {
                   "description": "Timestamp of when the ledger account category was created.",
                   "type": "string",
@@ -4160,7 +3645,6 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
                 "ledgerId",
                 "name",
                 "normalBalance",
-                "balances",
                 "created",
                 "updated",
               ],
@@ -4168,7 +3652,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
             },
           },
         },
-        "description": "A ledger account category is a grouping of Ledger Accounts. Its balance is equal to the sum of the balances of all contained accounts. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+        "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
       },
       "400": {
         "content": {

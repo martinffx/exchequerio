@@ -22,10 +22,10 @@ import {
 	TransactionValidationFailure,
 } from "./LedgerTransactionErrors";
 import type {
-	TransactionCreateRequest as LedgerTransactionCreateRequest,
+	ResolvedTransactionCreateRequest as LedgerTransactionCreateRequest,
 	TransactionListItemResponse,
 	TransactionResponse,
-	TransactionUpdateRequest as LedgerTransactionUpdateRequest,
+	ResolvedTransactionUpdateRequest as LedgerTransactionUpdateRequest,
 } from "./LedgerTransactionSchema";
 import { LedgerTransactionEntry } from "./LedgerTransactionEntry";
 
@@ -215,7 +215,15 @@ class LedgerTransaction {
 		const first = rows[0];
 		if (first === undefined) return Effect.succeed(Option.none());
 
-		return Effect.all(first.entries.map(entry => LedgerTransactionEntry.fromRow(entry))).pipe(
+		return Effect.all(
+			first.entries.map(entry =>
+				LedgerTransactionEntry.fromRow(entry, {
+					assetId: entry.asset.id,
+					assetCode: entry.asset.code,
+					minorUnitExponent: entry.asset.minorUnitExponent,
+				})
+			)
+		).pipe(
 			Effect.flatMap(entries =>
 				// oxlint-disable-next-line unicorn/no-array-callback-reference
 				LedgerTransaction.decode(first, Option.some(entries))
@@ -356,12 +364,12 @@ class LedgerTransaction {
 
 		for (const entry of entries) {
 			const amount = BigInt(entry.amount);
-			const total = totals.get(entry.currency) ?? 0n;
-			totals.set(entry.currency, total + (entry.direction === "debit" ? amount : -amount));
+			const total = totals.get(entry.assetId) ?? 0n;
+			totals.set(entry.assetId, total + (entry.direction === "debit" ? amount : -amount));
 		}
 
 		return [...totals.values()].some(total => total !== 0n)
-			? Effect.fail(new TransactionValidationFailure("Transaction Entries must balance by Currency"))
+			? Effect.fail(new TransactionValidationFailure("Transaction Entries must balance by Asset"))
 			: Effect.succeed(entries);
 	}
 }

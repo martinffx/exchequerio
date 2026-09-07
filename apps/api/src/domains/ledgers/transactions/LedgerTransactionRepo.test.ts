@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
-import { AccountNotFound, LedgerAccountCurrencyMismatch } from "@/domains/ledgers/accounts";
+import { AccountNotFound, LedgerAccountAssetMismatch } from "@/domains/ledgers/accounts";
 import {
 	newLedgerAccountID,
 	newLedgerAccountSettlementID,
@@ -18,6 +18,7 @@ import {
 	type OrgID,
 } from "@/lib/ids";
 import {
+	AssetsTable,
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
 	LedgerTransactionsTable,
@@ -37,8 +38,18 @@ import {
 	TransactionLifecycleConflict,
 	TransactionPersistenceFailure,
 } from "./LedgerTransactionErrors";
-import type { TransactionCreateRequest } from "./LedgerTransactionSchema";
+import type { ResolvedTransactionCreateRequest } from "./LedgerTransactionSchema";
 
+const accountAssets = new Map<
+	string,
+	{ assetId: string; assetCode: string; minorUnitExponent: number }
+>();
+const summary = (accountId: { toString(): string }) =>
+	accountAssets.get(accountId.toString()) ?? {
+		assetId: "ast_00000000000000000000000001",
+		assetCode: "EUR",
+		minorUnitExponent: 2,
+	};
 type AccountId = ReturnType<typeof newLedgerAccountID>;
 
 const request = (
@@ -46,16 +57,16 @@ const request = (
 	entries: readonly Readonly<{
 		accountId: AccountId;
 		direction: "debit" | "credit";
-		amount: number;
+		amount: string;
 	}>[]
-): TransactionCreateRequest => ({
+): ResolvedTransactionCreateRequest => ({
 	status,
 	description: "Repository transaction",
 	metadata: { source: "test" },
 	ledgerEntries: entries.map(entry => ({
 		...entry,
 		accountId: entry.accountId.toString(),
-		currencyCode: "EUR",
+		...summary(entry.accountId),
 	})),
 });
 
@@ -64,7 +75,7 @@ const persist = (
 	organizationId: OrgID,
 	ledgerId: LedgerID,
 	transactionId: ReturnType<typeof newLedgerTransactionID>,
-	transactionRequest: TransactionCreateRequest
+	transactionRequest: ResolvedTransactionCreateRequest
 ) =>
 	LedgerTransaction.fromCreateRequest(
 		transactionId,
@@ -113,17 +124,36 @@ describe("LedgerTransactionRepoLive", () => {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		normalBalance: "debit" | "credit",
-		currencyCode = "EUR"
+		assetCode = "EUR"
 	) => {
 		const id = newLedgerAccountID();
 		const db = database;
+		const [asset] = await db
+			.insert(AssetsTable)
+			.values({
+				id: newOrgID().toUUID(),
+				organizationId: organizationId.toUUID(),
+				code: assetCode,
+				name: assetCode,
+				minorUnitExponent: 2,
+			})
+			.onConflictDoUpdate({
+				target: [AssetsTable.organizationId, AssetsTable.code],
+				set: { name: assetCode },
+			})
+			.returning();
+		accountAssets.set(id.toString(), {
+			assetId: TypeID.fromUUID("ast", asset!.id).toString(),
+			assetCode: asset!.code,
+			minorUnitExponent: asset!.minorUnitExponent,
+		});
 		await db.insert(LedgerAccountsTable).values({
 			id: id.toUUID(),
 			organizationId: organizationId.toUUID(),
 			ledgerId: ledgerId.toUUID(),
 			name: `Account ${id.toUUID()}`,
 			normalBalance,
-			currencyCode,
+			assetId: asset!.id,
 		});
 		return id;
 	};
@@ -163,6 +193,7 @@ describe("LedgerTransactionRepoLive", () => {
 				.delete(LedgerAccountsTable)
 				.where(inArray(LedgerAccountsTable.organizationId, organizationIds));
 			await db.delete(LedgersTable).where(inArray(LedgersTable.organizationId, organizationIds));
+			await db.delete(AssetsTable).where(inArray(AssetsTable.organizationId, organizationIds));
 			await db.delete(OrganizationsTable).where(inArray(OrganizationsTable.id, organizationIds));
 		}
 		await runtime.dispose();
@@ -175,8 +206,8 @@ describe("LedgerTransactionRepoLive", () => {
 				newOrgID(),
 				newLedgerID(),
 				request("pending", [
-					{ accountId: newLedgerAccountID(), direction: "debit", amount: 10 },
-					{ accountId: newLedgerAccountID(), direction: "credit", amount: 10 },
+					{ accountId: newLedgerAccountID(), direction: "debit", amount: "10" },
+					{ accountId: newLedgerAccountID(), direction: "credit", amount: "10" },
 				])
 			)
 		);
@@ -197,8 +228,8 @@ describe("LedgerTransactionRepoLive", () => {
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 		const body = request("pending", [
-			{ accountId: debit, direction: "debit", amount: 100 },
-			{ accountId: credit, direction: "credit", amount: 100 },
+			{ accountId: debit, direction: "debit", amount: "100" },
+			{ accountId: credit, direction: "credit", amount: "100" },
 		]);
 		const id = newLedgerTransactionID();
 		await runtime.runPromise(persist(repository, organizationId, ledgerId, id, body));
@@ -215,7 +246,7 @@ describe("LedgerTransactionRepoLive", () => {
 		);
 		expect(loaded.toResponse().effectiveAt).toBe(effectiveAt);
 		const balances = await accounts(organizationId, ledgerId, [debit]);
-		expect(balances.get(debit.toString())?.postedAmount).toBe(100);
+		expect(balances.get(debit.toString())?.postedAmount).toBe(100n);
 		await expect(
 			runtime.runPromise(repository.updateTransaction(organizationId, ledgerId, id, body))
 		).rejects.toBeInstanceOf(TransactionLifecycleConflict);
@@ -236,9 +267,9 @@ describe("LedgerTransactionRepoLive", () => {
 				ledgerId,
 				newLedgerTransactionID(),
 				request(status, [
-					{ accountId: debit, direction: "debit", amount: 60 },
-					{ accountId: debit, direction: "debit", amount: 40 },
-					{ accountId: credit, direction: "credit", amount: 100 },
+					{ accountId: debit, direction: "debit", amount: "60" },
+					{ accountId: debit, direction: "debit", amount: "40" },
+					{ accountId: credit, direction: "credit", amount: "100" },
 				])
 			)
 		);
@@ -247,27 +278,27 @@ describe("LedgerTransactionRepoLive", () => {
 		expect(transaction.status).toBe(status);
 		expect(transaction.lockVersion).toBe(1);
 		expect(transaction.postedAt === undefined).toBe(!posted);
-		expect(Option.getOrThrow(transaction.entries).map(entry => entry.currency)).toEqual([
+		expect(Option.getOrThrow(transaction.entries).map(entry => entry.assetCode)).toEqual([
 			"EUR",
 			"EUR",
 			"EUR",
 		]);
 		expect(byId.get(debit.toString())).toMatchObject({
-			pendingAmount: 100,
-			postedAmount: posted ? 100 : 0,
-			availableAmount: posted ? 100 : 0,
-			pendingDebits: 100,
-			postedDebits: posted ? 100 : 0,
-			availableDebits: posted ? 100 : 0,
+			pendingAmount: 100n,
+			postedAmount: posted ? 100n : 0n,
+			availableAmount: posted ? 100n : 0n,
+			pendingDebits: 100n,
+			postedDebits: posted ? 100n : 0n,
+			availableDebits: posted ? 100n : 0n,
 			lockVersion: 2,
 		});
 		expect(byId.get(credit.toString())).toMatchObject({
-			pendingAmount: 100,
-			postedAmount: posted ? 100 : 0,
-			availableAmount: posted ? 100 : 0,
-			pendingCredits: 100,
-			postedCredits: posted ? 100 : 0,
-			availableCredits: posted ? 100 : 0,
+			pendingAmount: 100n,
+			postedAmount: posted ? 100n : 0n,
+			availableAmount: posted ? 100n : 0n,
+			pendingCredits: 100n,
+			postedCredits: posted ? 100n : 0n,
+			availableCredits: posted ? 100n : 0n,
 			lockVersion: 2,
 		});
 	});
@@ -284,8 +315,8 @@ describe("LedgerTransactionRepoLive", () => {
 				owner.ledgerId,
 				newLedgerTransactionID(),
 				request("pending", [
-					{ accountId: debit, direction: "debit", amount: 10 },
-					{ accountId: credit, direction: "credit", amount: 10 },
+					{ accountId: debit, direction: "debit", amount: "10" },
+					{ accountId: credit, direction: "credit", amount: "10" },
 				])
 			)
 		);
@@ -297,8 +328,8 @@ describe("LedgerTransactionRepoLive", () => {
 				owner.ledgerId,
 				newLedgerTransactionID(),
 				request("pending", [
-					{ accountId: debit, direction: "debit", amount: 20 },
-					{ accountId: credit, direction: "credit", amount: 20 },
+					{ accountId: debit, direction: "debit", amount: "20" },
+					{ accountId: credit, direction: "credit", amount: "20" },
 				])
 			)
 		);
@@ -333,6 +364,7 @@ describe("LedgerTransactionRepoLive", () => {
 		const { organizationId, ledgerId } = await createLedger();
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const missing = newLedgerAccountID();
+		accountAssets.set(missing.toString(), summary(debit));
 		const error = await runtime.runPromise(
 			Effect.flip(
 				persist(
@@ -341,8 +373,8 @@ describe("LedgerTransactionRepoLive", () => {
 					ledgerId,
 					newLedgerTransactionID(),
 					request("pending", [
-						{ accountId: debit, direction: "debit", amount: 1 },
-						{ accountId: missing, direction: "credit", amount: 1 },
+						{ accountId: debit, direction: "debit", amount: "1" },
+						{ accountId: missing, direction: "credit", amount: "1" },
 					])
 				)
 			)
@@ -350,7 +382,7 @@ describe("LedgerTransactionRepoLive", () => {
 
 		expect(error).toBeInstanceOf(AccountNotFound);
 		expect((await accounts(organizationId, ledgerId, [debit])).get(debit.toString())).toMatchObject({
-			pendingDebits: 0,
+			pendingDebits: 0n,
 			lockVersion: 1,
 		});
 		expect(
@@ -395,8 +427,8 @@ describe("LedgerTransactionRepoLive", () => {
 						ledgerId,
 						transactionId,
 						request("pending", [
-							{ accountId: debit, direction: "debit", amount: 10 },
-							{ accountId: credit, direction: "credit", amount: 10 },
+							{ accountId: debit, direction: "debit", amount: "10" },
+							{ accountId: credit, direction: "credit", amount: "10" },
 						])
 					)
 				)
@@ -420,11 +452,11 @@ describe("LedgerTransactionRepoLive", () => {
 				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toUUID()))
 		).toHaveLength(0);
 		for (const account of (await accounts(organizationId, ledgerId, [debit, credit])).values()) {
-			expect(account).toMatchObject({ pendingAmount: 0, lockVersion: 1 });
+			expect(account).toMatchObject({ pendingAmount: 0n, lockVersion: 1 });
 		}
 	});
 
-	it("supports balanced multi-Currency Transactions and negative balances", async () => {
+	it("supports balanced multi-Asset Transactions and negative balances", async () => {
 		const { organizationId, ledgerId } = await createLedger();
 		const eurDebit = await createAccount(organizationId, ledgerId, "debit", "EUR");
 		const eurCredit = await createAccount(organizationId, ledgerId, "debit", "EUR");
@@ -435,19 +467,19 @@ describe("LedgerTransactionRepoLive", () => {
 			persist(repository, organizationId, ledgerId, newLedgerTransactionID(), {
 				status: "posted",
 				ledgerEntries: [
-					{ accountId: eurDebit.toString(), direction: "debit", amount: 10, currencyCode: "EUR" },
-					{ accountId: eurCredit.toString(), direction: "credit", amount: 10, currencyCode: "EUR" },
-					{ accountId: usdDebit.toString(), direction: "debit", amount: 20, currencyCode: "USD" },
-					{ accountId: usdCredit.toString(), direction: "credit", amount: 20, currencyCode: "USD" },
+					{ accountId: eurDebit.toString(), direction: "debit", amount: "10", ...summary(eurDebit) },
+					{ accountId: eurCredit.toString(), direction: "credit", amount: "10", ...summary(eurCredit) },
+					{ accountId: usdDebit.toString(), direction: "debit", amount: "20", ...summary(usdDebit) },
+					{ accountId: usdCredit.toString(), direction: "credit", amount: "20", ...summary(usdCredit) },
 				],
 			})
 		);
 
 		const byId = await accounts(organizationId, ledgerId, [eurDebit, eurCredit, usdDebit, usdCredit]);
-		expect(byId.get(eurDebit.toString())?.postedAmount).toBe(10);
-		expect(byId.get(eurCredit.toString())?.postedAmount).toBe(-10);
-		expect(byId.get(usdDebit.toString())?.postedAmount).toBe(20);
-		expect(byId.get(usdCredit.toString())?.postedAmount).toBe(-20);
+		expect(byId.get(eurDebit.toString())?.postedAmount).toBe(10n);
+		expect(byId.get(eurCredit.toString())?.postedAmount).toBe(-10n);
+		expect(byId.get(usdDebit.toString())?.postedAmount).toBe(20n);
+		expect(byId.get(usdCredit.toString())?.postedAmount).toBe(-20n);
 	});
 
 	it("replaces a pending Transaction and records each affected Account once", async () => {
@@ -461,8 +493,8 @@ describe("LedgerTransactionRepoLive", () => {
 				ledgerId,
 				newLedgerTransactionID(),
 				request("pending", [
-					{ accountId: debit, direction: "debit", amount: 100 },
-					{ accountId: credit, direction: "credit", amount: 100 },
+					{ accountId: debit, direction: "debit", amount: "100" },
+					{ accountId: credit, direction: "credit", amount: "100" },
 				])
 			)
 		);
@@ -472,9 +504,9 @@ describe("LedgerTransactionRepoLive", () => {
 			repository.updateTransaction(organizationId, ledgerId, transaction.id, {
 				description: "Updated",
 				ledgerEntries: [
-					{ accountId: debit.toString(), direction: "debit", amount: 30, currencyCode: "EUR" },
-					{ accountId: debit.toString(), direction: "debit", amount: 10, currencyCode: "EUR" },
-					{ accountId: credit.toString(), direction: "credit", amount: 40, currencyCode: "EUR" },
+					{ accountId: debit.toString(), direction: "debit", amount: "30", ...summary(debit) },
+					{ accountId: debit.toString(), direction: "debit", amount: "10", ...summary(debit) },
+					{ accountId: credit.toString(), direction: "credit", amount: "40", ...summary(credit) },
 				],
 			})
 		);
@@ -484,8 +516,8 @@ describe("LedgerTransactionRepoLive", () => {
 		expect(updated.description).toBe("Updated");
 		expect(updated.lockVersion).toBe(2);
 		expect(updatedEntryIds).not.toEqual(originalEntryIds);
-		expect(byId.get(debit.toString())).toMatchObject({ pendingAmount: 40, lockVersion: 3 });
-		expect(byId.get(credit.toString())).toMatchObject({ pendingAmount: 40, lockVersion: 3 });
+		expect(byId.get(debit.toString())).toMatchObject({ pendingAmount: 40n, lockVersion: 3 });
+		expect(byId.get(credit.toString())).toMatchObject({ pendingAmount: 40n, lockVersion: 3 });
 	});
 
 	it("posts and voids pending Transactions exactly once", async () => {
@@ -500,8 +532,8 @@ describe("LedgerTransactionRepoLive", () => {
 					ledgerId,
 					newLedgerTransactionID(),
 					request("pending", [
-						{ accountId: debit, direction: "debit", amount: 25 },
-						{ accountId: credit, direction: "credit", amount: 25 },
+						{ accountId: debit, direction: "debit", amount: "25" },
+						{ accountId: credit, direction: "credit", amount: "25" },
 					])
 				)
 			);
@@ -530,15 +562,15 @@ describe("LedgerTransactionRepoLive", () => {
 		expect(voidedAgain.lockVersion).toBe(voided.lockVersion);
 		expect(Option.getOrThrow(voided.entries).every(entry => entry.status === "voided")).toBe(true);
 		expect(byId.get(debit.toString())).toMatchObject({
-			pendingAmount: 25,
-			postedAmount: 25,
-			availableAmount: 25,
+			pendingAmount: 25n,
+			postedAmount: 25n,
+			availableAmount: 25n,
 			lockVersion: 5,
 		});
 		expect(byId.get(credit.toString())).toMatchObject({
-			pendingAmount: 25,
-			postedAmount: 25,
-			availableAmount: 25,
+			pendingAmount: 25n,
+			postedAmount: 25n,
+			availableAmount: 25n,
 			lockVersion: 5,
 		});
 		const error = await runtime.runPromise(
@@ -549,16 +581,16 @@ describe("LedgerTransactionRepoLive", () => {
 		expect(error).toBeInstanceOf(TransactionLifecycleConflict);
 	});
 
-	it("rejects an Entry Currency that does not match its Account", async () => {
+	it("rejects an Entry Asset that does not match its Account", async () => {
 		const { organizationId, ledgerId } = await createLedger();
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 		const transactionRequest = request("pending", [
-			{ accountId: debit, direction: "debit", amount: 10 },
-			{ accountId: credit, direction: "credit", amount: 10 },
+			{ accountId: debit, direction: "debit", amount: "10" },
+			{ accountId: credit, direction: "credit", amount: "10" },
 		]);
-		transactionRequest.ledgerEntries[0]!.currencyCode = "USD";
-		transactionRequest.ledgerEntries[1]!.currencyCode = "USD";
+		transactionRequest.ledgerEntries[0]!.assetId = "ast_00000000000000000000000002";
+		transactionRequest.ledgerEntries[1]!.assetId = "ast_00000000000000000000000002";
 
 		const error = await runtime.runPromise(
 			Effect.flip(
@@ -566,7 +598,7 @@ describe("LedgerTransactionRepoLive", () => {
 			)
 		);
 
-		expect(error).toBeInstanceOf(LedgerAccountCurrencyMismatch);
+		expect(error).toBeInstanceOf(LedgerAccountAssetMismatch);
 		expect(
 			await runtime.runPromise(
 				repository.listTransactions(organizationId, ledgerId, { offset: 0, limit: 20 })

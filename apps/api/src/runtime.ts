@@ -1,6 +1,7 @@
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
+import { assetServiceLayer, assetRepoLayer, type AssetService } from "@/domains/assets";
 import { ledgerLayer, type LedgerService } from "@/domains/ledgers";
 import { accountLayer, type AccountService } from "@/domains/ledgers/accounts";
 import {
@@ -37,7 +38,8 @@ type ServerRuntimeServices =
 	| TransactionService
 	| IdempotencyService
 	| LedgerAccountCategoryService
-	| OrganizationService;
+	| OrganizationService
+	| AssetService;
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
@@ -62,13 +64,17 @@ const makeServerRuntimeLayer = (
 		valkey,
 		idempotency
 	);
-	const accountWithLedger = accountLayer.pipe(Layer.provide(ledgerLayer));
-	const transactionWithLedger = transactionLayer.pipe(Layer.provide(ledgerLayer));
+	const assetLayer = assetServiceLayer.pipe(Layer.provide(assetRepoLayer));
+	const accountWithLedger = accountLayer.pipe(Layer.provide(Layer.merge(ledgerLayer, assetLayer)));
+	const transactionWithLedger = transactionLayer.pipe(
+		Layer.provide(Layer.merge(ledgerLayer, assetLayer))
+	);
 	const settlementWithServices = settlementLayer.pipe(
 		Layer.provide(Layer.mergeAll(ledgerLayer, accountWithLedger, transactionWithLedger))
 	);
 	const ledgerAccountCategory = ledgerAccountCategoryLayer.pipe(Layer.provide(ledgerLayer));
 	return Layer.mergeAll(
+		assetLayer,
 		ledgerLayer,
 		accountWithLedger,
 		settlementWithServices,

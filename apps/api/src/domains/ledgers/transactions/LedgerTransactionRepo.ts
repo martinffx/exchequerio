@@ -4,12 +4,13 @@ import { Context, Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 
+import { ConflictError } from "@/lib/errors";
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import {
 	AccountNotFound,
 	AccountVersionConflict,
 	LedgerAccount,
-	LedgerAccountCurrencyMismatch,
+	LedgerAccountAssetMismatch,
 	requireAccount,
 	requireAccountWrite,
 } from "@/domains/ledgers/accounts";
@@ -21,6 +22,7 @@ import type {
 	OrgID,
 } from "@/lib/ids";
 import {
+	AssetsTable,
 	LedgerAccountSettlementsTable,
 	LedgerAccountsTable,
 	LedgerTransactionEntriesTable,
@@ -43,24 +45,29 @@ import {
 	requireTransaction,
 	requireTransactionWrite,
 } from "./LedgerTransactionErrors";
-import type { TransactionListQuery, TransactionUpdateRequest } from "./LedgerTransactionSchema";
+import type {
+	TransactionListQuery,
+	ResolvedTransactionUpdateRequest,
+} from "./LedgerTransactionSchema";
 
 /** Failures returned while creating ordinary Transaction accounting. */
 type LedgerTransactionCreateRepositoryError =
+	| ConflictError
 	| TransactionSettlementConflict
 	| AccountNotFound
 	| AccountVersionConflict
-	| LedgerAccountCurrencyMismatch
+	| LedgerAccountAssetMismatch
 	| TransactionConcurrencyFailure
 	| TransactionInfrastructureError
 	| TransactionValidationFailure;
 
 /** Failures returned while changing Transaction accounting. */
 type LedgerTransactionUpdateRepositoryError =
+	| ConflictError
 	| TransactionSettlementConflict
 	| AccountNotFound
 	| AccountVersionConflict
-	| LedgerAccountCurrencyMismatch
+	| LedgerAccountAssetMismatch
 	| TransactionConcurrencyFailure
 	| TransactionInfrastructureError
 	| TransactionLifecycleConflict
@@ -188,7 +195,7 @@ interface LedgerTransactionRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
-		request: TransactionUpdateRequest,
+		request: ResolvedTransactionUpdateRequest,
 		updated?: DateTime,
 		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
@@ -293,6 +300,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			},
 			with: {
 				entries: {
+					with: { asset: true },
 					orderBy: {
 						created: "asc",
 						id: "asc",
@@ -393,7 +401,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				ledgerId: encodeUuid(ledgerId),
 				settlementId: encodeUuid(settlementId),
 			},
-			with: { entries: { orderBy: { created: "asc", id: "asc" } } },
+			with: { entries: { with: { asset: true }, orderBy: { created: "asc", id: "asc" } } },
 		}).pipe(Effect.flatMap(rows => LedgerTransaction.fromRows(rows)));
 	}
 
@@ -584,7 +592,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
-		request: TransactionUpdateRequest,
+		request: ResolvedTransactionUpdateRequest,
 		updated = DateTime.utc(),
 		entryIds?: readonly LedgerTransactionEntryID[]
 	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
@@ -763,6 +771,13 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		return db
 			.select()
 			.from(LedgerAccountsTable)
+			.innerJoin(
+				AssetsTable,
+				and(
+					eq(AssetsTable.id, LedgerAccountsTable.assetId),
+					eq(AssetsTable.organizationId, LedgerAccountsTable.organizationId)
+				)
+			)
 			.where(
 				and(
 					eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
@@ -775,7 +790,17 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			)
 			.orderBy(asc(LedgerAccountsTable.id))
 			.pipe(
-				Effect.flatMap(rows => Effect.all(rows.map(row => LedgerAccount.fromRow(row)))),
+				Effect.flatMap(rows =>
+					Effect.all(
+						rows.map(row =>
+							LedgerAccount.fromRow(row.ledger_accounts, {
+								assetId: row.assets.id,
+								assetCode: row.assets.code,
+								minorUnitExponent: row.assets.minorUnitExponent,
+							})
+						)
+					)
+				),
 				Effect.map(
 					accounts =>
 						new Map<string, LedgerAccount>(
@@ -799,7 +824,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	 * @param accounts - Current Accounts indexed by identifier.
 	 * @param entries - Entries to apply in their supplied order.
 	 * @param updated - Update time assigned to each calculated Account.
-	 * @returns An Effect containing a new Account map, or a Currency mismatch failure.
+	 * @returns An Effect containing a new Account map, or an Asset mismatch failure.
 	 */
 	private applyEntriesToAccounts(
 		accounts: AccountsById,
@@ -958,31 +983,38 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			[...accounts.entries()].sort(([left], [right]) => left.localeCompare(right)),
 			([accountId, account]) => {
 				const updated = updatedAccounts.get(accountId)!;
-				return tx
-					.update(LedgerAccountsTable)
-					.set({
-						pendingAmount: updated.pendingAmount,
-						postedAmount: updated.postedAmount,
-						availableAmount: updated.availableAmount,
-						pendingCredits: updated.pendingCredits,
-						pendingDebits: updated.pendingDebits,
-						postedCredits: updated.postedCredits,
-						postedDebits: updated.postedDebits,
-						availableCredits: updated.availableCredits,
-						availableDebits: updated.availableDebits,
-						lockVersion: account.lockVersion + 1,
-						updated: updated.updated.toJSDate(),
-					})
-					.where(
-						and(
-							eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
-							eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
-							eq(LedgerAccountsTable.id, encodeUuid(account.id)),
-							eq(LedgerAccountsTable.lockVersion, account.lockVersion)
-						)
+				return Effect.try({
+					try: () => updated.assertBalancesInRange(),
+					catch: cause => cause as ConflictError,
+				}).pipe(
+					Effect.andThen(
+						tx
+							.update(LedgerAccountsTable)
+							.set({
+								pendingAmount: updated.pendingAmount,
+								postedAmount: updated.postedAmount,
+								availableAmount: updated.availableAmount,
+								pendingCredits: updated.pendingCredits,
+								pendingDebits: updated.pendingDebits,
+								postedCredits: updated.postedCredits,
+								postedDebits: updated.postedDebits,
+								availableCredits: updated.availableCredits,
+								availableDebits: updated.availableDebits,
+								lockVersion: account.lockVersion + 1,
+								updated: updated.updated.toJSDate(),
+							})
+							.where(
+								and(
+									eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+									eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+									eq(LedgerAccountsTable.id, encodeUuid(account.id)),
+									eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+								)
+							)
+							.returning({ id: LedgerAccountsTable.id })
+							.pipe(Effect.flatMap(rows => requireAccountWrite(rows.length === 1)))
 					)
-					.returning({ id: LedgerAccountsTable.id })
-					.pipe(Effect.flatMap(rows => requireAccountWrite(rows.length === 1)));
+				);
 			},
 			{ concurrency: 1, discard: true }
 		);

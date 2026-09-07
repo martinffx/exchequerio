@@ -2,7 +2,9 @@ import { Type } from "@sinclair/typebox";
 import { Effect, Result } from "effect";
 import type { FastifyPluginAsync } from "fastify";
 
+import { parseAmount } from "@/lib/amounts";
 import {
+	BadRequestError,
 	BadRequestProblem,
 	ConflictProblem,
 	ForbiddenProblem,
@@ -33,6 +35,29 @@ const commonErrors = {
 };
 
 const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
+	server.addHook("preValidation", async request => {
+		const body = request.body;
+		if (
+			typeof body !== "object" ||
+			body === null ||
+			!("alertCondition" in body) ||
+			!Array.isArray(body.alertCondition)
+		)
+			return;
+		const conditions: unknown[] = body.alertCondition;
+		for (const condition of conditions) {
+			if (
+				typeof condition !== "object" ||
+				condition === null ||
+				!("field" in condition) ||
+				condition.field !== "balance"
+			)
+				continue;
+			if (!("value" in condition) || typeof condition.value !== "string")
+				throw new BadRequestError("Balance condition value must be a decimal integer string");
+			parseAmount(condition.value);
+		}
+	});
 	server.get<{ Querystring: LedgerAccountBalanceMonitorListQuery }>(
 		"/",
 		{

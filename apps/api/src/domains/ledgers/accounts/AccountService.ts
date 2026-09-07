@@ -1,4 +1,9 @@
 import { Context, Effect, Layer, Option } from "effect";
+import {
+	AssetServiceTag,
+	type AssetService,
+	type AssetResolveError,
+} from "@/domains/assets/AssetService";
 import { TypeID } from "typeid-js";
 import { ServiceUnavailableError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
@@ -23,6 +28,7 @@ type AccountGetError = AccountNotFound | AccountInfrastructureError;
 type AccountCreateError =
 	| Exclude<LedgerAccountCreateRepositoryError, AccountRepositoryUnavailable>
 	| LedgerGetError
+	| AssetResolveError
 	| ServiceUnavailableError;
 type AccountUpdateError = AccountNotFound | LedgerAccountUpdateRepositoryError;
 type AccountDeleteError = AccountNotFound | LedgerAccountDeleteRepositoryError;
@@ -45,7 +51,8 @@ class AccountService {
 	 */
 	constructor(
 		private readonly repo: LedgerAccountRepo,
-		private readonly ledgerService: LedgerService
+		private readonly ledgerService: LedgerService,
+		private readonly assetService: AssetService
 	) {}
 
 	/**
@@ -100,8 +107,16 @@ class AccountService {
 		request: AccountCreateRequest
 	): Effect.Effect<LedgerAccount, AccountCreateError> {
 		return this.ledgerService.getLedger(organizationId, ledgerId).pipe(
-			Effect.andThen(Effect.sync(() => new TypeID("lat") as LedgerAccountID)),
-			Effect.map(id => LedgerAccount.fromCreateRequest(id, organizationId, ledgerId, request)),
+			Effect.andThen(this.assetService.resolveAssets(organizationId, [request])),
+			Effect.map(assets =>
+				LedgerAccount.fromCreateRequest(
+					new TypeID("lat") as LedgerAccountID,
+					organizationId,
+					ledgerId,
+					request,
+					assets[0]!
+				)
+			),
 			Effect.flatMap(account =>
 				this.repo.createAccount(account).pipe(
 					Effect.mapError(error =>
@@ -163,7 +178,8 @@ const accountServiceLayer = Layer.effect(
 	Effect.gen(function* () {
 		const repository = yield* LedgerAccountRepoTag;
 		const ledgerService = yield* LedgerServiceTag;
-		return new AccountService(repository, ledgerService);
+		const assetService = yield* AssetServiceTag;
+		return new AccountService(repository, ledgerService, assetService);
 	})
 );
 

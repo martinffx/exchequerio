@@ -123,39 +123,12 @@ class LedgerAccountCategoryEntity {
 	}
 
 	public toResponse(): LedgerAccountCategoryResponse {
-		// Balance aggregation deferred (Task decision 4C) - return hardcoded zeros
 		return {
 			id: this.id.toString(),
 			ledgerId: this.ledgerId.toString(),
 			name: this.name,
 			description: this.description,
 			normalBalance: this.normalBalance,
-			balances: [
-				{
-					balanceType: "pending" as const,
-					amount: 0,
-					currency: "USD",
-					currencyExponent: 2,
-					credits: 0,
-					debits: 0,
-				},
-				{
-					balanceType: "posted" as const,
-					amount: 0,
-					currency: "USD",
-					currencyExponent: 2,
-					credits: 0,
-					debits: 0,
-				},
-				{
-					balanceType: "availableBalance" as const,
-					amount: 0,
-					currency: "USD",
-					currencyExponent: 2,
-					credits: 0,
-					debits: 0,
-				},
-			],
 			metadata: this.metadata,
 			created: this.created.toISOString(),
 			updated: this.updated.toISOString(),

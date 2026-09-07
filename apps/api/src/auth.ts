@@ -9,6 +9,9 @@ import { parseId } from "@/lib/utils";
 import type { OrgID } from "@/lib/ids";
 
 const Permissions = [
+	"asset:read",
+	"asset:write",
+	"asset:delete",
 	"ledger:read",
 	"ledger:write",
 	"ledger:delete",
@@ -42,6 +45,7 @@ const Permissions = [
 ] as const;
 type Permission = (typeof Permissions)[number];
 const OrgReadonlyPermissions = new Set<Permission>([
+	"asset:read",
 	"my:organization:read",
 	"ledger:read",
 	"ledger:account:read",
@@ -54,6 +58,7 @@ const OrgReadonlyPermissions = new Set<Permission>([
 ]);
 const OrgUserPermissions = new Set<Permission>([
 	...OrgReadonlyPermissions,
+	"asset:write",
 	"ledger:write",
 	"ledger:transaction:write",
 	"ledger:transaction:entry:write",
@@ -65,6 +70,7 @@ const OrgUserPermissions = new Set<Permission>([
 ]);
 const OrgAdminPermissions = new Set<Permission>([
 	...OrgUserPermissions,
+	"asset:delete",
 	"my:organization:read",
 	"my:organization:write",
 	"my:organization:delete",

@@ -31,6 +31,36 @@
 		},
 		"boundaries/elements": [
 			{
+				"type": "asset-composition",
+				"pattern": "src/domains/assets/index.ts",
+				"mode": "full"
+			},
+			{
+				"type": "asset-domain",
+				"pattern": "src/domains/assets/Asset.ts",
+				"mode": "full"
+			},
+			{
+				"type": "asset-transport",
+				"pattern": "src/domains/assets/AssetSchema.ts",
+				"mode": "full"
+			},
+			{
+				"type": "asset-routes",
+				"pattern": "src/domains/assets/AssetRoutes.ts",
+				"mode": "full"
+			},
+			{
+				"type": "asset-repo",
+				"pattern": "src/domains/assets/AssetRepo.ts",
+				"mode": "full"
+			},
+			{
+				"type": "asset-service",
+				"pattern": "src/domains/assets/AssetService.ts",
+				"mode": "full"
+			},
+			{
 				"type": "tests",
 				"pattern": "src/**/*.test.ts",
 				"mode": "full"
@@ -413,7 +443,8 @@
 							"ledger-domain",
 							"ledger-service",
 							"http",
-							"shared-ids"
+							"shared-ids",
+							"asset-service"
 						]
 					},
 					{
@@ -482,7 +513,8 @@
 							"ledger-service",
 							"database",
 							"http",
-							"shared-ids"
+							"shared-ids",
+							"asset-service"
 						]
 					},
 					{
@@ -569,7 +601,8 @@
 							"idempotency-capability",
 							"organization-composition",
 							"runtime",
-							"category-composition"
+							"category-composition",
+							"asset-composition"
 						]
 					},
 					{
@@ -587,7 +620,8 @@
 							"ledger-composition",
 							"account-composition",
 							"transaction-composition",
-							"category-composition"
+							"category-composition",
+							"asset-composition"
 						]
 					},
 					{
@@ -644,6 +678,37 @@
 							"account-repo",
 							"shared-ids"
 						]
+					},
+					{
+						"from": ["asset-composition"],
+						"allow": ["asset-domain", "asset-transport", "asset-routes", "asset-repo", "asset-service"]
+					},
+					{
+						"from": ["asset-domain"],
+						"allow": ["asset-domain", "asset-transport", "shared-ids", "persistence-schema"]
+					},
+					{
+						"from": ["asset-transport"],
+						"allow": ["asset-transport"]
+					},
+					{
+						"from": ["asset-repo"],
+						"allow": [
+							"asset-repo",
+							"asset-domain",
+							"asset-transport",
+							"database",
+							"shared-ids",
+							"persistence-schema"
+						]
+					},
+					{
+						"from": ["asset-service"],
+						"allow": ["asset-service", "asset-domain", "asset-transport", "asset-repo", "shared-ids"]
+					},
+					{
+						"from": ["asset-routes"],
+						"allow": ["asset-routes", "asset-domain", "asset-service", "asset-transport", "shared-ids"]
 					}
 				]
 			}

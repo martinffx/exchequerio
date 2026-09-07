@@ -1,5 +1,6 @@
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { TypeID } from "typeid-js";
 import { DateTime } from "luxon";
 import type { Metadata } from "@/lib/utils";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -15,6 +16,7 @@ import {
 	type LedgerAccountID,
 } from "@/lib/ids";
 import {
+	AssetsTable,
 	LedgerAccountBalanceMonitorsTable,
 	LedgerAccountsTable,
 	LedgersTable,
@@ -60,6 +62,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 	const layer = ledgerAccountBalanceMonitorRepoLayer.pipe(Layer.provideMerge(databaseLayer));
 	const runtime: ManagedRuntime.ManagedRuntime<Database | LedgerAccountBalanceMonitorRepo, never> =
 		ManagedRuntime.make(layer);
+	const assetId = new TypeID("ast").toString();
 	const organizationId = newOrgID();
 	const ledgerId = newLedgerID();
 	const accountIds = [newLedgerAccountID(), newLedgerAccountID()] as const;
@@ -80,6 +83,13 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			organizationId: organizationId.toUUID(),
 			name: "Ledger",
 		});
+		await db.insert(AssetsTable).values({
+			id: TypeID.fromString(assetId).toUUID(),
+			organizationId: organizationId.toUUID(),
+			code: "USD",
+			name: "US Dollar",
+			minorUnitExponent: 2,
+		});
 		await db.insert(LedgerAccountsTable).values(
 			accountIds.map((accountId, index) => ({
 				id: accountId.toUUID(),
@@ -87,7 +97,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 				ledgerId: ledgerId.toUUID(),
 				name: `Account ${index}`,
 				normalBalance: "debit" as const,
-				currencyCode: "USD",
+				assetId: TypeID.fromString(assetId).toUUID(),
 			}))
 		);
 	});
@@ -108,6 +118,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 				)
 			);
 			await db.delete(LedgersTable).where(inArray(LedgersTable.id, [ledgerId.toUUID()]));
+			await db.delete(AssetsTable).where(eq(AssetsTable.id, TypeID.fromString(assetId).toUUID()));
 			await db
 				.delete(OrganizationsTable)
 				.where(inArray(OrganizationsTable.id, [organizationId.toUUID()]));
@@ -181,7 +192,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			accountId: accountIds[1],
 			name: "After",
 			description: "After",
-			alertThreshold: 0,
+			alertThreshold: 0n,
 			isActive: true,
 			metadata: { version: "after" },
 			updated: updatedAt,
@@ -212,7 +223,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			id: id.toUUID(),
 			accountId: accountIds[0].toUUID(),
 			name: "Stored name",
-			alertThreshold: "12.3400",
+			alertThreshold: 9007199254740993n,
 			isActive: 0,
 			created,
 			updated: applicationTime.toJSDate(),
@@ -224,7 +235,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			accountId: accountIds[0],
 			name: "Stored name",
 			description: undefined,
-			alertThreshold: 12.34,
+			alertThreshold: 9007199254740993n,
 			isActive: false,
 			metadata: { team: "treasury" },
 			updated: applicationTime,

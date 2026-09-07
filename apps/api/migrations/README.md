@@ -3,6 +3,17 @@
 Drizzle's PostgreSQL migrator applies pending migrations in a transaction. Migration SQL must be
 reviewed for the locks it takes before it is applied to a populated environment.
 
+## Asset cutover
+
+`20260907213428_assets-int64` requires empty Accounts, Entries, and Settlements. It takes exclusive
+locks before checking this precondition and fails transactionally if any of those tables contain
+records. Use a fresh development database; this migration neither converts legacy currency data
+nor deletes it. The application must use the Asset and decimal-string amount API at the cutover.
+
+The migration adds organization-owned Assets, replaces currency columns with Asset references,
+enforces Account/Entry/Settlement Asset consistency, and converts remaining quantity columns to
+`BIGINT`. See [Assets and amounts](../docs/product/assets.md) for the resulting API contract.
+
 ## Organization foreign-key indexes
 
 `20260806203446_blue_kid_colt/migration.sql` creates indexes on four existing Ledger tables with transactional

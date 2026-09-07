@@ -1,3 +1,7 @@
+import { typeid } from "typeid-js";
+import { Asset } from "@/domains/assets/Asset";
+import { AssetRepoTag, assetRepoLayer, type AssetRepo } from "@/domains/assets/AssetRepo";
+import type { AssetSummary } from "@/lib/AssetSchema";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
@@ -42,6 +46,7 @@ import {
 /** Repository dependencies for fixtures and Settlement persistence tests. */
 const layers = Layer.mergeAll(
 	organizationRepoLayer,
+	assetRepoLayer,
 	ledgerRepoLayer,
 	ledgerAccountRepoLayer,
 	ledgerTransactionRepoLayer,
@@ -52,6 +57,8 @@ const layers = Layer.mergeAll(
 type Services = Layer.Success<typeof layers>;
 let runtime: ManagedRuntime.ManagedRuntime<Services, never>;
 let organizations: OrganizationRepo;
+let assets: AssetRepo;
+const fixtureAssets = new Map<string, AssetSummary>();
 let ledgers: LedgerRepo;
 let accounts: LedgerAccountRepo;
 let transactions: LedgerTransactionRepo;
@@ -87,6 +94,19 @@ const context = (organizationId = newOrgID(), createOrganization = true) =>
 				Organization.fromRequest(organizationId, { name: "Settlement test" })
 			);
 		}
+		let asset = fixtureAssets.get(organizationId.toString());
+		if (!asset) {
+			const created = yield* assets.createAsset(
+				Asset.fromRequest(
+					typeid("ast").toString(),
+					organizationId,
+					{ code: "USD", name: "US Dollar", minorUnitExponent: 2 },
+					new Date()
+				)
+			);
+			asset = { assetId: created.id, assetCode: "USD", minorUnitExponent: 2 };
+			fixtureAssets.set(organizationId.toString(), asset);
+		}
 		fixtureLedgers.push({ organizationId, ledgerId });
 		yield* ledgers.createLedger(Ledger.fromRequest(ledgerId, organizationId, { name: "Ledger" }));
 		for (const [id, normalBalance] of [
@@ -94,13 +114,19 @@ const context = (organizationId = newOrgID(), createOrganization = true) =>
 			[contraAccountId, "credit"],
 		] as const)
 			yield* accounts.createAccount(
-				LedgerAccount.fromCreateRequest(id, organizationId, ledgerId, {
-					name: id.toString(),
-					currencyCode: "USD",
-					normalBalance,
-				})
+				LedgerAccount.fromCreateRequest(
+					id,
+					organizationId,
+					ledgerId,
+					{
+						name: id.toString(),
+						assetId: asset.assetId,
+						normalBalance,
+					},
+					asset
+				)
 			);
-		return { organizationId, ledgerId, settledAccountId, contraAccountId };
+		return { organizationId, ledgerId, settledAccountId, contraAccountId, asset };
 	});
 
 /** Organization, Ledger, and Account identifiers created by the fixture. */
@@ -118,7 +144,7 @@ type Owner = Effect.Success<ReturnType<typeof context>>;
  */
 const source = (
 	owner: Owner,
-	amount = 125,
+	amount: number | bigint = 125,
 	direction: "debit" | "credit" = "debit",
 	effectiveAt: DateTime = now(),
 	status: "pending" | "posted" = "posted"
@@ -132,12 +158,17 @@ const source = (
 				status,
 				effectiveAt: effectiveAt.toISO()!,
 				ledgerEntries: [
-					{ accountId: owner.settledAccountId.toString(), direction, amount, currencyCode: "USD" },
+					{
+						accountId: owner.settledAccountId.toString(),
+						direction,
+						amount: amount.toString(),
+						...owner.asset,
+					},
 					{
 						accountId: owner.contraAccountId.toString(),
 						direction: direction === "debit" ? "credit" : "debit",
-						amount,
-						currencyCode: "USD",
+						amount: amount.toString(),
+						...owner.asset,
 					},
 				],
 			},
@@ -165,7 +196,7 @@ const draft = (owner: Owner, allowEitherDirection = false) =>
 				status: "drafting",
 				allowEitherDirection,
 			},
-			"USD",
+			owner.asset,
 			now()
 		);
 		return yield* repo.createSettlement(entity, undefined, now());
@@ -174,6 +205,7 @@ const draft = (owner: Owner, allowEitherDirection = false) =>
 beforeAll(async () => {
 	runtime = ManagedRuntime.make(layers.pipe(Layer.provide(makeDatabaseLive(config.databaseUrl))));
 	organizations = await runtime.runPromise(OrganizationRepoTag);
+	assets = await runtime.runPromise(AssetRepoTag);
 	ledgers = await runtime.runPromise(LedgerRepoTag);
 	accounts = await runtime.runPromise(LedgerAccountRepoTag);
 	transactions = await runtime.runPromise(LedgerTransactionRepoTag);
@@ -183,8 +215,11 @@ afterAll(async () => {
 	try {
 		for (const fixture of fixtureLedgers)
 			await runtime.runPromise(ledgers.deleteLedgerFixtures(fixture.organizationId, fixture.ledgerId));
-		for (const id of fixtureOrganizations)
+		for (const id of fixtureOrganizations) {
+			const asset = fixtureAssets.get(id.toString());
+			if (asset) await runtime.runPromise(assets.deleteAsset(id, asset.assetId));
 			await runtime.runPromise(organizations.deleteOrganization(id));
+		}
 	} finally {
 		await runtime.dispose();
 	}
@@ -378,7 +413,7 @@ describe("Settlement repository processing", () => {
 		);
 		expect(pending.toResponse()).toMatchObject({
 			status: "pending",
-			amount: 125,
+			amount: "125",
 			settlementEntryDirection: "credit",
 			transactionId: first.id.toString(),
 		});
@@ -429,7 +464,7 @@ describe("Settlement repository processing", () => {
 				accounts.getAccount(owner.organizationId, owner.ledgerId, owner.settledAccountId)
 			)
 		);
-		expect(account.postedAmount).toBe(0);
+		expect(account.postedAmount).toBe(0n);
 	});
 	it("retains accounting across voiding and releases sources only on finalization", async () => {
 		const owner = await runtime.runPromise(context()),
@@ -486,7 +521,7 @@ describe("Settlement repository processing", () => {
 		);
 		expect(voided.toResponse()).toMatchObject({
 			status: "voided",
-			amount: 125,
+			amount: "125",
 			transactionId: accounting.id.toString(),
 		});
 		expect(
@@ -567,7 +602,7 @@ describe("Settlement repository processing", () => {
 			repo.buildTransaction(owner.organizationId, owner.ledgerId, allowed.id, now())
 		);
 		expect(Option.getOrThrow(transaction.entries)[0]).toMatchObject({
-			amount: 60,
+			amount: 60n,
 			direction: "debit",
 		});
 	});
@@ -627,7 +662,7 @@ describe("Settlement repository processing", () => {
 					status: "pending",
 					effectiveAtUpperBound: cutoff.toISO()!,
 				},
-				"USD",
+				owner.asset,
 				now()
 			)
 		);
@@ -652,7 +687,7 @@ describe("Settlement repository processing", () => {
 					)
 				).entries
 			)[0].amount
-		).toBe(70);
+		).toBe(70n);
 	});
 	it("allows only one concurrent owner of a source Entry", async () => {
 		const owner = await runtime.runPromise(context()),
@@ -802,7 +837,7 @@ describe("Settlement repository processing", () => {
 					status: "pending",
 					effectiveAtUpperBound: now().toISO()!,
 				},
-				"USD",
+				owner.asset,
 				now()
 			)
 		);
@@ -935,14 +970,14 @@ describe("Settlement repository processing", () => {
 							...Array.from({ length: count }, () => ({
 								accountId: owner.settledAccountId.toString(),
 								direction: "debit" as const,
-								amount: 1,
-								currencyCode: "USD",
+								amount: "1",
+								...owner.asset,
 							})),
 							{
 								accountId: owner.contraAccountId.toString(),
 								direction: "credit",
-								amount: count,
-								currencyCode: "USD",
+								amount: count.toString(),
+								...owner.asset,
 							},
 						],
 					}
@@ -966,7 +1001,7 @@ describe("Settlement repository processing", () => {
 					status: "pending",
 					effectiveAtUpperBound: now().toISO()!,
 				},
-				"USD",
+				owner.asset,
 				now()
 			)
 		);
@@ -1001,11 +1036,11 @@ describe("Settlement repository processing", () => {
 		const accounting = await runtime.runPromise(
 			repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
 		);
-		expect(Option.getOrThrow(accounting.entries)[0].amount).toBe(10000);
+		expect(Option.getOrThrow(accounting.entries)[0].amount).toBe(10000n);
 	}, 30_000);
 	it("rolls back generated accounting and projections when an Account write violates its limit", async () => {
 		const owner = await runtime.runPromise(context());
-		await runtime.runPromise(source(owner, Number.MAX_SAFE_INTEGER, "credit"));
+		await runtime.runPromise(source(owner, 9223372036854775807n, "credit"));
 		const selected = await runtime.runPromise(source(owner, 125));
 		const entity = await runtime.runPromise(draft(owner));
 		const before = await Promise.all(
@@ -1036,7 +1071,7 @@ describe("Settlement repository processing", () => {
 		);
 		await expect(
 			runtime.runPromise(transactions.createSettlementTransaction(accounting))
-		).rejects.toThrow(/persistence/);
+		).rejects.toMatchObject({ statusCode: 409 });
 		expect(
 			Option.isNone(
 				await runtime.runPromise(
@@ -1106,4 +1141,114 @@ describe("Settlement repository processing", () => {
 		},
 		30_000
 	);
+});
+
+describe("Settlement Asset accounting", () => {
+	it("rejects a contra Account using another Asset", async () => {
+		const owner = await runtime.runPromise(context());
+		const other = await runtime.runPromise(
+			assets.createAsset(
+				Asset.fromRequest(
+					typeid("ast").toString(),
+					owner.organizationId,
+					{ code: "EUR", name: "Euro", minorUnitExponent: 2 },
+					new Date()
+				)
+			)
+		);
+		try {
+			const contraAccountId = newLedgerAccountID();
+			await runtime.runPromise(
+				accounts.createAccount(
+					LedgerAccount.fromCreateRequest(
+						contraAccountId,
+						owner.organizationId,
+						owner.ledgerId,
+						{ name: "Euro contra", normalBalance: "credit", assetId: other.id },
+						{ assetId: other.id, assetCode: "EUR", minorUnitExponent: 2 }
+					)
+				)
+			);
+			const entity = await runtime.runPromise(
+				LedgerAccountSettlementEntity.fromRequest(
+					owner.organizationId,
+					owner.ledgerId,
+					{
+						settledAccountId: owner.settledAccountId.toString(),
+						contraAccountId: contraAccountId.toString(),
+						status: "drafting",
+					},
+					owner.asset,
+					now()
+				)
+			);
+			await expect(
+				runtime.runPromise(repo.createSettlement(entity, undefined, now()))
+			).rejects.toMatchObject({ statusCode: 400 });
+			expect(
+				await runtime.runPromise(repo.listSettlements(owner.organizationId, owner.ledgerId, 0, 20))
+			).toEqual([]);
+		} finally {
+			await runtime.runPromise(ledgers.deleteLedgerFixtures(owner.organizationId, owner.ledgerId));
+			await runtime.runPromise(assets.deleteAsset(owner.organizationId, other.id));
+		}
+	});
+	it("round trips exact source and offset amounts with current Asset metadata", async () => {
+		const owner = await runtime.runPromise(context());
+		const entry = await runtime.runPromise(source(owner, 9007199254740993n));
+		const entity = await runtime.runPromise(draft(owner));
+		await runtime.runPromise(
+			repo.changeEntries(
+				owner.organizationId,
+				owner.ledgerId,
+				entity.id,
+				[entry.entry.id.toString()],
+				true
+			)
+		);
+		await runtime.runPromise(
+			repo.prepareSettlement(
+				owner.organizationId,
+				owner.ledgerId,
+				entity.id,
+				{ status: "pending" },
+				now()
+			)
+		);
+		const accounting = await runtime.runPromise(
+			repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+		);
+		await runtime.runPromise(transactions.createSettlementTransaction(accounting));
+		const completed = await runtime.runPromise(
+			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "pending", now())
+		);
+		expect(completed.toResponse()).toMatchObject({ amount: "9007199254740993", ...owner.asset });
+		const asset = await runtime.runPromise(
+			assets.getAsset(owner.organizationId, owner.asset.assetId)
+		);
+		await runtime.runPromise(
+			assets.updateAsset(new Asset(owner.organizationId, { ...asset.toResponse(), code: "USD.NEW" }))
+		);
+		const refreshed = await runtime.runPromise(
+			repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id)
+		);
+		expect(refreshed.toResponse()).toMatchObject({
+			assetId: owner.asset.assetId,
+			assetCode: "USD.NEW",
+			minorUnitExponent: 2,
+		});
+		expect(
+			(
+				await runtime.runPromise(repo.listSettlements(owner.organizationId, owner.ledgerId, 0, 20))
+			)[0].toResponse()
+		).toMatchObject({ assetCode: "USD.NEW" });
+
+		expect(
+			(
+				await runtime.runPromise(
+					repo.listEntries(owner.organizationId, owner.ledgerId, entity.id, 0, 20)
+				)
+			)[0]
+		).toMatchObject({ amount: "9007199254740993", ...owner.asset, assetCode: "USD.NEW" });
+	});
 });
