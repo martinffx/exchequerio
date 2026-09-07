@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '5s';--> statement-breakpoint
+
 -- Clean cutover: existing currency strings do not determine an Asset exponent.
 -- Lock before checking so concurrent writes cannot pass the empty-data precondition.
 LOCK TABLE "ledger_accounts", "ledger_transaction_entries", "ledger_account_settlements" IN ACCESS EXCLUSIVE MODE;
