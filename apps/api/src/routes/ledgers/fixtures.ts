@@ -6,7 +6,7 @@ import {
 	LedgerAccountEntity,
 	LedgerEntity,
 	OrganizationEntity,
-} from "@/services";
+} from "@/repo/entities";
 
 function createOrganizationFixture(): OrganizationEntity {
 	return new OrganizationEntity({
