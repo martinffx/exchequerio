@@ -1,5 +1,7 @@
 import { CloneType, type Static, Type } from "@sinclair/typebox";
 import type { FastifyRequest } from "fastify";
+import { AssetSummarySchema } from "@/lib/AssetSchema";
+import { AccountBalanceResponse } from "../AccountSchema";
 import { MetadataSchema } from "@/lib/schema";
 import type { PaginationQuery } from "@/lib/schema";
 import { LedgerIdSchema } from "@/domains/ledgers/LedgerSchema";
@@ -59,10 +61,25 @@ const LedgerAccountCategoryResponse = Type.Object(
 	{
 		$id: "LedgerAccountCategoryResponse",
 		description:
-			"A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+			"A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
 	}
 );
 type LedgerAccountCategoryResponse = Static<typeof LedgerAccountCategoryResponse>;
+const LedgerAccountCategoryBalancesResponse = Type.Object(
+	{
+		categoryId: LedgerAccountCategoryId,
+		normalBalance: NormalBalance,
+		assets: Type.Array(
+			Type.Object({
+				...AssetSummarySchema.properties,
+				balances: Type.Array(AccountBalanceResponse),
+			})
+		),
+	},
+	{ $id: "LedgerAccountCategoryBalancesResponse" }
+);
+type LedgerAccountCategoryBalancesResponse = Static<typeof LedgerAccountCategoryBalancesResponse>;
+
 const LedgerAccountCategoryRequest = Type.Object(
 	{
 		name: Type.String({
@@ -114,6 +131,7 @@ type UnlinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
 }>;
 
 export {
+	LedgerAccountCategoryBalancesResponse,
 	LedgerIdParameters,
 	LinkAccountToCategoryParameters as LinkAccountToCategoryParams,
 	LinkCategoryToCategoryParameters as LinkCategoryToCategoryParams,

@@ -2059,6 +2059,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				testLedgerId
 			);
 			const repository = new LedgerAccountCategoryRepoLive({
+				execute: () => Effect.succeed([{ cycle: false }]),
 				insert: () => ({
 					values: () => ({
 						onConflictDoUpdate: () => ({ returning: () => Effect.fail(cause) }),

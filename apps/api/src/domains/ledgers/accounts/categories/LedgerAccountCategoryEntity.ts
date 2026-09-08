@@ -1,3 +1,5 @@
+import { assertInt64 } from "@/lib/amounts";
+import type { AssetsTable, LedgerAccountsTable } from "@/db/schema";
 import { encodeUuid } from "@/lib/utils";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { TypeID } from "typeid-js";
@@ -5,6 +7,7 @@ import type { Metadata } from "@/lib/schema";
 import type { LedgerAccountCategoriesTable } from "@/db/schema";
 import type {
 	LedgerAccountCategoryRequest,
+	LedgerAccountCategoryBalancesResponse,
 	LedgerAccountCategoryResponse,
 } from "./LedgerAccountCategorySchema";
 import type { LedgerAccountCategoryID, LedgerID, OrgID } from "@/lib/ids";
@@ -13,6 +16,18 @@ import type { LedgerAccountCategoryID, LedgerID, OrgID } from "@/lib/ids";
 type LedgerAccountCategoryRecord = InferSelectModel<typeof LedgerAccountCategoriesTable>;
 type LedgerAccountCategoryInsert = InferInsertModel<typeof LedgerAccountCategoriesTable>;
 type NormalBalance = "debit" | "credit";
+
+// SUM(bigint) is numeric in PostgreSQL; decimal text preserves it until exact bigint decoding.
+type CategoryBalanceRecord = Pick<LedgerAccountCategoryRecord, "id" | "normalBalance"> & {
+	assets: (Pick<InferSelectModel<typeof AssetsTable>, "id" | "code" | "minorUnitExponent"> &
+		Record<
+			keyof Pick<
+				InferSelectModel<typeof LedgerAccountsTable>,
+				"postedDebits" | "postedCredits" | "pendingDebits" | "pendingCredits"
+			>,
+			string
+		>)[];
+};
 
 interface LedgerAccountCategoryEntityOptions {
 	id: LedgerAccountCategoryID;
@@ -122,6 +137,60 @@ class LedgerAccountCategoryEntity {
 		};
 	}
 
+	/** Converts exact aggregate counters using this Category's orientation, not member availability. */
+	public static balancesFromRecord(record: CategoryBalanceRecord) {
+		const debitNormal = record.normalBalance === "debit";
+		return {
+			toResponse(): LedgerAccountCategoryBalancesResponse {
+				return {
+					categoryId: this.categoryId,
+					normalBalance: this.normalBalance,
+					assets: this.assets.map(asset => ({
+						...asset,
+						balances: asset.balances.map(balance => ({
+							balanceType: balance.balanceType,
+							amount: balance.amount.toString(),
+							credits: balance.credits.toString(),
+							debits: balance.debits.toString(),
+						})),
+					})),
+				};
+			},
+			categoryId: TypeID.fromUUID("lac", record.id).toString(),
+			normalBalance: record.normalBalance,
+			assets: record.assets.map(asset => {
+				const postedDebits = BigInt(asset.postedDebits);
+				const postedCredits = BigInt(asset.postedCredits);
+				const pendingDebits = BigInt(asset.pendingDebits);
+				const pendingCredits = BigInt(asset.pendingCredits);
+				const balance = (
+					balanceType: "pending" | "posted" | "availableBalance",
+					debits: bigint,
+					credits: bigint
+				) => ({
+					balanceType,
+					debits: assertInt64(debits),
+					credits: assertInt64(credits),
+					amount: assertInt64(debitNormal ? debits - credits : credits - debits),
+				});
+				return {
+					assetId: TypeID.fromUUID("ast", asset.id).toString(),
+					assetCode: asset.code,
+					minorUnitExponent: asset.minorUnitExponent,
+					balances: [
+						balance("pending", pendingDebits, pendingCredits),
+						balance("posted", postedDebits, postedCredits),
+						balance(
+							"availableBalance",
+							debitNormal ? postedDebits : pendingDebits,
+							debitNormal ? pendingCredits : postedCredits
+						),
+					],
+				};
+			}),
+		};
+	}
+
 	public toResponse(): LedgerAccountCategoryResponse {
 		return {
 			id: this.id.toString(),
@@ -136,7 +205,11 @@ class LedgerAccountCategoryEntity {
 	}
 }
 
+type CategoryBalances = ReturnType<typeof LedgerAccountCategoryEntity.balancesFromRecord>;
+
 export type {
+	CategoryBalances,
+	CategoryBalanceRecord,
 	LedgerAccountCategoryEntityOptions as LedgerAccountCategoryEntityOpts,
 	LedgerAccountCategoryRecord,
 	LedgerAccountCategoryInsert,
