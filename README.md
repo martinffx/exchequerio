@@ -127,10 +127,10 @@ pnpm run docker:up
 # Build and start PostgreSQL, Valkey, and the API
 pnpm run docker:up:api
 
-# Stop every profile, preserving database data
+# Stop every profile, preserving PostgreSQL and Valkey data
 pnpm run docker:down
 
-# Stop every profile and delete database data
+# Stop every profile and delete PostgreSQL and Valkey data
 pnpm run docker:clean
 
 # View PostgreSQL logs
@@ -140,6 +140,9 @@ pnpm run docker:logs
 Compose uses the stable project name `exchequerio` across branches and worktrees, with
 containers named `exchequerio-db-1`, `exchequerio-valkey-1`, and `exchequerio-api-1`.
 Database data lives in `exchequerio_pg-data`.
+Valkey uses append-only persistence with fsync every second, stored in
+`exchequerio_valkey-data`. Both volumes survive `docker:down` and are removed by
+`docker:clean`.
 
 For a fresh database when switching branches, run `pnpm run docker:clean`, switch
 branches, then run `pnpm run dev:api` or `pnpm run test`. PostgreSQL initializes fresh

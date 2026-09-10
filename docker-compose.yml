@@ -22,11 +22,14 @@ services:
       retries: 10
   valkey:
     image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     profiles:
       - infra
       - api
     ports:
       - 6379:6379
+    volumes:
+      - valkey-data:/data
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -57,3 +60,4 @@ services:
       start_period: 10s
 volumes:
   pg-data:
+  valkey-data:
