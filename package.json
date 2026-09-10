@@ -10,6 +10,7 @@
 		"docker:up": "docker-compose --profile infra up -d",
 		"docker:up:api": "docker-compose --profile api up -d --build",
 		"docker:down": "docker-compose --profile \"*\" down",
+		"docker:clean": "docker-compose --profile \"*\" down --volumes",
 		"docker:logs": "docker-compose --profile \"*\" logs -f",
 		"docker:logs:db": "docker-compose --profile infra logs -f db",
 		"docker:logs:redis": "docker-compose --profile infra logs -f valkey",
