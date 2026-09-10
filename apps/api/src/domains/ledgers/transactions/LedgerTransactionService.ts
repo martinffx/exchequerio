@@ -4,7 +4,7 @@ import { DateTime } from "luxon";
 import {
 	AssetServiceTag,
 	type AssetService,
-	type AssetResolveError,
+	type AssetGetError,
 } from "@/domains/assets/AssetService";
 import { AccountVersionConflict } from "@/domains/ledgers/accounts";
 import {
@@ -12,10 +12,12 @@ import {
 	type LedgerService,
 	LedgerServiceTag,
 } from "@/domains/ledgers/LedgerService";
+import type { InvalidId } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
 import {
 	newLedgerTransactionID,
 	newLedgerTransactionEntryID,
+	type AssetID,
 	type LedgerID,
 	type LedgerTransactionID,
 	type OrgID,
@@ -70,7 +72,8 @@ type TransactionListError = LedgerGetError | TransactionInfrastructureError;
 type TransactionGetError = TransactionNotFound | TransactionInfrastructureError;
 /** Claim, validation, and persistence failures returned by creation. */
 type TransactionCreateError =
-	| AssetResolveError
+	| AssetGetError
+	| InvalidId
 	| IdempotencyPending
 	| IdempotencyUnavailable
 	| TransactionNotFound
@@ -78,7 +81,8 @@ type TransactionCreateError =
 	| TransactionInfrastructureError;
 /** Claim and accounting failures returned by replacement. */
 type TransactionUpdateError =
-	| AssetResolveError
+	| AssetGetError
+	| InvalidId
 	| IdempotencyPending
 	| IdempotencyUnavailable
 	| TransactionGetError
@@ -234,7 +238,7 @@ class TransactionServiceLive implements TransactionService {
 		private readonly repository: LedgerTransactionRepo,
 		private readonly idempotency: IdempotencyService,
 		private readonly ledgerService: LedgerService,
-		private readonly assetService: Pick<AssetService, "resolveAssets">
+		private readonly assetService: Pick<AssetService, "getAsset">
 	) {}
 
 	/**
@@ -300,7 +304,16 @@ class TransactionServiceLive implements TransactionService {
 				return yield* this.getTransaction(organizationId, ledgerId, storedId);
 			}
 			const execute = Effect.gen({ self: this }, function* () {
-				const assets = yield* this.assetService.resolveAssets(organizationId, request.ledgerEntries);
+				const ledgerEntries = yield* Effect.forEach(request.ledgerEntries, entry =>
+					Effect.gen({ self: this }, function* () {
+						const reference =
+							entry.assetId === undefined
+								? entry.assetCode
+								: yield* parseId<"ast", AssetID>("ast", entry.assetId);
+						const asset = yield* this.assetService.getAsset(organizationId, reference);
+						return { ...entry, ...asset.toSummary() };
+					})
+				);
 				const created = yield* serverTime;
 				const transaction = yield* LedgerTransaction.fromCreateRequest(
 					newLedgerTransactionID(),
@@ -308,9 +321,9 @@ class TransactionServiceLive implements TransactionService {
 					ledgerId,
 					{
 						...request,
-						ledgerEntries: request.ledgerEntries.map((entry, index) => ({ ...entry, ...assets[index]! })),
+						ledgerEntries,
 					},
-					created as DateTime<true>,
+					created,
 					request.ledgerEntries.map(() => newLedgerTransactionEntryID())
 				);
 				return yield* retryMutation(
@@ -388,9 +401,22 @@ class TransactionServiceLive implements TransactionService {
 			}
 
 			const execute = this.validateAccountLimit(request.ledgerEntries).pipe(
-				Effect.andThen(this.assetService.resolveAssets(organizationId, request.ledgerEntries)),
-				Effect.flatMap(assets => serverTime.pipe(Effect.map(updated => ({ updated, assets })))),
-				Effect.flatMap(({ updated, assets }) => {
+				Effect.andThen(
+					Effect.forEach(request.ledgerEntries, entry =>
+						Effect.gen({ self: this }, function* () {
+							const reference =
+								entry.assetId === undefined
+									? entry.assetCode
+									: yield* parseId<"ast", AssetID>("ast", entry.assetId);
+							const asset = yield* this.assetService.getAsset(organizationId, reference);
+							return { ...entry, ...asset.toSummary() };
+						})
+					)
+				),
+				Effect.flatMap(ledgerEntries =>
+					serverTime.pipe(Effect.map(updated => ({ updated, ledgerEntries })))
+				),
+				Effect.flatMap(({ updated, ledgerEntries }) => {
 					const entryIds = request.ledgerEntries.map(() => newLedgerTransactionEntryID());
 					return retryMutation(
 						Effect.suspend(() =>
@@ -400,10 +426,7 @@ class TransactionServiceLive implements TransactionService {
 								transactionId,
 								{
 									...request,
-									ledgerEntries: request.ledgerEntries.map((entry, index) => ({
-										...entry,
-										...assets[index]!,
-									})),
+									ledgerEntries,
 								},
 								updated,
 								entryIds

@@ -7,6 +7,7 @@ import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import type { OrgID } from "@/lib/ids";
 import { OrganizationsTable } from "../../db/schema";
 import { Organization } from "./Organization";
+import { OrganizationPersistenceDecodingFailure } from "./OrganizationErrors";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,
@@ -166,6 +167,19 @@ describe("OrganizationRepoLive", () => {
 		expect(await runtime.runPromise(repository.getOrganization(organization.id))).toEqual(
 			Option.none()
 		);
+	});
+
+	it("returns a typed decoding failure for an invalid persisted timestamp", async () => {
+		const organization = await create("Invalid timestamp");
+		const [row] = await database.db
+			.select()
+			.from(OrganizationsTable)
+			.where(eq(OrganizationsTable.id, organization.id.toUUID()));
+		if (!row) throw new Error("Missing Organization fixture");
+		const error = await runtime.runPromise(
+			Effect.flip(Organization.fromRow({ ...row, created: new Date(Number.NaN) }))
+		);
+		expect(error).toBeInstanceOf(OrganizationPersistenceDecodingFailure);
 	});
 
 	it.each(["not-an-organization", "lgr_01h2x3y4z5a6b7c8d9e0f1g2h3"])(

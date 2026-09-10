@@ -15,7 +15,7 @@ explicitly; no catalog, aliases, classification, or cache is required. Codes may
 Exponents are explicitly supplied integers from 0 through 18.
 
 Account creation and Entries accept exactly one of Asset ID or code. Code lookup is scoped to the
-authenticated Organization and batched. Accounting persists IDs. Existing idempotency claims replay
+authenticated Organization and performed through individual Asset lookups. Accounting persists IDs. Existing idempotency claims replay
 before code lookup; internal retries preserve resolved identity. Responses include ID, current code,
 and exponent, so historical display follows renames.
 

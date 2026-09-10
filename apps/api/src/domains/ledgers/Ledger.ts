@@ -17,12 +17,6 @@ type LedgerOptions = {
 	readonly updated: DateTime;
 };
 
-const decodeDate = (value: Date): DateTime => {
-	const date = DateTime.fromJSDate(value, { zone: "utc" });
-	if (!date.isValid) throw new Error("Invalid Ledger timestamp");
-	return date;
-};
-
 const decodeMetadata = (value: string | null): Metadata | undefined => {
 	if (value === null) return undefined;
 	const decoded: unknown = JSON.parse(value);
@@ -33,12 +27,6 @@ const decodeMetadata = (value: string | null): Metadata | undefined => {
 		throw new Error("Ledger metadata values must be strings");
 	}
 	return decoded as Record<string, string>;
-};
-
-const toIso = (value: DateTime): string => {
-	const encoded = value.toISO();
-	if (encoded === null) throw new Error("Ledger contains an invalid timestamp");
-	return encoded;
 };
 
 class Ledger {
@@ -79,8 +67,8 @@ class Ledger {
 			const organizationId = yield* parseUuid<"org", OrgID>("org", row.organizationId);
 			const decoded = yield* Effect.try({
 				try: () => ({
-					created: decodeDate(row.created),
-					updated: decodeDate(row.updated),
+					created: DateTime.fromJSDate(row.created, { zone: "utc" }),
+					updated: DateTime.fromJSDate(row.updated, { zone: "utc" }),
 					metadata: decodeMetadata(row.metadata),
 				}),
 				catch: cause => cause,
@@ -130,8 +118,8 @@ class Ledger {
 			name: this.name,
 			...(this.description === undefined ? {} : { description: this.description }),
 			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
-			created: toIso(this.created),
-			updated: toIso(this.updated),
+			created: this.created.toISO(),
+			updated: this.updated.toISO(),
 		};
 	}
 }

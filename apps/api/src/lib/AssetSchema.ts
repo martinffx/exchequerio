@@ -12,7 +12,6 @@ const AssetSummarySchema = Type.Object({
 	assetCode: AssetCodeSchema,
 	minorUnitExponent: MinorUnitExponentSchema,
 });
-type AssetSelector = Static<typeof AssetSelectorSchema>;
 type AssetSummary = Static<typeof AssetSummarySchema>;
 const normalizeAssetCode = (code: string): string => code.toUpperCase();
 
@@ -24,4 +23,4 @@ export {
 	AssetSummarySchema,
 	normalizeAssetCode,
 };
-export type { AssetSelector, AssetSummary };
+export type { AssetSummary };

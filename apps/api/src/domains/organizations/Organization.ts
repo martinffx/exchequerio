@@ -11,7 +11,7 @@ import {
 	type OrganizationInfrastructureError,
 	OrganizationPersistenceDecodingFailure,
 } from "./OrganizationErrors";
-import { encodeUuid, parseUuid } from "@/lib/utils";
+import { encodeUuid, parseDate, parseUuid } from "@/lib/utils";
 
 type OrganizationOpts = {
 	id: OrgID;
@@ -19,20 +19,6 @@ type OrganizationOpts = {
 	description?: string;
 	created?: DateTime;
 	updated?: DateTime;
-};
-
-const parseDate = (jsDate: Date): Effect.Effect<DateTime, Error> =>
-	Effect.suspend(() => {
-		const date = DateTime.fromJSDate(jsDate, { zone: "utc" });
-		return date.isValid
-			? Effect.succeed(date)
-			: Effect.fail(new Error("Invalid Organization timestamp"));
-	});
-
-const toIso = (value: DateTime): string => {
-	const encoded = value.toISO();
-	if (encoded === null) throw new Error("Organization contains an invalid timestamp");
-	return encoded;
 };
 
 class Organization {
@@ -105,8 +91,8 @@ class Organization {
 			id: this.id.toString(),
 			name: this.name,
 			description: this.description ?? undefined,
-			created: toIso(this.created),
-			updated: toIso(this.updated),
+			created: this.created.toISO(),
+			updated: this.updated.toISO(),
 		};
 	}
 }
