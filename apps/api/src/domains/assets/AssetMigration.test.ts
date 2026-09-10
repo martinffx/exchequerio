@@ -5,6 +5,7 @@ import { Config } from "@/config";
 
 const directory = join(import.meta.dirname, "../../../migrations");
 const cutover = "20260907213428_assets-int64";
+
 const executeMigration = async (client: PoolClient, name: string) => {
 	const sql = await readFile(join(directory, name, "migration.sql"), "utf8");
 	await client.query("BEGIN");
@@ -67,6 +68,7 @@ describe("Asset cutover migration", () => {
 			).toEqual([{ absent: true }]);
 		});
 	});
+
 	it("migrates a fresh database and enforces Asset ownership and exact int64 storage", async () => {
 		await withLegacyDatabase(async client => {
 			await executeMigration(client, cutover);

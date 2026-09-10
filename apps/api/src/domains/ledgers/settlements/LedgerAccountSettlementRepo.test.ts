@@ -1,4 +1,4 @@
-import { typeid } from "typeid-js";
+import { TypeID, typeid } from "typeid-js";
 import { Asset } from "@/domains/assets/Asset";
 import { AssetRepoTag, assetRepoLayer, type AssetRepo } from "@/domains/assets/AssetRepo";
 import type { AssetSummary } from "@/lib/AssetSchema";
@@ -98,13 +98,13 @@ const context = (organizationId = newOrgID(), createOrganization = true) =>
 		if (!asset) {
 			const created = yield* assets.createAsset(
 				Asset.fromRequest(
-					typeid("ast").toString(),
+					typeid("ast"),
 					organizationId,
 					{ code: "USD", name: "US Dollar", minorUnitExponent: 2 },
-					new Date()
+					now()
 				)
 			);
-			asset = { assetId: created.id, assetCode: "USD", minorUnitExponent: 2 };
+			asset = created.toSummary();
 			fixtureAssets.set(organizationId.toString(), asset);
 		}
 		fixtureLedgers.push({ organizationId, ledgerId });
@@ -156,7 +156,7 @@ const source = (
 			owner.ledgerId,
 			{
 				status,
-				effectiveAt: effectiveAt.toISO()!,
+				effectiveAt: effectiveAt.toISO(),
 				ledgerEntries: [
 					{
 						accountId: owner.settledAccountId.toString(),
@@ -217,7 +217,8 @@ afterAll(async () => {
 			await runtime.runPromise(ledgers.deleteLedgerFixtures(fixture.organizationId, fixture.ledgerId));
 		for (const id of fixtureOrganizations) {
 			const asset = fixtureAssets.get(id.toString());
-			if (asset) await runtime.runPromise(assets.deleteAsset(id, asset.assetId));
+			if (asset)
+				await runtime.runPromise(assets.deleteAsset(id, TypeID.fromString(asset.assetId, "ast")));
 			await runtime.runPromise(organizations.deleteOrganization(id));
 		}
 	} finally {
@@ -660,7 +661,7 @@ describe("Settlement repository processing", () => {
 					settledAccountId: owner.settledAccountId.toString(),
 					contraAccountId: owner.contraAccountId.toString(),
 					status: "pending",
-					effectiveAtUpperBound: cutoff.toISO()!,
+					effectiveAtUpperBound: cutoff.toISO(),
 				},
 				owner.asset,
 				now()
@@ -835,7 +836,7 @@ describe("Settlement repository processing", () => {
 					settledAccountId: owner.settledAccountId.toString(),
 					contraAccountId: owner.contraAccountId.toString(),
 					status: "pending",
-					effectiveAtUpperBound: now().toISO()!,
+					effectiveAtUpperBound: now().toISO(),
 				},
 				owner.asset,
 				now()
@@ -999,7 +1000,7 @@ describe("Settlement repository processing", () => {
 					settledAccountId: owner.settledAccountId.toString(),
 					contraAccountId: owner.contraAccountId.toString(),
 					status: "pending",
-					effectiveAtUpperBound: now().toISO()!,
+					effectiveAtUpperBound: now().toISO(),
 				},
 				owner.asset,
 				now()
@@ -1149,10 +1150,10 @@ describe("Settlement Asset accounting", () => {
 		const other = await runtime.runPromise(
 			assets.createAsset(
 				Asset.fromRequest(
-					typeid("ast").toString(),
+					typeid("ast"),
 					owner.organizationId,
 					{ code: "EUR", name: "Euro", minorUnitExponent: 2 },
-					new Date()
+					now()
 				)
 			)
 		);
@@ -1164,8 +1165,8 @@ describe("Settlement Asset accounting", () => {
 						contraAccountId,
 						owner.organizationId,
 						owner.ledgerId,
-						{ name: "Euro contra", normalBalance: "credit", assetId: other.id },
-						{ assetId: other.id, assetCode: "EUR", minorUnitExponent: 2 }
+						{ name: "Euro contra", normalBalance: "credit", assetId: other.id.toString() },
+						{ assetId: other.id.toString(), assetCode: "EUR", minorUnitExponent: 2 }
 					)
 				)
 			);
@@ -1224,10 +1225,20 @@ describe("Settlement Asset accounting", () => {
 		);
 		expect(completed.toResponse()).toMatchObject({ amount: "9007199254740993", ...owner.asset });
 		const asset = await runtime.runPromise(
-			assets.getAsset(owner.organizationId, owner.asset.assetId)
+			assets.getAsset(owner.organizationId, TypeID.fromString(owner.asset.assetId, "ast"))
 		);
 		await runtime.runPromise(
-			assets.updateAsset(new Asset(owner.organizationId, { ...asset.toResponse(), code: "USD.NEW" }))
+			assets.updateAsset(
+				asset.replace(
+					{
+						code: "USD.NEW",
+						name: asset.name,
+						description: asset.description,
+						metadata: asset.metadata,
+					},
+					now()
+				)
+			)
 		);
 		const refreshed = await runtime.runPromise(
 			repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id)

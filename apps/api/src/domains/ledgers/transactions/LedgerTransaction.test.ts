@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { newLedgerAccountID, newLedgerID, newLedgerTransactionID, newOrgID } from "@/lib/ids";
 import { LedgerTransaction } from "./LedgerTransaction";
+import { TransactionValidationFailure } from "./LedgerTransactionErrors";
 import type { ResolvedTransactionCreateRequest } from "./LedgerTransactionSchema";
 
 const created = DateTime.fromISO("2026-09-01T12:00:00Z");
@@ -40,6 +41,21 @@ const create = (overrides: Partial<ResolvedTransactionCreateRequest> = {}) =>
 	);
 
 describe("Transaction effective time", () => {
+	it("keeps malformed input dates in the typed validation channel", () => {
+		const input = { ...request, effectiveAt: "not-a-timestamp" };
+		const creation = LedgerTransaction.fromCreateRequest(
+			newLedgerTransactionID(),
+			newOrgID(),
+			newLedgerID(),
+			input,
+			created
+		);
+		const replacement = create().fromUpdateRequest(input, created);
+		for (const effect of [creation, replacement]) {
+			expect(Effect.runSync(Effect.flip(effect))).toBeInstanceOf(TransactionValidationFailure);
+		}
+	});
+
 	it("defaults to server creation time and persists and returns it", () => {
 		const transaction = create();
 		expect(transaction.effectiveAt.toMillis()).toBe(created.toMillis());

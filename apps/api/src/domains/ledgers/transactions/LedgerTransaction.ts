@@ -47,12 +47,6 @@ type LedgerTransactionOptions = Readonly<{
 	updated: DateTime;
 }>;
 
-const toIso = (value: DateTime): string => {
-	const encoded = value.toISO();
-	if (encoded === null) throw new Error("Transaction contains an invalid timestamp");
-	return encoded;
-};
-
 /**
  * A balanced collection of Ledger Entries that share one lifecycle.
  *
@@ -123,26 +117,29 @@ class LedgerTransaction {
 			)
 		).pipe(
 			Effect.flatMap(entries => LedgerTransaction.validateBalanced(entries)),
-			Effect.map(
-				entries =>
-					new LedgerTransaction({
-						id,
-						organizationId,
-						ledgerId,
-						status: request.status,
-						description: request.description,
-						metadata: request.metadata,
-						// oxlint-disable-next-line unicorn/no-array-callback-reference
-						entries: Option.some(entries),
-						postedAt: request.status === "posted" ? created : undefined,
-						effectiveAt:
-							request.effectiveAt === undefined
-								? created
-								: DateTime.fromISO(request.effectiveAt, { zone: "utc" }),
-						lockVersion: 1,
-						created,
-						updated: created,
-					})
+			Effect.flatMap(entries =>
+				Effect.try({
+					try: () =>
+						new LedgerTransaction({
+							id,
+							organizationId,
+							ledgerId,
+							status: request.status,
+							description: request.description,
+							metadata: request.metadata,
+							// oxlint-disable-next-line unicorn/no-array-callback-reference
+							entries: Option.some(entries),
+							postedAt: request.status === "posted" ? created : undefined,
+							effectiveAt:
+								request.effectiveAt === undefined
+									? created
+									: DateTime.fromISO(request.effectiveAt, { zone: "utc" }),
+							lockVersion: 1,
+							created,
+							updated: created,
+						}),
+					catch: cause => new TransactionValidationFailure("Invalid Effective Time", { cause }),
+				})
 			)
 		);
 	}
@@ -169,21 +166,24 @@ class LedgerTransaction {
 			)
 		).pipe(
 			Effect.flatMap(entries => LedgerTransaction.validateBalanced(entries)),
-			Effect.map(
-				entries =>
-					new LedgerTransaction({
-						...this,
-						effectiveAt:
-							request.effectiveAt === undefined
-								? this.effectiveAt
-								: DateTime.fromISO(request.effectiveAt, { zone: "utc" }),
-						description: request.description,
-						metadata: request.metadata,
-						// oxlint-disable-next-line unicorn/no-array-callback-reference
-						entries: Option.some(entries),
-						lockVersion: this.lockVersion + 1,
-						updated,
-					})
+			Effect.flatMap(entries =>
+				Effect.try({
+					try: () =>
+						new LedgerTransaction({
+							...this,
+							effectiveAt:
+								request.effectiveAt === undefined
+									? this.effectiveAt
+									: DateTime.fromISO(request.effectiveAt, { zone: "utc" }),
+							description: request.description,
+							metadata: request.metadata,
+							// oxlint-disable-next-line unicorn/no-array-callback-reference
+							entries: Option.some(entries),
+							lockVersion: this.lockVersion + 1,
+							updated,
+						}),
+					catch: cause => new TransactionValidationFailure("Invalid Effective Time", { cause }),
+				})
 			)
 		);
 	}
@@ -262,10 +262,10 @@ class LedgerTransaction {
 			...(this.description === undefined ? {} : { description: this.description }),
 			status: this.status,
 			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
-			...(this.postedAt === undefined ? {} : { postedAt: toIso(this.postedAt) }),
-			effectiveAt: toIso(this.effectiveAt),
-			created: toIso(this.created),
-			updated: toIso(this.updated),
+			...(this.postedAt === undefined ? {} : { postedAt: this.postedAt.toISO() }),
+			effectiveAt: this.effectiveAt.toISO(),
+			created: this.created.toISO(),
+			updated: this.updated.toISO(),
 		};
 	}
 
