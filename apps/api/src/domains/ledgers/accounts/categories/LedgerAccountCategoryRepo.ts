@@ -1,5 +1,7 @@
+import { ConflictError } from "@/lib/errors";
+import type { CategoryBalanceRecord, CategoryBalances } from "./LedgerAccountCategoryEntity";
 import { encodeUuid } from "@/lib/utils";
-import { and, desc, eq, getTableColumns } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import { DatabaseTag, type EffectDrizzleDatabase, postgresErrorCode } from "@/db";
 import { postgresConstraint } from "@/db/errors";
@@ -15,10 +17,14 @@ import {
 	mapCategoryInfrastructureError,
 } from "./LedgerAccountCategoryErrors";
 import {
+	AssetsTable,
+	LedgerAccountsTable,
 	LedgerAccountCategoriesTable,
 	LedgerAccountCategoryAccountsTable,
 	LedgerAccountCategoryParentsTable,
 } from "@/db/schema";
+
+type CategoryBalancesRepositoryError = CategoryGetRepositoryError | ConflictError;
 
 type CategoryListRepositoryError = CategoryInfrastructureError;
 type CategoryGetRepositoryError = CategoryNotFound | CategoryInfrastructureError;
@@ -39,6 +45,12 @@ type CategoryLinkParentRepositoryError =
 type CategoryUnlinkParentRepositoryError = CategoryNotFound | CategoryInfrastructureError;
 
 interface LedgerAccountCategoryRepo {
+	getLedgerAccountCategoryBalances(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID
+	): Effect.Effect<CategoryBalances, CategoryBalancesRepositoryError>;
+
 	listLedgerAccountCategories(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -118,6 +130,61 @@ const requireUpsertedCategory = (
 
 class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 	constructor(private readonly db: EffectDrizzleDatabase) {}
+
+	getLedgerAccountCategoryBalances(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID
+	): Effect.Effect<CategoryBalances, CategoryBalancesRepositoryError> {
+		return Effect.suspend(() =>
+			this.db.execute<CategoryBalanceRecord>(
+				sql`
+   WITH RECURSIVE root AS (
+    SELECT id, normal_balance FROM ${LedgerAccountCategoriesTable}
+    WHERE organization_id = ${encodeUuid(organizationId)} AND ledger_id = ${encodeUuid(ledgerId)} AND id = ${encodeUuid(categoryId)}
+   ), descendants(id) AS (
+    SELECT id FROM root
+    UNION
+    SELECT links.category_id FROM ${LedgerAccountCategoryParentsTable} links
+    JOIN descendants ON descendants.id = links.parent_category_id
+    WHERE links.organization_id = ${encodeUuid(organizationId)} AND links.ledger_id = ${encodeUuid(ledgerId)}
+   ), members AS (
+    SELECT DISTINCT links.account_id FROM ${LedgerAccountCategoryAccountsTable} links
+    JOIN descendants ON descendants.id = links.category_id
+    WHERE links.organization_id = ${encodeUuid(organizationId)} AND links.ledger_id = ${encodeUuid(ledgerId)}
+   ), totals AS (
+    SELECT accounts.asset_id,
+     SUM(accounts.posted_debits)::text AS posted_debits, SUM(accounts.posted_credits)::text AS posted_credits,
+     SUM(accounts.pending_debits)::text AS pending_debits, SUM(accounts.pending_credits)::text AS pending_credits
+    FROM ${LedgerAccountsTable} accounts JOIN members ON members.account_id = accounts.id
+    WHERE accounts.organization_id = ${encodeUuid(organizationId)} AND accounts.ledger_id = ${encodeUuid(ledgerId)}
+    GROUP BY accounts.asset_id
+   )
+   SELECT root.id, root.normal_balance AS "normalBalance",
+    COALESCE((SELECT jsonb_agg(jsonb_build_object(
+     'id', assets.id, 'code', assets.code, 'minorUnitExponent', assets.minor_unit_exponent,
+     'postedDebits', totals.posted_debits, 'postedCredits', totals.posted_credits,
+     'pendingDebits', totals.pending_debits, 'pendingCredits', totals.pending_credits
+    ) ORDER BY assets.id) FROM totals JOIN ${AssetsTable} assets ON assets.id = totals.asset_id
+    WHERE assets.organization_id = ${encodeUuid(organizationId)}), '[]'::jsonb) AS assets
+   FROM root
+  `,
+				"objects"
+			)
+		).pipe(
+			Effect.mapError(mapCategoryInfrastructureError),
+			Effect.flatMap(
+				(rows): Effect.Effect<CategoryBalances, CategoryBalancesRepositoryError> =>
+					rows.length === 0
+						? Effect.fail(new CategoryNotFound(`Category not found: ${categoryId.toString()}`))
+						: Effect.try({
+								try: () => LedgerAccountCategoryEntity.balancesFromRecord(rows[0]),
+								catch: cause =>
+									cause instanceof ConflictError ? cause : new CategoryPersistenceDecodingFailure(cause),
+							})
+			)
+		);
+	}
 
 	listLedgerAccountCategories(
 		organizationId: OrgID,
@@ -306,6 +373,27 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 			yield* this.getLedgerAccountCategory(organizationId, ledgerId, parentCategoryId);
 			if (categoryId.toString() === parentCategoryId.toString())
 				return yield* Effect.fail(new CategoryConflict("Category cannot be its own parent"));
+			// Only reject cycles visible to this check; simultaneous links may still race.
+			const cycles = yield* this.db
+				.execute<{ cycle: boolean }>(
+					sql`
+    WITH RECURSIVE descendants(id) AS (
+     SELECT ${encodeUuid(categoryId)}::uuid
+     UNION
+     SELECT links.category_id FROM ${LedgerAccountCategoryParentsTable} links
+     JOIN descendants ON descendants.id = links.parent_category_id
+     WHERE links.organization_id = ${encodeUuid(organizationId)} AND links.ledger_id = ${encodeUuid(ledgerId)}
+    )
+    SELECT EXISTS(SELECT 1 FROM descendants WHERE id = ${encodeUuid(parentCategoryId)})
+     AND NOT EXISTS(SELECT 1 FROM ${LedgerAccountCategoryParentsTable}
+      WHERE organization_id = ${encodeUuid(organizationId)} AND ledger_id = ${encodeUuid(ledgerId)}
+      AND category_id = ${encodeUuid(categoryId)} AND parent_category_id = ${encodeUuid(parentCategoryId)}) AS cycle
+   `,
+					"objects"
+				)
+				.pipe(Effect.mapError(mapCategoryInfrastructureError));
+			if (cycles[0].cycle)
+				return yield* Effect.fail(new CategoryConflict("Category link would create a cycle"));
 			yield* this.db
 				.insert(LedgerAccountCategoryParentsTable)
 				.values({
@@ -374,6 +462,7 @@ const ledgerAccountCategoryRepoLayer = Layer.effect(
 );
 
 export type {
+	CategoryBalancesRepositoryError,
 	CategoryDeleteRepositoryError,
 	CategoryGetRepositoryError,
 	CategoryLinkAccountRepositoryError,

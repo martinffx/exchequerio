@@ -71,6 +71,7 @@ type AccountUpdateRequest = Static<typeof AccountUpdateRequest>;
 type AccountResponse = Static<typeof AccountResponse>;
 
 export {
+	AccountBalanceResponse,
 	NormalBalanceSchema,
 	AccountCollectionParameters,
 	AccountCreateRequest,

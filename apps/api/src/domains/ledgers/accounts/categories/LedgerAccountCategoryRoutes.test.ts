@@ -39,6 +39,7 @@ import { LedgerAccountCategoryRoutes } from "./LedgerAccountCategoryRoutes";
 
 const mockLedgerAccountCategoryService = vi.mocked<LedgerAccountCategoryService>({
 	listLedgerAccountCategories: vi.fn(),
+	getLedgerAccountCategoryBalances: vi.fn(),
 	getLedgerAccountCategory: vi.fn(),
 	createLedgerAccountCategory: vi.fn(),
 	updateLedgerAccountCategory: vi.fn(),
@@ -143,7 +144,57 @@ describe("LedgerAccountCategoryRoutes", () => {
 		}
 	);
 
-	it("locks all nine generated Category OpenAPI operations", async () => {
+	it("serializes Asset balances and preserves decimal-string precision", async () => {
+		const body = LedgerAccountCategoryEntity.balancesFromRecord({
+			id: categoryId.toUUID(),
+			normalBalance: "credit",
+			assets: [
+				{
+					id: new TypeID("ast").toUUID(),
+					code: "USD",
+					minorUnitExponent: 2,
+					postedCredits: "9007199254740993",
+					pendingCredits: "9007199254740993",
+					postedDebits: "0",
+					pendingDebits: "0",
+				},
+			],
+		});
+		mockLedgerAccountCategoryService.getLedgerAccountCategoryBalances.mockReturnValue(
+			Effect.succeed(body)
+		);
+		const response = await server.inject({
+			method: "GET",
+			url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/balances`,
+		});
+		expect(response.statusCode).toBe(200);
+		expect(response.json()).toEqual(body.toResponse());
+		expect(mockLedgerAccountCategoryService.getLedgerAccountCategoryBalances).toHaveBeenCalledWith(
+			TypeID.fromString(orgId),
+			ledgerId,
+			categoryId
+		);
+	});
+	it.each([
+		new ConflictError("Accounting projection exceeds the signed 64-bit range", { retryable: false }),
+		new NotFoundError("Category not found"),
+		new CategoryRepositoryUnavailable(new Error("offline")),
+		new CategoryPersistenceFailure(new Error("query failed")),
+	])("maps balance errors through the existing HTTP handler", async error => {
+		mockLedgerAccountCategoryService.getLedgerAccountCategoryBalances.mockReturnValue(
+			Effect.fail(error)
+		);
+		const response = await server.inject({
+			method: "GET",
+			url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/balances`,
+		});
+		expect(response.statusCode).toBe(error.statusCode);
+		expect(response.json<{ detail: string }>().detail).toBe(error.message);
+		if (error instanceof ConflictError)
+			expect(response.json<{ retryable: boolean }>().retryable).toBe(false);
+	});
+
+	it("documents all generated Category OpenAPI operations", async () => {
 		await authServer.ready();
 		const paths = authServer.swagger().paths;
 		const prefix = "/api/ledgers/{ledgerId}/accounts/categories";
@@ -152,6 +203,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		const account = paths?.[`${prefix}/{categoryId}/accounts/{accountId}`];
 		const parent = paths?.[`${prefix}/{categoryId}/categories/{parentCategoryId}`];
 		const operations = {
+			balances: paths?.[`${prefix}/{categoryId}/balances`]?.get,
 			list: collection?.get,
 			create: collection?.post,
 			get: item?.get,

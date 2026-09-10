@@ -28,6 +28,8 @@ describe("LedgerAccountCategoryService", () => {
 		updated: DateTime.utc(),
 	});
 	const mockRepo = {
+		getLedgerAccountCategoryBalances:
+			vi.fn<LedgerAccountCategoryRepo["getLedgerAccountCategoryBalances"]>(),
 		listLedgerAccountCategories: vi.fn<LedgerAccountCategoryRepo["listLedgerAccountCategories"]>(),
 		getLedgerAccountCategory: vi.fn<LedgerAccountCategoryRepo["getLedgerAccountCategory"]>(),
 		upsertLedgerAccountCategory: vi.fn<LedgerAccountCategoryRepo["upsertLedgerAccountCategory"]>(),
@@ -42,6 +44,32 @@ describe("LedgerAccountCategoryService", () => {
 
 	beforeEach(() => {
 		vi.resetAllMocks();
+	});
+
+	it("checks Ledger ownership before reading balances and propagates the result", async () => {
+		ledgerGet.mockReturnValue(Effect.succeed(ledger));
+		const response = LedgerAccountCategoryEntity.balancesFromRecord({
+			id: categoryId.toUUID(),
+			normalBalance: "debit",
+			assets: [],
+		});
+		mockRepo.getLedgerAccountCategoryBalances.mockReturnValue(Effect.succeed(response));
+		expect(
+			await Effect.runPromise(
+				service.getLedgerAccountCategoryBalances(organizationId, ledgerId, categoryId)
+			)
+		).toBe(response);
+		expect(mockRepo.getLedgerAccountCategoryBalances).toHaveBeenCalledWith(
+			organizationId,
+			ledgerId,
+			categoryId
+		);
+		mockRepo.getLedgerAccountCategoryBalances.mockClear();
+		ledgerGet.mockReturnValue(Effect.fail(new LedgerNotFound()));
+		await expect(
+			Effect.runPromise(service.getLedgerAccountCategoryBalances(organizationId, ledgerId, categoryId))
+		).rejects.toBeInstanceOf(LedgerNotFound);
+		expect(mockRepo.getLedgerAccountCategoryBalances).not.toHaveBeenCalled();
 	});
 
 	describe("listLedgerAccountCategories", () => {
