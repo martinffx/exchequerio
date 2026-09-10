@@ -64,6 +64,13 @@ problem. Existing code is evidence, not permission to copy ceremony.
   existing domain contract already excludes. Each decoder branch must correspond to a value a real
   producer can supply.
 
+## Luxon timestamps
+
+Enable `Settings.throwOnInvalid` in API startup, tests, and benchmarks, with the matching Luxon
+`TSSettings` declaration. Treat domain `DateTime` values as valid. Catch construction failures at
+decoding boundaries using `Effect.try` and the existing error types; serialize with `.toISO()`
+without repeated validity checks, null guards, or empty-string fallbacks.
+
 ## Validation
 
 Start PostgreSQL before targeted integration tests when it is not already running.

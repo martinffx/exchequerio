@@ -1,3 +1,4 @@
+import { Asset } from "@/domains/assets/Asset";
 import { TypeID } from "typeid-js";
 import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
@@ -13,11 +14,17 @@ import { LedgerAccountRepoTag } from "./LedgerAccountRepo";
 import { AccountService, AccountServiceTag, accountServiceLayer } from "./AccountService";
 import { LedgerAccount } from "./LedgerAccount";
 
-const asset = { assetId: new TypeID("ast").toString(), assetCode: "USD", minorUnitExponent: 2 };
-const assetService = {
-	resolveAssets: vi.fn(() => Effect.succeed([asset])),
-} as unknown as AssetService;
 const organizationId = newOrgID();
+const assetEntity = Asset.fromRequest(
+	new TypeID("ast"),
+	organizationId,
+	{ code: "USD", name: "Dollar", minorUnitExponent: 2 },
+	DateTime.utc()
+);
+const asset = assetEntity.toSummary();
+const assetService = {
+	getAsset: vi.fn(() => Effect.succeed(assetEntity)),
+} as unknown as AssetService;
 const ledgerId = newLedgerID();
 const accountId = newLedgerAccountID();
 const ledger = new Ledger({
@@ -29,7 +36,7 @@ const ledger = new Ledger({
 });
 const created = DateTime.fromISO("2026-08-09T10:00:00.000Z", {
 	zone: "utc",
-}) as DateTime<true>;
+});
 const account = LedgerAccount.fromCreateRequest(
 	accountId,
 	organizationId,
@@ -150,7 +157,7 @@ describe("AccountService", () => {
 			{ balanceType: "availableBalance", amount: 0n, credits: 0n, debits: 0n },
 		]);
 		expect(parent.getLedger).toHaveBeenCalledWith(organizationId, ledgerId);
-		expect(assetService.resolveAssets).toHaveBeenCalledWith(organizationId, [request]);
+		expect(assetService.getAsset).toHaveBeenCalledWith(organizationId, request.assetCode);
 		expect(repo.createAccount).toHaveBeenCalledWith(created);
 		expect(vi.mocked(repo.createAccount).mock.calls[0]?.[0]).toBeInstanceOf(LedgerAccount);
 	});

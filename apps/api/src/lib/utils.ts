@@ -34,11 +34,7 @@ const parseUuid = <Prefix extends string, Return extends TypeID<Prefix>>(
 
 const parseDate = (value: Date): Effect.Effect<DateTime, Error> =>
 	Effect.try({
-		try: () => {
-			const date = DateTime.fromJSDate(value, { zone: "utc" });
-			if (!date.isValid) throw new Error("Invalid persisted timestamp");
-			return date;
-		},
+		try: () => DateTime.fromJSDate(value, { zone: "utc" }),
 		catch: cause => new Error("Invalid persisted timestamp", { cause }),
 	});
 

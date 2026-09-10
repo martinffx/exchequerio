@@ -35,12 +35,6 @@ type LedgerAccountBalanceMonitorOptions = Readonly<{
 	updated: DateTime;
 }>;
 
-const toIso = (value: DateTime): string => {
-	const encoded = value.toISO();
-	if (encoded === null) throw new Error("Balance monitor contains an invalid timestamp");
-	return encoded;
-};
-
 class LedgerAccountBalanceMonitor {
 	readonly id: LedgerAccountBalanceMonitorID;
 	readonly accountId: LedgerAccountID;
@@ -126,8 +120,8 @@ class LedgerAccountBalanceMonitor {
 			alertCondition: [],
 			metadata: this.metadata,
 			lockVersion: 0,
-			created: toIso(this.created),
-			updated: toIso(this.updated),
+			created: this.created.toISO(),
+			updated: this.updated.toISO(),
 		};
 	}
 

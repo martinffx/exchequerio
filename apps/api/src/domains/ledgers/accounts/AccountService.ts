@@ -2,11 +2,12 @@ import { Context, Effect, Layer, Option } from "effect";
 import {
 	AssetServiceTag,
 	type AssetService,
-	type AssetResolveError,
+	type AssetGetError,
 } from "@/domains/assets/AssetService";
 import { TypeID } from "typeid-js";
-import { ServiceUnavailableError } from "@/lib/errors";
-import type { LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
+import { ServiceUnavailableError, type InvalidId } from "@/lib/errors";
+import { parseId } from "@/lib/utils";
+import type { AssetID, LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
 import { type LedgerGetError, LedgerServiceTag, type LedgerService } from "../LedgerService";
 import { LedgerAccount } from "./LedgerAccount";
 import {
@@ -28,7 +29,8 @@ type AccountGetError = AccountNotFound | AccountInfrastructureError;
 type AccountCreateError =
 	| Exclude<LedgerAccountCreateRepositoryError, AccountRepositoryUnavailable>
 	| LedgerGetError
-	| AssetResolveError
+	| AssetGetError
+	| InvalidId
 	| ServiceUnavailableError;
 type AccountUpdateError = AccountNotFound | LedgerAccountUpdateRepositoryError;
 type AccountDeleteError = AccountNotFound | LedgerAccountDeleteRepositoryError;
@@ -107,14 +109,19 @@ class AccountService {
 		request: AccountCreateRequest
 	): Effect.Effect<LedgerAccount, AccountCreateError> {
 		return this.ledgerService.getLedger(organizationId, ledgerId).pipe(
-			Effect.andThen(this.assetService.resolveAssets(organizationId, [request])),
-			Effect.map(assets =>
+			Effect.andThen(
+				request.assetId === undefined
+					? Effect.succeed<AssetID | string>(request.assetCode)
+					: parseId<"ast", AssetID>("ast", request.assetId)
+			),
+			Effect.flatMap(reference => this.assetService.getAsset(organizationId, reference)),
+			Effect.map(asset =>
 				LedgerAccount.fromCreateRequest(
 					new TypeID("lat") as LedgerAccountID,
 					organizationId,
 					ledgerId,
 					request,
-					assets[0]!
+					asset.toSummary()
 				)
 			),
 			Effect.flatMap(account =>
