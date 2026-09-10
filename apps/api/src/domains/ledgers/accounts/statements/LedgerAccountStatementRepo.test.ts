@@ -289,6 +289,50 @@ describe("LedgerAccountStatementRepoLive", () => {
 			await runtime.runPromise(Effect.flip(repository.getStatement(...scope, id)))
 		).toBeInstanceOf(NotFoundError);
 	}, 15000);
+	it("bounds the preflight to 10,001 Entries for oversized periods", async () => {
+		const request = {
+			startDatetime: "2045-01-01T00:00:00.000Z",
+			endDatetime: "2045-02-01T00:00:00.000Z",
+		};
+		const entry = await addEntry(request.startDatetime, "posted", "debit", 1n);
+		await db.execute(
+			sql`INSERT INTO ledger_transaction_entries (id, transaction_id, account_id, organization_id, ledger_id, direction, amount, asset_id, status) SELECT gen_random_uuid(), ${entry.transactionId}::uuid, ${accountId.toUUID()}::uuid, ${organizationId.toUUID()}::uuid, ${ledgerId.toUUID()}::uuid, 'debit', 1, ${assetId.toUUID()}::uuid, 'posted' FROM generate_series(1, 10001) n`
+		);
+		const effectDb = (await runtime.runPromise(DatabaseTag)).effectDb;
+		const queryResults: unknown[] = [];
+		const observedDb = new Proxy(effectDb, {
+			get(target, property, receiver) {
+				if (property !== "transaction") return Reflect.get(target, property, receiver) as unknown;
+				return (
+					callback: Parameters<EffectDrizzleDatabase["transaction"]>[0],
+					config: Parameters<EffectDrizzleDatabase["transaction"]>[1]
+				) =>
+					target.transaction(
+						tx =>
+							callback(
+								new Proxy(tx, {
+									get(transaction, key, transactionReceiver) {
+										if (key !== "execute")
+											return Reflect.get(transaction, key, transactionReceiver) as unknown;
+										return (...args: Parameters<typeof tx.execute>) =>
+											tx.execute(...args).pipe(Effect.tap(rows => Effect.sync(() => queryResults.push(rows))));
+									},
+								})
+							),
+						config
+					);
+			},
+		});
+		const observedRepository = new LedgerAccountStatementRepoLive(observedDb);
+		const id = new TypeID("lst") as LedgerAccountStatementID;
+		expect(
+			await runtime.runPromise(Effect.flip(observedRepository.createStatement(...scope, id, request)))
+		).toBeInstanceOf(BadRequestError);
+		expect(queryResults).toContainEqual([expect.objectContaining({ count: "10001" })]);
+		expect(
+			await runtime.runPromise(Effect.flip(repository.getStatement(...scope, id)))
+		).toBeInstanceOf(NotFoundError);
+	});
 	it("preflights oversized metadata in SQL and rolls back the rejected snapshot", async () => {
 		const request = {
 			startDatetime: "2050-01-01T00:00:00.000Z",

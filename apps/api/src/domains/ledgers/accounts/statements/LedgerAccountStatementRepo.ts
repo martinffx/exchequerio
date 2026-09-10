@@ -218,7 +218,7 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 						});
 						const inPeriod = sql`${eligible} AND t.effective_at >= ${period.startDatetime.toISOString()}::timestamptz AND t.effective_at < ${period.endDatetime.toISOString()}::timestamptz`;
 						const sizes = yield* tx.execute<{ count: string; bytes: string }>(
-							sql`SELECT count(*)::text AS count, (octet_length((${JSON.stringify(header)}::jsonb)::text) + coalesce(sum(octet_length((${entryDocument})::text)), 0) + greatest(count(*) - 1, 0) * 2)::text AS bytes ${inPeriod}`,
+							sql`SELECT count(*)::text AS count, (octet_length((${JSON.stringify(header)}::jsonb)::text) + coalesce(sum(octet_length(preflight.document::text)), 0) + greatest(count(*) - 1, 0) * 2)::text AS bytes FROM (SELECT ${entryDocument} AS document ${inPeriod} LIMIT ${MAX_STATEMENT_ENTRIES + 1}) preflight`,
 							"objects"
 						);
 						if (
