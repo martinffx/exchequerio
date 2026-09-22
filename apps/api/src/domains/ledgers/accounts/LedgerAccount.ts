@@ -58,12 +58,6 @@ type LedgerAccountBalance = Readonly<{
 	amount: bigint;
 }>;
 
-const toIso = (value: DateTime): string => {
-	const encoded = value.toISO();
-	if (encoded === null) throw new Error("Account contains an invalid timestamp");
-	return encoded;
-};
-
 class LedgerAccountAssetMismatch extends BadRequestError {
 	constructor(accountAssetId: string, entryAssetId: string) {
 		super(`Entry Asset ${entryAssetId} does not match Account Asset ${accountAssetId}`);
@@ -283,8 +277,8 @@ class LedgerAccount {
 			})),
 			...(this.metadata === undefined ? {} : { metadata: this.metadata }),
 			lockVersion: this.lockVersion,
-			created: toIso(this.created),
-			updated: toIso(this.updated),
+			created: this.created.toISO(),
+			updated: this.updated.toISO(),
 		};
 	}
 

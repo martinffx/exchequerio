@@ -1,4 +1,6 @@
 import { TypeID } from "typeid-js";
+import { DateTime } from "luxon";
+import { encodeUuid } from "@/lib/utils";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -6,7 +8,7 @@ import { Config } from "@/config";
 import { DatabaseTag, makeDatabaseLive, type Database } from "@/db";
 import { newOrgID, newLedgerID, newLedgerAccountID } from "@/lib/ids";
 import { AssetsTable, OrganizationsTable, LedgersTable, LedgerAccountsTable } from "@/db/schema";
-import { ConflictError, NotFoundError } from "@/lib/errors";
+import { ConflictError, InternalServerError, NotFoundError } from "@/lib/errors";
 import { assetRepoLayer } from "./AssetRepo";
 import { AssetServiceTag, assetServiceLayer, type AssetService } from "./AssetService";
 
@@ -27,6 +29,7 @@ beforeAll(async () => {
 		{ id: otherOrgId.toUUID(), name: "Other Asset tests" },
 	]);
 });
+
 afterAll(async () => {
 	if (database) {
 		for (const id of [orgId, otherOrgId]) {
@@ -53,11 +56,20 @@ describe("Asset persistence", () => {
 			})
 		);
 		expect(asset.toResponse()).toMatchObject({ code: "USD", minorUnitExponent: 2 });
-		expect(asset.id).toMatch(/^ast_[0-9a-z]{26}$/);
+		expect(asset.id).toBeInstanceOf(TypeID);
+		expect(DateTime.isDateTime(asset.created)).toBe(true);
+		expect(asset.created.zoneName).toBe("UTC");
+		const [stored] = await database.db
+			.select()
+			.from(AssetsTable)
+			.where(eq(AssetsTable.id, encodeUuid(asset.id)));
+		expect(asset.toRow()).toEqual(stored);
+		expect(asset.metadata).toEqual({ source: "manual" });
+		expect(asset.id.toString()).toMatch(/^ast_[0-9a-z]{26}$/);
 		const hidden = await runtime.runPromise(Effect.flip(service.getAsset(otherOrgId, asset.id)));
 		expect(hidden).toBeInstanceOf(NotFoundError);
 		const missingSelector = await runtime.runPromise(
-			Effect.flip(service.resolveAssets(otherOrgId, [{ assetId: asset.id }]))
+			Effect.flip(service.getAsset(otherOrgId, "USD"))
 		);
 		expect(missingSelector).toBeInstanceOf(NotFoundError);
 		await runtime.runPromise(
@@ -67,7 +79,7 @@ describe("Asset persistence", () => {
 			service.updateAsset(orgId, asset.id, { code: "usd:old", name: "Renamed" })
 		);
 		expect(renamed.toResponse()).toMatchObject({
-			id: asset.id,
+			id: asset.id.toString(),
 			code: "USD:OLD",
 			minorUnitExponent: 2,
 			created: asset.toResponse().created,
@@ -77,10 +89,12 @@ describe("Asset persistence", () => {
 		const replacement = await runtime.runPromise(
 			service.createAsset(orgId, { code: "USD", name: "Replacement", minorUnitExponent: 4 })
 		);
-		expect(replacement.id).not.toBe(asset.id);
+		expect(replacement.id.toString()).not.toBe(asset.id.toString());
 		expect(
 			await runtime.runPromise(
-				service.resolveAssets(orgId, [{ assetId: asset.id }, { assetCode: "usd" }])
+				Effect.forEach([asset.id, "usd"], reference =>
+					service.getAsset(orgId, reference).pipe(Effect.map(value => value.toSummary()))
+				)
 			)
 		).toEqual([renamed.toSummary(), replacement.toSummary()]);
 		const filtered = await runtime.runPromise(
@@ -92,6 +106,27 @@ describe("Asset persistence", () => {
 		);
 		expect(conflict).toBeInstanceOf(ConflictError);
 	});
+
+	it.each(["{", "null", "[]", '"text"', '{"count":1}'])(
+		"rejects malformed stored metadata %s",
+		async metadata => {
+			const asset = await runtime.runPromise(
+				service.createAsset(orgId, {
+					code: `BROKEN:${Buffer.from(metadata).toString("hex")}`,
+					name: "Malformed metadata",
+					minorUnitExponent: 2,
+				})
+			);
+			await database.db
+				.update(AssetsTable)
+				.set({ metadata })
+				.where(eq(AssetsTable.id, encodeUuid(asset.id)));
+			const error = await runtime.runPromise(Effect.flip(service.getAsset(orgId, asset.id)));
+			expect(error).toBeInstanceOf(InternalServerError);
+			expect(error.message).toBe("Persisted Asset could not be decoded");
+		}
+	);
+
 	it("enforces uniqueness for concurrent canonical-code creation", async () => {
 		const results = await Promise.all(
 			["race", "RACE"].map(code =>
@@ -103,6 +138,7 @@ describe("Asset persistence", () => {
 		expect(results.filter(result => result._tag === "Success")).toHaveLength(1);
 		expect(results.filter(result => result._tag === "Failure")).toHaveLength(1);
 	});
+
 	it("restricts deletion of an Asset referenced by an Account", async () => {
 		const asset = await runtime.runPromise(
 			service.createAsset(orgId, { code: "LOCKED", name: "Referenced", minorUnitExponent: 18 })
@@ -116,7 +152,7 @@ describe("Asset persistence", () => {
 			id: accountId,
 			organizationId: orgId.toUUID(),
 			ledgerId,
-			assetId: TypeID.fromString(asset.id).toUUID(),
+			assetId: encodeUuid(asset.id),
 			name: "Referenced",
 			normalBalance: "credit",
 		});

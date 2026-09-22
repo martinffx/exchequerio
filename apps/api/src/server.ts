@@ -1,3 +1,4 @@
+import "@/lib/luxon";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUI from "@fastify/swagger-ui";

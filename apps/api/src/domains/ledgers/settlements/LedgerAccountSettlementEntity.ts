@@ -52,18 +52,6 @@ type LedgerAccountSettlementEntityOptions = Readonly<
 		transaction?: LedgerTransaction;
 	}
 >;
-/**
- * Serializes a Settlement timestamp.
- *
- * @param date - Timestamp to serialize.
- * @returns The ISO timestamp.
- * @throws Error when the timestamp is invalid.
- */
-const toIso = (date: DateTime): string => {
-	const value = date.toISO();
-	if (value === null) throw new Error("Settlement contains an invalid timestamp");
-	return value;
-};
 /** Owns Settlement conversions and accounting construction without performing I/O. */
 class LedgerAccountSettlementEntity {
 	/**
@@ -120,6 +108,7 @@ class LedgerAccountSettlementEntity {
 		id = newLedgerAccountSettlementID()
 	) {
 		return Effect.gen(function* () {
+			const effectiveAtUpperBound = request.effectiveAtUpperBound;
 			if (request.status === "drafting" && request.effectiveAtUpperBound !== undefined)
 				return yield* Effect.fail(
 					new BadRequestError("Drafting Settlements use manual source selection")
@@ -139,8 +128,11 @@ class LedgerAccountSettlementEntity {
 				effectiveAtUpperBound:
 					request.status === "drafting"
 						? undefined
-						: request.effectiveAtUpperBound
-							? DateTime.fromISO(request.effectiveAtUpperBound, { zone: "utc" })
+						: effectiveAtUpperBound
+							? yield* Effect.try({
+									try: () => DateTime.fromISO(effectiveAtUpperBound, { zone: "utc" }),
+									catch: cause => new BadRequestError("Invalid Effective Time upper bound", { cause }),
+								})
 							: now,
 				created: now,
 				updated: now,
@@ -217,7 +209,6 @@ class LedgerAccountSettlementEntity {
 	 *
 	 * @remarks
 	 * Accounting fields are null until a generated Transaction is loaded.
-	 * Invalid timestamps throw during ISO serialization.
 	 *
 	 * @returns The response with amount and direction derived from the settled Account Entry.
 	 */
@@ -245,12 +236,12 @@ class LedgerAccountSettlementEntity {
 			minorUnitExponent: d.minorUnitExponent,
 			allowEitherDirection: d.allowEitherDirection,
 			// oxlint-disable-next-line unicorn/no-null -- Manual selection has no cutoff.
-			effectiveAtUpperBound: d.effectiveAtUpperBound ? toIso(d.effectiveAtUpperBound) : null,
+			effectiveAtUpperBound: d.effectiveAtUpperBound ? d.effectiveAtUpperBound.toISO() : null,
 			description: d.description,
 			metadata: d.metadata,
 			externalReference: d.externalReference,
-			created: toIso(d.created),
-			updated: toIso(d.updated),
+			created: d.created.toISO(),
+			updated: d.updated.toISO(),
 		};
 	}
 	/**
@@ -299,7 +290,7 @@ class LedgerAccountSettlementEntity {
 					status,
 					description: d.description,
 					metadata: { ...d.metadata, settlementId: d.id.toString() },
-					effectiveAt: toIso(d.created),
+					effectiveAt: d.created.toISO(),
 					ledgerEntries: [
 						{
 							accountId: d.settledAccountId.toString(),

@@ -73,7 +73,7 @@ const AssetRoutes: FastifyPluginAsync = async server => {
 		async request => {
 			const effect = parseId<"ast", AssetID>("ast", request.params.assetId).pipe(
 				Effect.flatMap(assetId =>
-					AssetServiceTag.use(service => service.getAsset(request.token.orgId, assetId.toString()))
+					AssetServiceTag.use(service => service.getAsset(request.token.orgId, assetId))
 				)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
@@ -145,9 +145,7 @@ const AssetRoutes: FastifyPluginAsync = async server => {
 		async request => {
 			const effect = parseId<"ast", AssetID>("ast", request.params.assetId).pipe(
 				Effect.flatMap(assetId =>
-					AssetServiceTag.use(service =>
-						service.updateAsset(request.token.orgId, assetId.toString(), request.body)
-					)
+					AssetServiceTag.use(service => service.updateAsset(request.token.orgId, assetId, request.body))
 				)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
@@ -180,7 +178,7 @@ const AssetRoutes: FastifyPluginAsync = async server => {
 		async (request, reply) => {
 			const effect = parseId<"ast", AssetID>("ast", request.params.assetId).pipe(
 				Effect.flatMap(assetId =>
-					AssetServiceTag.use(service => service.deleteAsset(request.token.orgId, assetId.toString()))
+					AssetServiceTag.use(service => service.deleteAsset(request.token.orgId, assetId))
 				)
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));

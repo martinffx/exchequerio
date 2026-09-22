@@ -7,10 +7,11 @@ import {
 	publishMonitorJobs,
 	type MonitorJob,
 } from "@/jobs/MonitorPublisher";
+import { Asset } from "@/domains/assets/Asset";
 import { NotFoundError } from "@/lib/errors";
 import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
-import { Settings } from "luxon";
+import { DateTime, Settings } from "luxon";
 import { TypeID } from "typeid-js";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -133,13 +134,14 @@ const ledgerService = {
 	getLedger: vi.fn<LedgerService["getLedger"]>(() => Effect.succeed({} as never)),
 } as unknown as LedgerService;
 const assets = {
-	resolveAssets: vi.fn<AssetService["resolveAssets"]>((_org, selectors) =>
+	getAsset: vi.fn<AssetService["getAsset"]>(orgId =>
 		Effect.succeed(
-			selectors.map(() => ({
-				assetId: "ast_00000000000000000000000001",
-				assetCode: "EUR",
-				minorUnitExponent: 2,
-			}))
+			Asset.fromRequest(
+				TypeID.fromString("ast_00000000000000000000000001", "ast"),
+				orgId,
+				{ code: "EUR", name: "Euro", minorUnitExponent: 2 },
+				DateTime.utc()
+			)
 		)
 	),
 };
@@ -186,7 +188,7 @@ describe("TransactionService", () => {
 		);
 
 		expect(found).toBe(transaction);
-		expect(assets.resolveAssets).not.toHaveBeenCalled();
+		expect(assets.getAsset).not.toHaveBeenCalled();
 		expect(repository.getTransaction).toHaveBeenCalledWith(organizationId, ledgerId, transactionId);
 		expect(repository.createTransaction).not.toHaveBeenCalled();
 		expect(publish).not.toHaveBeenCalled();
@@ -279,7 +281,7 @@ describe("TransactionService", () => {
 			)
 		).resolves.toBe(transaction);
 		expect(repository.createTransaction).toHaveBeenCalledTimes(5);
-		expect(assets.resolveAssets).toHaveBeenCalledOnce();
+		expect(assets.getAsset).toHaveBeenCalledTimes(createRequest.ledgerEntries.length);
 		const calls = repository.createTransaction.mock.calls;
 		expect(calls.every(call => call[0] === calls[0]?.[0])).toBe(true);
 	});
@@ -382,9 +384,9 @@ describe("TransactionService", () => {
 	});
 });
 
-it("releases a fresh claim when Asset resolution fails", async () => {
+it("releases a fresh claim when Asset lookup fails", async () => {
 	const failure = new NotFoundError("Asset not found");
-	assets.resolveAssets.mockReturnValueOnce(Effect.fail(failure));
+	assets.getAsset.mockReturnValueOnce(Effect.fail(failure));
 	await expect(
 		runtime.runPromise(
 			service.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest)

@@ -1,7 +1,5 @@
-import type { AssetSummary } from "@/lib/AssetSchema";
 import { encodeUuid } from "@/lib/utils";
-import { TypeID } from "typeid-js";
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import {
 	DatabaseTag,
@@ -15,7 +13,7 @@ import {
 	NotFoundError,
 	ServiceUnavailableError,
 } from "@/lib/errors";
-import type { OrgID } from "@/lib/ids";
+import type { AssetID, OrgID } from "@/lib/ids";
 import { AssetsTable } from "@/db/schema";
 import { Asset } from "./Asset";
 import type { AssetListQuery } from "./AssetSchema";
@@ -24,12 +22,14 @@ const mapError = (cause: unknown) =>
 	isPostgresUnavailable(cause)
 		? new ServiceUnavailableError("Asset repository unavailable", { cause })
 		: new InternalServerError("Asset persistence operation failed", { cause });
+
 const mapWriteError = (cause: unknown) =>
 	postgresErrorCode(cause) === "23505"
 		? new ConflictError("Asset code already exists", { cause })
 		: postgresErrorCode(cause) === "23503"
 			? new NotFoundError("Organization not found", { cause })
 			: mapError(cause);
+
 const requireRow = (
 	rows: (typeof AssetsTable.$inferSelect)[]
 ): Effect.Effect<Asset, NotFoundError | InternalServerError> =>
@@ -37,6 +37,7 @@ const requireRow = (
 
 export class AssetRepo {
 	constructor(private readonly db: EffectDrizzleDatabase) {}
+
 	listAssets(orgId: OrgID, query: AssetListQuery) {
 		return this.db
 			.select()
@@ -55,48 +56,23 @@ export class AssetRepo {
 				Effect.flatMap(rows => Effect.all(rows.map(row => Asset.fromRow(row))))
 			);
 	}
-	getAsset(orgId: OrgID, id: string) {
+
+	getAsset(orgId: OrgID, reference: AssetID | string) {
 		return this.db
 			.select()
 			.from(AssetsTable)
 			.where(
 				and(
 					eq(AssetsTable.organizationId, encodeUuid(orgId)),
-					eq(AssetsTable.id, encodeUuid(TypeID.fromString(id)))
+					typeof reference === "string"
+						? eq(AssetsTable.code, reference)
+						: eq(AssetsTable.id, encodeUuid(reference))
 				)
 			)
 			.limit(1)
 			.pipe(Effect.mapError(mapError), Effect.flatMap(requireRow));
 	}
-	findAssets(orgId: OrgID, ids: string[], codes: string[]) {
-		return this.db
-			.select({
-				assetId: AssetsTable.id,
-				assetCode: AssetsTable.code,
-				minorUnitExponent: AssetsTable.minorUnitExponent,
-			})
-			.from(AssetsTable)
-			.where(
-				and(
-					eq(AssetsTable.organizationId, encodeUuid(orgId)),
-					or(
-						inArray(
-							AssetsTable.id,
-							ids.map(id => encodeUuid(TypeID.fromString(id)))
-						),
-						inArray(AssetsTable.code, codes)
-					)
-				)
-			)
-			.pipe(
-				Effect.mapError(mapError),
-				Effect.map(rows =>
-					rows.map(
-						(row): AssetSummary => ({ ...row, assetId: TypeID.fromUUID("ast", row.assetId).toString() })
-					)
-				)
-			);
-	}
+
 	createAsset(asset: Asset) {
 		return this.db
 			.insert(AssetsTable)
@@ -104,6 +80,7 @@ export class AssetRepo {
 			.returning()
 			.pipe(Effect.mapError(mapWriteError), Effect.flatMap(requireRow));
 	}
+
 	updateAsset(asset: Asset) {
 		const { code, name, description, metadata, updated } = asset.toRow();
 		return this.db
@@ -112,20 +89,18 @@ export class AssetRepo {
 			.where(
 				and(
 					eq(AssetsTable.organizationId, encodeUuid(asset.organizationId)),
-					eq(AssetsTable.id, encodeUuid(TypeID.fromString(asset.id)))
+					eq(AssetsTable.id, encodeUuid(asset.id))
 				)
 			)
 			.returning()
 			.pipe(Effect.mapError(mapWriteError), Effect.flatMap(requireRow));
 	}
-	deleteAsset(orgId: OrgID, id: string) {
+
+	deleteAsset(orgId: OrgID, id: AssetID) {
 		return this.db
 			.delete(AssetsTable)
 			.where(
-				and(
-					eq(AssetsTable.organizationId, encodeUuid(orgId)),
-					eq(AssetsTable.id, encodeUuid(TypeID.fromString(id)))
-				)
+				and(eq(AssetsTable.organizationId, encodeUuid(orgId)), eq(AssetsTable.id, encodeUuid(id)))
 			)
 			.returning()
 			.pipe(
@@ -138,6 +113,7 @@ export class AssetRepo {
 			);
 	}
 }
+
 export const AssetRepoTag = Context.Service<AssetRepo>("AssetRepo");
 export const assetRepoLayer = Layer.effect(
 	AssetRepoTag,

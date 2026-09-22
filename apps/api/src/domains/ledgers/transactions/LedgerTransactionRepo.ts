@@ -625,11 +625,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				]),
 			].sort();
 			const accounts = yield* this.readAccounts(organizationId, ledgerId, accountIds);
-			const transaction = yield* current.fromUpdateRequest(
-				request,
-				updated as DateTime<true>,
-				entryIds
-			);
+			const transaction = yield* current.fromUpdateRequest(request, updated, entryIds);
 			const entries = Option.getOrThrow(transaction.entries);
 			const withoutCurrentEntries = this.removeEntriesFromAccounts(
 				accounts,
@@ -681,7 +677,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			const currentEntries = Option.getOrThrow(current.entries);
 			const accountIds = [...new Set(currentEntries.map(entry => entry.accountId.toString()))].sort();
 			const accounts = yield* this.readAccounts(organizationId, ledgerId, accountIds);
-			const transaction = yield* current.toPosted(postedAt as DateTime<true>);
+			const transaction = yield* current.toPosted(postedAt);
 			const entries = Option.getOrThrow(transaction.entries);
 			const withoutCurrentEntries = this.removeEntriesFromAccounts(
 				accounts,
@@ -733,7 +729,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			const currentEntries = Option.getOrThrow(current.entries);
 			const accountIds = [...new Set(currentEntries.map(entry => entry.accountId.toString()))].sort();
 			const accounts = yield* this.readAccounts(organizationId, ledgerId, accountIds);
-			const transaction = yield* current.toVoided(updated as DateTime<true>);
+			const transaction = yield* current.toVoided(updated);
 			const entries = Option.getOrThrow(transaction.entries);
 			const withoutCurrentEntries = this.removeEntriesFromAccounts(
 				accounts,
@@ -860,7 +856,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			(updatedAccounts, entry) =>
 				updatedAccounts
 					.get(entry.accountId.toString())!
-					.record(entry, updated as DateTime<true>)
+					.record(entry, updated)
 					.pipe(
 						Effect.map(account => {
 							updatedAccounts.set(entry.accountId.toString(), account);
@@ -888,10 +884,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		const updatedAccounts = new Map(accounts);
 		for (const entry of entries) {
 			const accountId = entry.accountId.toString();
-			updatedAccounts.set(
-				accountId,
-				updatedAccounts.get(accountId)!.remove(entry, updated as DateTime<true>)
-			);
+			updatedAccounts.set(accountId, updatedAccounts.get(accountId)!.remove(entry, updated));
 		}
 		return updatedAccounts;
 	}
