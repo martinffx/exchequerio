@@ -1,3 +1,4 @@
+import { MonitorPublisher, type MonitorJob } from "@/jobs/MonitorPublisher";
 import { Clock, Context, Effect, Layer, Option, Schedule } from "effect";
 import { DateTime } from "luxon";
 
@@ -234,7 +235,8 @@ class TransactionServiceLive implements TransactionService {
 		private readonly repository: LedgerTransactionRepo,
 		private readonly idempotency: IdempotencyService,
 		private readonly ledgerService: LedgerService,
-		private readonly assetService: Pick<AssetService, "resolveAssets">
+		private readonly assetService: Pick<AssetService, "resolveAssets">,
+		private readonly publish: (jobs: readonly MonitorJob[]) => Effect.Effect<void>
 	) {}
 
 	/**
@@ -322,8 +324,14 @@ class TransactionServiceLive implements TransactionService {
 					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
 				)
 			);
-			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
-			return result;
+			yield* this.publish(result.monitorJobs);
+			yield* this.idempotency.complete(
+				organizationId,
+				action,
+				idempotencyKey,
+				result.transaction.id.toString()
+			);
+			return result.transaction;
 		});
 	}
 
@@ -357,8 +365,14 @@ class TransactionServiceLive implements TransactionService {
 					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
 				)
 			);
-			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
-			return result;
+			yield* this.publish(result.monitorJobs);
+			yield* this.idempotency.complete(
+				organizationId,
+				action,
+				idempotencyKey,
+				result.transaction.id.toString()
+			);
+			return result.transaction;
 		});
 	}
 
@@ -417,8 +431,14 @@ class TransactionServiceLive implements TransactionService {
 					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
 				)
 			);
-			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
-			return result;
+			yield* this.publish(result.monitorJobs);
+			yield* this.idempotency.complete(
+				organizationId,
+				action,
+				idempotencyKey,
+				result.transaction.id.toString()
+			);
+			return result.transaction;
 		});
 	}
 
@@ -459,8 +479,14 @@ class TransactionServiceLive implements TransactionService {
 					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
 				)
 			);
-			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
-			return result;
+			yield* this.publish(result.monitorJobs);
+			yield* this.idempotency.complete(
+				organizationId,
+				action,
+				idempotencyKey,
+				result.transaction.id.toString()
+			);
+			return result.transaction;
 		});
 	}
 
@@ -501,8 +527,14 @@ class TransactionServiceLive implements TransactionService {
 					this.releaseFailedMutation(organizationId, action, idempotencyKey, error)
 				)
 			);
-			yield* this.idempotency.complete(organizationId, action, idempotencyKey, result.id.toString());
-			return result;
+			yield* this.publish(result.monitorJobs);
+			yield* this.idempotency.complete(
+				organizationId,
+				action,
+				idempotencyKey,
+				result.transaction.id.toString()
+			);
+			return result.transaction;
 		});
 	}
 
@@ -550,10 +582,10 @@ const transactionServiceLayer = Layer.effect(
 	TransactionServiceTag,
 	LedgerTransactionRepoTag.pipe(
 		Effect.flatMap(repository =>
-			Effect.all([IdempotencyServiceTag, LedgerServiceTag, AssetServiceTag]).pipe(
+			Effect.all([IdempotencyServiceTag, LedgerServiceTag, AssetServiceTag, MonitorPublisher]).pipe(
 				Effect.map(
-					([idempotency, ledgerService, assetService]) =>
-						new TransactionServiceLive(repository, idempotency, ledgerService, assetService)
+					([idempotency, ledgerService, assetService, publish]) =>
+						new TransactionServiceLive(repository, idempotency, ledgerService, assetService, publish)
 				)
 			)
 		)

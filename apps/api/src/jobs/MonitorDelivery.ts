@@ -92,8 +92,28 @@ export const deliverMonitorJob = (
 		return { matched: true };
 	});
 
+export const handleMonitorDelivery = (
+	payload: typeof MonitorDelivery.payloadSchema.Type,
+	encryptionKey: string,
+	send = sendWebhook
+) =>
+	Effect.gen(function* () {
+		const job = yield* Worker.CurrentJob;
+		return yield* deliverMonitorJob(payload, encryptionKey, send).pipe(
+			Effect.tapError(reason =>
+				Effect.logError("monitor_delivery_failed", {
+					jobId: job.jobId,
+					eventId: payload.eventId,
+					monitorId: payload.monitorId,
+					attempt: job.attempt,
+					reason,
+				})
+			)
+		);
+	});
+
 export const makeMonitorDeliveryWorker = (encryptionKey: string) =>
-	MonitorDelivery.toLayer(payload => deliverMonitorJob(payload, encryptionKey), {
+	MonitorDelivery.toLayer(payload => handleMonitorDelivery(payload, encryptionKey), {
 		concurrency: 5,
 	}).pipe(
 		Layer.provide(

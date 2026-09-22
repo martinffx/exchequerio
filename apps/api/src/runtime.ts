@@ -1,3 +1,5 @@
+import { monitorPublisherLayer } from "@/jobs/MonitorPublisher";
+import { makeMonitorJobStore } from "@/jobs/MonitorQueue";
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
@@ -62,7 +64,8 @@ const makeServerRuntimeLayer = (
 		Layer.succeed(ServerConfigTag, config),
 		overrides.database ?? makeDatabaseLive(config.databaseUrl),
 		valkey,
-		idempotency
+		idempotency,
+		monitorPublisherLayer.pipe(Layer.provide(makeMonitorJobStore(config.valkeyUrl)))
 	);
 	const assetLayer = assetServiceLayer.pipe(Layer.provide(assetRepoLayer));
 	const accountWithLedger = accountLayer.pipe(Layer.provide(Layer.merge(ledgerLayer, assetLayer)));

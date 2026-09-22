@@ -14,7 +14,6 @@ import {
 } from "@/lib/ids";
 import {
 	AssetsTable,
-	BalanceMonitorRevisionsTable,
 	LedgerAccountBalanceMonitorsTable,
 	LedgerAccountsTable,
 	LedgersTable,
@@ -161,29 +160,8 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			webhookToken: "ciphertext",
 			created: created.row.created,
 		});
-		const versions = await database.db
-			.select()
-			.from(BalanceMonitorRevisionsTable)
-			.where(eq(BalanceMonitorRevisionsTable.monitorId, created.row.id))
-			.orderBy(BalanceMonitorRevisionsTable.version);
-		expect(versions).toMatchObject([
-			{
-				version: 1,
-				startVersion: before.lockVersion,
-				endVersion: before.lockVersion + 2,
-				configuration: { webhookUrl: request.webhook.url },
-			},
-			{
-				version: 2,
-				startVersion: before.lockVersion + 2,
-				// oxlint-disable-next-line unicorn/no-null -- PostgreSQL nullable columns use null.
-				endVersion: null,
-				configuration: { webhookUrl: "https://example.com/changed" },
-			},
-		]);
-		await runtime.runPromise(
-			repository.deleteMonitor(scope, created.id, applicationTime.plus({ hours: 2 }).toJSDate())
-		);
+
+		await runtime.runPromise(repository.deleteMonitor(scope, created.id));
 		expect(Option.isNone(await runtime.runPromise(repository.getMonitor(scope, created.id)))).toBe(
 			true
 		);
@@ -195,13 +173,12 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		)[0];
 		expect(account.balanceMonitorCount).toBe(before.balanceMonitorCount);
 		expect(account.lockVersion).toBe(before.lockVersion + 2);
-		const deletedVersions = await database.db
-			.select()
-			.from(BalanceMonitorRevisionsTable)
-			.where(eq(BalanceMonitorRevisionsTable.monitorId, created.row.id));
-		expect(deletedVersions.every(revision => revision.endVersion === before.lockVersion + 2)).toBe(
-			true
-		);
+		expect(
+			await database.db
+				.select()
+				.from(LedgerAccountBalanceMonitorsTable)
+				.where(eq(LedgerAccountBalanceMonitorsTable.id, created.row.id))
+		).toEqual([]);
 	});
 	it("isolates Organization, Ledger and Account reads and mutations", async () => {
 		const record = await runtime.runPromise(repository.createMonitor(make()));
@@ -220,9 +197,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			)
 		).toBe(true);
 		expect(
-			Option.isNone(
-				await runtime.runPromise(repository.deleteMonitor(otherAccount, record.id, new Date()))
-			)
+			Option.isNone(await runtime.runPromise(repository.deleteMonitor(otherAccount, record.id)))
 		).toBe(true);
 		for (const invalid of [
 			{ ...scope, organizationId: newOrgID().toString() },
@@ -238,7 +213,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			).toMatchObject({ statusCode: 404 });
 		}
 	});
-	it("serializes concurrent edits into complete revisions and deletes only once", async () => {
+	it("serializes concurrent edits into complete versions and deletes only once", async () => {
 		const record = await runtime.runPromise(repository.createMonitor(make()));
 		const edits = await Promise.all(
 			["first", "second"].map(description =>
@@ -247,7 +222,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		);
 		expect(edits.map(edit => Option.getOrThrow(edit).row.lockVersion).sort()).toEqual([2, 3]);
 		const deleted = await Promise.all(
-			[1, 2].map(() => runtime.runPromise(repository.deleteMonitor(scope, record.id, new Date())))
+			[1, 2].map(() => runtime.runPromise(repository.deleteMonitor(scope, record.id)))
 		);
 		expect(deleted.filter(value => Option.isSome(value))).toHaveLength(1);
 	});
@@ -264,11 +239,9 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		expect(
 			Option.isNone(await runtime.runPromise(repository.updateMonitor(scope, id, {}, new Date())))
 		).toBe(true);
-		expect(
-			Option.isNone(await runtime.runPromise(repository.deleteMonitor(scope, id, new Date())))
-		).toBe(true);
+		expect(Option.isNone(await runtime.runPromise(repository.deleteMonitor(scope, id)))).toBe(true);
 	});
-	it("rolls back duplicate creates without changing the count or revisions", async () => {
+	it("rolls back duplicate creates without changing the count", async () => {
 		const record = await runtime.runPromise(repository.createMonitor(make()));
 		const before = (
 			await database.db
@@ -285,11 +258,6 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
 		)[0];
 		expect(after).toEqual(before);
-		const versions = await database.db
-			.select()
-			.from(BalanceMonitorRevisionsTable)
-			.where(eq(BalanceMonitorRevisionsTable.monitorId, record.row.id));
-		expect(versions).toHaveLength(1);
 	});
 	it("stores UUIDs and returns the same public TypeIDs", async () => {
 		const record = make();
@@ -301,5 +269,24 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			accountId: scope.accountId,
 			ledgerId: scope.ledgerId,
 		});
+	});
+	it("allows an unused Account to be deleted immediately after its monitor", async () => {
+		const unusedScope = { ...scope, accountId: accountIds[1].toString() };
+		const monitor = Effect.runSync(
+			LedgerAccountBalanceMonitor.fromRequest(
+				newLedgerAccountBalanceMonitorID(),
+				unusedScope,
+				request,
+				applicationTime,
+				"ciphertext"
+			)
+		);
+		await runtime.runPromise(repository.createMonitor(monitor));
+		await runtime.runPromise(repository.deleteMonitor(unusedScope, monitor.id));
+		const deleted = await database.db
+			.delete(LedgerAccountsTable)
+			.where(eq(LedgerAccountsTable.id, accountIds[1].toUUID()))
+			.returning();
+		expect(deleted).toHaveLength(1);
 	});
 });

@@ -71,7 +71,8 @@ const buildServer = async ({ runtimeLayer }: ServerOpts = {}): Promise<FastifyIn
 	try {
 		const config = await runtime.runPromise(ServerConfigTag);
 		server = fastify<Server, IncomingMessage, ServerResponse>({
-			forceCloseConnections: true,
+			// Node closes idle sockets itself; Fastify 5.11 treats "idle" as force-close here.
+			forceCloseConnections: false,
 			logger: {
 				transport: {
 					targets: [

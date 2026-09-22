@@ -153,7 +153,7 @@ pnpm run ci
 
 - [Getting Started](AGENTS.md) — Full development guide
 - [Engineering Standards](docs/standards/README.md) — Shared standards and app addenda
-- [Balance Monitors](apps/api/docs/product/balance-monitors.md) — Rules, webhook delivery, and worker operations
+- [Balance Monitors](apps/api/docs/product/balance-monitors.md) — Best-effort alerts, webhook delivery, and worker operations
 - [Ledger API Standards](docs/standards/api.md) — Backend architecture and development
 - [Customer Portal Standards](docs/standards/web.md) — Frontend architecture and development
 - [Documentation Standards](docs/standards/documentation.md) — Public content guidance

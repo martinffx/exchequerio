@@ -48,8 +48,6 @@ export class LedgerAccountBalanceMonitor {
 			// oxlint-disable-next-line unicorn/no-null -- PostgreSQL nullable columns use null.
 			metadata: encodeMetadata(request.metadata) ?? null,
 			lockVersion: 1,
-			// oxlint-disable-next-line unicorn/no-null -- PostgreSQL nullable columns use null.
-			deletedAt: null,
 			created: applicationTime.toJSDate(),
 			updated: applicationTime.toJSDate(),
 		});

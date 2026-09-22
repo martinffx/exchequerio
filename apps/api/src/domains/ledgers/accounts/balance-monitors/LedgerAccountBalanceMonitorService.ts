@@ -132,9 +132,8 @@ export class LedgerAccountBalanceMonitorService {
 		return Effect.gen({ self: this }, function* () {
 			yield* parseScope(scope);
 			const monitorId = yield* parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", id);
-			const time = yield* serverTime;
 			return yield* this.repository
-				.deleteMonitor(scope, monitorId, time.toJSDate())
+				.deleteMonitor(scope, monitorId)
 				.pipe(Effect.flatMap(requireFound(monitorId)));
 		});
 	}

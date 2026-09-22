@@ -1,7 +1,4 @@
-import type {
-	AlertCondition,
-	BalanceSnapshot,
-} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorSchema";
+import type { AlertCondition } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorSchema";
 import { type BuildQueryResult, defineRelations, sql } from "drizzle-orm";
 import {
 	jsonb,
@@ -400,7 +397,6 @@ const LedgerAccountBalanceMonitorsTable = pgTable(
 		webhookToken: text("webhook_token").notNull(),
 		metadata: text("metadata"),
 		lockVersion: integer("lock_version").notNull().default(1),
-		deletedAt: timestamp("deleted_at", { withTimezone: true }),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -423,48 +419,6 @@ type MonitorConfiguration = Pick<
 	LedgerAccountBalanceMonitorRow,
 	"description" | "alertCondition" | "webhookUrl" | "webhookToken" | "metadata"
 >;
-const BalanceMonitorRevisionsTable = pgTable(
-	"balance_monitor_revisions",
-	{
-		monitorId: uuid("monitor_id")
-			.notNull()
-			.references(() => LedgerAccountBalanceMonitorsTable.id, { onDelete: "cascade" }),
-		version: integer("version").notNull(),
-		accountId: uuid("account_id").notNull(),
-		startVersion: integer("start_version").notNull(),
-		endVersion: integer("end_version"),
-		configuration: jsonb("configuration").$type<MonitorConfiguration>().notNull(),
-	},
-	table => [
-		primaryKey({ columns: [table.monitorId, table.version] }),
-		index("balance_monitor_revisions_account_idx").on(table.accountId, table.startVersion),
-	]
-);
-const BalanceMonitorOutboxTable = pgTable(
-	"balance_monitor_outbox",
-	{
-		id: uuid("id").primaryKey(),
-		organizationId: uuid("organization_id").notNull(),
-		ledgerId: uuid("ledger_id").notNull(),
-		accountId: uuid("account_id").notNull(),
-		accountVersion: integer("account_version").notNull(),
-		transactionId: uuid("transaction_id").notNull(),
-		occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-		assetId: uuid("asset_id").notNull(),
-		assetCode: text("asset_code").notNull(),
-		minorUnitExponent: integer("minor_unit_exponent").notNull(),
-		before: jsonb("before").$type<BalanceSnapshot>().notNull(),
-		after: jsonb("after").$type<BalanceSnapshot>().notNull(),
-		claimToken: uuid("claim_token"),
-		claimUntil: timestamp("claim_until", { withTimezone: true }),
-		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
-	},
-	table => [
-		unique("balance_monitor_event_account_version_unique").on(table.accountId, table.accountVersion),
-		index("balance_monitor_outbox_claim_idx").on(table.claimUntil, table.created),
-	]
-);
-
 // Account Statements: Periodic balance snapshots and statements
 const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
 	id: uuid("id").primaryKey(),
@@ -752,8 +706,6 @@ type LedgerTransactionWithEntriesRow = BuildQueryResult<
 >;
 
 export {
-	BalanceMonitorRevisionsTable,
-	BalanceMonitorOutboxTable,
 	// Tables
 	AssetsTable,
 	OrganizationsTable,

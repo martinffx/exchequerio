@@ -84,7 +84,11 @@ const persist = (
 		transactionRequest,
 		DateTime.utc(),
 		transactionRequest.ledgerEntries.map(() => newLedgerTransactionEntryID())
-	).pipe(Effect.flatMap(transaction => repository.createTransaction(transaction)));
+	).pipe(
+		Effect.flatMap(transaction =>
+			repository.createTransaction(transaction).pipe(Effect.map(result => result.transaction))
+		)
+	);
 
 describe("LedgerTransactionRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
@@ -218,7 +222,10 @@ describe("LedgerTransactionRepoLive", () => {
 			})
 		);
 		const failure = await runtime.runPromise(
-			repository.createTransaction(generated).pipe(Effect.flip)
+			repository
+				.createTransaction(generated)
+				.pipe(Effect.map(result => result.transaction))
+				.pipe(Effect.flip)
 		);
 		expect(failure).toBeInstanceOf(TransactionSettlementConflict);
 	});
@@ -235,11 +242,19 @@ describe("LedgerTransactionRepoLive", () => {
 		await runtime.runPromise(persist(repository, organizationId, ledgerId, id, body));
 		const effectiveAt = "2027-01-01T00:00:00.000Z";
 		await runtime.runPromise(
-			repository.updateTransaction(organizationId, ledgerId, id, { ...body, effectiveAt })
+			repository
+				.updateTransaction(organizationId, ledgerId, id, { ...body, effectiveAt })
+				.pipe(Effect.map(result => result.transaction))
 		);
-		await runtime.runPromise(repository.updateTransaction(organizationId, ledgerId, id, body));
 		await runtime.runPromise(
-			repository.postTransaction(organizationId, ledgerId, id, DateTime.utc())
+			repository
+				.updateTransaction(organizationId, ledgerId, id, body)
+				.pipe(Effect.map(result => result.transaction))
+		);
+		await runtime.runPromise(
+			repository
+				.postTransaction(organizationId, ledgerId, id, DateTime.utc())
+				.pipe(Effect.map(result => result.transaction))
 		);
 		const loaded = Option.getOrThrow(
 			await runtime.runPromise(repository.getTransaction(organizationId, ledgerId, id))
@@ -248,7 +263,11 @@ describe("LedgerTransactionRepoLive", () => {
 		const balances = await accounts(organizationId, ledgerId, [debit]);
 		expect(balances.get(debit.toString())?.postedAmount).toBe(100n);
 		await expect(
-			runtime.runPromise(repository.updateTransaction(organizationId, ledgerId, id, body))
+			runtime.runPromise(
+				repository
+					.updateTransaction(organizationId, ledgerId, id, body)
+					.pipe(Effect.map(result => result.transaction))
+			)
 		).rejects.toBeInstanceOf(TransactionLifecycleConflict);
 	});
 
@@ -501,14 +520,16 @@ describe("LedgerTransactionRepoLive", () => {
 		const originalEntryIds = Option.getOrThrow(transaction.entries).map(entry => entry.id.toString());
 
 		const updated = await runtime.runPromise(
-			repository.updateTransaction(organizationId, ledgerId, transaction.id, {
-				description: "Updated",
-				ledgerEntries: [
-					{ accountId: debit.toString(), direction: "debit", amount: "30", ...summary(debit) },
-					{ accountId: debit.toString(), direction: "debit", amount: "10", ...summary(debit) },
-					{ accountId: credit.toString(), direction: "credit", amount: "40", ...summary(credit) },
-				],
-			})
+			repository
+				.updateTransaction(organizationId, ledgerId, transaction.id, {
+					description: "Updated",
+					ledgerEntries: [
+						{ accountId: debit.toString(), direction: "debit", amount: "30", ...summary(debit) },
+						{ accountId: debit.toString(), direction: "debit", amount: "10", ...summary(debit) },
+						{ accountId: credit.toString(), direction: "credit", amount: "40", ...summary(credit) },
+					],
+				})
+				.pipe(Effect.map(result => result.transaction))
 		);
 		const byId = await accounts(organizationId, ledgerId, [debit, credit]);
 		const updatedEntryIds = Option.getOrThrow(updated.entries).map(entry => entry.id.toString());
@@ -541,17 +562,25 @@ describe("LedgerTransactionRepoLive", () => {
 		const pendingToPost = await createPending();
 		const postedAt = DateTime.utc();
 		const posted = await runtime.runPromise(
-			repository.postTransaction(organizationId, ledgerId, pendingToPost.id, postedAt)
+			repository
+				.postTransaction(organizationId, ledgerId, pendingToPost.id, postedAt)
+				.pipe(Effect.map(result => result.transaction))
 		);
 		const postedAgain = await runtime.runPromise(
-			repository.postTransaction(organizationId, ledgerId, pendingToPost.id, postedAt)
+			repository
+				.postTransaction(organizationId, ledgerId, pendingToPost.id, postedAt)
+				.pipe(Effect.map(result => result.transaction))
 		);
 		const pendingToVoid = await createPending();
 		const voided = await runtime.runPromise(
-			repository.voidTransaction(organizationId, ledgerId, pendingToVoid.id, DateTime.utc())
+			repository
+				.voidTransaction(organizationId, ledgerId, pendingToVoid.id, DateTime.utc())
+				.pipe(Effect.map(result => result.transaction))
 		);
 		const voidedAgain = await runtime.runPromise(
-			repository.voidTransaction(organizationId, ledgerId, pendingToVoid.id, DateTime.utc())
+			repository
+				.voidTransaction(organizationId, ledgerId, pendingToVoid.id, DateTime.utc())
+				.pipe(Effect.map(result => result.transaction))
 		);
 		const byId = await accounts(organizationId, ledgerId, [debit, credit]);
 
@@ -575,7 +604,9 @@ describe("LedgerTransactionRepoLive", () => {
 		});
 		const error = await runtime.runPromise(
 			Effect.flip(
-				repository.voidTransaction(organizationId, ledgerId, pendingToPost.id, DateTime.utc())
+				repository
+					.voidTransaction(organizationId, ledgerId, pendingToPost.id, DateTime.utc())
+					.pipe(Effect.map(result => result.transaction))
 			)
 		);
 		expect(error).toBeInstanceOf(TransactionLifecycleConflict);

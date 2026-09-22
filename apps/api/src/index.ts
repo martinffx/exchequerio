@@ -1,7 +1,9 @@
+import { registerShutdown } from "@/shutdown";
 import { buildServer } from "@/server";
 
 const start = async () => {
 	const server = await buildServer();
+	registerShutdown(server);
 	try {
 		server.ready(() => console.log(server.printRoutes()));
 		await server.listen({ port: 3000, host: "::", ipv6Only: false });

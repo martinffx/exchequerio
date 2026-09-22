@@ -1,11 +1,12 @@
-import { Effect } from "effect";
+import { Effect, Logger } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { encryptToken } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
 import {
 	sendWebhook,
 	WebhookDeliveryError,
 } from "@/domains/ledgers/accounts/balance-monitors/MonitorWebhook";
-import { deliverMonitorJob, MonitorDelivery } from "./MonitorDelivery";
+import { JobStore, Worker } from "effect-mq";
+import { deliverMonitorJob, handleMonitorDelivery, MonitorDelivery } from "./MonitorDelivery";
 
 const key = Buffer.alloc(32, 1).toString("base64");
 const payload: typeof MonitorDelivery.payloadSchema.Type = {
@@ -78,4 +79,43 @@ describe("MonitorDelivery", () => {
 		).toBe("Unable to decrypt monitor token");
 		expect(send).not.toHaveBeenCalled();
 	});
+});
+
+it("logs a sanitized delivery failure with the actual worker attempt", async () => {
+	const messages: unknown[] = [];
+	const logger = Logger.make(entry => {
+		messages.push(entry.message);
+	});
+	const send = vi.fn<typeof sendWebhook>(() =>
+		Effect.fail(new WebhookDeliveryError({ message: "caller-token https://secret.example" }))
+	);
+	const failure = await Effect.runPromise(
+		handleMonitorDelivery(payload, key, send).pipe(
+			Effect.provideService(Worker.CurrentJob, {
+				jobId: JobStore.JobId("job"),
+				name: "balance-monitor-delivery",
+				queue: JobStore.QueueName("balance-monitor-delivery"),
+				attempt: 4,
+				attemptsMax: 12,
+			}),
+			Effect.provide(Logger.layer([logger], { mergeWithExisting: false })),
+			Effect.flip
+		)
+	);
+	expect(failure).toBe("Webhook delivery failed");
+	expect(messages).toEqual([
+		[
+			"monitor_delivery_failed",
+			{
+				jobId: "job",
+				eventId: payload.eventId,
+				monitorId: payload.monitorId,
+				attempt: 4,
+				reason: "Webhook delivery failed",
+			},
+		],
+	]);
+	expect(JSON.stringify(messages)).not.toContain("caller-token");
+	expect(JSON.stringify(messages)).not.toContain("secret.example");
+	expect(JSON.stringify(messages)).not.toContain(payload.webhookToken);
 });

@@ -1,15 +1,13 @@
 import { TypeID } from "typeid-js";
 import { encodeUuid } from "@/lib/utils";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import { NotFoundError } from "@/lib/errors";
 import type { LedgerAccountBalanceMonitorID } from "@/lib/ids";
 import {
-	BalanceMonitorRevisionsTable as revisions,
 	LedgerAccountBalanceMonitorsTable as monitors,
 	LedgerAccountsTable as accounts,
-	type LedgerAccountBalanceMonitorRow,
 	type MonitorConfiguration,
 } from "@/db/schema";
 import { LedgerAccountBalanceMonitor, type MonitorScope } from "./LedgerAccountBalanceMonitor";
@@ -39,22 +37,8 @@ const monitorWhere = (scope: MonitorScope, id?: LedgerAccountBalanceMonitorID) =
 		eq(monitors.accountId, scope.accountId),
 		eq(monitors.ledgerId, scope.ledgerId),
 		eq(monitors.organizationId, scope.organizationId),
-		isNull(monitors.deletedAt),
 		id ? eq(monitors.id, encodeUuid(id)) : undefined
 	);
-const configuration = ({
-	description,
-	alertCondition,
-	webhookUrl,
-	webhookToken,
-	metadata,
-}: LedgerAccountBalanceMonitorRow): MonitorConfiguration => ({
-	description,
-	alertCondition,
-	webhookUrl,
-	webhookToken,
-	metadata,
-});
 export class LedgerAccountBalanceMonitorRepoLive {
 	constructor(private readonly db: EffectDrizzleDatabase) {}
 	private requireAccount(scope: MonitorScope) {
@@ -108,13 +92,6 @@ export class LedgerAccountBalanceMonitorRepoLive {
 						.for("update");
 					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
 					const [row] = yield* tx.insert(monitors).values(record.toCreateRow()).returning();
-					yield* tx.insert(revisions).values({
-						monitorId: row.id,
-						accountId: row.accountId,
-						version: row.lockVersion,
-						startVersion: account.lockVersion,
-						configuration: configuration(row),
-					});
 					yield* tx
 						.update(accounts)
 						.set({ balanceMonitorCount: sql`${accounts.balanceMonitorCount} + 1` })
@@ -138,29 +115,18 @@ export class LedgerAccountBalanceMonitorRepoLive {
 					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
 					const [current] = yield* tx.select().from(monitors).where(monitorWhere(scope, id));
 					if (!current) return Option.none<LedgerAccountBalanceMonitor>();
-					yield* tx
-						.update(revisions)
-						.set({ endVersion: account.lockVersion })
-						.where(and(eq(revisions.monitorId, current.id), eq(revisions.version, current.lockVersion)));
 					const [row] = yield* tx
 						.update(monitors)
 						.set({ ...changes, lockVersion: current.lockVersion + 1, updated: time })
 						.where(monitorWhere(scope, id))
 						.returning();
-					yield* tx.insert(revisions).values({
-						monitorId: row.id,
-						accountId: row.accountId,
-						version: row.lockVersion,
-						startVersion: account.lockVersion,
-						configuration: configuration(row),
-					});
 					// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
 					return Option.some(yield* LedgerAccountBalanceMonitor.fromRow(row));
 				})
 			)
 			.pipe(Effect.mapError(mapError));
 	}
-	deleteMonitor(scope: MonitorScope, id: LedgerAccountBalanceMonitorID, time: Date) {
+	deleteMonitor(scope: MonitorScope, id: LedgerAccountBalanceMonitorID) {
 		scope = toScopeRow(scope);
 		return this.db
 			.transaction(tx =>
@@ -169,14 +135,7 @@ export class LedgerAccountBalanceMonitorRepoLive {
 					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
 					const [current] = yield* tx.select().from(monitors).where(monitorWhere(scope, id));
 					if (!current) return Option.none<void>();
-					yield* tx
-						.update(revisions)
-						.set({ endVersion: account.lockVersion })
-						.where(and(eq(revisions.monitorId, current.id), eq(revisions.version, current.lockVersion)));
-					yield* tx
-						.update(monitors)
-						.set({ deletedAt: time, updated: time })
-						.where(monitorWhere(scope, id));
+					yield* tx.delete(monitors).where(monitorWhere(scope, id));
 					yield* tx
 						.update(accounts)
 						.set({ balanceMonitorCount: sql`${accounts.balanceMonitorCount} - 1` })

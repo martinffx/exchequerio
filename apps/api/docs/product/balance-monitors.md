@@ -62,16 +62,31 @@ There is no public alert-history API.
 
 ## Processing and durability
 
-The ledger write saves an Account's before/after snapshot in a PostgreSQL outbox in the same
-transaction as its balance update. Accounts without monitors and changes with identical snapshots
-do not create outbox events. This adds database writes to monitored balance changes; it does not
-perform webhook requests inside the ledger transaction.
+Alerts are best effort. Inside the accounting transaction, the repository captures before/after
+balances and the applicable monitor configuration while holding the Account locks. After commit,
+the service hands these self-contained jobs to an application-owned background task and continues
+without waiting for Valkey. Publication allows four retries after the first attempt, with exponential
+backoff starting at 100 ms and ±20% jitter. Each attempt has a five-second timeout; the full retry
+sequence takes at most approximately 27 seconds. Retries reuse the same payloads and job IDs, so
+partial success or a lost acknowledgement does not duplicate jobs. This covers ordinary and Settlement Transactions.
+Accounts without monitors, unchanged balances, rollbacks, and completed accounting replays produce
+no new jobs. Webhook requests run only in the delivery worker.
 
-A separate worker claims bounded outbox batches with expiring leases and publishes self-contained
-jobs through effect-mq 0.7.0 to the existing Valkey service. It deletes an outbox event only after
-publishing all its monitor jobs successfully. Stable job keys make repeated publication safe.
-PostgreSQL LISTEN/NOTIFY wakes the relay, with startup/reconnect and periodic recovery scans for
-missed notifications. Notifications are wakeups; PostgreSQL holds the durable work until handoff.
+There is no PostgreSQL outbox or relay. A crash between accounting commit and enqueue can lose an
+alert, and publication is not recovered automatically after retries are exhausted. Exhausted enqueue failures and timeouts are logged
+and do not retry or roll back accounting. The service continues its existing idempotency completion
+or Settlement finalization. Those operations retain their own failure behavior.
+
+`monitor_enqueue_failed` logs Transaction, Account, and job IDs with a sanitized reason and attempt count. Its
+`unconfirmed` outcome means Valkey may have accepted some or all jobs despite the missing response.
+`monitor_delivery_failed` identifies the event, monitor, job, and attempt. Neither log includes
+credentials, webhook URLs, payloads, or raw errors. Use these events for operational alerts; an
+abrupt process or host failure can occur before any log is written.
+
+SIGTERM and SIGINT stop the API from accepting work, await active requests, then drain tracked
+background enqueue tasks before disposing Valkey and the runtime. The API Compose service allows
+60 seconds for shutdown. Other deployments must allow enough time for active requests and the
+remaining enqueue retries. Forced termination and host failure cannot be drained.
 
 Each job evaluates its own before/after snapshots, so evaluation does not require Account ordering.
 Matching jobs deliver the webhook with at most 12 total attempts and exponential delays starting at
@@ -80,10 +95,9 @@ Completed and cancelled jobs expire after 24 hours; failed jobs expire after 7 d
 are not removed by these retention limits. Inspect and replay failures before their retention expires.
 
 Valkey uses a durable volume, AOF persistence with `appendfsync everysec`, and `noeviction`.
-After a confirmed Valkey handoff, PostgreSQL no longer retains that event. This design explicitly
-accepts roughly one second of handed-off work loss if Valkey crashes before its AOF is flushed;
-it does not guarantee recovery from loss of the Valkey volume. A stopped worker can resume work
-that remains in PostgreSQL or durable Valkey storage.
+This design accepts roughly one second of queued work loss if Valkey crashes before its AOF is
+flushed; it does not guarantee recovery from loss of the Valkey volume. A stopped delivery worker
+can resume jobs retained in Valkey.
 
 ## Running and operating
 
@@ -123,10 +137,12 @@ The Compose `api` profile starts both API and worker from the same image. Export
 docker-compose --env-file apps/api/.env --profile api up -d --build
 ```
 
-Run database migrations before starting the new API and worker. The unreleased monitor migration
-now follows the UUID and Asset cutovers. Use a fresh development database to replay this history;
-there is no compatibility path for the earlier branch-only monitor migration or queue payloads. The monitor migration refuses to
-proceed when legacy monitor rows exist because those rows did not persist the new rule and webhook
-configuration. Export the old records, explicitly remove them with operator authorization, rerun the
-migration, and recreate monitors with complete configuration. Do not silently discard records or
-invent conditions during migration.
+For the best-effort cutover, stop accounting writes and let the old relay drain
+`balance_monitor_outbox` completely. Stop the old API and worker, apply migrations, then start the
+new API and delivery worker. The forward migration refuses a nonempty outbox, preserves active
+monitors, removes already-deleted monitor heads, and drops outbox and revision storage. Existing
+Valkey jobs remain compatible and keep their captured configuration.
+
+The earlier initial monitor migration still refuses legacy rows that lack complete rule and webhook
+configuration. Resolve those records explicitly before applying that migration. A fresh development
+database can replay the full migration history.
