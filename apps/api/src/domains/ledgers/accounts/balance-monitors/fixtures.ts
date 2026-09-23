@@ -1,6 +1,6 @@
-import type { MonitorJob } from "./BalanceMonitorJob";
+import type { LedgerAccountBalanceMonitorJobPayload } from "./LedgerAccountBalanceMonitorJob";
 
-export const monitorJob: MonitorJob = {
+export const monitorJob: LedgerAccountBalanceMonitorJobPayload = {
 	eventId: "event",
 	monitorId: "monitor",
 	monitorVersion: 1,

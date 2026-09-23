@@ -1,4 +1,4 @@
-import type { MonitorJob } from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
+import type { LedgerAccountBalanceMonitorJobPayload } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { randomUUID } from "node:crypto";
 import { encodeUuid } from "@/lib/utils";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
@@ -56,7 +56,7 @@ import type {
 /** Committed accounting and immutable jobs to publish after the repository returns. */
 export interface AccountingMutation {
 	transaction: LedgerTransaction;
-	monitorJobs: MonitorJob[];
+	monitorJobs: LedgerAccountBalanceMonitorJobPayload[];
 }
 
 /** Failures returned while creating ordinary Transaction accounting. */
@@ -998,7 +998,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	) {
 		return Effect.gen(function* () {
 			const events: Omit<
-				MonitorJob,
+				LedgerAccountBalanceMonitorJobPayload,
 				"monitorId" | "monitorVersion" | "alertCondition" | "webhookUrl" | "webhookSigningSecret"
 			>[] = [];
 			yield* Effect.try({

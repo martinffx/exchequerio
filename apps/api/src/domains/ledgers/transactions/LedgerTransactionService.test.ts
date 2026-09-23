@@ -1,11 +1,11 @@
 import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
 import { MemoryJobStore } from "effect-mq";
 import {
-	BalanceMonitorJob,
-	MonitorPublisher,
-	monitorPublisherLayer,
-	type MonitorJob,
-} from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
+	LedgerAccountBalanceMonitorJob,
+	LedgerAccountBalanceMonitorPublisher,
+	ledgerAccountBalanceMonitorPublisherLayer,
+	type LedgerAccountBalanceMonitorJobPayload,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { Asset } from "@/domains/assets/Asset";
 import { NotFoundError } from "@/lib/errors";
 import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
@@ -144,9 +144,11 @@ const assets = {
 		)
 	),
 };
-const publish = vi.fn<(jobs: readonly MonitorJob[]) => Effect.Effect<void>>(() => Effect.void);
+const publish = vi.fn<
+	(jobs: readonly LedgerAccountBalanceMonitorJobPayload[]) => Effect.Effect<void>
+>(() => Effect.void);
 const dependencies = Layer.mergeAll(
-	Layer.succeed(MonitorPublisher, publish),
+	Layer.succeed(LedgerAccountBalanceMonitorPublisher, publish),
 	Layer.succeed(AssetServiceTag, assets as unknown as AssetService),
 	Layer.succeed(LedgerTransactionRepoTag, repository),
 	Layer.succeed(IdempotencyServiceTag, idempotency),
@@ -443,11 +445,14 @@ it("completes accounting idempotency without retrying when enqueue fails", async
 	repository.createTransaction.mockReturnValue(
 		Effect.succeed({ transaction, monitorJobs: [monitorJob] })
 	);
-	vi.spyOn(BalanceMonitorJob, "enqueueMany").mockReturnValue(Effect.die("unavailable"));
+	vi.spyOn(LedgerAccountBalanceMonitorJob, "enqueueMany").mockReturnValue(Effect.die("unavailable"));
 	publish.mockImplementation(jobs =>
 		Effect.gen(function* () {
-			yield* (yield* MonitorPublisher)(jobs);
-		}).pipe(Effect.provide(monitorPublisherLayer), Effect.provide(MemoryJobStore.layer))
+			yield* (yield* LedgerAccountBalanceMonitorPublisher)(jobs);
+		}).pipe(
+			Effect.provide(ledgerAccountBalanceMonitorPublisherLayer),
+			Effect.provide(MemoryJobStore.layer)
+		)
 	);
 	expect(
 		await runtime.runPromise(service.createTransactionEntity(idempotencyKey, transaction))
@@ -463,7 +468,7 @@ it("completes accounting and idempotency while background enqueue is still block
 		finish = resolve;
 	});
 	const enqueued = vi.fn<() => void>();
-	vi.spyOn(BalanceMonitorJob, "enqueueMany").mockReturnValue(
+	vi.spyOn(LedgerAccountBalanceMonitorJob, "enqueueMany").mockReturnValue(
 		Effect.gen(function* () {
 			yield* Effect.promise(() => pending);
 			enqueued();
@@ -471,10 +476,10 @@ it("completes accounting and idempotency while background enqueue is still block
 		})
 	);
 	const publisherRuntime = ManagedRuntime.make(
-		monitorPublisherLayer.pipe(Layer.provide(MemoryJobStore.layer))
+		ledgerAccountBalanceMonitorPublisherLayer.pipe(Layer.provide(MemoryJobStore.layer))
 	);
 	try {
-		const backgroundPublish = await publisherRuntime.runPromise(MonitorPublisher);
+		const backgroundPublish = await publisherRuntime.runPromise(LedgerAccountBalanceMonitorPublisher);
 		publish.mockImplementation(backgroundPublish);
 		repository.createTransaction.mockReturnValue(
 			Effect.succeed({ transaction, monitorJobs: [monitorJob] })

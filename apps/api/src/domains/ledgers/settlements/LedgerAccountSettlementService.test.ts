@@ -1,10 +1,10 @@
 import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
 import {
-	BalanceMonitorJob,
-	MonitorPublisher,
-	monitorPublisherLayer,
-	type MonitorJob,
-} from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
+	LedgerAccountBalanceMonitorJob,
+	LedgerAccountBalanceMonitorPublisher,
+	ledgerAccountBalanceMonitorPublisherLayer,
+	type LedgerAccountBalanceMonitorJobPayload,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { MemoryJobStore } from "effect-mq";
 import { randomUUID } from "node:crypto";
 import { Effect, Option } from "effect";
@@ -66,7 +66,9 @@ let idempotency: Mocked<IdempotencyService>;
 let getAccount: Mocked<Pick<AccountService, "getAccount">>["getAccount"];
 let service: LedgerAccountSettlementService;
 let key: string;
-let publish = vi.fn<(jobs: readonly MonitorJob[]) => Effect.Effect<void>>(() => Effect.void);
+let publish = vi.fn<
+	(jobs: readonly LedgerAccountBalanceMonitorJobPayload[]) => Effect.Effect<void>
+>(() => Effect.void);
 
 beforeEach(() => {
 	key = randomUUID();
@@ -468,13 +470,16 @@ it("finalizes committed Settlement accounting even when enqueue fails", async ()
 		Effect.succeed({ transaction: accounting, monitorJobs: [monitorJob] })
 	);
 	const enqueue = vi
-		.spyOn(BalanceMonitorJob, "enqueueMany")
+		.spyOn(LedgerAccountBalanceMonitorJob, "enqueueMany")
 		.mockReturnValue(Effect.die("unavailable"));
 	try {
 		publish.mockImplementation(jobs =>
 			Effect.gen(function* () {
-				yield* (yield* MonitorPublisher)(jobs);
-			}).pipe(Effect.provide(monitorPublisherLayer), Effect.provide(MemoryJobStore.layer))
+				yield* (yield* LedgerAccountBalanceMonitorPublisher)(jobs);
+			}).pipe(
+				Effect.provide(ledgerAccountBalanceMonitorPublisherLayer),
+				Effect.provide(MemoryJobStore.layer)
+			)
 		);
 		await expect(create()).resolves.toBe(finalized);
 		expect(transactions.createSettlementTransaction).toHaveBeenCalledOnce();

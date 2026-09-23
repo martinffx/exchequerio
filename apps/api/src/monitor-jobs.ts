@@ -1,15 +1,19 @@
+import {
+	LedgerAccountBalanceMonitorJob,
+	makeLedgerAccountBalanceMonitorJobStore,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { Effect, ManagedRuntime, Option } from "effect";
 import { JobStore } from "effect-mq";
 import { Config } from "@/config";
-import { BalanceMonitorJob } from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
-import { makeMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/MonitorQueue";
 
 const [command, rawId, ...extra] = process.argv.slice(2);
 if (!rawId || !["inspect", "replay"].includes(command ?? "") || extra.length) {
 	console.error("Usage: monitor:jobs <inspect|replay> <jobId>");
 	process.exitCode = 1;
 } else {
-	const runtime = ManagedRuntime.make(makeMonitorJobStore(new Config().valkeyUrl));
+	const runtime = ManagedRuntime.make(
+		makeLedgerAccountBalanceMonitorJobStore(new Config().valkeyUrl)
+	);
 	try {
 		const result = await runtime.runPromise(
 			Effect.gen(function* () {
@@ -27,7 +31,7 @@ if (!rawId || !["inspect", "replay"].includes(command ?? "") || extra.length) {
 				if (command === "replay") {
 					if (job.state !== "failed")
 						return yield* Effect.fail("Only failed monitor jobs can be replayed");
-					yield* BalanceMonitorJob.retry(id);
+					yield* LedgerAccountBalanceMonitorJob.retry(id);
 					return { id, replayed: true };
 				}
 				// Allowlist operational fields: never print payload, credentials, or arbitrary stored errors.

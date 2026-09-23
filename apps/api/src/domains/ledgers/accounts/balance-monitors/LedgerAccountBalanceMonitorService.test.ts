@@ -14,7 +14,7 @@ import {
 import { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonitorService";
 import type { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import type { LedgerAccountBalanceMonitorRequest } from "./LedgerAccountBalanceMonitorSchema";
-import { decryptSecret } from "./MonitorSecrets";
+import { decryptSecret } from "@/lib/crypto";
 const scope = {
 	organizationId: newOrgID().toString(),
 	ledgerId: newLedgerID().toString(),

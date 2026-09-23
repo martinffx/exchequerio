@@ -1,17 +1,21 @@
+import {
+	makeLedgerAccountBalanceMonitorJobWorker,
+	makeLedgerAccountBalanceMonitorJobStore,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { Config } from "@/config";
-import { encryptSecret } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
-import { makeBalanceMonitorJobWorker } from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
-import { makeMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/MonitorQueue";
+import { encryptSecret } from "@/lib/crypto";
 
 const config = new Config();
 // Validate before starting a worker that could otherwise exhaust jobs with an invalid key.
 encryptSecret("", config.balanceMonitorEncryptionKey);
-const store = makeMonitorJobStore(config.valkeyUrl);
+const store = makeLedgerAccountBalanceMonitorJobStore(config.valkeyUrl);
 const runtime = ManagedRuntime.make(
 	Layer.mergeAll(
 		store,
-		makeBalanceMonitorJobWorker(config.balanceMonitorEncryptionKey).pipe(Layer.provide(store))
+		makeLedgerAccountBalanceMonitorJobWorker(config.balanceMonitorEncryptionKey).pipe(
+			Layer.provide(store)
+		)
 	)
 );
 let stopping = false;

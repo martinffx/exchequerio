@@ -1,10 +1,10 @@
 import { JobStore, MemoryJobStore } from "effect-mq";
 import {
-	BalanceMonitorJob,
-	MonitorPublisher,
-	monitorPublisherLayer,
-	type MonitorJob,
-} from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
+	LedgerAccountBalanceMonitorJob,
+	LedgerAccountBalanceMonitorPublisher,
+	ledgerAccountBalanceMonitorPublisherLayer,
+	type LedgerAccountBalanceMonitorJobPayload,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
 import { EventEmitter } from "node:events";
 import { request } from "node:http";
@@ -85,7 +85,7 @@ it("responds before enqueue finishes, then drains publication on shutdown before
 	});
 	const enqueued = vi.fn<() => void>();
 	const released = vi.fn<() => void>();
-	const enqueue = vi.spyOn(BalanceMonitorJob, "enqueueMany").mockReturnValue(
+	const enqueue = vi.spyOn(LedgerAccountBalanceMonitorJob, "enqueueMany").mockReturnValue(
 		Effect.gen(function* () {
 			yield* Effect.promise(() => pending);
 			enqueued();
@@ -100,14 +100,16 @@ it("responds before enqueue finishes, then drains publication on shutdown before
 			return store;
 		})
 	).pipe(Layer.provide(MemoryJobStore.layer));
-	let publish!: (jobs: readonly MonitorJob[]) => Effect.Effect<void>;
+	let publish!: (jobs: readonly LedgerAccountBalanceMonitorJobPayload[]) => Effect.Effect<void>;
 	const runtimeLayer = Layer.effect(
 		ServerConfigTag,
 		Effect.gen(function* () {
-			publish = yield* MonitorPublisher;
+			publish = yield* LedgerAccountBalanceMonitorPublisher;
 			return new Config({ environment: "test", jwtSecret: "test-secret" });
 		})
-	).pipe(Layer.provide(monitorPublisherLayer.pipe(Layer.provide(store)))) as ServerRuntimeLayer;
+	).pipe(
+		Layer.provide(ledgerAccountBalanceMonitorPublisherLayer.pipe(Layer.provide(store)))
+	) as ServerRuntimeLayer;
 	const server = await buildServer({ runtimeLayer });
 	const signals = new EventEmitter();
 	const stop = registerShutdown(server, signals);

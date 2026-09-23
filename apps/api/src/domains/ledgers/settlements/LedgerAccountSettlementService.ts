@@ -1,7 +1,7 @@
 import {
-	MonitorPublisher,
-	type MonitorJob,
-} from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
+	LedgerAccountBalanceMonitorPublisher,
+	type LedgerAccountBalanceMonitorJobPayload,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { Context, Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
 import { type AccountService, AccountServiceTag } from "../accounts/AccountService";
@@ -44,7 +44,9 @@ class LedgerAccountSettlementService {
 		private readonly accounts: AccountService,
 		private readonly transactions: LedgerTransactionRepo,
 		private readonly idempotency: IdempotencyService,
-		private readonly publish: (jobs: readonly MonitorJob[]) => Effect.Effect<void>
+		private readonly publish: (
+			jobs: readonly LedgerAccountBalanceMonitorJobPayload[]
+		) => Effect.Effect<void>
 	) {}
 	/**
 	 * Lists Settlements within one Organization and Ledger.
@@ -331,7 +333,7 @@ const ledgerAccountSettlementServiceLayer = Layer.effect(
 			yield* AccountServiceTag,
 			yield* LedgerTransactionRepoTag,
 			yield* IdempotencyServiceTag,
-			yield* MonitorPublisher
+			yield* LedgerAccountBalanceMonitorPublisher
 		);
 	})
 );

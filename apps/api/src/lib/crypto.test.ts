@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { decodeSigningSecret, signWebhook, decryptSecret, encryptSecret } from "./MonitorSecrets";
+import { decodeSigningSecret, signWebhook, decryptSecret, encryptSecret } from "./crypto";
 
 const key = Buffer.alloc(32, 7).toString("base64");
-describe("monitor secrets", () => {
+describe("secrets", () => {
 	it("roundtrips tokens with randomized authenticated ciphertext", () => {
 		const encrypted = encryptSecret("private-token", key);
 		expect(encrypted).not.toContain("private-token");
@@ -12,17 +12,17 @@ describe("monitor secrets", () => {
 	it("rejects tampering and wrong keys without exposing inputs", () => {
 		const encrypted = encryptSecret("private-token", key);
 		for (const value of ["private-token", `${encrypted.slice(0, -4)}AAAA`]) {
-			expect(() => decryptSecret(value, key)).toThrow("Unable to decrypt monitor secret");
+			expect(() => decryptSecret(value, key)).toThrow("Unable to decrypt secret");
 		}
 		expect(() => decryptSecret(encrypted, Buffer.alloc(32, 8).toString("base64"))).toThrow(
-			"Unable to decrypt monitor secret"
+			"Unable to decrypt secret"
 		);
 	});
 	it.each(["secret", "", Buffer.alloc(31).toString("base64"), `${key}garbage`])(
 		"rejects invalid keys",
 		invalid => {
-			expect(() => encryptSecret("private-token", invalid)).toThrow("Invalid monitor encryption key");
-			expect(() => decryptSecret("private-token", invalid)).toThrow("Invalid monitor encryption key");
+			expect(() => encryptSecret("private-token", invalid)).toThrow("Invalid encryption key");
+			expect(() => decryptSecret("private-token", invalid)).toThrow("Invalid encryption key");
 		}
 	);
 });

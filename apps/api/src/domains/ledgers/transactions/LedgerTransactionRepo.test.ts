@@ -1,4 +1,4 @@
-import type { MonitorJob } from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
+import type { LedgerAccountBalanceMonitorJobPayload } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { Client } from "pg";
 import { TypeID } from "typeid-js";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -649,7 +649,7 @@ describe("LedgerTransactionRepoLive", () => {
 	});
 
 	describe("balance monitor capture", () => {
-		const jobs: MonitorJob[] = [];
+		const jobs: LedgerAccountBalanceMonitorJobPayload[] = [];
 		const capture = (result: AccountingMutation) => {
 			jobs.push(...result.monitorJobs);
 			return result.transaction;

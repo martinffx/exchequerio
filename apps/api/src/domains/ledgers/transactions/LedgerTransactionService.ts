@@ -1,7 +1,7 @@
 import {
-	MonitorPublisher,
-	type MonitorJob,
-} from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
+	LedgerAccountBalanceMonitorPublisher,
+	type LedgerAccountBalanceMonitorJobPayload,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { Clock, Context, Effect, Layer, Option, Schedule } from "effect";
 import { DateTime } from "luxon";
 
@@ -243,7 +243,9 @@ class TransactionServiceLive implements TransactionService {
 		private readonly idempotency: IdempotencyService,
 		private readonly ledgerService: LedgerService,
 		private readonly assetService: Pick<AssetService, "getAsset">,
-		private readonly publish: (jobs: readonly MonitorJob[]) => Effect.Effect<void>
+		private readonly publish: (
+			jobs: readonly LedgerAccountBalanceMonitorJobPayload[]
+		) => Effect.Effect<void>
 	) {}
 
 	/**
@@ -608,7 +610,12 @@ const transactionServiceLayer = Layer.effect(
 	TransactionServiceTag,
 	LedgerTransactionRepoTag.pipe(
 		Effect.flatMap(repository =>
-			Effect.all([IdempotencyServiceTag, LedgerServiceTag, AssetServiceTag, MonitorPublisher]).pipe(
+			Effect.all([
+				IdempotencyServiceTag,
+				LedgerServiceTag,
+				AssetServiceTag,
+				LedgerAccountBalanceMonitorPublisher,
+			]).pipe(
 				Effect.map(
 					([idempotency, ledgerService, assetService, publish]) =>
 						new TransactionServiceLive(repository, idempotency, ledgerService, assetService, publish)

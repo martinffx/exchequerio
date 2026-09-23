@@ -3,7 +3,7 @@ import { createHmac, createCipheriv, createDecipheriv, randomBytes } from "node:
 const decodeKey = (key: string): Buffer => {
 	const bytes = Buffer.from(key, "base64");
 	if (bytes.length !== 32 || bytes.toString("base64") !== key) {
-		throw new Error("Invalid monitor encryption key");
+		throw new Error("Invalid encryption key");
 	}
 	return bytes;
 };
@@ -16,7 +16,7 @@ export const encryptSecret = (plaintext: string, key: string): string => {
 		const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
 		return `v1.${Buffer.concat([nonce, cipher.getAuthTag(), ciphertext]).toString("base64")}`;
 	} catch {
-		throw new Error("Unable to encrypt monitor secret");
+		throw new Error("Unable to encrypt secret");
 	}
 };
 
@@ -31,7 +31,7 @@ export const decryptSecret = (ciphertext: string, key: string): string => {
 		decipher.setAuthTag(bytes.subarray(12, 28));
 		return Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString("utf8");
 	} catch {
-		throw new Error("Unable to decrypt monitor secret");
+		throw new Error("Unable to decrypt secret");
 	}
 };
 
