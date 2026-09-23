@@ -13,22 +13,25 @@ Read only the documents relevant to the work:
 
 ## Repository map
 
-| Scope              | Source       | Required references                                                                                                                                                                                           |
-| ------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ledger API         | `apps/api/`  | [Shared standards](./docs/standards/README.md), [API addendum](./docs/standards/api.md), and [ERD](./apps/api/docs/product/erd.md) |
-| Customer portal    | `apps/web/`  | [Shared standards](./docs/standards/README.md) and [web addendum](./docs/standards/web.md)                                                                                                                    |
-| Documentation site | `apps/docs/` | [Shared standards](./docs/standards/README.md), [documentation addendum](./docs/standards/documentation.md), and [CONTEXT.md](./CONTEXT.md) for all Ledger terminology                                        |
+| Scope              | Source       | Required references                                                                                                                                                    |
+| ------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ledger API         | `apps/api/`  | [Shared standards](./docs/standards/README.md), [API addendum](./docs/standards/api.md), and [ERD](./apps/api/docs/product/erd.md)                                     |
+| Customer portal    | `apps/web/`  | [Shared standards](./docs/standards/README.md) and [web addendum](./docs/standards/web.md)                                                                             |
+| Documentation site | `apps/docs/` | [Shared standards](./docs/standards/README.md), [documentation addendum](./docs/standards/documentation.md), and [CONTEXT.md](./CONTEXT.md) for all Ledger terminology |
 
 ## Agent workflow
 
 - Use `atelier-orchestrator` at the start of development work. It selects an Inline Plan for bounded changes or a Spec-backed Plan when durable design and coordination artifacts are warranted.
 - Use `ponytail` at full intensity for development work. Prefer the smallest behavior-preserving change, reuse existing code and platform behavior, and defer shared abstractions until a second current consumer exists.
+- State required guarantees and acceptable failures in the plan before implementation. Revise the approved plan when those change.
+- Check existing solutions and concurrent changes to shared dependencies before substantial work.
 - Treat framework and architecture migrations as behavior-preserving. Before implementation, list every intended change to API behavior, domain rules, persistence, errors, identifiers, time, or operational behavior; the default is none. Stop and split the work if implementation discovers an unlisted change.
 - Keep migrations separate from product and infrastructure changes unless the broader scope is explicitly requested.
 - Treat skills as decision guidance, not implementation checklists; the task and existing source determine which patterns apply.
 - Read [domain documentation guidance](./docs/agents/domain.md) before domain-modelling work. Maintain `CONTEXT.md` as a glossary, not an implementation specification.
 - Read [issue-tracker guidance](./docs/agents/issue-tracker.md) when issue tracking is relevant. `plan.json` remains authoritative for Spec-backed task details and dependencies.
 - Preserve unrelated work in a dirty worktree. Do not commit, push, or open a pull request unless explicitly requested.
+- Report checks actually executed and their results separately from tests added.
 
 ## Repository skills
 

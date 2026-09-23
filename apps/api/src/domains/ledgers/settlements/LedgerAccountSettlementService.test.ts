@@ -1,3 +1,11 @@
+import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
+import {
+	LedgerAccountBalanceMonitorJob,
+	LedgerAccountBalanceMonitorPublisher,
+	ledgerAccountBalanceMonitorPublisherLayer,
+	type LedgerAccountBalanceMonitorJobPayload,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
+import { MemoryJobStore } from "effect-mq";
 import { randomUUID } from "node:crypto";
 import { Effect, Option } from "effect";
 import { DateTime } from "luxon";
@@ -58,9 +66,13 @@ let idempotency: Mocked<IdempotencyService>;
 let getAccount: Mocked<Pick<AccountService, "getAccount">>["getAccount"];
 let service: LedgerAccountSettlementService;
 let key: string;
+let publish = vi.fn<
+	(jobs: readonly LedgerAccountBalanceMonitorJobPayload[]) => Effect.Effect<void>
+>(() => Effect.void);
 
 beforeEach(() => {
 	key = randomUUID();
+	publish = vi.fn(() => Effect.void);
 	repository = {
 		listSettlements: vi.fn(),
 		getSettlement: vi.fn(),
@@ -90,7 +102,9 @@ beforeEach(() => {
 		voidTransaction: vi.fn(),
 	};
 	transactions.getSettlementTransaction.mockReturnValue(Effect.succeed(Option.none()));
-	transactions.createSettlementTransaction.mockReturnValue(Effect.succeed(accounting));
+	transactions.createSettlementTransaction.mockReturnValue(
+		Effect.succeed({ transaction: accounting, monitorJobs: [] })
+	);
 	idempotency = { claim: vi.fn(), complete: vi.fn(), release: vi.fn() };
 	idempotency.claim.mockReturnValue(Effect.succeed(Option.none()));
 	idempotency.complete.mockReturnValue(Effect.void);
@@ -115,7 +129,8 @@ beforeEach(() => {
 		repository,
 		{ getAccount } as unknown as AccountService,
 		transactions,
-		idempotency
+		idempotency,
+		publish
 	);
 });
 
@@ -154,7 +169,7 @@ describe("LedgerAccountSettlementService", () => {
 					key,
 					settlementId.toString()
 				);
-				return accounting;
+				return { transaction: accounting, monitorJobs: [] };
 			})
 		);
 		repository.finalizeSettlement.mockImplementation(() =>
@@ -238,8 +253,12 @@ describe("LedgerAccountSettlementService", () => {
 			repository.getSettlement.mockReturnValue(Effect.succeed(processing));
 			repository.finalizeSettlement.mockReturnValue(Effect.succeed(terminal));
 			transactions.getSettlementTransaction.mockReturnValue(Effect.succeed(existingAccounting));
-			transactions.postSettlementTransaction.mockReturnValue(Effect.succeed(accounting));
-			transactions.voidSettlementTransaction.mockReturnValue(Effect.succeed(accounting));
+			transactions.postSettlementTransaction.mockReturnValue(
+				Effect.succeed({ transaction: accounting, monitorJobs: [] })
+			);
+			transactions.voidSettlementTransaction.mockReturnValue(
+				Effect.succeed({ transaction: accounting, monitorJobs: [] })
+			);
 			await expect(
 				Effect.runPromise(
 					service.patchLedgerAccountSettlement(organizationId, ledgerId, settlementId, key, {
@@ -410,4 +429,62 @@ describe("LedgerAccountSettlementService", () => {
 		);
 		expect(transactions.getSettlementTransaction).not.toHaveBeenCalled();
 	});
+});
+
+it.each(["pending", "posted", "voided"] as const)(
+	"publishes %s accounting before Settlement finalization",
+	async target => {
+		const processing = new LedgerAccountSettlementEntity({ ...prepared.data, targetStatus: target });
+		repository.getSettlement.mockReturnValue(Effect.succeed(processing));
+		idempotency.claim.mockReturnValue(Effect.succeed(replayClaim));
+		let committed = false;
+		const mutation = Effect.sync(() => {
+			committed = true;
+			return { transaction: accounting, monitorJobs: [monitorJob] };
+		});
+		transactions.createSettlementTransaction.mockReturnValue(mutation);
+		transactions.postSettlementTransaction.mockReturnValue(mutation);
+		transactions.voidSettlementTransaction.mockReturnValue(mutation);
+		if (target !== "pending")
+			transactions.getSettlementTransaction.mockReturnValue(Effect.succeed(existingAccounting));
+		publish.mockImplementation(jobs =>
+			Effect.sync(() => {
+				expect(committed).toBe(true);
+				expect(jobs).toEqual([monitorJob]);
+				expect(repository.finalizeSettlement).not.toHaveBeenCalled();
+			})
+		);
+		await expect(
+			Effect.runPromise(
+				service.patchLedgerAccountSettlement(organizationId, ledgerId, settlementId, key, {
+					status: target,
+				})
+			)
+		).resolves.toBe(finalized);
+		expect(publish).toHaveBeenCalledOnce();
+		expect(repository.finalizeSettlement).toHaveBeenCalledOnce();
+	}
+);
+it("finalizes committed Settlement accounting even when enqueue fails", async () => {
+	transactions.createSettlementTransaction.mockReturnValue(
+		Effect.succeed({ transaction: accounting, monitorJobs: [monitorJob] })
+	);
+	const enqueue = vi
+		.spyOn(LedgerAccountBalanceMonitorJob, "enqueueMany")
+		.mockReturnValue(Effect.die("unavailable"));
+	try {
+		publish.mockImplementation(jobs =>
+			Effect.gen(function* () {
+				yield* (yield* LedgerAccountBalanceMonitorPublisher)(jobs);
+			}).pipe(
+				Effect.provide(ledgerAccountBalanceMonitorPublisherLayer),
+				Effect.provide(MemoryJobStore.layer)
+			)
+		);
+		await expect(create()).resolves.toBe(finalized);
+		expect(transactions.createSettlementTransaction).toHaveBeenCalledOnce();
+		expect(repository.finalizeSettlement).toHaveBeenCalledOnce();
+	} finally {
+		enqueue.mockRestore();
+	}
 });

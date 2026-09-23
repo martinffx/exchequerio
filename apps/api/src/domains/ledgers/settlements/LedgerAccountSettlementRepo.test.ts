@@ -175,7 +175,9 @@ const source = (
 			now(),
 			[newLedgerTransactionEntryID(), newLedgerTransactionEntryID()]
 		);
-		const created = yield* transactions.createTransaction(transaction);
+		const created = yield* transactions
+			.createTransaction(transaction)
+			.pipe(Effect.map(result => result.transaction));
 		return { transaction: created, entry: Option.getOrThrow(created.entries)[0] };
 	});
 /**
@@ -253,11 +255,13 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		await runtime.runPromise(
-			transactions.createSettlementTransaction(
-				await runtime.runPromise(
-					repo.buildTransaction(owner.organizationId, owner.ledgerId, settlement.id, now())
+			transactions
+				.createSettlementTransaction(
+					await runtime.runPromise(
+						repo.buildTransaction(owner.organizationId, owner.ledgerId, settlement.id, now())
+					)
 				)
-			)
+				.pipe(Effect.map(result => result.transaction))
 		);
 		await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, settlement.id, "posted", now())
@@ -405,8 +409,16 @@ describe("Settlement repository processing", () => {
 			repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
 		);
 		const [first, second] = await Promise.all([
-			runtime.runPromise(transactions.createSettlementTransaction(accounting)),
-			runtime.runPromise(transactions.createSettlementTransaction(accounting)),
+			runtime.runPromise(
+				transactions
+					.createSettlementTransaction(accounting)
+					.pipe(Effect.map(result => result.transaction))
+			),
+			runtime.runPromise(
+				transactions
+					.createSettlementTransaction(accounting)
+					.pipe(Effect.map(result => result.transaction))
+			),
 		]);
 		expect(first.id).toEqual(second.id);
 		const pending = await runtime.runPromise(
@@ -428,19 +440,25 @@ describe("Settlement repository processing", () => {
 
 		await expect(
 			runtime.runPromise(
-				transactions.postTransaction(owner.organizationId, owner.ledgerId, first.id, now())
+				transactions
+					.postTransaction(owner.organizationId, owner.ledgerId, first.id, now())
+					.pipe(Effect.map(result => result.transaction))
 			)
 		).rejects.toThrow(/Settlement/);
 		await expect(
 			runtime.runPromise(
-				transactions.voidTransaction(owner.organizationId, owner.ledgerId, first.id, now())
+				transactions
+					.voidTransaction(owner.organizationId, owner.ledgerId, first.id, now())
+					.pipe(Effect.map(result => result.transaction))
 			)
 		).rejects.toThrow(/Settlement/);
 		await expect(
 			runtime.runPromise(
-				transactions.updateTransaction(owner.organizationId, owner.ledgerId, first.id, {
-					ledgerEntries: [],
-				})
+				transactions
+					.updateTransaction(owner.organizationId, owner.ledgerId, first.id, {
+						ledgerEntries: [],
+					})
+					.pipe(Effect.map(result => result.transaction))
 			)
 		).rejects.toThrow(/Settlement/);
 		await runtime.runPromise(
@@ -453,7 +471,9 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		const posted = await runtime.runPromise(
-			transactions.postSettlementTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+			transactions
+				.postSettlementTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+				.pipe(Effect.map(result => result.transaction))
 		);
 		expect(posted.id).toEqual(first.id);
 		await runtime.runPromise(
@@ -491,11 +511,13 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		const accounting = await runtime.runPromise(
-			transactions.createSettlementTransaction(
-				await runtime.runPromise(
-					repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+			transactions
+				.createSettlementTransaction(
+					await runtime.runPromise(
+						repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+					)
 				)
-			)
+				.pipe(Effect.map(result => result.transaction))
 		);
 		await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "pending", now())
@@ -510,7 +532,9 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		await runtime.runPromise(
-			transactions.voidSettlementTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+			transactions
+				.voidSettlementTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+				.pipe(Effect.map(result => result.transaction))
 		);
 		expect(
 			await runtime.runPromise(
@@ -779,11 +803,13 @@ describe("Settlement repository processing", () => {
 			)
 		);
 		const accounting = await runtime.runPromise(
-			transactions.createSettlementTransaction(
-				await runtime.runPromise(
-					repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+			transactions
+				.createSettlementTransaction(
+					await runtime.runPromise(
+						repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
+					)
 				)
-			)
+				.pipe(Effect.map(result => result.transaction))
 		);
 		await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "posted", now())
@@ -984,7 +1010,9 @@ describe("Settlement repository processing", () => {
 					}
 				)
 			);
-			const created = await runtime.runPromise(transactions.createTransaction(transaction));
+			const created = await runtime.runPromise(
+				transactions.createTransaction(transaction).pipe(Effect.map(result => result.transaction))
+			);
 			ids.push(
 				...Option.getOrThrow(created.entries)
 					.filter(entry => entry.accountId.toString() === owner.settledAccountId.toString())
@@ -1071,7 +1099,11 @@ describe("Settlement repository processing", () => {
 			repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
 		);
 		await expect(
-			runtime.runPromise(transactions.createSettlementTransaction(accounting))
+			runtime.runPromise(
+				transactions
+					.createSettlementTransaction(accounting)
+					.pipe(Effect.map(result => result.transaction))
+			)
 		).rejects.toMatchObject({ statusCode: 409 });
 		expect(
 			Option.isNone(
@@ -1219,7 +1251,11 @@ describe("Settlement Asset accounting", () => {
 		const accounting = await runtime.runPromise(
 			repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now())
 		);
-		await runtime.runPromise(transactions.createSettlementTransaction(accounting));
+		await runtime.runPromise(
+			transactions
+				.createSettlementTransaction(accounting)
+				.pipe(Effect.map(result => result.transaction))
+		);
 		const completed = await runtime.runPromise(
 			repo.finalizeSettlement(owner.organizationId, owner.ledgerId, entity.id, "pending", now())
 		);

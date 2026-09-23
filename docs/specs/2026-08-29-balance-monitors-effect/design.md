@@ -1,5 +1,8 @@
 # Balance Monitors Effect migration
 
+Related: [retrospective of the later asynchronous Balance Monitors feature](./retro.md).
+That feature is separate from the CRUD migration specified here.
+
 ## Problem
 
 The Ledger Account Balance Monitor resource still uses the API's legacy Promise service,

@@ -1,3 +1,5 @@
+import type { LedgerAccountBalanceMonitorJobPayload } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
+import { randomUUID } from "node:crypto";
 import { encodeUuid } from "@/lib/utils";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
@@ -22,6 +24,7 @@ import type {
 	OrgID,
 } from "@/lib/ids";
 import {
+	LedgerAccountBalanceMonitorsTable,
 	AssetsTable,
 	LedgerAccountSettlementsTable,
 	LedgerAccountsTable,
@@ -49,6 +52,12 @@ import type {
 	TransactionListQuery,
 	ResolvedTransactionUpdateRequest,
 } from "./LedgerTransactionSchema";
+
+/** Committed accounting and immutable jobs to publish after the repository returns. */
+export interface AccountingMutation {
+	transaction: LedgerTransaction;
+	monitorJobs: LedgerAccountBalanceMonitorJobPayload[];
+}
 
 /** Failures returned while creating ordinary Transaction accounting. */
 type LedgerTransactionCreateRepositoryError =
@@ -109,7 +118,7 @@ interface LedgerTransactionRepo {
 	 */
 	createSettlementTransaction(
 		transaction: LedgerTransaction
-	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+	): Effect.Effect<AccountingMutation, LedgerTransactionUpdateRepositoryError>;
 	/**
 	 * Posts accounting for a Settlement prepared for posting.
 	 *
@@ -127,7 +136,7 @@ interface LedgerTransactionRepo {
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID,
 		now: DateTime
-	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+	): Effect.Effect<AccountingMutation, LedgerTransactionUpdateRepositoryError>;
 	/**
 	 * Voids accounting for a Settlement prepared for voiding.
 	 *
@@ -145,7 +154,7 @@ interface LedgerTransactionRepo {
 		ledgerId: LedgerID,
 		settlementId: LedgerAccountSettlementID,
 		now: DateTime
-	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+	): Effect.Effect<AccountingMutation, LedgerTransactionUpdateRepositoryError>;
 
 	/**
 	 * Lists Transactions for one Organization and Ledger in reverse creation order.
@@ -181,7 +190,7 @@ interface LedgerTransactionRepo {
 	 */
 	createTransaction(
 		transaction: LedgerTransaction
-	): Effect.Effect<LedgerTransaction, LedgerTransactionCreateRepositoryError>;
+	): Effect.Effect<AccountingMutation, LedgerTransactionCreateRepositoryError>;
 	/**
 	 * Replaces a pending Transaction's mutable fields and Entries atomically.
 	 *
@@ -198,7 +207,7 @@ interface LedgerTransactionRepo {
 		request: ResolvedTransactionUpdateRequest,
 		updated?: DateTime,
 		entryIds?: readonly LedgerTransactionEntryID[]
-	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError>;
+	): Effect.Effect<AccountingMutation, LedgerTransactionUpdateRepositoryError>;
 	/**
 	 * Posts a pending Transaction and moves its Entry effects into posted Account projections.
 	 *
@@ -213,7 +222,7 @@ interface LedgerTransactionRepo {
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
 		postedAt: DateTime
-	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError>;
+	): Effect.Effect<AccountingMutation, LedgerTransactionTransitionRepositoryError>;
 	/**
 	 * Voids a pending Transaction and removes its effects from Account projections.
 	 *
@@ -228,7 +237,7 @@ interface LedgerTransactionRepo {
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
 		updated: DateTime
-	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError>;
+	): Effect.Effect<AccountingMutation, LedgerTransactionTransitionRepositoryError>;
 }
 
 /** Effect service key for Transaction persistence. */
@@ -321,7 +330,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	 */
 	createTransaction(
 		transaction: LedgerTransaction
-	): Effect.Effect<LedgerTransaction, LedgerTransactionCreateRepositoryError> {
+	): Effect.Effect<AccountingMutation, LedgerTransactionCreateRepositoryError> {
 		if (transaction.settlementId !== undefined)
 			return Effect.fail(new TransactionSettlementConflict());
 		return this.db
@@ -351,14 +360,15 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			yield* tx
 				.insert(LedgerTransactionEntriesTable)
 				.values(entries.map(entry => entry.toRow(transaction)));
-			yield* this.writeAccounts(
+			const monitorJobs = yield* this.writeAccounts(
 				tx,
 				transaction.organizationId,
 				transaction.ledgerId,
 				accounts,
-				updated
+				updated,
+				transaction.id
 			);
-			return transaction;
+			return { transaction, monitorJobs };
 		});
 	}
 
@@ -450,7 +460,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	 */
 	createSettlementTransaction(
 		transaction: LedgerTransaction
-	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
+	): Effect.Effect<AccountingMutation, LedgerTransactionUpdateRepositoryError> {
 		const settlementId = transaction.settlementId;
 		if (settlementId === undefined) return Effect.fail(new TransactionSettlementConflict());
 		return this.db
@@ -468,7 +478,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 						transaction.ledgerId,
 						settlementId
 					);
-					if (Option.isSome(existing)) return existing.value;
+					if (Option.isSome(existing)) return { transaction: existing.value, monitorJobs: [] };
 					if (
 						settlement.status !== "processing" ||
 						settlement.targetStatus !== transaction.status ||
@@ -546,7 +556,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		settlementId: LedgerAccountSettlementID,
 		target: "posted" | "voided",
 		now: DateTime
-	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
+	): Effect.Effect<AccountingMutation, LedgerTransactionUpdateRepositoryError> {
 		return this.db
 			.transaction(tx =>
 				Effect.gen({ self: this }, function* () {
@@ -557,7 +567,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 						ledgerId,
 						settlementId
 					).pipe(Effect.flatMap(requireTransaction));
-					if (current.status === target) return current;
+					if (current.status === target) return { transaction: current, monitorJobs: [] };
 					if (settlement.status !== "processing" || settlement.targetStatus !== target)
 						return yield* Effect.fail(new TransactionLifecycleConflict(settlement.status, target));
 					const next = yield* target === "posted" ? current.toPosted(now) : current.toVoided(now);
@@ -572,8 +582,15 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 					);
 					yield* this.writeTransaction(tx, current, next);
 					yield* this.writeEntryStatus(tx, next);
-					yield* this.writeAccounts(tx, organizationId, ledgerId, accounts, updated);
-					return next;
+					const monitorJobs = yield* this.writeAccounts(
+						tx,
+						organizationId,
+						ledgerId,
+						accounts,
+						updated,
+						next.id
+					);
+					return { transaction: next, monitorJobs };
 				})
 			)
 			.pipe(Effect.mapError(mapTransactionMutationError));
@@ -595,7 +612,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		request: ResolvedTransactionUpdateRequest,
 		updated = DateTime.utc(),
 		entryIds?: readonly LedgerTransactionEntryID[]
-	): Effect.Effect<LedgerTransaction, LedgerTransactionUpdateRepositoryError> {
+	): Effect.Effect<AccountingMutation, LedgerTransactionUpdateRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
 			if (current.settlementId !== undefined)
@@ -621,14 +638,16 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				transaction.updated
 			);
 
-			yield* this.db.transaction(tx =>
+			const monitorJobs = yield* this.db.transaction(tx =>
 				this.writeTransaction(tx, current, transaction).pipe(
 					Effect.andThen(this.replaceEntries(tx, transaction, entries)),
-					Effect.andThen(this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts))
+					Effect.andThen(
+						this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts, transaction.id)
+					)
 				)
 			);
 
-			return transaction;
+			return { transaction, monitorJobs };
 		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
@@ -648,12 +667,12 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
 		postedAt: DateTime
-	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError> {
+	): Effect.Effect<AccountingMutation, LedgerTransactionTransitionRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
 			if (current.settlementId !== undefined)
 				return yield* Effect.fail(new TransactionSettlementConflict());
-			if (current.status === "posted") return current;
+			if (current.status === "posted") return { transaction: current, monitorJobs: [] };
 
 			const currentEntries = Option.getOrThrow(current.entries);
 			const accountIds = [...new Set(currentEntries.map(entry => entry.accountId.toString()))].sort();
@@ -671,14 +690,16 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				transaction.updated
 			);
 
-			yield* this.db.transaction(tx =>
+			const monitorJobs = yield* this.db.transaction(tx =>
 				this.writeTransaction(tx, current, transaction).pipe(
 					Effect.andThen(this.writeEntryStatus(tx, transaction)),
-					Effect.andThen(this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts))
+					Effect.andThen(
+						this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts, transaction.id)
+					)
 				)
 			);
 
-			return transaction;
+			return { transaction, monitorJobs };
 		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
@@ -698,12 +719,12 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID,
 		updated: DateTime
-	): Effect.Effect<LedgerTransaction, LedgerTransactionTransitionRepositoryError> {
+	): Effect.Effect<AccountingMutation, LedgerTransactionTransitionRepositoryError> {
 		return Effect.gen({ self: this }, function* () {
 			const current = yield* this.readTransaction(organizationId, ledgerId, transactionId);
 			if (current.settlementId !== undefined)
 				return yield* Effect.fail(new TransactionSettlementConflict());
-			if (current.status === "voided") return current;
+			if (current.status === "voided") return { transaction: current, monitorJobs: [] };
 
 			const currentEntries = Option.getOrThrow(current.entries);
 			const accountIds = [...new Set(currentEntries.map(entry => entry.accountId.toString()))].sort();
@@ -721,14 +742,16 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				transaction.updated
 			);
 
-			yield* this.db.transaction(tx =>
+			const monitorJobs = yield* this.db.transaction(tx =>
 				this.writeTransaction(tx, current, transaction).pipe(
 					Effect.andThen(this.writeEntryStatus(tx, transaction)),
-					Effect.andThen(this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts))
+					Effect.andThen(
+						this.writeAccounts(tx, organizationId, ledgerId, accounts, updatedAccounts, transaction.id)
+					)
 				)
 			);
 
-			return transaction;
+			return { transaction, monitorJobs };
 		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}
 
@@ -970,47 +993,117 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID,
 		accounts: AccountsById,
-		updatedAccounts: AccountsById
+		updatedAccounts: AccountsById,
+		transactionId: LedgerTransactionID
 	) {
-		return Effect.forEach(
-			[...accounts.entries()].sort(([left], [right]) => left.localeCompare(right)),
-			([accountId, account]) => {
-				const updated = updatedAccounts.get(accountId)!;
-				return Effect.try({
-					try: () => updated.assertBalancesInRange(),
-					catch: cause => cause as ConflictError,
-				}).pipe(
-					Effect.andThen(
-						tx
-							.update(LedgerAccountsTable)
-							.set({
-								pendingAmount: updated.pendingAmount,
-								postedAmount: updated.postedAmount,
-								availableAmount: updated.availableAmount,
-								pendingCredits: updated.pendingCredits,
-								pendingDebits: updated.pendingDebits,
-								postedCredits: updated.postedCredits,
-								postedDebits: updated.postedDebits,
-								availableCredits: updated.availableCredits,
-								availableDebits: updated.availableDebits,
-								lockVersion: account.lockVersion + 1,
-								updated: updated.updated.toJSDate(),
-							})
-							.where(
-								and(
-									eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
-									eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
-									eq(LedgerAccountsTable.id, encodeUuid(account.id)),
-									eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+		return Effect.gen(function* () {
+			const events: Omit<
+				LedgerAccountBalanceMonitorJobPayload,
+				"monitorId" | "monitorVersion" | "alertCondition" | "webhookUrl" | "webhookSigningSecret"
+			>[] = [];
+			yield* Effect.try({
+				try: () => {
+					for (const account of updatedAccounts.values()) account.assertBalancesInRange();
+				},
+				catch: cause => cause as ConflictError,
+			});
+			yield* Effect.forEach(
+				[...accounts.entries()].sort(([left], [right]) => left.localeCompare(right)),
+				([accountId, account]) => {
+					const updated = updatedAccounts.get(accountId)!;
+					return tx
+						.update(LedgerAccountsTable)
+						.set({
+							pendingAmount: updated.pendingAmount,
+							postedAmount: updated.postedAmount,
+							availableAmount: updated.availableAmount,
+							pendingCredits: updated.pendingCredits,
+							pendingDebits: updated.pendingDebits,
+							postedCredits: updated.postedCredits,
+							postedDebits: updated.postedDebits,
+							availableCredits: updated.availableCredits,
+							availableDebits: updated.availableDebits,
+							lockVersion: account.lockVersion + 1,
+							updated: updated.updated.toJSDate(),
+						})
+						.where(
+							and(
+								eq(LedgerAccountsTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId)),
+								eq(LedgerAccountsTable.id, encodeUuid(account.id)),
+								eq(LedgerAccountsTable.lockVersion, account.lockVersion)
+							)
+						)
+						.returning({
+							id: LedgerAccountsTable.id,
+						})
+						.pipe(
+							Effect.flatMap(rows =>
+								requireAccountWrite(rows.length === 1).pipe(
+									Effect.andThen(
+										Effect.sync(() => {
+											const before = {
+												posted: account.postedAmount.toString(),
+												pending: account.pendingAmount.toString(),
+												availableBalance: account.availableAmount.toString(),
+											};
+											const after = {
+												posted: updated.postedAmount.toString(),
+												pending: updated.pendingAmount.toString(),
+												availableBalance: updated.availableAmount.toString(),
+											};
+											if (
+												before.posted === after.posted &&
+												before.pending === after.pending &&
+												before.availableBalance === after.availableBalance
+											)
+												return;
+											events.push({
+												eventId: randomUUID(),
+												organizationId: organizationId.toString(),
+												ledgerId: ledgerId.toString(),
+												accountId: account.id.toString(),
+												accountVersion: account.lockVersion + 1,
+												transactionId: transactionId.toString(),
+												occurredAt: updated.updated.toJSDate().toISOString(),
+												assetId: account.assetId,
+												assetCode: account.assetCode,
+												minorUnitExponent: account.minorUnitExponent,
+												before,
+												after,
+											});
+										})
+									)
 								)
 							)
-							.returning({ id: LedgerAccountsTable.id })
-							.pipe(Effect.flatMap(rows => requireAccountWrite(rows.length === 1)))
+						);
+				},
+				{ concurrency: 1, discard: true }
+			);
+			if (events.length === 0) return [];
+			// Account writes hold row locks until commit; monitor mutations take the same locks.
+			const eventsByAccount = new Map(
+				events.map(event => [encodeUuid(TypeID.fromString(event.accountId)), event])
+			);
+			const monitors = yield* tx
+				.select()
+				.from(LedgerAccountBalanceMonitorsTable)
+				.where(
+					and(
+						eq(LedgerAccountBalanceMonitorsTable.organizationId, encodeUuid(organizationId)),
+						eq(LedgerAccountBalanceMonitorsTable.ledgerId, encodeUuid(ledgerId)),
+						inArray(LedgerAccountBalanceMonitorsTable.accountId, [...eventsByAccount.keys()])
 					)
 				);
-			},
-			{ concurrency: 1, discard: true }
-		);
+			return monitors.map(monitor => ({
+				...eventsByAccount.get(monitor.accountId)!,
+				monitorId: TypeID.fromUUID("lbm", monitor.id).toString(),
+				monitorVersion: monitor.lockVersion,
+				alertCondition: monitor.alertCondition,
+				webhookUrl: monitor.webhookUrl,
+				webhookSigningSecret: monitor.webhookSigningSecret,
+			}));
+		});
 	}
 }
 

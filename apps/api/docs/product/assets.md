@@ -65,8 +65,8 @@ Signed quantities range from `"-9223372036854775808"` to `"9223372036854775807"`
 
 JSON numbers, fractions, exponent notation, whitespace, leading plus signs, redundant leading zeros,
 and negative zero are rejected. Counts, timestamps, lock versions, and exponents retain their
-existing representations. Balance-valued Monitor conditions use signed amount strings; timestamp
-conditions remain numeric. Monitor evaluation is not implemented.
+existing representations. Balance Monitor comparisons use signed amount strings for Posted, Pending, and Available Balance.
+Compound conditions emit on false-to-true crossings; see [Balance monitors](./balance-monitors.md).
 
 Every stored Account projection, including gross Debit and Credit totals, must fit the signed
 64-bit range. Exact intermediate totals may exceed it, but a final overflow returns `409` and

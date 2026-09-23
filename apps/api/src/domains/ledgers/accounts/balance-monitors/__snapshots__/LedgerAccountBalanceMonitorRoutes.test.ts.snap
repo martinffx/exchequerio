@@ -3,24 +3,25 @@
 exports[`LedgerAccountBalanceMonitorRoutes > creates with the existing 200 response 1`] = `
 {
   "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
-  "alertCondition": [],
+  "alertCondition": {
+    "conditions": [
+      {
+        "balanceType": "posted",
+        "operator": "<",
+        "value": "100",
+      },
+    ],
+    "mode": "all",
+  },
   "created": "2025-01-01T00:00:00.000Z",
   "description": "Test balance monitor",
   "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "lockVersion": 0,
+  "ledgerId": "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4",
+  "lockVersion": 1,
   "updated": "2025-01-01T00:00:00.000Z",
-}
-`;
-
-exports[`LedgerAccountBalanceMonitorRoutes > gets through the Effect service and ignores parent path IDs 1`] = `
-{
-  "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
-  "alertCondition": [],
-  "created": "2025-01-01T00:00:00.000Z",
-  "description": "Test balance monitor",
-  "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "lockVersion": 0,
-  "updated": "2025-01-01T00:00:00.000Z",
+  "webhook": {
+    "url": "https://example.com/hook",
+  },
 }
 `;
 
@@ -28,12 +29,25 @@ exports[`LedgerAccountBalanceMonitorRoutes > lists through the Effect service wi
 [
   {
     "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
-    "alertCondition": [],
+    "alertCondition": {
+      "conditions": [
+        {
+          "balanceType": "posted",
+          "operator": "<",
+          "value": "100",
+        },
+      ],
+      "mode": "all",
+    },
     "created": "2025-01-01T00:00:00.000Z",
     "description": "Test balance monitor",
     "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-    "lockVersion": 0,
+    "ledgerId": "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4",
+    "lockVersion": 1,
     "updated": "2025-01-01T00:00:00.000Z",
+    "webhook": {
+      "url": "https://example.com/hook",
+    },
   },
 ]
 `;
@@ -69,6 +83,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
             "name": "ledgerId",
             "required": true,
             "schema": {
+              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
               "type": "string",
             },
           },
@@ -77,6 +92,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
             "name": "accountId",
             "required": true,
             "schema": {
+              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
               "type": "string",
             },
           },
@@ -87,23 +103,39 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
               "application/json": {
                 "schema": {
                   "items": {
-                    "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
                     "properties": {
                       "accountId": {
-                        "description": "The ledger account's ID",
                         "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                         "type": "string",
                       },
                       "alertCondition": {
-                        "items": {
-                          "anyOf": [
-                            {
+                        "additionalProperties": false,
+                        "properties": {
+                          "conditions": {
+                            "items": {
+                              "additionalProperties": false,
                               "properties": {
-                                "field": {
-                                  "enum": [
-                                    "balance",
+                                "balanceType": {
+                                  "anyOf": [
+                                    {
+                                      "enum": [
+                                        "posted",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        "pending",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    {
+                                      "enum": [
+                                        "availableBalance",
+                                      ],
+                                      "type": "string",
+                                    },
                                   ],
-                                  "type": "string",
                                 },
                                 "operator": {
                                   "anyOf": [
@@ -115,13 +147,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                     },
                                     {
                                       "enum": [
-                                        "<",
+                                        "!=",
                                       ],
                                       "type": "string",
                                     },
                                     {
                                       "enum": [
-                                        ">",
+                                        "<",
                                       ],
                                       "type": "string",
                                     },
@@ -133,13 +165,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                     },
                                     {
                                       "enum": [
-                                        ">=",
+                                        ">",
                                       ],
                                       "type": "string",
                                     },
                                     {
                                       "enum": [
-                                        "!=",
+                                        ">=",
                                       ],
                                       "type": "string",
                                     },
@@ -153,99 +185,56 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                 },
                               },
                               "required": [
-                                "field",
+                                "balanceType",
                                 "operator",
                                 "value",
                               ],
                               "type": "object",
                             },
-                            {
-                              "properties": {
-                                "field": {
-                                  "anyOf": [
-                                    {
-                                      "enum": [
-                                        "created",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        "updated",
-                                      ],
-                                      "type": "string",
-                                    },
-                                  ],
-                                },
-                                "operator": {
-                                  "anyOf": [
-                                    {
-                                      "enum": [
-                                        "=",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        "<",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        ">",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        "<=",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        ">=",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        "!=",
-                                      ],
-                                      "type": "string",
-                                    },
-                                  ],
-                                },
-                                "value": {
-                                  "type": "number",
-                                },
+                            "minItems": 1,
+                            "type": "array",
+                          },
+                          "mode": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "all",
+                                ],
+                                "type": "string",
                               },
-                              "required": [
-                                "field",
-                                "operator",
-                                "value",
-                              ],
-                              "type": "object",
-                            },
-                          ],
+                              {
+                                "enum": [
+                                  "any",
+                                ],
+                                "type": "string",
+                              },
+                            ],
+                          },
                         },
-                        "type": "array",
+                        "required": [
+                          "mode",
+                          "conditions",
+                        ],
+                        "type": "object",
                       },
                       "created": {
+                        "format": "date-time",
                         "type": "string",
                       },
                       "description": {
-                        "description": "An optional free-form description for internal use.",
                         "type": "string",
                       },
                       "id": {
-                        "description": "Unique identifier for the ledger account balance monitor.",
                         "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                         "type": "string",
                       },
+                      "ledgerId": {
+                        "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                        "type": "string",
+                      },
                       "lockVersion": {
-                        "type": "number",
+                        "minimum": 1,
+                        "type": "integer",
                       },
                       "metadata": {
                         "additionalProperties": {
@@ -255,18 +244,31 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                         "type": "object",
                       },
                       "updated": {
+                        "format": "date-time",
                         "type": "string",
+                      },
+                      "webhook": {
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "url",
+                        ],
+                        "type": "object",
                       },
                     },
                     "required": [
                       "id",
                       "accountId",
+                      "ledgerId",
                       "alertCondition",
+                      "webhook",
                       "lockVersion",
                       "created",
                       "updated",
                     ],
-                    "title": "LedgerAccountBalanceMonitorResponse",
                     "type": "object",
                   },
                   "type": "array",
@@ -572,6 +574,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
             "name": "ledgerId",
             "required": true,
             "schema": {
+              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
               "type": "string",
             },
           },
@@ -580,6 +583,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
             "name": "accountId",
             "required": true,
             "schema": {
+              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
               "type": "string",
             },
           },
@@ -588,21 +592,36 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": false,
                 "properties": {
-                  "accountId": {
-                    "description": "The ledger account associated with this balance monitor.",
-                    "type": "string",
-                  },
                   "alertCondition": {
-                    "items": {
-                      "anyOf": [
-                        {
+                    "additionalProperties": false,
+                    "properties": {
+                      "conditions": {
+                        "items": {
+                          "additionalProperties": false,
                           "properties": {
-                            "field": {
-                              "enum": [
-                                "balance",
+                            "balanceType": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "posted",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "pending",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "availableBalance",
+                                  ],
+                                  "type": "string",
+                                },
                               ],
-                              "type": "string",
                             },
                             "operator": {
                               "anyOf": [
@@ -614,13 +633,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                 },
                                 {
                                   "enum": [
-                                    "<",
+                                    "!=",
                                   ],
                                   "type": "string",
                                 },
                                 {
                                   "enum": [
-                                    ">",
+                                    "<",
                                   ],
                                   "type": "string",
                                 },
@@ -632,13 +651,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                 },
                                 {
                                   "enum": [
-                                    ">=",
+                                    ">",
                                   ],
                                   "type": "string",
                                 },
                                 {
                                   "enum": [
-                                    "!=",
+                                    ">=",
                                   ],
                                   "type": "string",
                                 },
@@ -652,87 +671,39 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                             },
                           },
                           "required": [
-                            "field",
+                            "balanceType",
                             "operator",
                             "value",
                           ],
                           "type": "object",
                         },
-                        {
-                          "properties": {
-                            "field": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "created",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "updated",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "operator": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "!=",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "value": {
-                              "type": "number",
-                            },
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "mode": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "all",
+                            ],
+                            "type": "string",
                           },
-                          "required": [
-                            "field",
-                            "operator",
-                            "value",
-                          ],
-                          "type": "object",
-                        },
-                      ],
+                          {
+                            "enum": [
+                              "any",
+                            ],
+                            "type": "string",
+                          },
+                        ],
+                      },
                     },
-                    "type": "array",
+                    "required": [
+                      "mode",
+                      "conditions",
+                    ],
+                    "type": "object",
                   },
                   "description": {
-                    "description": "An optional free-form description for internal use.",
                     "type": "string",
                   },
                   "metadata": {
@@ -742,10 +713,29 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
                     "type": "object",
                   },
+                  "webhook": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "signingSecret": {
+                        "pattern": "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+                        "type": "string",
+                        "writeOnly": true,
+                      },
+                      "url": {
+                        "format": "uri",
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "url",
+                      "signingSecret",
+                    ],
+                    "type": "object",
+                  },
                 },
                 "required": [
-                  "accountId",
                   "alertCondition",
+                  "webhook",
                 ],
                 "type": "object",
               },
@@ -758,23 +748,39 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
                   "properties": {
                     "accountId": {
-                      "description": "The ledger account's ID",
                       "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                       "type": "string",
                     },
                     "alertCondition": {
-                      "items": {
-                        "anyOf": [
-                          {
+                      "additionalProperties": false,
+                      "properties": {
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
                             "properties": {
-                              "field": {
-                                "enum": [
-                                  "balance",
+                              "balanceType": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "posted",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "pending",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "availableBalance",
+                                    ],
+                                    "type": "string",
+                                  },
                                 ],
-                                "type": "string",
                               },
                               "operator": {
                                 "anyOf": [
@@ -786,13 +792,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                   },
                                   {
                                     "enum": [
-                                      "<",
+                                      "!=",
                                     ],
                                     "type": "string",
                                   },
                                   {
                                     "enum": [
-                                      ">",
+                                      "<",
                                     ],
                                     "type": "string",
                                   },
@@ -804,13 +810,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                   },
                                   {
                                     "enum": [
-                                      ">=",
+                                      ">",
                                     ],
                                     "type": "string",
                                   },
                                   {
                                     "enum": [
-                                      "!=",
+                                      ">=",
                                     ],
                                     "type": "string",
                                   },
@@ -824,99 +830,56 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                               },
                             },
                             "required": [
-                              "field",
+                              "balanceType",
                               "operator",
                               "value",
                             ],
                             "type": "object",
                           },
-                          {
-                            "properties": {
-                              "field": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "created",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "updated",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "operator": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "!=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "value": {
-                                "type": "number",
-                              },
+                          "minItems": 1,
+                          "type": "array",
+                        },
+                        "mode": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "all",
+                              ],
+                              "type": "string",
                             },
-                            "required": [
-                              "field",
-                              "operator",
-                              "value",
-                            ],
-                            "type": "object",
-                          },
-                        ],
+                            {
+                              "enum": [
+                                "any",
+                              ],
+                              "type": "string",
+                            },
+                          ],
+                        },
                       },
-                      "type": "array",
+                      "required": [
+                        "mode",
+                        "conditions",
+                      ],
+                      "type": "object",
                     },
                     "created": {
+                      "format": "date-time",
                       "type": "string",
                     },
                     "description": {
-                      "description": "An optional free-form description for internal use.",
                       "type": "string",
                     },
                     "id": {
-                      "description": "Unique identifier for the ledger account balance monitor.",
                       "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                       "type": "string",
                     },
+                    "ledgerId": {
+                      "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
                     "lockVersion": {
-                      "type": "number",
+                      "minimum": 1,
+                      "type": "integer",
                     },
                     "metadata": {
                       "additionalProperties": {
@@ -926,13 +889,27 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                       "type": "object",
                     },
                     "updated": {
+                      "format": "date-time",
                       "type": "string",
+                    },
+                    "webhook": {
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "url",
+                      ],
+                      "type": "object",
                     },
                   },
                   "required": [
                     "id",
                     "accountId",
+                    "ledgerId",
                     "alertCondition",
+                    "webhook",
                     "lockVersion",
                     "created",
                     "updated",
@@ -941,7 +918,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                 },
               },
             },
-            "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+            "description": "Default Response",
           },
           "400": {
             "content": {
@@ -1066,6 +1043,53 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     "type": {
                       "enum": [
                         "FORBIDDEN",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "type",
+                    "status",
+                    "title",
+                    "detail",
+                    "instance",
+                    "traceId",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Default Response",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string",
+                    },
+                    "instance": {
+                      "type": "string",
+                    },
+                    "retryable": {
+                      "type": "boolean",
+                    },
+                    "status": {
+                      "enum": [
+                        404,
+                      ],
+                      "type": "number",
+                    },
+                    "title": {
+                      "type": "string",
+                    },
+                    "traceId": {
+                      "type": "string",
+                    },
+                    "type": {
+                      "enum": [
+                        "NOT_FOUND",
                       ],
                       "type": "string",
                     },
@@ -1285,7 +1309,24 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
         "operationId": "deleteLedgerAccountBalanceMonitor",
         "parameters": [
           {
-            "description": "Unique identifier for the ledger account balance monitor.",
+            "in": "path",
+            "name": "ledgerId",
+            "required": true,
+            "schema": {
+              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+          },
+          {
             "in": "path",
             "name": "balanceMonitorId",
             "required": true,
@@ -1691,7 +1732,24 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
         "operationId": "getLedgerAccountBalanceMonitor",
         "parameters": [
           {
-            "description": "Unique identifier for the ledger account balance monitor.",
+            "in": "path",
+            "name": "ledgerId",
+            "required": true,
+            "schema": {
+              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+          },
+          {
             "in": "path",
             "name": "balanceMonitorId",
             "required": true,
@@ -1706,23 +1764,39 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
                   "properties": {
                     "accountId": {
-                      "description": "The ledger account's ID",
                       "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                       "type": "string",
                     },
                     "alertCondition": {
-                      "items": {
-                        "anyOf": [
-                          {
+                      "additionalProperties": false,
+                      "properties": {
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
                             "properties": {
-                              "field": {
-                                "enum": [
-                                  "balance",
+                              "balanceType": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "posted",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "pending",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "availableBalance",
+                                    ],
+                                    "type": "string",
+                                  },
                                 ],
-                                "type": "string",
                               },
                               "operator": {
                                 "anyOf": [
@@ -1734,13 +1808,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                   },
                                   {
                                     "enum": [
-                                      "<",
+                                      "!=",
                                     ],
                                     "type": "string",
                                   },
                                   {
                                     "enum": [
-                                      ">",
+                                      "<",
                                     ],
                                     "type": "string",
                                   },
@@ -1752,13 +1826,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                   },
                                   {
                                     "enum": [
-                                      ">=",
+                                      ">",
                                     ],
                                     "type": "string",
                                   },
                                   {
                                     "enum": [
-                                      "!=",
+                                      ">=",
                                     ],
                                     "type": "string",
                                   },
@@ -1772,99 +1846,56 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                               },
                             },
                             "required": [
-                              "field",
+                              "balanceType",
                               "operator",
                               "value",
                             ],
                             "type": "object",
                           },
-                          {
-                            "properties": {
-                              "field": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "created",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "updated",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "operator": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "!=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "value": {
-                                "type": "number",
-                              },
+                          "minItems": 1,
+                          "type": "array",
+                        },
+                        "mode": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "all",
+                              ],
+                              "type": "string",
                             },
-                            "required": [
-                              "field",
-                              "operator",
-                              "value",
-                            ],
-                            "type": "object",
-                          },
-                        ],
+                            {
+                              "enum": [
+                                "any",
+                              ],
+                              "type": "string",
+                            },
+                          ],
+                        },
                       },
-                      "type": "array",
+                      "required": [
+                        "mode",
+                        "conditions",
+                      ],
+                      "type": "object",
                     },
                     "created": {
+                      "format": "date-time",
                       "type": "string",
                     },
                     "description": {
-                      "description": "An optional free-form description for internal use.",
                       "type": "string",
                     },
                     "id": {
-                      "description": "Unique identifier for the ledger account balance monitor.",
                       "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                       "type": "string",
                     },
+                    "ledgerId": {
+                      "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
                     "lockVersion": {
-                      "type": "number",
+                      "minimum": 1,
+                      "type": "integer",
                     },
                     "metadata": {
                       "additionalProperties": {
@@ -1874,13 +1905,27 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                       "type": "object",
                     },
                     "updated": {
+                      "format": "date-time",
                       "type": "string",
+                    },
+                    "webhook": {
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "url",
+                      ],
+                      "type": "object",
                     },
                   },
                   "required": [
                     "id",
                     "accountId",
+                    "ledgerId",
                     "alertCondition",
+                    "webhook",
                     "lockVersion",
                     "created",
                     "updated",
@@ -1889,7 +1934,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                 },
               },
             },
-            "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+            "description": "Default Response",
           },
           "400": {
             "content": {
@@ -2231,7 +2276,24 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
         "operationId": "updateLedgerAccountBalanceMonitor",
         "parameters": [
           {
-            "description": "Unique identifier for the ledger account balance monitor.",
+            "in": "path",
+            "name": "ledgerId",
+            "required": true,
+            "schema": {
+              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+          },
+          {
             "in": "path",
             "name": "balanceMonitorId",
             "required": true,
@@ -2245,21 +2307,36 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": false,
                 "properties": {
-                  "accountId": {
-                    "description": "The ledger account associated with this balance monitor.",
-                    "type": "string",
-                  },
                   "alertCondition": {
-                    "items": {
-                      "anyOf": [
-                        {
+                    "additionalProperties": false,
+                    "properties": {
+                      "conditions": {
+                        "items": {
+                          "additionalProperties": false,
                           "properties": {
-                            "field": {
-                              "enum": [
-                                "balance",
+                            "balanceType": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "posted",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "pending",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "availableBalance",
+                                  ],
+                                  "type": "string",
+                                },
                               ],
-                              "type": "string",
                             },
                             "operator": {
                               "anyOf": [
@@ -2271,13 +2348,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                 },
                                 {
                                   "enum": [
-                                    "<",
+                                    "!=",
                                   ],
                                   "type": "string",
                                 },
                                 {
                                   "enum": [
-                                    ">",
+                                    "<",
                                   ],
                                   "type": "string",
                                 },
@@ -2289,13 +2366,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                 },
                                 {
                                   "enum": [
-                                    ">=",
+                                    ">",
                                   ],
                                   "type": "string",
                                 },
                                 {
                                   "enum": [
-                                    "!=",
+                                    ">=",
                                   ],
                                   "type": "string",
                                 },
@@ -2309,87 +2386,39 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                             },
                           },
                           "required": [
-                            "field",
+                            "balanceType",
                             "operator",
                             "value",
                           ],
                           "type": "object",
                         },
-                        {
-                          "properties": {
-                            "field": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "created",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "updated",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "operator": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "!=",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "value": {
-                              "type": "number",
-                            },
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "mode": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "all",
+                            ],
+                            "type": "string",
                           },
-                          "required": [
-                            "field",
-                            "operator",
-                            "value",
-                          ],
-                          "type": "object",
-                        },
-                      ],
+                          {
+                            "enum": [
+                              "any",
+                            ],
+                            "type": "string",
+                          },
+                        ],
+                      },
                     },
-                    "type": "array",
+                    "required": [
+                      "mode",
+                      "conditions",
+                    ],
+                    "type": "object",
                   },
                   "description": {
-                    "description": "An optional free-form description for internal use.",
                     "type": "string",
                   },
                   "metadata": {
@@ -2399,10 +2428,28 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
                     "type": "object",
                   },
+                  "webhook": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "signingSecret": {
+                        "pattern": "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+                        "type": "string",
+                        "writeOnly": true,
+                      },
+                      "url": {
+                        "format": "uri",
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "url",
+                    ],
+                    "type": "object",
+                  },
                 },
                 "required": [
-                  "accountId",
                   "alertCondition",
+                  "webhook",
                 ],
                 "type": "object",
               },
@@ -2415,23 +2462,39 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
                   "properties": {
                     "accountId": {
-                      "description": "The ledger account's ID",
                       "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                       "type": "string",
                     },
                     "alertCondition": {
-                      "items": {
-                        "anyOf": [
-                          {
+                      "additionalProperties": false,
+                      "properties": {
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
                             "properties": {
-                              "field": {
-                                "enum": [
-                                  "balance",
+                              "balanceType": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "posted",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "pending",
+                                    ],
+                                    "type": "string",
+                                  },
+                                  {
+                                    "enum": [
+                                      "availableBalance",
+                                    ],
+                                    "type": "string",
+                                  },
                                 ],
-                                "type": "string",
                               },
                               "operator": {
                                 "anyOf": [
@@ -2443,13 +2506,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                   },
                                   {
                                     "enum": [
-                                      "<",
+                                      "!=",
                                     ],
                                     "type": "string",
                                   },
                                   {
                                     "enum": [
-                                      ">",
+                                      "<",
                                     ],
                                     "type": "string",
                                   },
@@ -2461,13 +2524,13 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                                   },
                                   {
                                     "enum": [
-                                      ">=",
+                                      ">",
                                     ],
                                     "type": "string",
                                   },
                                   {
                                     "enum": [
-                                      "!=",
+                                      ">=",
                                     ],
                                     "type": "string",
                                   },
@@ -2481,99 +2544,56 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                               },
                             },
                             "required": [
-                              "field",
+                              "balanceType",
                               "operator",
                               "value",
                             ],
                             "type": "object",
                           },
-                          {
-                            "properties": {
-                              "field": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "created",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "updated",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "operator": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "!=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "value": {
-                                "type": "number",
-                              },
+                          "minItems": 1,
+                          "type": "array",
+                        },
+                        "mode": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "all",
+                              ],
+                              "type": "string",
                             },
-                            "required": [
-                              "field",
-                              "operator",
-                              "value",
-                            ],
-                            "type": "object",
-                          },
-                        ],
+                            {
+                              "enum": [
+                                "any",
+                              ],
+                              "type": "string",
+                            },
+                          ],
+                        },
                       },
-                      "type": "array",
+                      "required": [
+                        "mode",
+                        "conditions",
+                      ],
+                      "type": "object",
                     },
                     "created": {
+                      "format": "date-time",
                       "type": "string",
                     },
                     "description": {
-                      "description": "An optional free-form description for internal use.",
                       "type": "string",
                     },
                     "id": {
-                      "description": "Unique identifier for the ledger account balance monitor.",
                       "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
                       "type": "string",
                     },
+                    "ledgerId": {
+                      "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
                     "lockVersion": {
-                      "type": "number",
+                      "minimum": 1,
+                      "type": "integer",
                     },
                     "metadata": {
                       "additionalProperties": {
@@ -2583,13 +2603,27 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                       "type": "object",
                     },
                     "updated": {
+                      "format": "date-time",
                       "type": "string",
+                    },
+                    "webhook": {
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "url",
+                      ],
+                      "type": "object",
                     },
                   },
                   "required": [
                     "id",
                     "accountId",
+                    "ledgerId",
                     "alertCondition",
+                    "webhook",
                     "lockVersion",
                     "created",
                     "updated",
@@ -2598,7 +2632,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                 },
               },
             },
-            "description": "A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
+            "description": "Default Response",
           },
           "400": {
             "content": {
@@ -2990,11 +3024,24 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
 exports[`LedgerAccountBalanceMonitorRoutes > updates with the existing response and service inputs 1`] = `
 {
   "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
-  "alertCondition": [],
+  "alertCondition": {
+    "conditions": [
+      {
+        "balanceType": "posted",
+        "operator": "<",
+        "value": "100",
+      },
+    ],
+    "mode": "all",
+  },
   "created": "2025-01-01T00:00:00.000Z",
   "description": "Test balance monitor",
   "id": "lbm_01h2x3y4z5a6b7c8d9e0f1g2h5",
-  "lockVersion": 0,
+  "ledgerId": "lgr_01h2x3y4z5a6b7c8d9e0f1g2h4",
+  "lockVersion": 1,
   "updated": "2025-01-01T00:00:00.000Z",
+  "webhook": {
+    "url": "https://example.com/hook",
+  },
 }
 `;

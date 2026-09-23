@@ -45,6 +45,18 @@ path.
 Generate migrations from schema changes, review the generated SQL, and keep migrations separate
 unless broader scope is requested.
 
+## Asynchronous work
+
+Decide acceptable loss, request blocking, retries, and replay before choosing delivery
+infrastructure. Neither an outbox nor best-effort publication is a universal default; choose
+the mechanism that satisfies the agreed guarantees.
+
+Capture the data needed to preserve agreed behavior across configuration changes. Keep delivery
+retries from repeating committed accounting operations.
+
+Test important failure boundaries early, at the narrowest useful layer: blocked or failed
+publication, duplicate delivery, and graceful shutdown where applicable.
+
 ## Effect and errors
 
 Use the installed Effect major and copy the nearest approved slice only where it solves the same

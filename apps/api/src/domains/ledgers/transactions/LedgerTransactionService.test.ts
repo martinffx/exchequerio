@@ -1,3 +1,11 @@
+import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
+import { MemoryJobStore } from "effect-mq";
+import {
+	LedgerAccountBalanceMonitorJob,
+	LedgerAccountBalanceMonitorPublisher,
+	ledgerAccountBalanceMonitorPublisherLayer,
+	type LedgerAccountBalanceMonitorJobPayload,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { Asset } from "@/domains/assets/Asset";
 import { NotFoundError } from "@/lib/errors";
 import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
@@ -89,13 +97,13 @@ const repository = {
 		Effect.succeed(foundTransaction)
 	),
 	createSettlementTransaction: vi.fn<LedgerTransactionRepo["createSettlementTransaction"]>(() =>
-		Effect.succeed(transaction)
+		Effect.succeed({ transaction, monitorJobs: [] })
 	),
 	postSettlementTransaction: vi.fn<LedgerTransactionRepo["postSettlementTransaction"]>(() =>
-		Effect.succeed(transaction)
+		Effect.succeed({ transaction, monitorJobs: [] })
 	),
 	voidSettlementTransaction: vi.fn<LedgerTransactionRepo["voidSettlementTransaction"]>(() =>
-		Effect.succeed(transaction)
+		Effect.succeed({ transaction, monitorJobs: [] })
 	),
 	listTransactions: vi.fn<LedgerTransactionRepo["listTransactions"]>(() =>
 		Effect.succeed([transaction])
@@ -104,16 +112,16 @@ const repository = {
 		Effect.succeed(foundTransaction)
 	),
 	createTransaction: vi.fn<LedgerTransactionRepo["createTransaction"]>(() =>
-		Effect.succeed(transaction)
+		Effect.succeed({ transaction, monitorJobs: [] })
 	),
 	updateTransaction: vi.fn<LedgerTransactionRepo["updateTransaction"]>(() =>
-		Effect.succeed(transaction)
+		Effect.succeed({ transaction, monitorJobs: [] })
 	),
 	postTransaction: vi.fn<LedgerTransactionRepo["postTransaction"]>(() =>
-		Effect.succeed(transaction)
+		Effect.succeed({ transaction, monitorJobs: [] })
 	),
 	voidTransaction: vi.fn<LedgerTransactionRepo["voidTransaction"]>(() =>
-		Effect.succeed(transaction)
+		Effect.succeed({ transaction, monitorJobs: [] })
 	),
 } satisfies LedgerTransactionRepo;
 const idempotency = {
@@ -136,7 +144,11 @@ const assets = {
 		)
 	),
 };
+const publish = vi.fn<
+	(jobs: readonly LedgerAccountBalanceMonitorJobPayload[]) => Effect.Effect<void>
+>(() => Effect.void);
 const dependencies = Layer.mergeAll(
+	Layer.succeed(LedgerAccountBalanceMonitorPublisher, publish),
 	Layer.succeed(AssetServiceTag, assets as unknown as AssetService),
 	Layer.succeed(LedgerTransactionRepoTag, repository),
 	Layer.succeed(IdempotencyServiceTag, idempotency),
@@ -180,6 +192,7 @@ describe("TransactionService", () => {
 		expect(assets.getAsset).not.toHaveBeenCalled();
 		expect(repository.getTransaction).toHaveBeenCalledWith(organizationId, ledgerId, transactionId);
 		expect(repository.createTransaction).not.toHaveBeenCalled();
+		expect(publish).not.toHaveBeenCalled();
 	});
 
 	it("propagates shared pending and unavailable idempotency failures", async () => {
@@ -258,7 +271,9 @@ describe("TransactionService", () => {
 		let attempts = 0;
 		repository.createTransaction.mockImplementation(() => {
 			attempts += 1;
-			return attempts < 5 ? Effect.fail(new AccountVersionConflict()) : Effect.succeed(transaction);
+			return attempts < 5
+				? Effect.fail(new AccountVersionConflict())
+				: Effect.succeed({ transaction, monitorJobs: [] });
 		});
 
 		await expect(
@@ -275,7 +290,7 @@ describe("TransactionService", () => {
 	it("retries typed PostgreSQL concurrency failures without inspecting their cause", async () => {
 		repository.createTransaction
 			.mockReturnValueOnce(Effect.fail(new TransactionConcurrencyFailure(new Error("opaque"))))
-			.mockReturnValueOnce(Effect.succeed(transaction));
+			.mockReturnValueOnce(Effect.succeed({ transaction, monitorJobs: [] }));
 
 		await expect(
 			runtime.runPromise(
@@ -335,7 +350,7 @@ describe("TransactionService", () => {
 	it("retries Transaction OCC conflicts", async () => {
 		repository.updateTransaction
 			.mockReturnValueOnce(Effect.fail(new TransactionVersionConflict()))
-			.mockReturnValueOnce(Effect.succeed(transaction));
+			.mockReturnValueOnce(Effect.succeed({ transaction, monitorJobs: [] }));
 
 		await expect(
 			runtime.runPromise(
@@ -384,4 +399,102 @@ it("releases a fresh claim when Asset lookup fails", async () => {
 		idempotencyKey
 	);
 	expect(repository.createTransaction).not.toHaveBeenCalled();
+});
+
+it.each(["create", "entity", "update", "post", "void"] as const)(
+	"publishes after %s commits and before completing idempotency",
+	async action => {
+		let committed = false;
+		const mutation = Effect.sync(() => {
+			committed = true;
+			return { transaction, monitorJobs: [monitorJob] };
+		});
+		repository.createTransaction.mockReturnValue(mutation);
+		repository.updateTransaction.mockReturnValue(mutation);
+		repository.postTransaction.mockReturnValue(mutation);
+		repository.voidTransaction.mockReturnValue(mutation);
+		publish.mockImplementation(jobs =>
+			Effect.sync(() => {
+				expect(committed).toBe(true);
+				expect(jobs).toEqual([monitorJob]);
+				expect(idempotency.complete).not.toHaveBeenCalled();
+			})
+		);
+		const result =
+			action === "create"
+				? service.createTransaction(organizationId, ledgerId, idempotencyKey, createRequest)
+				: action === "entity"
+					? service.createTransactionEntity(idempotencyKey, transaction)
+					: action === "update"
+						? service.updateTransaction(
+								organizationId,
+								ledgerId,
+								transactionId,
+								idempotencyKey,
+								updateRequest
+							)
+						: action === "post"
+							? service.postTransaction(organizationId, ledgerId, transactionId, idempotencyKey)
+							: service.voidTransaction(organizationId, ledgerId, transactionId, idempotencyKey);
+		expect(await runtime.runPromise(result)).toBe(transaction);
+		expect(publish).toHaveBeenCalledOnce();
+		expect(idempotency.complete).toHaveBeenCalledOnce();
+	}
+);
+it("completes accounting idempotency without retrying when enqueue fails", async () => {
+	repository.createTransaction.mockReturnValue(
+		Effect.succeed({ transaction, monitorJobs: [monitorJob] })
+	);
+	vi.spyOn(LedgerAccountBalanceMonitorJob, "enqueueMany").mockReturnValue(Effect.die("unavailable"));
+	publish.mockImplementation(jobs =>
+		Effect.gen(function* () {
+			yield* (yield* LedgerAccountBalanceMonitorPublisher)(jobs);
+		}).pipe(
+			Effect.provide(ledgerAccountBalanceMonitorPublisherLayer),
+			Effect.provide(MemoryJobStore.layer)
+		)
+	);
+	expect(
+		await runtime.runPromise(service.createTransactionEntity(idempotencyKey, transaction))
+	).toBe(transaction);
+	expect(repository.createTransaction).toHaveBeenCalledOnce();
+	expect(idempotency.complete).toHaveBeenCalledOnce();
+	expect(idempotency.release).not.toHaveBeenCalled();
+});
+
+it("completes accounting and idempotency while background enqueue is still blocked", async () => {
+	let finish!: () => void;
+	const pending = new Promise<void>(resolve => {
+		finish = resolve;
+	});
+	const enqueued = vi.fn<() => void>();
+	vi.spyOn(LedgerAccountBalanceMonitorJob, "enqueueMany").mockReturnValue(
+		Effect.gen(function* () {
+			yield* Effect.promise(() => pending);
+			enqueued();
+			return [];
+		})
+	);
+	const publisherRuntime = ManagedRuntime.make(
+		ledgerAccountBalanceMonitorPublisherLayer.pipe(Layer.provide(MemoryJobStore.layer))
+	);
+	try {
+		const backgroundPublish = await publisherRuntime.runPromise(LedgerAccountBalanceMonitorPublisher);
+		publish.mockImplementation(backgroundPublish);
+		repository.createTransaction.mockReturnValue(
+			Effect.succeed({ transaction, monitorJobs: [monitorJob] })
+		);
+		expect(
+			await runtime.runPromise(service.createTransactionEntity(idempotencyKey, transaction))
+		).toBe(transaction);
+		expect(idempotency.complete).toHaveBeenCalledOnce();
+		expect(repository.createTransaction).toHaveBeenCalledOnce();
+		expect(enqueued).not.toHaveBeenCalled();
+		finish();
+		await publisherRuntime.dispose();
+		expect(enqueued).toHaveBeenCalledOnce();
+	} finally {
+		finish();
+		await publisherRuntime.dispose();
+	}
 });
