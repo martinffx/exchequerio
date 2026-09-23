@@ -24,7 +24,7 @@ const mapError = (cause: unknown) =>
 	cause instanceof NotFoundError ||
 	cause instanceof LedgerAccountBalanceMonitorPersistenceDecodingFailure
 		? cause
-		: new LedgerAccountBalanceMonitorPersistenceFailure(cause);
+		: new LedgerAccountBalanceMonitorPersistenceFailure();
 const toScopeRow = (scope: MonitorScope): MonitorScope => ({
 	organizationId: encodeUuid(TypeID.fromString(scope.organizationId)),
 	ledgerId: encodeUuid(TypeID.fromString(scope.ledgerId)),

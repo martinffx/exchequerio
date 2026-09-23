@@ -14,8 +14,9 @@ class LedgerAccountBalanceMonitorPersistenceDecodingFailure extends InternalServ
 }
 
 class LedgerAccountBalanceMonitorPersistenceFailure extends InternalServerError {
-	constructor(cause: unknown) {
-		super("Internal Server Error", { cause });
+	constructor() {
+		// Database errors include query parameters with credential-bearing webhook URLs.
+		super("Internal Server Error");
 	}
 }
 

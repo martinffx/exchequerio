@@ -1,10 +1,12 @@
 import { TypeID } from "typeid-js";
 import { eq, inArray } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import fastify from "fastify";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
+import { globalErrorHandler } from "@/lib/errors";
 import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
 import {
 	newLedgerAccountBalanceMonitorID,
@@ -260,6 +262,45 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
 		)[0];
 		expect(after).toEqual(before);
+	});
+	it("keeps webhook credentials out of HTTP error logs after a failed insert", async () => {
+		const token = "monitor-regression-token";
+		const url = `https://example.com/hooks?token=${token}`;
+		const ciphertext = "monitor-regression-ciphertext";
+		const record = await runtime.runPromise(
+			LedgerAccountBalanceMonitor.fromRow({
+				...make().row,
+				webhookUrl: url,
+				webhookSigningSecret: ciphertext,
+			}).pipe(Effect.flatMap(value => repository.createMonitor(value)))
+		);
+		const error = await runtime.runPromise(Effect.flip(repository.createMonitor(record)));
+		const logs: string[] = [];
+		const server = fastify({
+			logger: { stream: { write: (message: string) => logs.push(message) } },
+		});
+		server.setErrorHandler(globalErrorHandler);
+		server.get("/failure", async () => {
+			throw error;
+		});
+		try {
+			const response = await server.inject({ method: "GET", url: "/failure" });
+			expect(response.statusCode).toBe(500);
+			expect(response.json()).toMatchObject({
+				type: "INTERNAL_SERVER_ERROR",
+				status: 500,
+				title: "Internal Server Error",
+				detail: "Internal Server Error",
+			});
+			const output = logs.join("");
+			for (const sensitive of [url, token, ciphertext, '"params":', "Failed query:"]) {
+				expect(output).not.toContain(sensitive);
+				expect(response.body).not.toContain(sensitive);
+			}
+			expect(output).toContain("LedgerAccountBalanceMonitorPersistenceFailure");
+		} finally {
+			await server.close();
+		}
 	});
 	it("stores UUIDs and returns the same public TypeIDs", async () => {
 		const record = make();
