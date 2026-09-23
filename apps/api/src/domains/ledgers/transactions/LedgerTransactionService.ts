@@ -1,4 +1,7 @@
-import { MonitorPublisher, type MonitorJob } from "@/jobs/MonitorPublisher";
+import {
+	MonitorPublisher,
+	type MonitorJob,
+} from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
 import { Clock, Context, Effect, Layer, Option, Schedule } from "effect";
 import { DateTime } from "luxon";
 

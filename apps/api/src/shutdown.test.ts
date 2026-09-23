@@ -1,7 +1,11 @@
 import { JobStore, MemoryJobStore } from "effect-mq";
-import { MonitorPublisher, monitorPublisherLayer, type MonitorJob } from "@/jobs/MonitorPublisher";
-import { MonitorDelivery } from "@/jobs/MonitorDelivery";
-import { monitorJob } from "@/jobs/fixtures";
+import {
+	MonitorPublisher,
+	monitorPublisherLayer,
+	type MonitorJob,
+} from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
+import { MonitorDelivery } from "@/domains/ledgers/accounts/balance-monitors/MonitorDelivery";
+import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
 import { EventEmitter } from "node:events";
 import { request } from "node:http";
 import { Effect, Layer } from "effect";

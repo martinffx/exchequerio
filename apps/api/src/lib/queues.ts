@@ -3,12 +3,7 @@ import { Redis } from "effect/unstable/persistence";
 import { RedisJobStore } from "effect-mq/redis";
 import { Redis as IoRedis } from "ioredis";
 
-type MonitorQueueOptions = Pick<
-	RedisJobStore.RedisJobStoreOptions,
-	"prefix" | "historyTtl" | "historySweepInterval"
->;
-
-export const makeMonitorJobStore = (valkeyUrl: string, options: MonitorQueueOptions = {}) => {
+export const makeJobStore = (valkeyUrl: string, options: RedisJobStore.RedisJobStoreOptions) => {
 	const redisLayer = Layer.effect(
 		Redis.Redis,
 		Effect.gen(function* () {
@@ -53,10 +48,5 @@ export const makeMonitorJobStore = (valkeyUrl: string, options: MonitorQueueOpti
 		})
 	);
 
-	return RedisJobStore.layer({
-		prefix: "exchequer-balance-monitors",
-		historyTtl: { completed: "1 day", failed: "7 days", cancelled: "1 day" },
-		historySweepInterval: "1 minute",
-		...options,
-	}).pipe(Layer.provide(redisLayer));
+	return RedisJobStore.layer(options).pipe(Layer.provide(redisLayer));
 };

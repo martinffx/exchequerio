@@ -1,4 +1,4 @@
-import type { MonitorJob } from "@/jobs/MonitorPublisher";
+import type { MonitorJob } from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
 import { randomUUID } from "node:crypto";
 import { encodeUuid } from "@/lib/utils";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";

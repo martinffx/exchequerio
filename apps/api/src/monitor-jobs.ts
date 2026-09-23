@@ -1,8 +1,8 @@
 import { Effect, ManagedRuntime, Option } from "effect";
 import { JobStore } from "effect-mq";
 import { Config } from "@/config";
-import { MonitorDelivery } from "@/jobs/MonitorDelivery";
-import { makeMonitorJobStore } from "@/jobs/MonitorQueue";
+import { MonitorDelivery } from "@/domains/ledgers/accounts/balance-monitors/MonitorDelivery";
+import { makeMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/MonitorQueue";
 
 const [command, rawId, ...extra] = process.argv.slice(2);
 if (!rawId || !["inspect", "replay"].includes(command ?? "") || extra.length) {

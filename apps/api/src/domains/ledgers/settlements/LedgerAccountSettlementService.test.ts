@@ -1,6 +1,9 @@
-import { monitorJob } from "@/jobs/fixtures";
-import { publishMonitorJobs, type MonitorJob } from "@/jobs/MonitorPublisher";
-import { MonitorDelivery } from "@/jobs/MonitorDelivery";
+import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
+import {
+	publishMonitorJobs,
+	type MonitorJob,
+} from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
+import { MonitorDelivery } from "@/domains/ledgers/accounts/balance-monitors/MonitorDelivery";
 import { MemoryJobStore } from "effect-mq";
 import { randomUUID } from "node:crypto";
 import { Effect, Option } from "effect";

@@ -1,8 +1,8 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { Config } from "@/config";
 import { encryptSecret } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
-import { makeMonitorDeliveryWorker } from "@/jobs/MonitorDelivery";
-import { makeMonitorJobStore } from "@/jobs/MonitorQueue";
+import { makeMonitorDeliveryWorker } from "@/domains/ledgers/accounts/balance-monitors/MonitorDelivery";
+import { makeMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/MonitorQueue";
 
 const config = new Config();
 // Validate before starting a worker that could otherwise exhaust jobs with an invalid key.

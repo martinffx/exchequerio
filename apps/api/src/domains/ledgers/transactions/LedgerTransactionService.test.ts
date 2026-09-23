@@ -1,12 +1,12 @@
-import { monitorJob } from "@/jobs/fixtures";
+import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
 import { MemoryJobStore } from "effect-mq";
-import { MonitorDelivery } from "@/jobs/MonitorDelivery";
+import { MonitorDelivery } from "@/domains/ledgers/accounts/balance-monitors/MonitorDelivery";
 import {
 	MonitorPublisher,
 	monitorPublisherLayer,
 	publishMonitorJobs,
 	type MonitorJob,
-} from "@/jobs/MonitorPublisher";
+} from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
 import { Asset } from "@/domains/assets/Asset";
 import { NotFoundError } from "@/lib/errors";
 import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";

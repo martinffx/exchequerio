@@ -1,5 +1,5 @@
-import { monitorPublisherLayer } from "@/jobs/MonitorPublisher";
-import { makeMonitorJobStore } from "@/jobs/MonitorQueue";
+import { monitorPublisherLayer } from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
+import { makeMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/MonitorQueue";
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
