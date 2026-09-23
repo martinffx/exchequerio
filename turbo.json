@@ -43,6 +43,10 @@
 		},
 		"db:migrate": {
 			"cache": false
+		},
+		"dev:worker": {
+			"cache": false,
+			"persistent": true
 		}
 	}
 }

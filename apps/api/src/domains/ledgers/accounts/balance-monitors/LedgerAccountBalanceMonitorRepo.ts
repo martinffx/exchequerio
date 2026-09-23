@@ -1,160 +1,158 @@
+import { TypeID } from "typeid-js";
 import { encodeUuid } from "@/lib/utils";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
-
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
+import { NotFoundError } from "@/lib/errors";
 import type { LedgerAccountBalanceMonitorID } from "@/lib/ids";
 import {
-	type LedgerAccountBalanceMonitorRow,
-	LedgerAccountBalanceMonitorsTable,
+	LedgerAccountBalanceMonitorsTable as monitors,
+	LedgerAccountsTable as accounts,
+	type MonitorConfiguration,
 } from "@/db/schema";
-
-import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
-import type { LedgerAccountBalanceMonitorListQuery } from "./LedgerAccountBalanceMonitorSchema";
 import {
-	type LedgerAccountBalanceMonitorInfrastructureError,
+	LedgerAccountBalanceMonitor,
+	type LedgerAccountBalanceMonitorRecord,
+	type MonitorScope,
+} from "./LedgerAccountBalanceMonitor";
+import {
 	LedgerAccountBalanceMonitorPersistenceDecodingFailure,
 	LedgerAccountBalanceMonitorPersistenceFailure,
 } from "./LedgerAccountBalanceMonitorErrors";
-
-interface LedgerAccountBalanceMonitorRepo {
-	listMonitors(
-		query: LedgerAccountBalanceMonitorListQuery
-	): Effect.Effect<LedgerAccountBalanceMonitor[], LedgerAccountBalanceMonitorInfrastructureError>;
-	getMonitor(
-		id: LedgerAccountBalanceMonitorID
-	): Effect.Effect<
-		Option.Option<LedgerAccountBalanceMonitor>,
-		LedgerAccountBalanceMonitorInfrastructureError
-	>;
-	createMonitor(
-		record: LedgerAccountBalanceMonitor
-	): Effect.Effect<LedgerAccountBalanceMonitor, LedgerAccountBalanceMonitorInfrastructureError>;
-	updateMonitor(
-		id: LedgerAccountBalanceMonitorID,
-		record: LedgerAccountBalanceMonitor
-	): Effect.Effect<
-		Option.Option<LedgerAccountBalanceMonitor>,
-		LedgerAccountBalanceMonitorInfrastructureError
-	>;
-	deleteMonitor(
-		id: LedgerAccountBalanceMonitorID
-	): Effect.Effect<Option.Option<void>, LedgerAccountBalanceMonitorInfrastructureError>;
-}
-
-const LedgerAccountBalanceMonitorRepoTag = Context.Service<LedgerAccountBalanceMonitorRepo>(
-	"LedgerAccountBalanceMonitorRepo"
-);
-
-const mapInfrastructureError = (cause: unknown): LedgerAccountBalanceMonitorInfrastructureError =>
-	cause instanceof LedgerAccountBalanceMonitorPersistenceDecodingFailure ||
-	cause instanceof LedgerAccountBalanceMonitorPersistenceFailure
+import type { LedgerAccountBalanceMonitorListQuery } from "./LedgerAccountBalanceMonitorSchema";
+const mapError = (cause: unknown) =>
+	cause instanceof NotFoundError ||
+	cause instanceof LedgerAccountBalanceMonitorPersistenceDecodingFailure
 		? cause
-		: new LedgerAccountBalanceMonitorPersistenceFailure(cause);
-
-const decodeOptionalRow = (row: LedgerAccountBalanceMonitorRow | undefined) =>
-	row === undefined
-		? Effect.succeed(Option.none<LedgerAccountBalanceMonitor>())
-		: // oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the decoded monitor.
-			LedgerAccountBalanceMonitor.fromRow(row).pipe(Effect.map(monitor => Option.some(monitor)));
-
-class LedgerAccountBalanceMonitorRepoLive implements LedgerAccountBalanceMonitorRepo {
+		: new LedgerAccountBalanceMonitorPersistenceFailure();
+const toScopeRow = (scope: MonitorScope): MonitorScope => ({
+	organizationId: encodeUuid(TypeID.fromString(scope.organizationId)),
+	ledgerId: encodeUuid(TypeID.fromString(scope.ledgerId)),
+	accountId: encodeUuid(TypeID.fromString(scope.accountId)),
+});
+const accountWhere = (scope: MonitorScope) =>
+	and(
+		eq(accounts.id, scope.accountId),
+		eq(accounts.ledgerId, scope.ledgerId),
+		eq(accounts.organizationId, scope.organizationId)
+	);
+const monitorWhere = (scope: MonitorScope, id?: LedgerAccountBalanceMonitorID) =>
+	and(
+		eq(monitors.accountId, scope.accountId),
+		eq(monitors.ledgerId, scope.ledgerId),
+		eq(monitors.organizationId, scope.organizationId),
+		id ? eq(monitors.id, encodeUuid(id)) : undefined
+	);
+export class LedgerAccountBalanceMonitorRepoLive {
 	constructor(private readonly db: EffectDrizzleDatabase) {}
-
-	listMonitors(
-		query: LedgerAccountBalanceMonitorListQuery
-	): Effect.Effect<LedgerAccountBalanceMonitor[], LedgerAccountBalanceMonitorInfrastructureError> {
+	private requireAccount(scope: MonitorScope) {
 		return this.db
-			.select()
-			.from(LedgerAccountBalanceMonitorsTable)
-			.orderBy(desc(LedgerAccountBalanceMonitorsTable.created))
-			.limit(query.limit)
-			.offset(query.offset)
-			.pipe(
-				Effect.flatMap(rows => Effect.all(rows.map(row => LedgerAccountBalanceMonitor.fromRow(row)))),
-				Effect.mapError(mapInfrastructureError)
-			);
-	}
-
-	getMonitor(
-		id: LedgerAccountBalanceMonitorID
-	): Effect.Effect<
-		Option.Option<LedgerAccountBalanceMonitor>,
-		LedgerAccountBalanceMonitorInfrastructureError
-	> {
-		return this.db
-			.select()
-			.from(LedgerAccountBalanceMonitorsTable)
-			.where(eq(LedgerAccountBalanceMonitorsTable.id, encodeUuid(id)))
+			.select({ id: accounts.id })
+			.from(accounts)
+			.where(accountWhere(scope))
 			.limit(1)
 			.pipe(
-				Effect.flatMap(rows => decodeOptionalRow(rows[0])),
-				Effect.mapError(mapInfrastructureError)
-			);
-	}
-
-	createMonitor(
-		record: LedgerAccountBalanceMonitor
-	): Effect.Effect<LedgerAccountBalanceMonitor, LedgerAccountBalanceMonitorInfrastructureError> {
-		return this.db
-			.insert(LedgerAccountBalanceMonitorsTable)
-			.values(record.toCreateRow())
-			.returning()
-			.pipe(
 				Effect.flatMap(rows =>
-					rows[0] === undefined
-						? Effect.fail(
-								new LedgerAccountBalanceMonitorPersistenceFailure(new Error("INSERT returned no row"))
-							)
-						: LedgerAccountBalanceMonitor.fromRow(rows[0])
-				),
-				Effect.mapError(mapInfrastructureError)
+					rows.length ? Effect.void : Effect.fail(new NotFoundError("Account not found"))
+				)
 			);
 	}
-
+	listMonitors(scope: MonitorScope, query: LedgerAccountBalanceMonitorListQuery) {
+		scope = toScopeRow(scope);
+		return this.requireAccount(scope).pipe(
+			Effect.flatMap(() =>
+				this.db
+					.select()
+					.from(monitors)
+					.where(monitorWhere(scope))
+					.orderBy(desc(monitors.created))
+					.limit(query.limit)
+					.offset(query.offset)
+			),
+			Effect.flatMap(rows => Effect.all(rows.map(row => LedgerAccountBalanceMonitor.fromRow(row)))),
+			Effect.mapError(mapError)
+		);
+	}
+	getMonitor(scope: MonitorScope, id: LedgerAccountBalanceMonitorID) {
+		scope = toScopeRow(scope);
+		return this.requireAccount(scope).pipe(
+			Effect.flatMap(() => this.db.select().from(monitors).where(monitorWhere(scope, id)).limit(1)),
+			Effect.flatMap(rows =>
+				rows[0]
+					? LedgerAccountBalanceMonitor.fromRow(rows[0]).pipe(Effect.map(Option.some))
+					: Effect.succeed(Option.none<LedgerAccountBalanceMonitorRecord>())
+			),
+			Effect.mapError(mapError)
+		);
+	}
+	createMonitor(record: LedgerAccountBalanceMonitorRecord) {
+		return this.db
+			.transaction(tx =>
+				Effect.gen(function* () {
+					const [account] = yield* tx
+						.select()
+						.from(accounts)
+						.where(accountWhere(record.row))
+						.for("update");
+					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
+					const [row] = yield* tx.insert(monitors).values(record.toCreateRow()).returning();
+					return yield* LedgerAccountBalanceMonitor.fromRow(row);
+				})
+			)
+			.pipe(Effect.mapError(mapError));
+	}
 	updateMonitor(
+		scope: MonitorScope,
 		id: LedgerAccountBalanceMonitorID,
-		record: LedgerAccountBalanceMonitor
-	): Effect.Effect<
-		Option.Option<LedgerAccountBalanceMonitor>,
-		LedgerAccountBalanceMonitorInfrastructureError
-	> {
+		changes: Partial<MonitorConfiguration>,
+		time: Date
+	) {
+		scope = toScopeRow(scope);
 		return this.db
-			.update(LedgerAccountBalanceMonitorsTable)
-			.set(record.toUpdateRow())
-			.where(eq(LedgerAccountBalanceMonitorsTable.id, encodeUuid(id)))
-			.returning()
-			.pipe(
-				Effect.flatMap(rows => decodeOptionalRow(rows[0])),
-				Effect.mapError(mapInfrastructureError)
-			);
+			.transaction(tx =>
+				Effect.gen(function* () {
+					const [account] = yield* tx.select().from(accounts).where(accountWhere(scope)).for("update");
+					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
+					const [current] = yield* tx.select().from(monitors).where(monitorWhere(scope, id));
+					if (!current) return Option.none<LedgerAccountBalanceMonitorRecord>();
+					const [row] = yield* tx
+						.update(monitors)
+						.set({ ...changes, lockVersion: current.lockVersion + 1, updated: time })
+						.where(monitorWhere(scope, id))
+						.returning();
+					// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
+					return Option.some(yield* LedgerAccountBalanceMonitor.fromRow(row));
+				})
+			)
+			.pipe(Effect.mapError(mapError));
 	}
-
-	deleteMonitor(
-		id: LedgerAccountBalanceMonitorID
-	): Effect.Effect<Option.Option<void>, LedgerAccountBalanceMonitorInfrastructureError> {
+	deleteMonitor(scope: MonitorScope, id: LedgerAccountBalanceMonitorID) {
+		scope = toScopeRow(scope);
 		return this.db
-			.delete(LedgerAccountBalanceMonitorsTable)
-			.where(eq(LedgerAccountBalanceMonitorsTable.id, encodeUuid(id)))
-			.returning({ id: LedgerAccountBalanceMonitorsTable.id })
-			.pipe(
-				// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some receives the presence marker.
-				Effect.map(rows => (rows.length === 0 ? Option.none() : Option.some(undefined))),
-				Effect.mapError(mapInfrastructureError)
-			);
+			.transaction(tx =>
+				Effect.gen(function* () {
+					const [account] = yield* tx.select().from(accounts).where(accountWhere(scope)).for("update");
+					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
+					const [current] = yield* tx.select().from(monitors).where(monitorWhere(scope, id));
+					if (!current) return Option.none<void>();
+					yield* tx.delete(monitors).where(monitorWhere(scope, id));
+					// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
+					return Option.some(undefined);
+				})
+			)
+			.pipe(Effect.mapError(mapError));
 	}
 }
-
-const ledgerAccountBalanceMonitorRepoLayer = Layer.effect(
+export type LedgerAccountBalanceMonitorRepo = Pick<
+	LedgerAccountBalanceMonitorRepoLive,
+	"listMonitors" | "getMonitor" | "createMonitor" | "updateMonitor" | "deleteMonitor"
+>;
+export const LedgerAccountBalanceMonitorRepoTag = Context.Service<LedgerAccountBalanceMonitorRepo>(
+	"LedgerAccountBalanceMonitorRepo"
+);
+export const ledgerAccountBalanceMonitorRepoLayer = Layer.effect(
 	LedgerAccountBalanceMonitorRepoTag,
 	DatabaseTag.pipe(
 		Effect.map(database => new LedgerAccountBalanceMonitorRepoLive(database.effectDb))
 	)
 );
-
-export type { LedgerAccountBalanceMonitorRepo };
-export {
-	LedgerAccountBalanceMonitorRepoLive,
-	LedgerAccountBalanceMonitorRepoTag,
-	ledgerAccountBalanceMonitorRepoLayer,
-};

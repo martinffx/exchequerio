@@ -1,141 +1,151 @@
+import { parseAmount } from "@/lib/amounts";
 import { Clock, Context, Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
-
-import { InvalidId } from "@/lib/errors";
-import { parseId } from "@/lib/utils";
+import { BadRequestError, ServiceUnavailableError } from "@/lib/errors";
+import { encodeMetadata, parseId } from "@/lib/utils";
 import {
 	newLedgerAccountBalanceMonitorID,
 	type LedgerAccountBalanceMonitorID,
 	type LedgerAccountID,
+	type LedgerID,
 } from "@/lib/ids";
-
-import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
-import {
-	type LedgerAccountBalanceMonitorInfrastructureError,
-	LedgerAccountBalanceMonitorNotFound,
-	LedgerAccountBalanceMonitorPersistenceFailure,
-} from "./LedgerAccountBalanceMonitorErrors";
+import { LedgerAccountBalanceMonitor, type MonitorScope } from "./LedgerAccountBalanceMonitor";
+import { LedgerAccountBalanceMonitorNotFound } from "./LedgerAccountBalanceMonitorErrors";
 import {
 	type LedgerAccountBalanceMonitorRepo,
 	LedgerAccountBalanceMonitorRepoTag,
 } from "./LedgerAccountBalanceMonitorRepo";
-import type { LedgerAccountBalanceMonitorRequest } from "./LedgerAccountBalanceMonitorSchema";
-
-type LedgerAccountBalanceMonitorListError = LedgerAccountBalanceMonitorInfrastructureError;
-type LedgerAccountBalanceMonitorGetError =
-	| InvalidId
-	| LedgerAccountBalanceMonitorNotFound
-	| LedgerAccountBalanceMonitorInfrastructureError;
-type LedgerAccountBalanceMonitorCreateError = LedgerAccountBalanceMonitorInfrastructureError;
-type LedgerAccountBalanceMonitorUpdateError = LedgerAccountBalanceMonitorGetError;
-type LedgerAccountBalanceMonitorDeleteError = LedgerAccountBalanceMonitorGetError;
-
+import type {
+	LedgerAccountBalanceMonitorRequest,
+	LedgerAccountBalanceMonitorUpdateRequest,
+} from "./LedgerAccountBalanceMonitorSchema";
+import { decodeSigningSecret, encryptSecret } from "@/lib/crypto";
+import { validateWebhookUrl } from "./LedgerAccountBalanceMonitorJob";
 const serverTime = Clock.currentTimeMillis.pipe(
 	Effect.map(milliseconds => DateTime.fromMillis(milliseconds, { zone: "utc" }))
 );
-
+const parseScope = (scope: MonitorScope) =>
+	Effect.all([
+		parseId<"lgr", LedgerID>("lgr", scope.ledgerId),
+		parseId<"lat", LedgerAccountID>("lat", scope.accountId),
+	]).pipe(Effect.as(scope));
 const requireFound =
 	<A>(id: LedgerAccountBalanceMonitorID) =>
-	(value: Option.Option<A>): Effect.Effect<A, LedgerAccountBalanceMonitorNotFound> =>
+	(value: Option.Option<A>) =>
 		Option.match(value, {
 			onNone: () => Effect.fail(new LedgerAccountBalanceMonitorNotFound(id)),
 			onSome: Effect.succeed,
 		});
-
-const parseAccountId = (
-	value: string
-): Effect.Effect<LedgerAccountID, LedgerAccountBalanceMonitorPersistenceFailure> =>
-	parseId<"lat", LedgerAccountID>("lat", value).pipe(
-		Effect.mapError(
-			() => new LedgerAccountBalanceMonitorPersistenceFailure(new Error("Invalid Ledger Account ID"))
-		)
-	);
-
-class LedgerAccountBalanceMonitorService {
-	constructor(private readonly repository: LedgerAccountBalanceMonitorRepo) {}
-
-	listLedgerAccountBalanceMonitors(
-		offset: number,
-		limit: number
-	): Effect.Effect<LedgerAccountBalanceMonitor[], LedgerAccountBalanceMonitorListError> {
-		return this.repository.listMonitors({ offset, limit });
+export class LedgerAccountBalanceMonitorService {
+	constructor(
+		private readonly repository: LedgerAccountBalanceMonitorRepo,
+		private readonly encryptionKey: string
+	) {}
+	private webhook(request: LedgerAccountBalanceMonitorUpdateRequest) {
+		return Effect.gen({ self: this }, function* () {
+			yield* Effect.try({
+				try: () => {
+					for (const condition of request.alertCondition.conditions) parseAmount(condition.value);
+				},
+				catch: error => error as BadRequestError,
+			});
+			yield* Effect.try({
+				try: () => validateWebhookUrl(request.webhook.url),
+				catch: () => new BadRequestError("Webhook URL must be a public HTTPS destination"),
+			});
+			const signingSecret = request.webhook.signingSecret;
+			if (signingSecret !== undefined) {
+				yield* Effect.try({
+					try: () => decodeSigningSecret(signingSecret),
+					catch: () =>
+						new BadRequestError(
+							"Webhook signing secret must be whsec_ followed by a base64-encoded 32-byte key"
+						),
+				});
+			}
+			const encrypted = yield* Effect.try({
+				try: () => encryptSecret(signingSecret ?? "", this.encryptionKey),
+				catch: () => new ServiceUnavailableError("Balance monitor configuration unavailable"),
+			});
+			return {
+				webhookUrl: request.webhook.url,
+				...(signingSecret === undefined ? {} : { webhookSigningSecret: encrypted }),
+			};
+		});
 	}
-
-	getLedgerAccountBalanceMonitor(
-		id: string
-	): Effect.Effect<LedgerAccountBalanceMonitor, LedgerAccountBalanceMonitorGetError> {
-		return parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", id).pipe(
-			Effect.flatMap(monitorId =>
-				this.repository.getMonitor(monitorId).pipe(Effect.flatMap(requireFound(monitorId)))
-			)
+	listLedgerAccountBalanceMonitors(scope: MonitorScope, offset: number, limit: number) {
+		return parseScope(scope).pipe(
+			Effect.flatMap(() => this.repository.listMonitors(scope, { offset, limit }))
 		);
 	}
-
+	getLedgerAccountBalanceMonitor(scope: MonitorScope, id: string) {
+		return Effect.gen({ self: this }, function* () {
+			yield* parseScope(scope);
+			const monitorId = yield* parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", id);
+			return yield* this.repository
+				.getMonitor(scope, monitorId)
+				.pipe(Effect.flatMap(requireFound(monitorId)));
+		});
+	}
 	createLedgerAccountBalanceMonitor(
+		scope: MonitorScope,
 		request: LedgerAccountBalanceMonitorRequest
-	): Effect.Effect<LedgerAccountBalanceMonitor, LedgerAccountBalanceMonitorCreateError> {
-		return Effect.all({
-			id: Effect.sync(newLedgerAccountBalanceMonitorID),
-			accountId: parseAccountId(request.accountId),
-			applicationTime: serverTime,
-		}).pipe(
-			Effect.map(({ id, accountId, applicationTime }) =>
-				LedgerAccountBalanceMonitor.fromRequest(id, accountId, request, applicationTime)
-			),
-			Effect.flatMap(record => this.repository.createMonitor(record))
-		);
+	) {
+		return Effect.gen({ self: this }, function* () {
+			yield* parseScope(scope);
+			const webhook = yield* this.webhook(request);
+			const time = yield* serverTime;
+			const record = yield* LedgerAccountBalanceMonitor.fromRequest(
+				newLedgerAccountBalanceMonitorID(),
+				scope,
+				request,
+				time,
+				webhook.webhookSigningSecret!
+			);
+			return yield* this.repository.createMonitor(record);
+		});
 	}
-
 	updateLedgerAccountBalanceMonitor(
+		scope: MonitorScope,
 		id: string,
-		request: LedgerAccountBalanceMonitorRequest
-	): Effect.Effect<LedgerAccountBalanceMonitor, LedgerAccountBalanceMonitorUpdateError> {
-		return Effect.all({
-			id: parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", id),
-			accountId: parseAccountId(request.accountId),
-			applicationTime: serverTime,
-		}).pipe(
-			Effect.map(({ id: monitorId, accountId, applicationTime }) => ({
-				monitorId,
-				record: LedgerAccountBalanceMonitor.fromRequest(monitorId, accountId, request, applicationTime),
-			})),
-			Effect.flatMap(({ monitorId, record }) =>
-				this.repository.updateMonitor(monitorId, record).pipe(Effect.flatMap(requireFound(monitorId)))
-			)
-		);
+		request: LedgerAccountBalanceMonitorUpdateRequest
+	) {
+		return Effect.gen({ self: this }, function* () {
+			yield* parseScope(scope);
+			const monitorId = yield* parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", id);
+			const webhook = yield* this.webhook(request);
+			const time = yield* serverTime;
+			return yield* this.repository
+				.updateMonitor(
+					scope,
+					monitorId,
+					{
+						...webhook,
+						description: request.description,
+						alertCondition: request.alertCondition,
+						metadata: encodeMetadata(request.metadata),
+					},
+					time.toJSDate()
+				)
+				.pipe(Effect.flatMap(requireFound(monitorId)));
+		});
 	}
-
-	deleteLedgerAccountBalanceMonitor(
-		id: string
-	): Effect.Effect<void, LedgerAccountBalanceMonitorDeleteError> {
-		return parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", id).pipe(
-			Effect.flatMap(monitorId =>
-				this.repository.deleteMonitor(monitorId).pipe(Effect.flatMap(requireFound(monitorId)))
-			)
-		);
+	deleteLedgerAccountBalanceMonitor(scope: MonitorScope, id: string) {
+		return Effect.gen({ self: this }, function* () {
+			yield* parseScope(scope);
+			const monitorId = yield* parseId<"lbm", LedgerAccountBalanceMonitorID>("lbm", id);
+			return yield* this.repository
+				.deleteMonitor(scope, monitorId)
+				.pipe(Effect.flatMap(requireFound(monitorId)));
+		});
 	}
 }
-
-const LedgerAccountBalanceMonitorServiceTag = Context.Service<LedgerAccountBalanceMonitorService>(
-	"LedgerAccountBalanceMonitorService"
-);
-
-const ledgerAccountBalanceMonitorServiceLayer = Layer.effect(
-	LedgerAccountBalanceMonitorServiceTag,
-	LedgerAccountBalanceMonitorRepoTag.pipe(
-		Effect.map(repository => new LedgerAccountBalanceMonitorService(repository))
-	)
-);
-
-export type {
-	LedgerAccountBalanceMonitorCreateError,
-	LedgerAccountBalanceMonitorDeleteError,
-	LedgerAccountBalanceMonitorGetError,
-	LedgerAccountBalanceMonitorListError,
-	LedgerAccountBalanceMonitorUpdateError,
-};
-export {
-	LedgerAccountBalanceMonitorService,
-	LedgerAccountBalanceMonitorServiceTag,
-	ledgerAccountBalanceMonitorServiceLayer,
-};
+export const LedgerAccountBalanceMonitorServiceTag =
+	Context.Service<LedgerAccountBalanceMonitorService>("LedgerAccountBalanceMonitorService");
+export const ledgerAccountBalanceMonitorServiceLayer = (encryptionKey: string) =>
+	Layer.effect(
+		LedgerAccountBalanceMonitorServiceTag,
+		LedgerAccountBalanceMonitorRepoTag.pipe(
+			Effect.map(repository => new LedgerAccountBalanceMonitorService(repository, encryptionKey))
+		)
+	);

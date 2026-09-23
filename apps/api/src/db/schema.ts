@@ -1,5 +1,7 @@
+import type { AlertCondition } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorSchema";
 import { type BuildQueryResult, defineRelations, sql } from "drizzle-orm";
 import {
+	jsonb,
 	bigint,
 	boolean,
 	check,
@@ -377,24 +379,41 @@ type LedgerAccountCategoryAccountInsertRow = Required<
 >;
 
 // Account Balance Monitors: Real-time balance tracking with alerts
-const LedgerAccountBalanceMonitorsTable = pgTable("ledger_account_balance_monitors", {
-	id: uuid("id").primaryKey(),
-	accountId: uuid("account_id")
-		.notNull()
-		.references(() => LedgerAccountsTable.id),
-	name: text("name").notNull(),
-	description: text("description"),
-	alertThreshold: bigint("alert_threshold", { mode: "bigint" }).notNull().default(0n),
-	isActive: integer("is_active").notNull().default(1), // SQLite-compatible boolean
-	metadata: text("metadata"),
-	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
-	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-});
+const LedgerAccountBalanceMonitorsTable = pgTable(
+	"ledger_account_balance_monitors",
+	{
+		id: uuid("id").primaryKey(),
+		organizationId: uuid("organization_id").notNull(),
+		ledgerId: uuid("ledger_id").notNull(),
+		accountId: uuid("account_id").notNull(),
+		description: text("description"),
+		alertCondition: jsonb("alert_condition").$type<AlertCondition>().notNull(),
+		webhookUrl: text("webhook_url").notNull(),
+		webhookSigningSecret: text("webhook_signing_secret").notNull(),
+		metadata: text("metadata"),
+		lockVersion: integer("lock_version").notNull().default(1),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => [
+		foreignKey({
+			name: "balance_monitor_account_scope_fk",
+			columns: [table.organizationId, table.ledgerId, table.accountId],
+			foreignColumns: [
+				LedgerAccountsTable.organizationId,
+				LedgerAccountsTable.ledgerId,
+				LedgerAccountsTable.id,
+			],
+		}),
+		index("balance_monitors_account_idx").on(table.accountId),
+	]
+);
 type LedgerAccountBalanceMonitorRow = typeof LedgerAccountBalanceMonitorsTable.$inferSelect;
-type LedgerAccountBalanceMonitorInsertRow = Required<
-	typeof LedgerAccountBalanceMonitorsTable.$inferInsert
+type LedgerAccountBalanceMonitorInsertRow = typeof LedgerAccountBalanceMonitorsTable.$inferInsert;
+type MonitorConfiguration = Pick<
+	LedgerAccountBalanceMonitorRow,
+	"description" | "alertCondition" | "webhookUrl" | "webhookSigningSecret" | "metadata"
 >;
-
 // Account Statements: Periodic balance snapshots and statements
 const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
 	id: uuid("id").primaryKey(),
@@ -704,6 +723,7 @@ export {
 	ledgerSettlementStatus,
 };
 export type {
+	MonitorConfiguration,
 	AssetRow,
 	AssetInsertRow,
 	LedgerAccountInsertRow,

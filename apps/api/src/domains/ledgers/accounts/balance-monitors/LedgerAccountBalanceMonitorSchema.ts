@@ -1,89 +1,115 @@
-import { CloneType, type Static, Type } from "@sinclair/typebox";
-
 import { AmountSchema } from "@/lib/amounts";
+import { type Static, Type } from "@sinclair/typebox";
 import { MetadataSchema } from "@/lib/schema";
 import { PaginationQuery } from "@/lib/schema";
-import { AccountIdSchema } from "@/domains/ledgers/accounts/AccountSchema";
+import { AccountItemParameters, AccountIdSchema } from "../AccountSchema";
 
-const LedgerAccountBalanceMonitorId = Type.String({
-	description: "Unique identifier for the ledger account balance monitor.",
-	pattern: "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-});
-const LedgerAccountBalanceMonitorIdParameters = Type.Object({
-	balanceMonitorId: LedgerAccountBalanceMonitorId,
-});
-
-const AlertOperator = Type.Union([
-	Type.Literal("="),
-	Type.Literal("<"),
-	Type.Literal(">"),
-	Type.Literal("<="),
-	Type.Literal(">="),
-	Type.Literal("!="),
+const LedgerAccountBalanceMonitorId = Type.String({ pattern: "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
+const LedgerAccountBalanceMonitorIdParameters = Type.Intersect([
+	AccountItemParameters,
+	Type.Object({ balanceMonitorId: LedgerAccountBalanceMonitorId }),
 ]);
-const AlertCondition = Type.Union([
-	Type.Object({ field: Type.Literal("balance"), operator: AlertOperator, value: AmountSchema }),
-	Type.Object({
-		field: Type.Union([Type.Literal("created"), Type.Literal("updated")]),
-		operator: AlertOperator,
-		value: Type.Number(),
-	}),
+const BalanceType = Type.Union([
+	Type.Literal("posted"),
+	Type.Literal("pending"),
+	Type.Literal("availableBalance"),
 ]);
-
-const LedgerAccountBalanceMonitorResponse = Type.Object(
+const AlertCondition = Type.Object(
 	{
-		id: LedgerAccountBalanceMonitorId,
-		accountId: CloneType(AccountIdSchema, { description: "The ledger account's ID" }),
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
+		mode: Type.Union([Type.Literal("all"), Type.Literal("any")]),
+		conditions: Type.Array(
+			Type.Object(
+				{
+					balanceType: BalanceType,
+					operator: Type.Union([
+						Type.Literal("="),
+						Type.Literal("!="),
+						Type.Literal("<"),
+						Type.Literal("<="),
+						Type.Literal(">"),
+						Type.Literal(">="),
+					]),
+					value: AmountSchema,
+				},
+				{ additionalProperties: false }
+			),
+			{ minItems: 1 }
 		),
-		alertCondition: Type.Array(AlertCondition),
-		metadata: Type.Optional(MetadataSchema),
-		lockVersion: Type.Number(),
-		created: Type.String(),
-		updated: Type.String(),
 	},
-	{
-		$id: "LedgerAccountBalanceMonitorResponse",
-		description:
-			"A ledger account balance monitor is an object that stores an alert_condition for which, when the account's values cross the alert condition, a webhook is sent. Each ledger account balance monitor belongs to a ledger account.",
-	}
+	{ additionalProperties: false }
 );
-
+const BalanceSnapshot = Type.Object({
+	posted: AmountSchema,
+	pending: AmountSchema,
+	availableBalance: AmountSchema,
+});
 const LedgerAccountBalanceMonitorRequest = Type.Object(
 	{
-		accountId: Type.String({
-			description: "The ledger account associated with this balance monitor.",
-		}),
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
+		description: Type.Optional(Type.String()),
+		alertCondition: AlertCondition,
+		webhook: Type.Object(
+			{
+				url: Type.String({ format: "uri" }),
+				signingSecret: Type.String({
+					pattern: "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+					writeOnly: true,
+				}),
+			},
+			{ additionalProperties: false }
 		),
-		alertCondition: Type.Array(AlertCondition),
 		metadata: Type.Optional(MetadataSchema),
 	},
-	{
-		$id: "LedgerAccountBalanceMonitorRequest",
-	}
+	{ additionalProperties: false }
 );
-
+const LedgerAccountBalanceMonitorUpdateRequest = Type.Object(
+	{
+		...LedgerAccountBalanceMonitorRequest.properties,
+		webhook: Type.Object(
+			{
+				url: Type.String({ format: "uri" }),
+				signingSecret: Type.Optional(
+					Type.String({ pattern: "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$", writeOnly: true })
+				),
+			},
+			{ additionalProperties: false }
+		),
+	},
+	{ additionalProperties: false }
+);
+const LedgerAccountBalanceMonitorResponse = Type.Object({
+	id: LedgerAccountBalanceMonitorId,
+	accountId: AccountIdSchema,
+	ledgerId: AccountItemParameters.properties.ledgerId,
+	description: Type.Optional(Type.String()),
+	alertCondition: AlertCondition,
+	webhook: Type.Object({ url: Type.String() }),
+	metadata: Type.Optional(MetadataSchema),
+	lockVersion: Type.Integer({ minimum: 1 }),
+	created: Type.String({ format: "date-time" }),
+	updated: Type.String({ format: "date-time" }),
+});
 const LedgerAccountBalanceMonitorListQuerySchema = PaginationQuery;
-
+type AlertCondition = Static<typeof AlertCondition>;
+type BalanceSnapshot = Static<typeof BalanceSnapshot>;
+type LedgerAccountBalanceMonitorRequest = Static<typeof LedgerAccountBalanceMonitorRequest>;
+type LedgerAccountBalanceMonitorUpdateRequest = Static<
+	typeof LedgerAccountBalanceMonitorUpdateRequest
+>;
+type LedgerAccountBalanceMonitorResponse = Static<typeof LedgerAccountBalanceMonitorResponse>;
 type LedgerAccountBalanceMonitorIdParameters = Static<
 	typeof LedgerAccountBalanceMonitorIdParameters
 >;
-type LedgerAccountBalanceMonitorRequest = Static<typeof LedgerAccountBalanceMonitorRequest>;
-type LedgerAccountBalanceMonitorResponse = Static<typeof LedgerAccountBalanceMonitorResponse>;
-type LedgerAccountBalanceMonitorListQuery = Static<typeof PaginationQuery>;
-
+type LedgerAccountBalanceMonitorListQuery = Static<
+	typeof LedgerAccountBalanceMonitorListQuerySchema
+>;
 export {
+	AlertCondition,
+	BalanceSnapshot,
 	LedgerAccountBalanceMonitorId,
 	LedgerAccountBalanceMonitorIdParameters,
 	LedgerAccountBalanceMonitorListQuerySchema,
 	LedgerAccountBalanceMonitorRequest,
+	LedgerAccountBalanceMonitorUpdateRequest,
 	LedgerAccountBalanceMonitorResponse,
 };
 export type { LedgerAccountBalanceMonitorListQuery };

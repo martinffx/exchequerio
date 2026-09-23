@@ -1,3 +1,7 @@
+import {
+	LedgerAccountBalanceMonitorPublisher,
+	type LedgerAccountBalanceMonitorJobPayload,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { Context, Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
 import { type AccountService, AccountServiceTag } from "../accounts/AccountService";
@@ -39,7 +43,10 @@ class LedgerAccountSettlementService {
 		private readonly repository: LedgerAccountSettlementRepo,
 		private readonly accounts: AccountService,
 		private readonly transactions: LedgerTransactionRepo,
-		private readonly idempotency: IdempotencyService
+		private readonly idempotency: IdempotencyService,
+		private readonly publish: (
+			jobs: readonly LedgerAccountBalanceMonitorJobPayload[]
+		) => Effect.Effect<void>
 	) {}
 	/**
 	 * Lists Settlements within one Organization and Ledger.
@@ -197,11 +204,17 @@ class LedgerAccountSettlementService {
 			const existing = yield* this.transactions.getSettlementTransaction(org, ledger, id);
 			if (Option.isNone(existing)) {
 				const accounting = yield* this.repository.buildTransaction(org, ledger, id, now);
-				yield* this.transactions.createSettlementTransaction(accounting);
+				yield* this.transactions
+					.createSettlementTransaction(accounting)
+					.pipe(Effect.tap(result => this.publish(result.monitorJobs)));
 			} else if (settlement.targetStatus === "posted")
-				yield* this.transactions.postSettlementTransaction(org, ledger, id, now);
+				yield* this.transactions
+					.postSettlementTransaction(org, ledger, id, now)
+					.pipe(Effect.tap(result => this.publish(result.monitorJobs)));
 			else if (settlement.targetStatus === "voided")
-				yield* this.transactions.voidSettlementTransaction(org, ledger, id, now);
+				yield* this.transactions
+					.voidSettlementTransaction(org, ledger, id, now)
+					.pipe(Effect.tap(result => this.publish(result.monitorJobs)));
 			return yield* this.repository.finalizeSettlement(
 				org,
 				ledger,
@@ -319,7 +332,8 @@ const ledgerAccountSettlementServiceLayer = Layer.effect(
 			yield* LedgerAccountSettlementRepoTag,
 			yield* AccountServiceTag,
 			yield* LedgerTransactionRepoTag,
-			yield* IdempotencyServiceTag
+			yield* IdempotencyServiceTag,
+			yield* LedgerAccountBalanceMonitorPublisher
 		);
 	})
 );

@@ -1,4 +1,3 @@
-import { encodeUuid } from "@/lib/utils";
 import { Effect, Layer } from "effect";
 import fastifySwagger from "@fastify/swagger";
 import fastify, { type FastifyInstance } from "fastify";
@@ -30,16 +29,30 @@ const monitorId = TypeID.fromString<"lbm">(
 ) as LedgerAccountBalanceMonitorID;
 const accountId = TypeID.fromString<"lat">("lat_01h2x3y4z5a6b7c8d9e0f1g2h6") as LedgerAccountID;
 const request: LedgerAccountBalanceMonitorRequest = {
-	accountId: accountId.toString(),
 	description: "Test balance monitor",
-	alertCondition: [],
+	alertCondition: {
+		mode: "all",
+		conditions: [{ balanceType: "posted", operator: "<", value: "100" }],
+	},
+	webhook: {
+		url: "https://example.com/hook",
+		signingSecret: "whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+	},
 	metadata: {},
 };
-const monitor = LedgerAccountBalanceMonitor.fromRequest(
-	monitorId,
-	accountId,
-	{ ...request, metadata: undefined },
-	DateTime.fromISO("2025-01-01T00:00:00.000Z", { zone: "utc" })
+const scope = {
+	organizationId: organizationId.toString(),
+	ledgerId,
+	accountId: accountId.toString(),
+};
+const monitor = Effect.runSync(
+	LedgerAccountBalanceMonitor.fromRequest(
+		monitorId,
+		scope,
+		{ ...request, metadata: undefined },
+		DateTime.fromISO("2025-01-01T00:00:00.000Z", { zone: "utc" }),
+		"ciphertext"
+	)
 );
 const collectionUrl = `/api/ledgers/${ledgerId}/accounts/${accountId.toString()}/balance-monitors`;
 const itemUrl = `${collectionUrl}/${monitorId.toString()}`;
@@ -99,35 +112,6 @@ afterEach(async () => {
 });
 
 describe("LedgerAccountBalanceMonitorRoutes", () => {
-	it.each(["POST", "PUT"] as const)("validates exact balance amounts for %s", async method => {
-		const implementation = service();
-		const { server } = await buildRouteServer(implementation);
-		const url = method === "POST" ? collectionUrl : itemUrl;
-		for (const value of [1000, "01", "1.5", "9223372036854775808", "-9223372036854775809"]) {
-			const response = await server.inject({
-				method,
-				url,
-				headers: authorize(),
-				payload: { ...request, alertCondition: [{ field: "balance", operator: "<", value }] },
-			});
-			expect(response.statusCode).toBe(400);
-		}
-		for (const condition of [
-			{ field: "balance", operator: "<", value: "9007199254740993" },
-			{ field: "balance", operator: "<", value: "-9223372036854775808" },
-			{ field: "created", operator: "<", value: 1000 },
-		]) {
-			const response = await server.inject({
-				method,
-				url,
-				headers: authorize(),
-				payload: { ...request, alertCondition: [condition] },
-			});
-			expect(response.statusCode).toBe(200);
-			expect(response.json()).not.toHaveProperty("balances");
-		}
-	});
-
 	it.each([
 		['{"period":"monthly"}', { period: "monthly" }],
 		["{}", {}],
@@ -142,14 +126,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 	])("safely returns stored metadata %s on GET and list", async (metadata, expected) => {
 		const stored = await Effect.runPromise(
 			LedgerAccountBalanceMonitor.fromRow({
-				id: encodeUuid(monitorId),
-				accountId: encodeUuid(accountId),
-				name: monitor.name,
-				description: "Historical monitor",
-				alertThreshold: 0n,
-				isActive: 1,
-				created: monitor.created.toJSDate(),
-				updated: monitor.updated.toJSDate(),
+				...monitor.row,
 				metadata,
 			})
 		);
@@ -178,6 +155,63 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		}
 	});
 
+	it("forwards authenticated scope on GET and redacts credentials", async () => {
+		const implementation = service();
+		const { server } = await buildRouteServer(implementation);
+		const response = await server.inject({ method: "GET", url: itemUrl, headers: authorize() });
+		expect(response.statusCode).toBe(200);
+		expect(implementation.getLedgerAccountBalanceMonitor).toHaveBeenCalledWith(
+			scope,
+			monitorId.toString()
+		);
+		expect(response.json()).toMatchObject({
+			alertCondition: request.alertCondition,
+			webhook: { url: request.webhook.url },
+			lockVersion: 1,
+		});
+		expect(response.body).not.toContain("secret");
+		expect(response.json()).not.toHaveProperty("balances");
+	});
+	it("requires a token on creation and permits omission on update", async () => {
+		const implementation = service();
+		const { server } = await buildRouteServer(implementation);
+		const payload = { ...request, webhook: { url: request.webhook.url } };
+		const created = await server.inject({
+			method: "POST",
+			url: collectionUrl,
+			headers: authorize(),
+			payload,
+		});
+		expect(created.statusCode).toBe(400);
+		const updated = await server.inject({
+			method: "PUT",
+			url: itemUrl,
+			headers: authorize(),
+			payload,
+		});
+		expect(updated.statusCode).toBe(200);
+	});
+	it.each([
+		{ mode: "all", conditions: [] },
+		{ mode: "all", conditions: [{ balanceType: "posted", operator: "<", value: 0.5 }] },
+		{
+			mode: "all",
+			conditions: [{ balanceType: "posted", operator: "<", value: Number.MAX_SAFE_INTEGER + 1 }],
+		},
+		{ mode: "all", conditions: [{ balanceType: "missing", operator: "<", value: "1" }] },
+		{ mode: "nested", conditions: [{ balanceType: "posted", operator: "<", value: "1" }] },
+	])("rejects invalid conditions %#", async alertCondition => {
+		const implementation = service();
+		const { server } = await buildRouteServer(implementation);
+		const response = await server.inject({
+			method: "POST",
+			url: collectionUrl,
+			headers: authorize(),
+			payload: { ...request, alertCondition },
+		});
+		expect(response.statusCode).toBe(400);
+		expect(implementation.createLedgerAccountBalanceMonitor).not.toHaveBeenCalled();
+	});
 	it("keeps the five existing permission declarations", async () => {
 		const { hasPermissions } = await buildRouteServer(service());
 
@@ -198,9 +232,13 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 	it("preserves metadata key-value pairs on the wire", async () => {
 		const implementation = service();
-		implementation.createLedgerAccountBalanceMonitor.mockImplementation(body =>
-			Effect.succeed(
-				LedgerAccountBalanceMonitor.fromRequest(monitorId, accountId, body, monitor.updated)
+		implementation.createLedgerAccountBalanceMonitor.mockImplementation((scope, body) =>
+			LedgerAccountBalanceMonitor.fromRequest(
+				monitorId,
+				scope,
+				body,
+				DateTime.fromJSDate(monitor.row.updated),
+				"ciphertext"
 			)
 		);
 		const { server } = await buildRouteServer(implementation);
@@ -213,7 +251,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		});
 		expect(response.statusCode).toBe(200);
 		expect(response.json()).toMatchObject({ metadata });
-		expect(implementation.createLedgerAccountBalanceMonitor).toHaveBeenCalledWith({
+		expect(implementation.createLedgerAccountBalanceMonitor).toHaveBeenCalledWith(scope, {
 			...request,
 			metadata,
 		});
@@ -246,7 +284,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 		expect(response.statusCode).toBe(200);
 		expect(response.json()).toMatchSnapshot();
-		expect(implementation.listLedgerAccountBalanceMonitors).toHaveBeenCalledWith(0, 20);
+		expect(implementation.listLedgerAccountBalanceMonitors).toHaveBeenCalledWith(scope, 0, 20);
 		expect(runPromise).toHaveBeenCalledOnce();
 	});
 
@@ -261,22 +299,19 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		});
 
 		expect(response.statusCode).toBe(200);
-		expect(implementation.listLedgerAccountBalanceMonitors).toHaveBeenCalledWith(10, 5);
+		expect(implementation.listLedgerAccountBalanceMonitors).toHaveBeenCalledWith(scope, 10, 5);
 	});
 
-	it("gets through the Effect service and ignores parent path IDs", async () => {
+	it("rejects malformed parent path IDs", async () => {
 		const implementation = service();
 		const { server } = await buildRouteServer(implementation);
-
 		const response = await server.inject({
 			method: "GET",
 			url: `/api/ledgers/not-a-ledger/accounts/not-an-account/balance-monitors/${monitorId.toString()}`,
 			headers: authorize(),
 		});
-
-		expect(response.statusCode).toBe(200);
-		expect(response.json()).toMatchSnapshot();
-		expect(implementation.getLedgerAccountBalanceMonitor).toHaveBeenCalledWith(monitorId.toString());
+		expect(response.statusCode).toBe(400);
+		expect(implementation.getLedgerAccountBalanceMonitor).not.toHaveBeenCalled();
 	});
 
 	it("creates with the existing 200 response", async () => {
@@ -292,7 +327,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 		expect(response.statusCode).toBe(200);
 		expect(response.json()).toMatchSnapshot();
-		expect(implementation.createLedgerAccountBalanceMonitor).toHaveBeenCalledWith(request);
+		expect(implementation.createLedgerAccountBalanceMonitor).toHaveBeenCalledWith(scope, request);
 	});
 
 	it("updates with the existing response and service inputs", async () => {
@@ -309,6 +344,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		expect(response.statusCode).toBe(200);
 		expect(response.json()).toMatchSnapshot();
 		expect(implementation.updateLedgerAccountBalanceMonitor).toHaveBeenCalledWith(
+			scope,
 			monitorId.toString(),
 			request
 		);
@@ -323,6 +359,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		expect(response.statusCode).toBe(200);
 		expect(response.body).toBe("");
 		expect(implementation.deleteLedgerAccountBalanceMonitor).toHaveBeenCalledWith(
+			scope,
 			monitorId.toString()
 		);
 	});

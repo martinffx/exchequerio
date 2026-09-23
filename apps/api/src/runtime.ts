@@ -1,3 +1,7 @@
+import {
+	ledgerAccountBalanceMonitorPublisherLayer,
+	makeLedgerAccountBalanceMonitorJobStore,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
@@ -62,7 +66,10 @@ const makeServerRuntimeLayer = (
 		Layer.succeed(ServerConfigTag, config),
 		overrides.database ?? makeDatabaseLive(config.databaseUrl),
 		valkey,
-		idempotency
+		idempotency,
+		ledgerAccountBalanceMonitorPublisherLayer.pipe(
+			Layer.provide(makeLedgerAccountBalanceMonitorJobStore(config.valkeyUrl))
+		)
 	);
 	const assetLayer = assetServiceLayer.pipe(Layer.provide(assetRepoLayer));
 	const accountWithLedger = accountLayer.pipe(Layer.provide(Layer.merge(ledgerLayer, assetLayer)));
@@ -78,7 +85,7 @@ const makeServerRuntimeLayer = (
 		ledgerLayer,
 		accountWithLedger,
 		settlementWithServices,
-		balanceMonitorLayer,
+		balanceMonitorLayer(config.balanceMonitorEncryptionKey),
 		ledgerAccountStatementLayer,
 		transactionWithLedger,
 		ledgerAccountCategory,

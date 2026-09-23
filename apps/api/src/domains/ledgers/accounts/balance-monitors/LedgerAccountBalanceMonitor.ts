@@ -1,88 +1,97 @@
+import { parseAmount } from "@/lib/amounts";
+import { TypeID } from "typeid-js";
 import { Effect } from "effect";
 import { DateTime } from "luxon";
-
 import {
-	encodeUuid,
-	encodeMetadata,
 	type Metadata,
+	encodeMetadata,
 	parseDate,
 	parseUuid,
+	encodeUuid,
 	parseMetadata,
 } from "@/lib/utils";
 import type { LedgerAccountBalanceMonitorID, LedgerAccountID } from "@/lib/ids";
-import type {
-	LedgerAccountBalanceMonitorRow,
-	LedgerAccountBalanceMonitorsTable,
-} from "@/db/schema";
-
+import type { LedgerAccountBalanceMonitorRow } from "@/db/schema";
 import { LedgerAccountBalanceMonitorPersistenceDecodingFailure } from "./LedgerAccountBalanceMonitorErrors";
 import type {
+	AlertCondition,
+	BalanceSnapshot,
 	LedgerAccountBalanceMonitorRequest,
 	LedgerAccountBalanceMonitorResponse,
 } from "./LedgerAccountBalanceMonitorSchema";
 
-type LedgerAccountBalanceMonitorWriteRow = typeof LedgerAccountBalanceMonitorsTable.$inferInsert;
-
-type LedgerAccountBalanceMonitorOptions = Readonly<{
-	id: LedgerAccountBalanceMonitorID;
-	accountId: LedgerAccountID;
-	name: string;
-	description?: string;
-	alertThreshold: bigint;
-	isActive: boolean;
-	metadata?: Metadata;
-	created: DateTime;
-	updated: DateTime;
-}>;
-
-class LedgerAccountBalanceMonitor {
+export type MonitorScope = Pick<
+	LedgerAccountBalanceMonitorRow,
+	"organizationId" | "ledgerId" | "accountId"
+>;
+export type LedgerAccountBalanceMonitorRecord = LedgerAccountBalanceMonitor & {
+	readonly row: LedgerAccountBalanceMonitorRow;
 	readonly id: LedgerAccountBalanceMonitorID;
 	readonly accountId: LedgerAccountID;
-	readonly name: string;
-	readonly description?: string;
-	readonly alertThreshold: bigint;
-	readonly isActive: boolean;
-	readonly metadata?: Metadata;
-	readonly created: DateTime;
-	readonly updated: DateTime;
+	readonly metadata: Metadata | undefined;
+};
 
-	private constructor(options: LedgerAccountBalanceMonitorOptions) {
-		this.id = options.id;
-		this.accountId = options.accountId;
-		this.name = options.name;
-		this.description = options.description;
-		this.alertThreshold = options.alertThreshold;
-		this.isActive = options.isActive;
-		this.metadata = options.metadata;
-		this.created = options.created;
-		this.updated = options.updated;
+export class LedgerAccountBalanceMonitor {
+	private constructor(readonly alertCondition: AlertCondition) {}
+
+	static fromConfiguration(configuration: Pick<LedgerAccountBalanceMonitorRow, "alertCondition">) {
+		return new LedgerAccountBalanceMonitor(configuration.alertCondition);
+	}
+
+	/** A complete accounting mutation is one transition, independent of worker arrival order. */
+	crossed(before: BalanceSnapshot, after: BalanceSnapshot): boolean {
+		return !this.matches(before) && this.matches(after);
+	}
+
+	private matches(balances: BalanceSnapshot): boolean {
+		const compare = (item: AlertCondition["conditions"][number]): boolean => {
+			const amount = parseAmount(balances[item.balanceType]);
+			const threshold = parseAmount(item.value);
+			switch (item.operator) {
+				case "=":
+					return amount === threshold;
+				case "!=":
+					return amount !== threshold;
+				case "<":
+					return amount < threshold;
+				case "<=":
+					return amount <= threshold;
+				case ">":
+					return amount > threshold;
+				case ">=":
+					return amount >= threshold;
+			}
+		};
+		return this.alertCondition.mode === "all"
+			? this.alertCondition.conditions.every(compare)
+			: this.alertCondition.conditions.some(compare);
 	}
 
 	static fromRequest(
 		id: LedgerAccountBalanceMonitorID,
-		accountId: LedgerAccountID,
+		scope: MonitorScope,
 		request: LedgerAccountBalanceMonitorRequest,
-		applicationTime: DateTime
-	): LedgerAccountBalanceMonitor {
-		return new LedgerAccountBalanceMonitor({
-			id,
-			accountId,
-			name: request.description || "Balance Monitor",
-			description: request.description,
-			alertThreshold: 0n,
-			isActive: true,
-			metadata: request.metadata,
-			created: applicationTime,
-			updated: applicationTime,
+		applicationTime: DateTime,
+		encryptedSecret: string
+	) {
+		return LedgerAccountBalanceMonitor.fromRow({
+			organizationId: encodeUuid(TypeID.fromString(scope.organizationId)),
+			ledgerId: encodeUuid(TypeID.fromString(scope.ledgerId)),
+			accountId: encodeUuid(TypeID.fromString(scope.accountId)),
+			id: encodeUuid(id),
+			// oxlint-disable-next-line unicorn/no-null -- PostgreSQL nullable columns use null.
+			description: request.description ?? null,
+			alertCondition: request.alertCondition,
+			webhookUrl: request.webhook.url,
+			webhookSigningSecret: encryptedSecret,
+			// oxlint-disable-next-line unicorn/no-null -- PostgreSQL nullable columns use null.
+			metadata: encodeMetadata(request.metadata) ?? null,
+			lockVersion: 1,
+			created: applicationTime.toJSDate(),
+			updated: applicationTime.toJSDate(),
 		});
 	}
-
-	static fromRow(
-		row: LedgerAccountBalanceMonitorRow
-	): Effect.Effect<
-		LedgerAccountBalanceMonitor,
-		LedgerAccountBalanceMonitorPersistenceDecodingFailure
-	> {
+	static fromRow(row: LedgerAccountBalanceMonitorRow) {
 		return Effect.all({
 			id: parseUuid<"lbm", LedgerAccountBalanceMonitorID>("lbm", row.id),
 			accountId: parseUuid<"lat", LedgerAccountID>("lat", row.accountId),
@@ -90,53 +99,32 @@ class LedgerAccountBalanceMonitor {
 			updated: parseDate(row.updated),
 			metadata: parseMetadata(row.metadata).pipe(Effect.catch(() => Effect.succeed(undefined))),
 		}).pipe(
-			Effect.map(
-				decoded =>
-					new LedgerAccountBalanceMonitor({
-						...decoded,
-						name: row.name,
-						description: row.description ?? undefined,
-						alertThreshold: row.alertThreshold,
-						isActive: row.isActive === 1,
-					})
+			Effect.map(decoded =>
+				Object.assign(LedgerAccountBalanceMonitor.fromConfiguration(row), {
+					row,
+					id: decoded.id,
+					accountId: decoded.accountId,
+					metadata: decoded.metadata,
+				})
 			),
 			Effect.mapError(cause => new LedgerAccountBalanceMonitorPersistenceDecodingFailure(cause))
 		);
 	}
-
-	toCreateRow(): LedgerAccountBalanceMonitorWriteRow {
-		return this.toWriteRow();
-	}
-
-	toUpdateRow(): LedgerAccountBalanceMonitorWriteRow {
-		return this.toWriteRow();
-	}
-
-	toResponse(): LedgerAccountBalanceMonitorResponse {
+	toResponse(this: LedgerAccountBalanceMonitorRecord): LedgerAccountBalanceMonitorResponse {
 		return {
 			id: this.id.toString(),
 			accountId: this.accountId.toString(),
-			description: this.description,
-			alertCondition: [],
+			ledgerId: TypeID.fromUUID("lgr", this.row.ledgerId).toString(),
+			description: this.row.description ?? undefined,
+			alertCondition: this.row.alertCondition,
+			webhook: { url: this.row.webhookUrl },
 			metadata: this.metadata,
-			lockVersion: 0,
-			created: this.created.toISO(),
-			updated: this.updated.toISO(),
+			lockVersion: this.row.lockVersion,
+			created: this.row.created.toISOString(),
+			updated: this.row.updated.toISOString(),
 		};
 	}
-
-	private toWriteRow(): LedgerAccountBalanceMonitorWriteRow {
-		return {
-			id: encodeUuid(this.id),
-			accountId: encodeUuid(this.accountId),
-			name: this.name,
-			description: this.description,
-			alertThreshold: this.alertThreshold,
-			isActive: this.isActive ? 1 : 0,
-			metadata: encodeMetadata(this.metadata),
-			updated: this.updated.toJSDate(),
-		};
+	toCreateRow(this: LedgerAccountBalanceMonitorRecord) {
+		return this.row;
 	}
 }
-
-export { LedgerAccountBalanceMonitor };

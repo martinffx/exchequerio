@@ -22,7 +22,16 @@ services:
       retries: 10
   valkey:
     image: valkey/valkey:8-alpine
-    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    command:
+      [
+        "valkey-server",
+        "--appendonly",
+        "yes",
+        "--appendfsync",
+        "everysec",
+        "--maxmemory-policy",
+        "noeviction",
+      ]
     profiles:
       - infra
       - api
@@ -36,6 +45,8 @@ services:
       timeout: 5s
       retries: 10
   api:
+    stop_grace_period: 60s
+    image: exchequer-api:local
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -45,6 +56,7 @@ services:
       - DATABASE_URL=postgresql://postgres:password@db:5432/ledger?schema=public
       - VALKEY_URL=redis://valkey:6379
       - JWT_SECRET=change-me-for-local-development
+      - BALANCE_MONITOR_ENCRYPTION_KEY=${BALANCE_MONITOR_ENCRYPTION_KEY:-}
     ports:
       - 3000:3000
     depends_on:
@@ -58,6 +70,20 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+  worker:
+    image: exchequer-api:local
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    profiles:
+      - api
+    command: ["node", "dist/worker.mjs"]
+    environment:
+      - VALKEY_URL=redis://valkey:6379
+      - BALANCE_MONITOR_ENCRYPTION_KEY=${BALANCE_MONITOR_ENCRYPTION_KEY:-}
+    depends_on:
+      valkey:
+        condition: service_healthy
 volumes:
   pg-data:
   valkey-data:
