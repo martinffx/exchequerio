@@ -17,6 +17,7 @@ import {
 	mapCategoryInfrastructureError,
 } from "./LedgerAccountCategoryErrors";
 import {
+	LedgersTable,
 	AssetsTable,
 	LedgerAccountsTable,
 	LedgerAccountCategoriesTable,
@@ -368,15 +369,35 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 		categoryId: LedgerAccountCategoryID,
 		parentCategoryId: LedgerAccountCategoryID
 	): Effect.Effect<void, CategoryLinkParentRepositoryError> {
-		return Effect.gen({ self: this }, function* () {
-			yield* this.getLedgerAccountCategory(organizationId, ledgerId, categoryId);
-			yield* this.getLedgerAccountCategory(organizationId, ledgerId, parentCategoryId);
-			if (categoryId.toString() === parentCategoryId.toString())
-				return yield* Effect.fail(new CategoryConflict("Category cannot be its own parent"));
-			// Only reject cycles visible to this check; simultaneous links may still race.
-			const cycles = yield* this.db
-				.execute<{ cycle: boolean }>(
-					sql`
+		return this.db
+			.transaction(
+				tx =>
+					Effect.gen(function* () {
+						// ponytail: serialize parent additions per Ledger; finer locks only if contention warrants it.
+						const [ledger] = yield* tx
+							.select({ id: LedgersTable.id })
+							.from(LedgersTable)
+							.where(
+								and(
+									eq(LedgersTable.organizationId, encodeUuid(organizationId)),
+									eq(LedgersTable.id, encodeUuid(ledgerId))
+								)
+							)
+							.for("no key update", { noWait: true });
+						if (!ledger)
+							return yield* Effect.fail(
+								new CategoryNotFound(`Category not found: ${categoryId.toString()}`)
+							);
+						const repository = new LedgerAccountCategoryRepoLive(tx);
+						yield* repository.getLedgerAccountCategory(organizationId, ledgerId, categoryId);
+						yield* repository.getLedgerAccountCategory(organizationId, ledgerId, parentCategoryId);
+						if (categoryId.toString() === parentCategoryId.toString())
+							return yield* Effect.fail(
+								new CategoryConflict("Category cannot be its own parent", { retryable: false })
+							);
+						const cycles = yield* tx
+							.execute<{ cycle: boolean }>(
+								sql`
     WITH RECURSIVE descendants(id) AS (
      SELECT ${encodeUuid(categoryId)}::uuid
      UNION
@@ -389,37 +410,53 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
       WHERE organization_id = ${encodeUuid(organizationId)} AND ledger_id = ${encodeUuid(ledgerId)}
       AND category_id = ${encodeUuid(categoryId)} AND parent_category_id = ${encodeUuid(parentCategoryId)}) AS cycle
    `,
-					"objects"
-				)
-				.pipe(Effect.mapError(mapCategoryInfrastructureError));
-			if (cycles[0].cycle)
-				return yield* Effect.fail(new CategoryConflict("Category link would create a cycle"));
-			yield* this.db
-				.insert(LedgerAccountCategoryParentsTable)
-				.values({
-					organizationId: encodeUuid(organizationId),
-					ledgerId: encodeUuid(ledgerId),
-					categoryId: encodeUuid(categoryId),
-					parentCategoryId: encodeUuid(parentCategoryId),
-				})
-				.onConflictDoNothing()
-				.pipe(
-					Effect.mapError(cause => {
-						if (postgresErrorCode(cause) === "23514")
-							return new CategoryConflict("Category cannot be its own parent", { cause });
-						if (postgresErrorCode(cause) === "23503") {
-							const constraint = postgresConstraint(cause);
-							if (constraint === "ledger_account_category_parents_child_ownership_fk")
-								return new CategoryNotFound(`Category not found: ${categoryId.toString()}`, { cause });
-							if (constraint === "ledger_account_category_parents_parent_ownership_fk")
-								return new CategoryNotFound(`Category not found: ${parentCategoryId.toString()}`, {
-									cause,
-								});
-						}
-						return mapCategoryInfrastructureError(cause);
-					})
-				);
-		}).pipe(Effect.asVoid);
+								"objects"
+							)
+							.pipe(Effect.mapError(mapCategoryInfrastructureError));
+						if (cycles[0].cycle)
+							return yield* Effect.fail(
+								new CategoryConflict("Category link would create a cycle", { retryable: false })
+							);
+						yield* tx
+							.insert(LedgerAccountCategoryParentsTable)
+							.values({
+								organizationId: encodeUuid(organizationId),
+								ledgerId: encodeUuid(ledgerId),
+								categoryId: encodeUuid(categoryId),
+								parentCategoryId: encodeUuid(parentCategoryId),
+							})
+							.onConflictDoNothing()
+							.pipe(
+								Effect.mapError(cause => {
+									if (postgresErrorCode(cause) === "23514")
+										return new CategoryConflict("Category cannot be its own parent", { cause });
+									if (postgresErrorCode(cause) === "23503") {
+										const constraint = postgresConstraint(cause);
+										if (constraint === "ledger_account_category_parents_child_ownership_fk")
+											return new CategoryNotFound(`Category not found: ${categoryId.toString()}`, { cause });
+										if (constraint === "ledger_account_category_parents_parent_ownership_fk")
+											return new CategoryNotFound(`Category not found: ${parentCategoryId.toString()}`, {
+												cause,
+											});
+									}
+									return mapCategoryInfrastructureError(cause);
+								})
+							);
+					}),
+				{ isolationLevel: "read committed" }
+			)
+			.pipe(
+				Effect.mapError(cause => {
+					if (cause instanceof CategoryNotFound || cause instanceof CategoryConflict) return cause;
+					if (postgresErrorCode(cause) === "55P03")
+						return new CategoryConflict("Category graph is busy; retry the parent link", {
+							cause,
+							retryable: true,
+						});
+					return mapCategoryInfrastructureError(cause);
+				}),
+				Effect.asVoid
+			);
 	}
 
 	unlinkCategoryFromParent(

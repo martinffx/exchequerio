@@ -1261,8 +1261,10 @@ describe("LedgerAccountCategoryRepo", () => {
 				)
 			);
 
-			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
-			const insert = vi.spyOn(effectDb, "insert");
+			const getCategory = vi.spyOn(
+				LedgerAccountCategoryRepoLive.prototype,
+				"getLedgerAccountCategory"
+			);
 			await runtime.runPromise(
 				ledgerAccountCategoryRepo.linkCategoryToParent(
 					testOrgId,
@@ -1276,7 +1278,12 @@ describe("LedgerAccountCategoryRepo", () => {
 				[testOrgId, testLedgerId, childCategoryId],
 				[testOrgId, testLedgerId, parentCategoryId],
 			]);
-			expect(getCategory.mock.invocationCallOrder[1]).toBeLessThan(insert.mock.invocationCallOrder[0]);
+			expect(
+				await db
+					.select()
+					.from(LedgerAccountCategoryParentsTable)
+					.where(eq(LedgerAccountCategoryParentsTable.categoryId, childCategoryId.toUUID()))
+			).toMatchObject([{ parentCategoryId: parentCategoryId.toUUID() }]);
 			getCategory.mockRestore();
 
 			// Cleanup
@@ -2058,7 +2065,12 @@ describe("LedgerAccountCategoryRepo", () => {
 				testOrgId,
 				testLedgerId
 			);
-			const repository = new LedgerAccountCategoryRepoLive({
+			const transaction = {
+				select: () => ({
+					from: () => ({
+						where: () => ({ for: () => Effect.succeed([{ id: testLedgerId.toUUID() }]) }),
+					}),
+				}),
 				execute: () => Effect.succeed([{ cycle: false }]),
 				insert: () => ({
 					values: () => ({
@@ -2066,8 +2078,15 @@ describe("LedgerAccountCategoryRepo", () => {
 						onConflictDoNothing: () => Effect.fail(cause),
 					}),
 				}),
+			};
+			const repository = new LedgerAccountCategoryRepoLive({
+				...transaction,
+				transaction: (run: (tx: EffectDrizzleDatabase) => Effect.Effect<void, unknown>) =>
+					run(transaction as never),
 			} as never);
-			vi.spyOn(repository, "getLedgerAccountCategory").mockReturnValue(Effect.succeed(entity));
+			vi
+				.spyOn(LedgerAccountCategoryRepoLive.prototype, "getLedgerAccountCategory")
+				.mockReturnValue(Effect.succeed(entity));
 			const program =
 				operation === "upsert"
 					? repository.upsertLedgerAccountCategory(entity)

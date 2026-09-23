@@ -1,5 +1,8 @@
 # Ledger Account Categories ownership and Effect migration
 
+The later balance feature is described in [Category balance decisions](../../../apps/api/docs/product/category-balances.md).
+This document records the earlier ownership and Effect migration.
+
 ## Problem
 
 Ledger Account Category operations use Ledger IDs without checking that the authenticated

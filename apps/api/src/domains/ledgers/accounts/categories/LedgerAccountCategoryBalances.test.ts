@@ -4,11 +4,11 @@ import { buildServer } from "@/server";
 import { signJWT } from "@/auth";
 import { LedgerTransactionEntriesTable, LedgerTransactionsTable } from "@/db/schema";
 import { TypeID } from "typeid-js";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime, Result } from "effect";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
-import { DatabaseTag, makeDatabaseLive, type Database } from "@/db";
+import { DatabaseTag, makeDatabaseLive, postgresErrorCode, type Database } from "@/db";
 import {
 	AssetsTable,
 	OrganizationsTable,
@@ -20,7 +20,7 @@ import {
 } from "@/db/schema";
 import { newOrgID, newLedgerID, newLedgerAccountID, type LedgerAccountCategoryID } from "@/lib/ids";
 import { INT64_MAX } from "@/lib/amounts";
-import { CategoryNotFound } from "./LedgerAccountCategoryErrors";
+import { CategoryConflict, CategoryNotFound } from "./LedgerAccountCategoryErrors";
 import {
 	LedgerAccountCategoryRepoTag,
 	LedgerAccountCategoryRepoLive,
@@ -411,6 +411,163 @@ describe("Category balance rollups", () => {
 		} finally {
 			await server.close();
 		}
+	});
+
+	it.each(["reverse", "longer"])(
+		"rejects a concurrent %s cycle, then rejects its retry after commit",
+		async shape => {
+			const a = await category();
+			const b = await category();
+			const tail = shape === "reverse" ? b : await category();
+			if (shape === "longer")
+				await runtime.runPromise(repo.linkCategoryToParent(org, ledger, b, tail));
+			const entered = barrier();
+			const release = barrier();
+			const mutation = runtime.runPromise(
+				database.effectDb
+					.transaction(tx =>
+						Effect.gen(function* () {
+							yield* new LedgerAccountCategoryRepoLive(tx).linkCategoryToParent(org, ledger, a, b);
+							entered.resolve();
+							yield* Effect.promise(() => release.promise);
+						})
+					)
+					.pipe(Effect.result)
+			);
+			const server = await buildServer();
+			server.log.level = "silent";
+			const authorization = `Bearer ${signJWT({ sub: org.toString(), scope: ["super_admin"] })}`;
+			const request = () =>
+				Effect.promise(() =>
+					server.inject({
+						method: "PATCH",
+						url: `/api/ledgers/${ledger.toString()}/accounts/categories/${tail.toString()}/categories/${a.toString()}`,
+						headers: { authorization },
+					})
+				).pipe(Effect.timeout("2 seconds"));
+			try {
+				await Promise.race([entered.promise, mutation]);
+				try {
+					const busy = await Effect.runPromise(request());
+					expect(busy.statusCode).toBe(409);
+					expect(busy.json()).toMatchObject({ retryable: true });
+					const stored = await database.db
+						.select()
+						.from(LedgerAccountCategoryParentsTable)
+						.where(eq(LedgerAccountCategoryParentsTable.categoryId, tail.toUUID()));
+					expect(stored).toHaveLength(0);
+				} finally {
+					release.resolve();
+					expect(Result.isSuccess(await mutation)).toBe(true);
+				}
+				const cycle = await Effect.runPromise(request());
+				expect(cycle.statusCode).toBe(409);
+				expect(cycle.json()).toMatchObject({
+					retryable: false,
+					detail: "Category link would create a cycle",
+				});
+				await runtime.runPromise(repo.linkCategoryToParent(org, ledger, a, b));
+			} finally {
+				release.resolve();
+				await mutation;
+				await server.close();
+			}
+		}
+	);
+
+	it("releases the guard on rollback and allows reads, accounting and another Ledger while held", async () => {
+		const a = await category();
+		const b = await category();
+		const member = await account(a, { normalBalance: "debit" });
+		const contra = await account(b);
+		const otherLedger = newLedgerID();
+		const otherChild = new TypeID("lac") as LedgerAccountCategoryID;
+		const otherParent = new TypeID("lac") as LedgerAccountCategoryID;
+		await database.db
+			.insert(LedgersTable)
+			.values({ id: otherLedger.toUUID(), organizationId: org.toUUID(), name: "Independent" });
+		await database.db.insert(LedgerAccountCategoriesTable).values(
+			[otherChild, otherParent].map(id => ({
+				...ownership,
+				ledgerId: otherLedger.toUUID(),
+				id: id.toUUID(),
+				name: "Independent",
+				normalBalance: "debit" as const,
+			}))
+		);
+		const entered = barrier();
+		const release = barrier();
+		const rollback = new Error("Rollback test link");
+		const mutation = runtime.runPromise(
+			database.effectDb
+				.transaction(tx =>
+					Effect.gen(function* () {
+						yield* new LedgerAccountCategoryRepoLive(tx).linkCategoryToParent(org, ledger, a, b);
+						entered.resolve();
+						yield* Effect.promise(() => release.promise);
+						return yield* Effect.fail(rollback);
+					})
+				)
+				.pipe(Effect.result)
+		);
+		const server = await buildServer();
+		server.log.level = "silent";
+		try {
+			await Promise.race([entered.promise, mutation]);
+			const conflict = await runtime.runPromise(
+				repo.linkCategoryToParent(org, ledger, b, a).pipe(Effect.flip, Effect.timeout("2 seconds"))
+			);
+			expect(conflict).toBeInstanceOf(CategoryConflict);
+			expect(conflict).toMatchObject({ retryable: true });
+			expect(postgresErrorCode(conflict.cause)).toBe("55P03");
+			await runtime.runPromise(
+				repo
+					.linkCategoryToParent(org, otherLedger, otherChild, otherParent)
+					.pipe(Effect.timeout("2 seconds"))
+			);
+			expect((await read(a)).assets[0].balances[1].amount).toBe("0");
+			const posted = await Effect.runPromise(
+				Effect.promise(() =>
+					server.inject({
+						method: "POST",
+						url: `/api/ledgers/${ledger.toString()}/transactions`,
+						headers: {
+							authorization: `Bearer ${signJWT({ sub: org.toString(), scope: ["super_admin"] })}`,
+							"idempotency-key": randomUUID(),
+						},
+						payload: {
+							status: "posted",
+							ledgerEntries: [
+								{
+									accountId: member.toString(),
+									assetId: asset.toString(),
+									direction: "debit",
+									amount: "10",
+								},
+								{
+									accountId: contra.toString(),
+									assetId: asset.toString(),
+									direction: "credit",
+									amount: "10",
+								},
+							],
+						},
+					})
+				).pipe(Effect.timeout("2 seconds"))
+			);
+			expect(posted.statusCode).toBe(201);
+			expect((await read(a)).assets[0].balances[1].amount).toBe("10");
+		} finally {
+			release.resolve();
+			expect(await mutation).toMatchObject({ failure: rollback });
+			await server.close();
+		}
+		await runtime.runPromise(repo.linkCategoryToParent(org, ledger, b, a));
+		const stored = await database.db
+			.select()
+			.from(LedgerAccountCategoryParentsTable)
+			.where(eq(LedgerAccountCategoryParentsTable.categoryId, a.toUUID()));
+		expect(stored).toHaveLength(0);
 	});
 
 	it("rejects a visible longer cycle and preserves duplicate links", async () => {
