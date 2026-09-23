@@ -1,6 +1,6 @@
 import { TypeID } from "typeid-js";
 import { encodeUuid } from "@/lib/utils";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import { NotFoundError } from "@/lib/errors";
@@ -92,10 +92,6 @@ export class LedgerAccountBalanceMonitorRepoLive {
 						.for("update");
 					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
 					const [row] = yield* tx.insert(monitors).values(record.toCreateRow()).returning();
-					yield* tx
-						.update(accounts)
-						.set({ balanceMonitorCount: sql`${accounts.balanceMonitorCount} + 1` })
-						.where(accountWhere(record.row));
 					return yield* LedgerAccountBalanceMonitor.fromRow(row);
 				})
 			)
@@ -136,10 +132,6 @@ export class LedgerAccountBalanceMonitorRepoLive {
 					const [current] = yield* tx.select().from(monitors).where(monitorWhere(scope, id));
 					if (!current) return Option.none<void>();
 					yield* tx.delete(monitors).where(monitorWhere(scope, id));
-					yield* tx
-						.update(accounts)
-						.set({ balanceMonitorCount: sql`${accounts.balanceMonitorCount} - 1` })
-						.where(accountWhere(scope));
 					// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
 					return Option.some(undefined);
 				})

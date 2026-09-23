@@ -159,10 +159,9 @@ Responses display the current code and exponent by joining the Asset definition.
 ## Balance monitoring
 
 An Account owns Balance Monitors through a scoped Organization/Ledger/Account foreign key.
-`balance_monitor_count` controls capture without changing the Account's accounting version.
 Monitor changes lock the Account row, serializing edits and deletion with accounting capture.
-Accounting captures the current monitor version, configuration, and before/after balances in its
-transaction. Services publish self-contained jobs to Valkey after commit on a best-effort basis.
+Accounting queries monitors for changed Accounts and captures their current version, configuration,
+and before/after balances in its transaction. Services publish self-contained jobs to Valkey after commit on a best-effort basis.
 There are no monitor revision or outbox tables. Deletion removes the monitor immediately; captured
 jobs retain their configuration and can finish after deletion.
 See [Balance monitors](./balance-monitors.md) for the API, delivery, and operational contracts.

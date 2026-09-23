@@ -1260,19 +1260,6 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "0",
-      "generated": null,
-      "identity": null,
-      "name": "balance_monitor_count",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ledger_accounts"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
       "default": "1",
       "generated": null,
       "identity": null,
@@ -3041,13 +3028,6 @@
       "entityType": "checks",
       "schema": "public",
       "table": "ledger_account_settlements"
-    },
-    {
-      "value": "\"balance_monitor_count\" >= 0",
-      "name": "ledger_accounts_monitor_count_nonnegative",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "ledger_accounts"
     },
     {
       "value": "\"amount\" > 0",

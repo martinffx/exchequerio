@@ -659,11 +659,6 @@ describe("LedgerTransactionRepoLive", () => {
 			const debit = await createAccount(organizationId, ledgerId, "debit");
 			const credit = await createAccount(organizationId, ledgerId, "credit");
 			const assetId = TypeID.fromString(summary(debit).assetId);
-			if (monitored)
-				await database
-					.update(LedgerAccountsTable)
-					.set({ balanceMonitorCount: 1 })
-					.where(eq(LedgerAccountsTable.id, debit.toUUID()));
 			const monitor = {
 				id: new TypeID("lbm").toUUID(),
 				organizationId: organizationId.toUUID(),
@@ -871,7 +866,7 @@ describe("LedgerTransactionRepoLive", () => {
 		);
 
 		it.each([true, false])(
-			"uses the monitor count committed while the balance update waits (enabled=%s)",
+			"uses the monitors committed while the balance update waits (enabled=%s)",
 			async enabled => {
 				const f = await fixture(!enabled);
 				const client = new Client({ connectionString: new Config().databaseUrl });
@@ -880,8 +875,7 @@ describe("LedgerTransactionRepoLive", () => {
 				try {
 					await client.query("BEGIN");
 					const backend = await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid");
-					await client.query("UPDATE ledger_accounts SET balance_monitor_count = $1 WHERE id = $2", [
-						enabled ? 1 : 0,
+					await client.query("SELECT id FROM ledger_accounts WHERE id = $1 FOR UPDATE", [
 						f.debit.toUUID(),
 					]);
 					if (enabled)

@@ -143,7 +143,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 				.from(LedgerAccountsTable)
 				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
 		)[0];
-		expect(account).toEqual({ ...before, balanceMonitorCount: before.balanceMonitorCount + 1 });
+		expect(account).toEqual(before);
 		await database.db
 			.update(LedgerAccountsTable)
 			.set({ lockVersion: before.lockVersion + 2 })
@@ -174,8 +174,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 				.from(LedgerAccountsTable)
 				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
 		)[0];
-		expect(account.balanceMonitorCount).toBe(before.balanceMonitorCount);
-		expect(account.lockVersion).toBe(before.lockVersion + 2);
+		expect(account).toEqual({ ...before, lockVersion: before.lockVersion + 2 });
 		expect(
 			await database.db
 				.select()

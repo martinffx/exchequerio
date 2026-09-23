@@ -1036,14 +1036,12 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 						)
 						.returning({
 							id: LedgerAccountsTable.id,
-							monitorCount: LedgerAccountsTable.balanceMonitorCount,
 						})
 						.pipe(
 							Effect.flatMap(rows =>
 								requireAccountWrite(rows.length === 1).pipe(
 									Effect.andThen(
 										Effect.sync(() => {
-											if (!rows[0]!.monitorCount) return;
 											const before = {
 												posted: account.postedAmount.toString(),
 												pending: account.pendingAmount.toString(),

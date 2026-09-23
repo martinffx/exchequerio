@@ -123,17 +123,12 @@ const LedgerAccountsTable = pgTable(
 		postedDebits: bigint("posted_debits", { mode: "bigint" }).notNull().default(0n),
 		availableCredits: bigint("available_credits", { mode: "bigint" }).notNull().default(0n),
 		availableDebits: bigint("available_debits", { mode: "bigint" }).notNull().default(0n),
-		balanceMonitorCount: integer("balance_monitor_count").notNull().default(0),
 		lockVersion: integer("lock_version").notNull().default(1),
 		metadata: text("metadata"), // TEXT for DSQL compatibility (JSON string)
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
 		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
 	},
 	table => ({
-		monitorCountNonnegative: check(
-			"ledger_accounts_monitor_count_nonnegative",
-			sql`${table.balanceMonitorCount} >= 0`
-		),
 		organizationIdx: index("idx_ledger_accounts_organization").on(table.organizationId),
 		organizationLedgerFk: foreignKey({
 			name: "ledger_accounts_organization_ledger_fk",
