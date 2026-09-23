@@ -10,7 +10,11 @@ import {
 	LedgerAccountsTable as accounts,
 	type MonitorConfiguration,
 } from "@/db/schema";
-import { LedgerAccountBalanceMonitor, type MonitorScope } from "./LedgerAccountBalanceMonitor";
+import {
+	LedgerAccountBalanceMonitor,
+	type LedgerAccountBalanceMonitorRecord,
+	type MonitorScope,
+} from "./LedgerAccountBalanceMonitor";
 import {
 	LedgerAccountBalanceMonitorPersistenceDecodingFailure,
 	LedgerAccountBalanceMonitorPersistenceFailure,
@@ -76,12 +80,12 @@ export class LedgerAccountBalanceMonitorRepoLive {
 			Effect.flatMap(rows =>
 				rows[0]
 					? LedgerAccountBalanceMonitor.fromRow(rows[0]).pipe(Effect.map(Option.some))
-					: Effect.succeed(Option.none<LedgerAccountBalanceMonitor>())
+					: Effect.succeed(Option.none<LedgerAccountBalanceMonitorRecord>())
 			),
 			Effect.mapError(mapError)
 		);
 	}
-	createMonitor(record: LedgerAccountBalanceMonitor) {
+	createMonitor(record: LedgerAccountBalanceMonitorRecord) {
 		return this.db
 			.transaction(tx =>
 				Effect.gen(function* () {
@@ -110,7 +114,7 @@ export class LedgerAccountBalanceMonitorRepoLive {
 					const [account] = yield* tx.select().from(accounts).where(accountWhere(scope)).for("update");
 					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
 					const [current] = yield* tx.select().from(monitors).where(monitorWhere(scope, id));
-					if (!current) return Option.none<LedgerAccountBalanceMonitor>();
+					if (!current) return Option.none<LedgerAccountBalanceMonitorRecord>();
 					const [row] = yield* tx
 						.update(monitors)
 						.set({ ...changes, lockVersion: current.lockVersion + 1, updated: time })

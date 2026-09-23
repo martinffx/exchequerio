@@ -1,4 +1,4 @@
-import { monitorPublisherLayer } from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
+import { monitorPublisherLayer } from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
 import { makeMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/MonitorQueue";
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "@/config";

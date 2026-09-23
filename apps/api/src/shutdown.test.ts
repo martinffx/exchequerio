@@ -1,10 +1,10 @@
 import { JobStore, MemoryJobStore } from "effect-mq";
 import {
+	BalanceMonitorJob,
 	MonitorPublisher,
 	monitorPublisherLayer,
 	type MonitorJob,
-} from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
-import { MonitorDelivery } from "@/domains/ledgers/accounts/balance-monitors/MonitorDelivery";
+} from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
 import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
 import { EventEmitter } from "node:events";
 import { request } from "node:http";
@@ -85,7 +85,7 @@ it("responds before enqueue finishes, then drains publication on shutdown before
 	});
 	const enqueued = vi.fn<() => void>();
 	const released = vi.fn<() => void>();
-	const enqueue = vi.spyOn(MonitorDelivery, "enqueueMany").mockReturnValue(
+	const enqueue = vi.spyOn(BalanceMonitorJob, "enqueueMany").mockReturnValue(
 		Effect.gen(function* () {
 			yield* Effect.promise(() => pending);
 			enqueued();

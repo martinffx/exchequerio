@@ -1,6 +1,20 @@
+import { Effect } from "effect";
+import { DateTime } from "luxon";
+import {
+	newOrgID,
+	newLedgerID,
+	newLedgerAccountID,
+	newLedgerAccountBalanceMonitorID,
+} from "@/lib/ids";
 import { describe, expect, it } from "vitest";
 import type { AlertCondition, BalanceSnapshot } from "./LedgerAccountBalanceMonitorSchema";
-import { crossed } from "./MonitorCondition";
+import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
+
+const crossed = (condition: AlertCondition, before: BalanceSnapshot, after: BalanceSnapshot) =>
+	LedgerAccountBalanceMonitor.fromConfiguration({ alertCondition: condition }).crossed(
+		before,
+		after
+	);
 
 const balances = (amount: string): BalanceSnapshot => ({
 	posted: amount,
@@ -14,7 +28,7 @@ const rule = (
 	mode: "all",
 	conditions: [{ balanceType: "availableBalance", operator, value }],
 });
-describe("Balance monitor crossings", () => {
+describe("LedgerAccountBalanceMonitor.crossed", () => {
 	it("emits once per crossing and rearms after recovery", () => {
 		const states = ["120", "90", "80", "110", "90"];
 		expect(
@@ -80,4 +94,34 @@ describe("Balance monitor crossings", () => {
 		).toBe(true);
 		expect(crossed(rule("<", "10"), balances("10"), balances("9"))).toBe(true);
 	});
+});
+
+it("evaluates the condition of a persisted monitor without changing its representation", () => {
+	const id = newLedgerAccountBalanceMonitorID();
+	const accountId = newLedgerAccountID();
+	const monitor = Effect.runSync(
+		LedgerAccountBalanceMonitor.fromRequest(
+			id,
+			{
+				organizationId: newOrgID().toString(),
+				ledgerId: newLedgerID().toString(),
+				accountId: accountId.toString(),
+			},
+			{
+				alertCondition: rule(),
+				webhook: { url: "https://example.com/hook", signingSecret: "unused" },
+				metadata: { team: "treasury" },
+			},
+			DateTime.utc(2026, 9, 23),
+			"encrypted-secret"
+		)
+	);
+	expect(monitor.crossed(balances("110"), balances("90"))).toBe(true);
+	expect(monitor.toResponse()).toMatchObject({
+		id: id.toString(),
+		accountId: accountId.toString(),
+		alertCondition: rule(),
+		metadata: { team: "treasury" },
+	});
+	expect(monitor.toCreateRow()).toBe(monitor.row);
 });

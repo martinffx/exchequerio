@@ -1,7 +1,7 @@
 import { Effect, ManagedRuntime, Option } from "effect";
 import { JobStore } from "effect-mq";
 import { Config } from "@/config";
-import { MonitorDelivery } from "@/domains/ledgers/accounts/balance-monitors/MonitorDelivery";
+import { BalanceMonitorJob } from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
 import { makeMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/MonitorQueue";
 
 const [command, rawId, ...extra] = process.argv.slice(2);
@@ -27,7 +27,7 @@ if (!rawId || !["inspect", "replay"].includes(command ?? "") || extra.length) {
 				if (command === "replay") {
 					if (job.state !== "failed")
 						return yield* Effect.fail("Only failed monitor jobs can be replayed");
-					yield* MonitorDelivery.retry(id);
+					yield* BalanceMonitorJob.retry(id);
 					return { id, replayed: true };
 				}
 				// Allowlist operational fields: never print payload, credentials, or arbitrary stored errors.

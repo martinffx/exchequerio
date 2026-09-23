@@ -1,7 +1,7 @@
 import {
 	MonitorPublisher,
 	type MonitorJob,
-} from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
+} from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
 import { Clock, Context, Effect, Layer, Option, Schedule } from "effect";
 import { DateTime } from "luxon";
 

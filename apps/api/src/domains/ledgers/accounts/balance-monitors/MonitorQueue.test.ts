@@ -3,7 +3,7 @@ import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { Job, JobStore, Worker } from "effect-mq";
 import { Redis as IoRedis } from "ioredis";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MonitorDelivery } from "./MonitorDelivery";
+import { BalanceMonitorJob } from "./BalanceMonitorJob";
 import { monitorJob } from "./fixtures";
 import { WebhookDeliveryError } from "@/domains/ledgers/accounts/balance-monitors/MonitorWebhook";
 import { makeMonitorJobStore } from "./MonitorQueue";
@@ -87,17 +87,17 @@ describe("MonitorQueue with Valkey", () => {
 		[503, "delayed"],
 	] as const)("applies the monitor retry policy for HTTP %s", async (status, state) => {
 		const worker = ManagedRuntime.make(
-			MonitorDelivery.toLayer(
+			BalanceMonitorJob.toLayer(
 				() => Effect.fail(new WebhookDeliveryError({ reason: "http", status })),
 				{ concurrency: 1 }
 			).pipe(Layer.provide(Worker.layer({ pollInterval: "20 millis" })), Layer.provide(storeLayer))
 		);
 		workers.push(worker);
 		await worker.runPromise(Effect.void);
-		const id = await runtime.runPromise(MonitorDelivery.enqueue(monitorJob));
+		const id = await runtime.runPromise(BalanceMonitorJob.enqueue(monitorJob));
 		await waitForState(id, state);
 		expect(
-			(await runtime.runPromise(MonitorDelivery.attempts(id))).map(attempt => attempt.outcome)
+			(await runtime.runPromise(BalanceMonitorJob.attempts(id))).map(attempt => attempt.outcome)
 		).toEqual([state === "failed" ? "failed" : "retried"]);
 	});
 

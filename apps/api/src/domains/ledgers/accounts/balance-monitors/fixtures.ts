@@ -1,4 +1,4 @@
-import type { MonitorJob } from "./MonitorPublisher";
+import type { MonitorJob } from "./BalanceMonitorJob";
 
 export const monitorJob: MonitorJob = {
 	eventId: "event",

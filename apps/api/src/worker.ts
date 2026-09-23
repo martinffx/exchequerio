@@ -1,7 +1,7 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { Config } from "@/config";
 import { encryptSecret } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
-import { makeMonitorDeliveryWorker } from "@/domains/ledgers/accounts/balance-monitors/MonitorDelivery";
+import { makeBalanceMonitorJobWorker } from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
 import { makeMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/MonitorQueue";
 
 const config = new Config();
@@ -11,7 +11,7 @@ const store = makeMonitorJobStore(config.valkeyUrl);
 const runtime = ManagedRuntime.make(
 	Layer.mergeAll(
 		store,
-		makeMonitorDeliveryWorker(config.balanceMonitorEncryptionKey).pipe(Layer.provide(store))
+		makeBalanceMonitorJobWorker(config.balanceMonitorEncryptionKey).pipe(Layer.provide(store))
 	)
 );
 let stopping = false;

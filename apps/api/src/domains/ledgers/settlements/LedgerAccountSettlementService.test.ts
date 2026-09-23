@@ -1,9 +1,10 @@
 import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
 import {
-	publishMonitorJobs,
+	BalanceMonitorJob,
+	MonitorPublisher,
+	monitorPublisherLayer,
 	type MonitorJob,
-} from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
-import { MonitorDelivery } from "@/domains/ledgers/accounts/balance-monitors/MonitorDelivery";
+} from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
 import { MemoryJobStore } from "effect-mq";
 import { randomUUID } from "node:crypto";
 import { Effect, Option } from "effect";
@@ -467,11 +468,13 @@ it("finalizes committed Settlement accounting even when enqueue fails", async ()
 		Effect.succeed({ transaction: accounting, monitorJobs: [monitorJob] })
 	);
 	const enqueue = vi
-		.spyOn(MonitorDelivery, "enqueueMany")
+		.spyOn(BalanceMonitorJob, "enqueueMany")
 		.mockReturnValue(Effect.die("unavailable"));
 	try {
 		publish.mockImplementation(jobs =>
-			publishMonitorJobs(jobs).pipe(Effect.provide(MemoryJobStore.layer))
+			Effect.gen(function* () {
+				yield* (yield* MonitorPublisher)(jobs);
+			}).pipe(Effect.provide(monitorPublisherLayer), Effect.provide(MemoryJobStore.layer))
 		);
 		await expect(create()).resolves.toBe(finalized);
 		expect(transactions.createSettlementTransaction).toHaveBeenCalledOnce();

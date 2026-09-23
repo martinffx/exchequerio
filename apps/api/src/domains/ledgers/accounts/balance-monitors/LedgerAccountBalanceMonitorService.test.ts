@@ -7,7 +7,10 @@ import {
 	newLedgerAccountID,
 	newLedgerAccountBalanceMonitorID,
 } from "@/lib/ids";
-import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
+import {
+	LedgerAccountBalanceMonitor,
+	type LedgerAccountBalanceMonitorRecord,
+} from "./LedgerAccountBalanceMonitor";
 import { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonitorService";
 import type { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import type { LedgerAccountBalanceMonitorRequest } from "./LedgerAccountBalanceMonitorSchema";
@@ -43,7 +46,7 @@ const repo = () =>
 		listMonitors: vi.fn(() => Effect.succeed([record])),
 		// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
 		getMonitor: vi.fn(() => Effect.succeed(Option.some(record))),
-		createMonitor: vi.fn((value: LedgerAccountBalanceMonitor) => Effect.succeed(value)),
+		createMonitor: vi.fn((value: LedgerAccountBalanceMonitorRecord) => Effect.succeed(value)),
 		updateMonitor: vi.fn<LedgerAccountBalanceMonitorRepo["updateMonitor"]>(() => {
 			// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
 			return Effect.succeed(Option.some(record));

@@ -1,4 +1,4 @@
-import type { MonitorJob } from "@/domains/ledgers/accounts/balance-monitors/MonitorPublisher";
+import type { MonitorJob } from "@/domains/ledgers/accounts/balance-monitors/BalanceMonitorJob";
 import { Client } from "pg";
 import { TypeID } from "typeid-js";
 import { and, eq, inArray, sql } from "drizzle-orm";
