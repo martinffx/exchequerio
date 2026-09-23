@@ -33,7 +33,7 @@ export class LedgerAccountBalanceMonitor {
 		scope: MonitorScope,
 		request: LedgerAccountBalanceMonitorRequest,
 		applicationTime: DateTime,
-		encryptedToken: string
+		encryptedSecret: string
 	) {
 		return LedgerAccountBalanceMonitor.fromRow({
 			organizationId: encodeUuid(TypeID.fromString(scope.organizationId)),
@@ -44,7 +44,7 @@ export class LedgerAccountBalanceMonitor {
 			description: request.description ?? null,
 			alertCondition: request.alertCondition,
 			webhookUrl: request.webhook.url,
-			webhookToken: encryptedToken,
+			webhookSigningSecret: encryptedSecret,
 			// oxlint-disable-next-line unicorn/no-null -- PostgreSQL nullable columns use null.
 			metadata: encodeMetadata(request.metadata) ?? null,
 			lockVersion: 1,

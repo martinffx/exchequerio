@@ -1,5 +1,4 @@
 import { parseAmount } from "@/lib/amounts";
-import { validateHeaderValue } from "node:http";
 import { Clock, Context, Effect, Layer, Option } from "effect";
 import { DateTime } from "luxon";
 import { BadRequestError, ServiceUnavailableError } from "@/lib/errors";
@@ -20,7 +19,7 @@ import type {
 	LedgerAccountBalanceMonitorRequest,
 	LedgerAccountBalanceMonitorUpdateRequest,
 } from "./LedgerAccountBalanceMonitorSchema";
-import { encryptToken } from "./MonitorSecrets";
+import { decodeSigningSecret, encryptSecret } from "./MonitorSecrets";
 import { validateWebhookUrl } from "./MonitorWebhook";
 const serverTime = Clock.currentTimeMillis.pipe(
 	Effect.map(milliseconds => DateTime.fromMillis(milliseconds, { zone: "utc" }))
@@ -54,20 +53,23 @@ export class LedgerAccountBalanceMonitorService {
 				try: () => validateWebhookUrl(request.webhook.url),
 				catch: () => new BadRequestError("Webhook URL must be a public HTTPS destination"),
 			});
-			if (request.webhook.bearerToken !== undefined) {
+			const signingSecret = request.webhook.signingSecret;
+			if (signingSecret !== undefined) {
 				yield* Effect.try({
-					try: () => validateHeaderValue("Authorization", `Bearer ${request.webhook.bearerToken}`),
+					try: () => decodeSigningSecret(signingSecret),
 					catch: () =>
-						new BadRequestError("Webhook bearer token contains invalid HTTP header characters"),
+						new BadRequestError(
+							"Webhook signing secret must be whsec_ followed by a base64-encoded 32-byte key"
+						),
 				});
 			}
 			const encrypted = yield* Effect.try({
-				try: () => encryptToken(request.webhook.bearerToken ?? "", this.encryptionKey),
+				try: () => encryptSecret(signingSecret ?? "", this.encryptionKey),
 				catch: () => new ServiceUnavailableError("Balance monitor configuration unavailable"),
 			});
 			return {
 				webhookUrl: request.webhook.url,
-				...(request.webhook.bearerToken === undefined ? {} : { webhookToken: encrypted }),
+				...(signingSecret === undefined ? {} : { webhookSigningSecret: encrypted }),
 			};
 		});
 	}
@@ -98,7 +100,7 @@ export class LedgerAccountBalanceMonitorService {
 				scope,
 				request,
 				time,
-				webhook.webhookToken!
+				webhook.webhookSigningSecret!
 			);
 			return yield* this.repository.createMonitor(record);
 		});

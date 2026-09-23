@@ -394,7 +394,7 @@ const LedgerAccountBalanceMonitorsTable = pgTable(
 		description: text("description"),
 		alertCondition: jsonb("alert_condition").$type<AlertCondition>().notNull(),
 		webhookUrl: text("webhook_url").notNull(),
-		webhookToken: text("webhook_token").notNull(),
+		webhookSigningSecret: text("webhook_signing_secret").notNull(),
 		metadata: text("metadata"),
 		lockVersion: integer("lock_version").notNull().default(1),
 		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
@@ -417,7 +417,7 @@ type LedgerAccountBalanceMonitorRow = typeof LedgerAccountBalanceMonitorsTable.$
 type LedgerAccountBalanceMonitorInsertRow = typeof LedgerAccountBalanceMonitorsTable.$inferInsert;
 type MonitorConfiguration = Pick<
 	LedgerAccountBalanceMonitorRow,
-	"description" | "alertCondition" | "webhookUrl" | "webhookToken" | "metadata"
+	"description" | "alertCondition" | "webhookUrl" | "webhookSigningSecret" | "metadata"
 >;
 // Account Statements: Periodic balance snapshots and statements
 const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {

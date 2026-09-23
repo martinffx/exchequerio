@@ -11,7 +11,7 @@ import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import { LedgerAccountBalanceMonitorService } from "./LedgerAccountBalanceMonitorService";
 import type { LedgerAccountBalanceMonitorRepo } from "./LedgerAccountBalanceMonitorRepo";
 import type { LedgerAccountBalanceMonitorRequest } from "./LedgerAccountBalanceMonitorSchema";
-import { decryptToken } from "./MonitorSecrets";
+import { decryptSecret } from "./MonitorSecrets";
 const scope = {
 	organizationId: newOrgID().toString(),
 	ledgerId: newLedgerID().toString(),
@@ -23,7 +23,10 @@ const request: LedgerAccountBalanceMonitorRequest = {
 		mode: "all",
 		conditions: [{ balanceType: "posted", operator: "<", value: "100" }],
 	},
-	webhook: { url: "https://example.com/hook", bearerToken: "secret" },
+	webhook: {
+		url: "https://example.com/hook",
+		signingSecret: "whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+	},
 	metadata: { team: "treasury" },
 };
 const record = Effect.runSync(
@@ -41,8 +44,10 @@ const repo = () =>
 		// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
 		getMonitor: vi.fn(() => Effect.succeed(Option.some(record))),
 		createMonitor: vi.fn((value: LedgerAccountBalanceMonitor) => Effect.succeed(value)),
-		// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
-		updateMonitor: vi.fn(() => Effect.succeed(Option.some(record))),
+		updateMonitor: vi.fn<LedgerAccountBalanceMonitorRepo["updateMonitor"]>(() => {
+			// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
+			return Effect.succeed(Option.some(record));
+		}),
 		// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
 		deleteMonitor: vi.fn(() => Effect.succeed(Option.some(undefined))),
 	}) satisfies LedgerAccountBalanceMonitorRepo;
@@ -53,7 +58,9 @@ describe("Balance monitor service", () => {
 		const created = await Effect.runPromise(
 			service.createLedgerAccountBalanceMonitor(scope, request)
 		);
-		expect(decryptToken(created.row.webhookToken, key)).toBe("secret");
+		expect(decryptSecret(created.row.webhookSigningSecret, key)).toBe(
+			"whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="
+		);
 		expect(created.toResponse()).toMatchObject({
 			alertCondition: request.alertCondition,
 			webhook: { url: request.webhook.url },
@@ -63,7 +70,7 @@ describe("Balance monitor service", () => {
 		expect(JSON.stringify(created.toResponse())).not.toContain("secret");
 		expect(created.toResponse()).not.toHaveProperty("balances");
 	});
-	it("passes authenticated scope and preserves omitted token on update", async () => {
+	it("passes authenticated scope and preserves omitted signing secret on update", async () => {
 		const repository = repo();
 		const service = new LedgerAccountBalanceMonitorService(repository, key);
 		await Effect.runPromise(
@@ -84,6 +91,23 @@ describe("Balance monitor service", () => {
 			expect.any(Date),
 		]);
 	});
+	it("encrypts a replacement signing secret on update", async () => {
+		const repository = repo();
+		const signingSecret = `whsec_${Buffer.alloc(32, 8).toString("base64")}`;
+		await Effect.runPromise(
+			new LedgerAccountBalanceMonitorService(repository, key).updateLedgerAccountBalanceMonitor(
+				scope,
+				record.id.toString(),
+				{
+					...request,
+					webhook: { ...request.webhook, signingSecret },
+				}
+			)
+		);
+		const updated = repository.updateMonitor.mock.calls[0]!;
+		expect(decryptSecret(updated[2].webhookSigningSecret!, key)).toBe(signingSecret);
+	});
+
 	it.each(["", "invalid"])("sanitizes invalid encryption configuration %s", async invalid => {
 		const repository = repo();
 		const error = await Effect.runPromise(
@@ -113,27 +137,29 @@ describe("Balance monitor service", () => {
 		expect(error).toMatchObject({ statusCode: 400 });
 		expect(repository.createMonitor).not.toHaveBeenCalled();
 	});
-	it.each(["secret\r\nInjected: value", "secret\n", "secret\u0100"])(
-		"rejects invalid bearer header characters on create and update (%#)",
-		async bearerToken => {
-			const repository = repo();
-			const service = new LedgerAccountBalanceMonitorService(repository, key);
-			const invalid = { ...request, webhook: { ...request.webhook, bearerToken } };
-			for (const action of [
-				service.createLedgerAccountBalanceMonitor(scope, invalid),
-				service.updateLedgerAccountBalanceMonitor(scope, record.id.toString(), invalid),
-			]) {
-				const error = await Effect.runPromise(Effect.flip(action));
-				expect(error).toMatchObject({
-					statusCode: 400,
-					message: "Webhook bearer token contains invalid HTTP header characters",
-				});
-				expect(error.message).not.toContain(bearerToken);
-			}
-			expect(repository.createMonitor).not.toHaveBeenCalled();
-			expect(repository.updateMonitor).not.toHaveBeenCalled();
+	it.each([
+		"not-a-signing-key",
+		"whsec_invalid",
+		"whsec_" + Buffer.alloc(31).toString("base64"),
+		"whsec_" + Buffer.alloc(32, 7).toString("base64").slice(0, -2) + "d=",
+	])("rejects invalid signing secrets on create and update (%#)", async signingSecret => {
+		const repository = repo();
+		const service = new LedgerAccountBalanceMonitorService(repository, key);
+		const invalid = { ...request, webhook: { ...request.webhook, signingSecret } };
+		for (const action of [
+			service.createLedgerAccountBalanceMonitor(scope, invalid),
+			service.updateLedgerAccountBalanceMonitor(scope, record.id.toString(), invalid),
+		]) {
+			const error = await Effect.runPromise(Effect.flip(action));
+			expect(error).toMatchObject({
+				statusCode: 400,
+				message: "Webhook signing secret must be whsec_ followed by a base64-encoded 32-byte key",
+			});
+			expect(error.message).not.toContain(signingSecret);
 		}
-	);
+		expect(repository.createMonitor).not.toHaveBeenCalled();
+		expect(repository.updateMonitor).not.toHaveBeenCalled();
+	});
 	it("maps absent monitors to 404 and malformed IDs to 400", async () => {
 		const repository = repo();
 		repository.getMonitor.mockReturnValueOnce(Effect.succeed(Option.none()));

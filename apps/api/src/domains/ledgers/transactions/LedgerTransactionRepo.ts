@@ -999,7 +999,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		return Effect.gen(function* () {
 			const events: Omit<
 				MonitorJob,
-				"monitorId" | "monitorVersion" | "alertCondition" | "webhookUrl" | "webhookToken"
+				"monitorId" | "monitorVersion" | "alertCondition" | "webhookUrl" | "webhookSigningSecret"
 			>[] = [];
 			yield* Effect.try({
 				try: () => {
@@ -1103,7 +1103,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				monitorVersion: monitor.lockVersion,
 				alertCondition: monitor.alertCondition,
 				webhookUrl: monitor.webhookUrl,
-				webhookToken: monitor.webhookToken,
+				webhookSigningSecret: monitor.webhookSigningSecret,
 			}));
 		});
 	}

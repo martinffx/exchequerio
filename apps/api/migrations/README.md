@@ -51,9 +51,11 @@ Start the updated application only after migration replay succeeds.
 
 ## Balance monitors
 
-`20260907223239_balance-monitors` follows the UUID and Asset cutovers. It replaces the unreleased
-branch-only monitor migration and requires a fresh development/test database for replay. No existing
-database or queued job conversion is provided for that unreleased version.
+`20260907223239_balance-monitors` follows the UUID and Asset cutovers. It creates the final monitor
+schema directly, including encrypted webhook signing secrets, without outbox, revision, or soft-delete
+storage. Earlier branch versions are unreleased: recreate development/test databases that applied
+them before replaying migrations. Use fresh development monitor queue state for the new signing
+payload; no database or queued job conversion is provided.
 
 The migration locks and checks the legacy monitor table before replacing its scaffold columns.
 Existing monitor rows cause a transactional failure; export and explicitly resolve them before

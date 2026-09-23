@@ -50,7 +50,10 @@ const LedgerAccountBalanceMonitorRequest = Type.Object(
 		webhook: Type.Object(
 			{
 				url: Type.String({ format: "uri" }),
-				bearerToken: Type.String({ minLength: 1, writeOnly: true }),
+				signingSecret: Type.String({
+					pattern: "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+					writeOnly: true,
+				}),
 			},
 			{ additionalProperties: false }
 		),
@@ -64,7 +67,9 @@ const LedgerAccountBalanceMonitorUpdateRequest = Type.Object(
 		webhook: Type.Object(
 			{
 				url: Type.String({ format: "uri" }),
-				bearerToken: Type.Optional(Type.String({ minLength: 1, writeOnly: true })),
+				signingSecret: Type.Optional(
+					Type.String({ pattern: "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$", writeOnly: true })
+				),
 			},
 			{ additionalProperties: false }
 		),

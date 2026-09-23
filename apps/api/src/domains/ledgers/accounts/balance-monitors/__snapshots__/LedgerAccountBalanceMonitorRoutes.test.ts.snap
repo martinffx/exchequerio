@@ -716,8 +716,8 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                   "webhook": {
                     "additionalProperties": false,
                     "properties": {
-                      "bearerToken": {
-                        "minLength": 1,
+                      "signingSecret": {
+                        "pattern": "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
                         "type": "string",
                         "writeOnly": true,
                       },
@@ -728,7 +728,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                     },
                     "required": [
                       "url",
-                      "bearerToken",
+                      "signingSecret",
                     ],
                     "type": "object",
                   },
@@ -2431,8 +2431,8 @@ exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI cont
                   "webhook": {
                     "additionalProperties": false,
                     "properties": {
-                      "bearerToken": {
-                        "minLength": 1,
+                      "signingSecret": {
+                        "pattern": "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
                         "type": "string",
                         "writeOnly": true,
                       },

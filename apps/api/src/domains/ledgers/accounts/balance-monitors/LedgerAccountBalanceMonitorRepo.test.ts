@@ -109,7 +109,10 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			mode: "all" as const,
 			conditions: [{ balanceType: "posted" as const, operator: "<" as const, value: "100" }],
 		},
-		webhook: { url: "https://example.com/hook", bearerToken: "secret" },
+		webhook: {
+			url: "https://example.com/hook",
+			signingSecret: "whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+		},
 	};
 	const make = () =>
 		Effect.runSync(
@@ -157,7 +160,7 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		);
 		expect(updated.row).toMatchObject({
 			lockVersion: 2,
-			webhookToken: "ciphertext",
+			webhookSigningSecret: "ciphertext",
 			created: created.row.created,
 		});
 

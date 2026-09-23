@@ -34,7 +34,10 @@ const request: LedgerAccountBalanceMonitorRequest = {
 		mode: "all",
 		conditions: [{ balanceType: "posted", operator: "<", value: "100" }],
 	},
-	webhook: { url: "https://example.com/hook", bearerToken: "secret" },
+	webhook: {
+		url: "https://example.com/hook",
+		signingSecret: "whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+	},
 	metadata: {},
 };
 const scope = {

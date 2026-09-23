@@ -22,7 +22,7 @@ from the URL; Organization scope comes from authentication. Creation and updates
 	},
 	"webhook": {
 		"url": "https://example.com/hooks/balance",
-		"bearerToken": "caller-provided-secret"
+		"signingSecret": "whsec_<base64-encoded 32-byte random key>"
 	}
 }
 ```
@@ -34,19 +34,45 @@ Pending Transactions. Optional metadata follows the Ledger API's string-map meta
 
 Creation establishes the current balance as the baseline and sends no initial alert, even when
 its condition is already true. Editing a rule establishes a new baseline without sending an alert.
-Responses expose the saved configuration and `lockVersion`, but never the bearer token. An update
-may omit `webhook.bearerToken` to retain the existing token.
+Responses expose the saved configuration and `lockVersion`, but never the signing secret. An update
+may omit `webhook.signingSecret` to retain the existing signing secret.
 
 Each configuration version is immutable for balance changes that already occurred. A queued change
-uses the rule, URL, and token that applied when it was captured, even after a later edit. Deleting a
+uses the rule, URL, and signing secret that applied when it was captured, even after a later edit. Deleting a
 monitor stops future monitoring; evaluations and deliveries for earlier changes finish normally.
 
 ## Webhook contract
 
-The worker sends JSON using HTTPS POST with `Authorization: Bearer <token>`. Destinations must be
+The worker sends signed JSON using HTTPS POST. Destinations must be
 public HTTPS endpoints. Delivery validates and pins resolved addresses, rejects unsafe addresses,
 and does not follow redirects. Each request has a 10-second deadline including DNS resolution.
-Any 2xx response succeeds; other responses and transport failures retry.
+Any 2xx response succeeds. Network failures (including DNS), timeouts, HTTP 408, 429, and 5xx
+responses retry. Other HTTP responses, unsafe destinations, and invalid signing credentials fail
+immediately and remain available for operator inspection and replay.
+
+The caller supplies a signing secret when creating a monitor. Use `whsec_` followed by the canonical
+base64 encoding of 32 random bytes; the API rejects other formats. Generate one with:
+
+```bash
+printf 'whsec_'; openssl rand -base64 32
+```
+
+Delivery follows the [Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md)
+HMAC-SHA256 convention. Headers are:
+
+- `webhook-id`: the stable event ID, also present in the JSON body.
+- `webhook-timestamp`: the attempt time in integer Unix seconds; refreshed on every retry.
+- `webhook-signature`: `v1,` followed by the base64-encoded HMAC-SHA256 signature.
+
+The signed bytes are `webhook-id.webhook-timestamp.raw-body`. Decode the secret after removing
+`whsec_` to obtain the HMAC key. The receiver must verify the signature against the exact raw request
+body with a constant-time comparison before processing it, accept attempt timestamps only within
+five minutes of its clock, and deduplicate the event ID. Changing the ID, timestamp, or body invalidates
+the signature. No bearer Authorization header is sent.
+
+Updating `webhook.signingSecret` affects future captured alerts only. Receivers must retain old
+verification secrets while historical jobs can still be delivered or replayed. Signing secrets are
+separate from the API and worker's storage encryption key.
 
 The payload contains `type: "balance_monitor.triggered"`, a stable `eventId`, `monitorId`,
 `monitorVersion`, `organizationId`, `ledgerId`, `accountId`, `accountVersion`, `transactionId`,
@@ -79,7 +105,8 @@ or Settlement finalization. Those operations retain their own failure behavior.
 
 `monitor_enqueue_failed` logs Transaction, Account, and job IDs with a sanitized reason and attempt count. Its
 `unconfirmed` outcome means Valkey may have accepted some or all jobs despite the missing response.
-`monitor_delivery_failed` identifies the event, monitor, job, and attempt. Neither log includes
+`monitor_delivery_failed` identifies the event, monitor, job, attempt, failure category, and HTTP
+status when available. Stored delivery errors retain the same safe category and status. Neither log includes
 credentials, webhook URLs, payloads, or raw errors. Use these events for operational alerts; an
 abrupt process or host failure can occur before any log is written.
 
@@ -109,7 +136,7 @@ openssl rand -base64 32
 
 Store it as `BALANCE_MONITOR_ENCRYPTION_KEY` in `apps/api/.env` for local development and in the
 secret environment of both the API and worker in deployment. No default key is supplied. Monitor
-writes require a valid key, and the worker validates its key at startup. Tokens are encrypted in
+writes require a valid key, and the worker validates its key at startup. Signing secrets are encrypted in
 PostgreSQL and queued payloads. Keep the same key until all configurations and jobs encrypted with it
 are retired. There is no built-in key rotation or automatic re-encryption; replacing the key makes
 existing ciphertext unreadable.
@@ -137,12 +164,12 @@ The Compose `api` profile starts both API and worker from the same image. Export
 docker-compose --env-file apps/api/.env --profile api up -d --build
 ```
 
-For the best-effort cutover, stop accounting writes and let the old relay drain
-`balance_monitor_outbox` completely. Stop the old API and worker, apply migrations, then start the
-new API and delivery worker. The forward migration refuses a nonempty outbox, preserves active
-monitors, removes already-deleted monitor heads, and drops outbox and revision storage. Existing
-Valkey jobs remain compatible and keep their captured configuration.
+The monitor migration creates the final schema directly, without outbox or revision tables. It
+refuses legacy rows that lack complete rule and webhook configuration; resolve those records
+explicitly before applying it.
 
-The earlier initial monitor migration still refuses legacy rows that lack complete rule and webhook
-configuration. Resolve those records explicitly before applying that migration. A fresh development
-database can replay the full migration history.
+This feature is unreleased. Development and test databases that applied earlier branch migrations
+must be recreated before replaying migration history. Old bearer-token jobs are incompatible with
+signed delivery: use a fresh, dedicated development Valkey instance or clear only the obsolete
+`exchequer-balance-monitors` job data while its API and worker are stopped. No automatic database or
+queue reset, data conversion, or compatibility layer is provided.

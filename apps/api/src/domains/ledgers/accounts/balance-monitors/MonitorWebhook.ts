@@ -3,11 +3,51 @@ import dns from "node:dns";
 import type { ClientRequest } from "node:http";
 import https from "node:https";
 import { BlockList, isIP } from "node:net";
-import { Data, Effect } from "effect";
+import { Data, Effect, Schema } from "effect";
 
-export class WebhookDeliveryError extends Data.TaggedError("WebhookDeliveryError")<{
-	readonly message: string;
-}> {}
+import { signWebhook } from "./MonitorSecrets";
+
+export const WebhookFailure = Schema.Struct({
+	reason: Schema.Literals([
+		"dns",
+		"network",
+		"timeout",
+		"interrupted",
+		"destination",
+		"credentials",
+		"http",
+	]),
+	status: Schema.optional(Schema.Number),
+});
+export class WebhookDeliveryError extends Data.TaggedError("WebhookDeliveryError")<
+	typeof WebhookFailure.Type
+> {
+	override get message(): string {
+		switch (this.reason) {
+			case "dns":
+				return "Webhook DNS resolution failed";
+			case "network":
+				return "Webhook delivery failed";
+			case "timeout":
+				return "Webhook delivery timed out";
+			case "interrupted":
+				return "Webhook delivery interrupted";
+			case "destination":
+				return "Invalid webhook destination";
+			case "credentials":
+				return "Invalid webhook signing credentials";
+			case "http":
+				return `Webhook returned HTTP ${this.status}`;
+		}
+	}
+}
+
+export const isRetryableWebhookFailure = (error: typeof WebhookFailure.Type): boolean =>
+	error.reason === "http"
+		? error.status === 408 ||
+			error.status === 429 ||
+			(error.status !== undefined && error.status >= 500 && error.status < 600)
+		: ["dns", "network", "timeout", "interrupted"].includes(error.reason);
 
 const reservedV4 = new BlockList();
 for (const [address, prefix] of [
@@ -66,25 +106,26 @@ export const validateWebhookUrl = (value: string): void => {
 
 export const sendWebhook = (
 	url: string,
-	bearerToken: string,
-	payload: unknown
+	signingSecret: string,
+	payload: { readonly eventId: string; readonly [key: string]: unknown }
 ): Effect.Effect<void, WebhookDeliveryError> =>
 	Effect.tryPromise({
 		try: signal =>
 			new Promise<void>((resolve, reject) => {
 				let request: ClientRequest | undefined;
 				let finished = false;
-				const finish = (message?: string) => {
+				const finish = (reason?: (typeof WebhookFailure.Type)["reason"], status?: number) => {
 					if (finished) return;
 					finished = true;
 					clearTimeout(timer);
 					signal.removeEventListener("abort", abort);
 					request?.destroy();
-					if (message) reject(new WebhookDeliveryError({ message }));
+					if (reason)
+						reject(new WebhookDeliveryError({ reason, ...(status === undefined ? {} : { status }) }));
 					else resolve();
 				};
-				const abort = () => finish("Webhook delivery interrupted");
-				const timer = setTimeout(() => finish("Webhook delivery timed out"), 10_000);
+				const abort = () => finish("interrupted");
+				const timer = setTimeout(() => finish("timeout"), 10_000);
 				signal.addEventListener("abort", abort, { once: true });
 				if (signal.aborted) {
 					abort();
@@ -96,18 +137,26 @@ export const sendWebhook = (
 					validateWebhookUrl(url);
 					target = new URL(url);
 				} catch {
-					finish("Invalid webhook destination");
+					finish("destination");
 					return;
 				}
 				const send = (addresses: dns.LookupAddress[]) => {
 					if (finished) return;
 					const selected = addresses[0];
 					if (!selected || !addresses.every(({ address }) => isPublicAddress(address))) {
-						finish("Invalid webhook destination");
+						finish("destination");
+						return;
+					}
+					const body = JSON.stringify(payload);
+					const timestamp = Math.floor(Date.now() / 1000);
+					let signature: string;
+					try {
+						signature = signWebhook(signingSecret, payload.eventId, timestamp, body);
+					} catch {
+						finish("credentials");
 						return;
 					}
 					try {
-						const body = JSON.stringify(payload);
 						request = https.request(
 							target,
 							{
@@ -119,7 +168,9 @@ export const sendWebhook = (
 									else callback(null, selected.address, selected.family);
 								},
 								headers: {
-									Authorization: `Bearer ${bearerToken}`,
+									"webhook-id": payload.eventId,
+									"webhook-timestamp": String(timestamp),
+									"webhook-signature": signature,
 									"Content-Type": "application/json",
 									"Content-Length": Buffer.byteLength(body),
 								},
@@ -128,13 +179,13 @@ export const sendWebhook = (
 								const status = response.statusCode ?? 0;
 								// Delivery is acknowledged by status; never retain or log receiver bodies.
 								response.destroy();
-								finish(status >= 200 && status < 300 ? undefined : `Webhook returned HTTP ${status}`);
+								finish(status >= 200 && status < 300 ? undefined : "http", status);
 							}
 						);
-						request.on("error", () => finish("Webhook delivery failed"));
+						request.on("error", () => finish("network"));
 						request.end(body);
 					} catch {
-						finish("Webhook delivery failed");
+						finish("network");
 					}
 				};
 				const host = hostname(target);
@@ -143,16 +194,14 @@ export const sendWebhook = (
 				else {
 					try {
 						dns.lookup(host, { all: true }, (error, addresses) => {
-							if (error) finish("Webhook DNS resolution failed");
+							if (error) finish("dns");
 							else send(addresses);
 						});
 					} catch {
-						finish("Webhook DNS resolution failed");
+						finish("dns");
 					}
 				}
 			}),
 		catch: error =>
-			error instanceof WebhookDeliveryError
-				? error
-				: new WebhookDeliveryError({ message: "Webhook delivery failed" }),
+			error instanceof WebhookDeliveryError ? error : new WebhookDeliveryError({ reason: "network" }),
 	});

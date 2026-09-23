@@ -2,8 +2,13 @@ import { parseAmount } from "@/lib/amounts";
 import { Effect, Layer, Schema } from "effect";
 import { Job, Worker } from "effect-mq";
 import { crossed } from "@/domains/ledgers/accounts/balance-monitors/MonitorCondition";
-import { decryptToken } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
-import { sendWebhook } from "@/domains/ledgers/accounts/balance-monitors/MonitorWebhook";
+import { decryptSecret } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
+import {
+	sendWebhook,
+	WebhookFailure,
+	WebhookDeliveryError,
+	isRetryableWebhookFailure,
+} from "@/domains/ledgers/accounts/balance-monitors/MonitorWebhook";
 
 const amount = Schema.String.check(
 	Schema.makeFilter<string>(value => {
@@ -51,10 +56,11 @@ export class MonitorDelivery extends Job.make("balance-monitor-delivery", {
 		after: balanceSnapshot,
 		alertCondition,
 		webhookUrl: Schema.String,
-		webhookToken: Schema.String,
+		webhookSigningSecret: Schema.String,
 	},
 	success: Schema.Struct({ matched: Schema.Boolean }),
-	error: Schema.String,
+	error: WebhookFailure,
+	retryable: isRetryableWebhookFailure,
 	queue: "balance-monitor-delivery",
 	idempotencyKey: ({ eventId, monitorId }) => `${eventId}:${monitorId}`,
 	defaults: { attempts: 12, backoff: { type: "exponential", delay: "30 seconds", factor: 2 } },
@@ -67,11 +73,11 @@ export const deliverMonitorJob = (
 ) =>
 	Effect.gen(function* () {
 		if (!crossed(payload.alertCondition, payload.before, payload.after)) return { matched: false };
-		const token = yield* Effect.try({
-			try: () => decryptToken(payload.webhookToken, encryptionKey),
-			catch: () => "Unable to decrypt monitor token",
+		const secret = yield* Effect.try({
+			try: () => decryptSecret(payload.webhookSigningSecret, encryptionKey),
+			catch: () => new WebhookDeliveryError({ reason: "credentials" }),
 		});
-		yield* send(payload.webhookUrl, token, {
+		yield* send(payload.webhookUrl, secret, {
 			type: "balance_monitor.triggered",
 			eventId: `${payload.eventId}:${payload.monitorId}`,
 			monitorId: payload.monitorId,
@@ -88,7 +94,7 @@ export const deliverMonitorJob = (
 			before: payload.before,
 			after: payload.after,
 			alertCondition: payload.alertCondition,
-		}).pipe(Effect.mapError(() => "Webhook delivery failed"));
+		});
 		return { matched: true };
 	});
 
@@ -100,13 +106,14 @@ export const handleMonitorDelivery = (
 	Effect.gen(function* () {
 		const job = yield* Worker.CurrentJob;
 		return yield* deliverMonitorJob(payload, encryptionKey, send).pipe(
-			Effect.tapError(reason =>
+			Effect.tapError(error =>
 				Effect.logError("monitor_delivery_failed", {
 					jobId: job.jobId,
 					eventId: payload.eventId,
 					monitorId: payload.monitorId,
 					attempt: job.attempt,
-					reason,
+					reason: error.reason,
+					...(error.status === undefined ? {} : { status: error.status }),
 				})
 			)
 		);

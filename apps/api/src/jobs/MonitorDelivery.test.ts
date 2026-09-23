@@ -1,6 +1,6 @@
 import { Effect, Logger } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { encryptToken } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
+import { encryptSecret } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
 import {
 	sendWebhook,
 	WebhookDeliveryError,
@@ -29,7 +29,7 @@ const payload: typeof MonitorDelivery.payloadSchema.Type = {
 		conditions: [{ balanceType: "posted", operator: "<", value: "100" }],
 	},
 	webhookUrl: "https://example.com/hooks",
-	webhookToken: encryptToken("caller-token", key),
+	webhookSigningSecret: encryptSecret("whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=", key),
 };
 
 describe("MonitorDelivery", () => {
@@ -38,7 +38,7 @@ describe("MonitorDelivery", () => {
 		expect(
 			await Effect.runPromise(
 				deliverMonitorJob(
-					{ ...payload, after: payload.before, webhookToken: "invalid" },
+					{ ...payload, after: payload.before, webhookSigningSecret: "invalid" },
 					"invalid",
 					send
 				)
@@ -51,32 +51,41 @@ describe("MonitorDelivery", () => {
 		const send = vi.fn<typeof sendWebhook>(() => Effect.void);
 		expect(await Effect.runPromise(deliverMonitorJob(payload, key, send))).toEqual({ matched: true });
 		await Effect.runPromise(deliverMonitorJob(payload, key, send));
-		const { webhookUrl, webhookToken: _webhookToken, ...historical } = payload;
-		expect(send).toHaveBeenNthCalledWith(1, webhookUrl, "caller-token", {
-			...historical,
-			type: "balance_monitor.triggered",
-			eventId: "event-1:monitor-1",
-		});
+		const { webhookUrl, webhookSigningSecret: _webhookSigningSecret, ...historical } = payload;
+		expect(send).toHaveBeenNthCalledWith(
+			1,
+			webhookUrl,
+			"whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+			{
+				...historical,
+				type: "balance_monitor.triggered",
+				eventId: "event-1:monitor-1",
+			}
+		);
 		expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
-		expect(JSON.stringify(send.mock.calls[0]?.[2])).not.toContain("caller-token");
+		expect(JSON.stringify(send.mock.calls[0]?.[2])).not.toContain(
+			"whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="
+		);
 	});
 
-	it("fails retryably and sanitizes delivery errors", async () => {
+	it("preserves safe HTTP failure details", async () => {
 		const send = vi.fn<typeof sendWebhook>(() =>
-			Effect.fail(new WebhookDeliveryError({ message: "caller-token https://secret.example" }))
+			Effect.fail(new WebhookDeliveryError({ reason: "http", status: 503 }))
 		);
-		expect(await Effect.runPromise(deliverMonitorJob(payload, key, send).pipe(Effect.flip))).toBe(
-			"Webhook delivery failed"
-		);
+		expect(
+			await Effect.runPromise(deliverMonitorJob(payload, key, send).pipe(Effect.flip))
+		).toMatchObject({ reason: "http", status: 503 });
 	});
 
-	it("fails retryably on invalid encrypted credentials without sending", async () => {
+	it("fails permanently on invalid encrypted credentials without sending", async () => {
 		const send = vi.fn<typeof sendWebhook>(() => Effect.void);
 		expect(
 			await Effect.runPromise(
-				deliverMonitorJob({ ...payload, webhookToken: "invalid-secret" }, key, send).pipe(Effect.flip)
+				deliverMonitorJob({ ...payload, webhookSigningSecret: "invalid-secret" }, key, send).pipe(
+					Effect.flip
+				)
 			)
-		).toBe("Unable to decrypt monitor token");
+		).toMatchObject({ reason: "credentials" });
 		expect(send).not.toHaveBeenCalled();
 	});
 });
@@ -87,7 +96,7 @@ it("logs a sanitized delivery failure with the actual worker attempt", async () 
 		messages.push(entry.message);
 	});
 	const send = vi.fn<typeof sendWebhook>(() =>
-		Effect.fail(new WebhookDeliveryError({ message: "caller-token https://secret.example" }))
+		Effect.fail(new WebhookDeliveryError({ reason: "http", status: 503 }))
 	);
 	const failure = await Effect.runPromise(
 		handleMonitorDelivery(payload, key, send).pipe(
@@ -102,7 +111,7 @@ it("logs a sanitized delivery failure with the actual worker attempt", async () 
 			Effect.flip
 		)
 	);
-	expect(failure).toBe("Webhook delivery failed");
+	expect(failure).toMatchObject({ reason: "http", status: 503 });
 	expect(messages).toEqual([
 		[
 			"monitor_delivery_failed",
@@ -111,11 +120,39 @@ it("logs a sanitized delivery failure with the actual worker attempt", async () 
 				eventId: payload.eventId,
 				monitorId: payload.monitorId,
 				attempt: 4,
-				reason: "Webhook delivery failed",
+				reason: "http",
+				status: 503,
 			},
 		],
 	]);
-	expect(JSON.stringify(messages)).not.toContain("caller-token");
+	expect(JSON.stringify(messages)).not.toContain(
+		"whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="
+	);
 	expect(JSON.stringify(messages)).not.toContain("secret.example");
-	expect(JSON.stringify(messages)).not.toContain(payload.webhookToken);
+	expect(JSON.stringify(messages)).not.toContain(payload.webhookSigningSecret);
+});
+
+it.each([
+	[400, false],
+	[401, false],
+	[403, false],
+	[404, false],
+	[408, true],
+	[429, true],
+	[500, true],
+	[503, true],
+	[302, false],
+])("classifies HTTP %s for automatic retries", (status, retryable) => {
+	expect(MonitorDelivery.retryable?.({ reason: "http", status })).toBe(retryable);
+});
+
+it.each([
+	["dns", true],
+	["network", true],
+	["timeout", true],
+	["interrupted", true],
+	["credentials", false],
+	["destination", false],
+] as const)("classifies %s failures for automatic retries", (reason, retryable) => {
+	expect(MonitorDelivery.retryable?.({ reason })).toBe(retryable);
 });

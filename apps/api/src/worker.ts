@@ -1,12 +1,12 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { Config } from "@/config";
-import { encryptToken } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
+import { encryptSecret } from "@/domains/ledgers/accounts/balance-monitors/MonitorSecrets";
 import { makeMonitorDeliveryWorker } from "@/jobs/MonitorDelivery";
 import { makeMonitorJobStore } from "@/jobs/MonitorQueue";
 
 const config = new Config();
 // Validate before starting a worker that could otherwise exhaust jobs with an invalid key.
-encryptToken("", config.balanceMonitorEncryptionKey);
+encryptSecret("", config.balanceMonitorEncryptionKey);
 const store = makeMonitorJobStore(config.valkeyUrl);
 const runtime = ManagedRuntime.make(
 	Layer.mergeAll(

@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 /* oxlint-disable unicorn/no-null -- Node DNS callbacks require null for successful resolution. */
 import dns from "node:dns";
 import { EventEmitter } from "node:events";
@@ -6,6 +7,8 @@ import https from "node:https";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sendWebhook, validateWebhookUrl } from "./MonitorWebhook";
+
+const signingSecret = "whsec_BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=";
 
 afterEach(() => {
 	vi.restoreAllMocks();
@@ -69,14 +72,17 @@ function transport(
 }
 
 describe("webhook delivery", () => {
-	it("pins a public address and sends JSON with bearer authorization", async () => {
+	it("pins a public address and signs the transmitted JSON and refreshes the timestamp on retry", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(1700000000000);
 		const { request, req } = transport(204);
 		await Effect.runPromise(
-			sendWebhook("https://example.com/hook", "private-token", { eventId: "event" })
+			sendWebhook("https://example.com/hook", signingSecret, { eventId: "event" })
 		);
 		const options = request.mock.calls[0]?.[1] as https.RequestOptions;
 		expect(options.headers).toMatchObject({
-			Authorization: "Bearer private-token",
+			"webhook-id": "event",
+			"webhook-timestamp": "1700000000",
+			"webhook-signature": `v1,${createHmac("sha256", Buffer.alloc(32, 7)).update('event.1700000000.{"eventId":"event"}').digest("base64")}`,
 			"Content-Type": "application/json",
 		});
 		expect(options.agent).toBe(false);
@@ -84,6 +90,17 @@ describe("webhook delivery", () => {
 		options.lookup?.("example.com", { all: true }, callback);
 		expect(callback).toHaveBeenCalledWith(null, [{ address: "8.8.8.8", family: 4 }]);
 		expect(req.end).toHaveBeenCalledWith('{"eventId":"event"}');
+		expect(options.headers).not.toHaveProperty("Authorization");
+		vi.mocked(Date.now).mockReturnValue(1700000001000);
+		await Effect.runPromise(
+			sendWebhook("https://example.com/hook", signingSecret, { eventId: "event" })
+		);
+		const retried = request.mock.calls[1]?.[1] as https.RequestOptions;
+		expect(retried.headers).toMatchObject({
+			"webhook-id": "event",
+			"webhook-timestamp": "1700000001",
+		});
+		expect(retried.headers).not.toEqual(options.headers);
 	});
 	it.each(["127.0.0.1", "::ffff:127.0.0.1", "fe80::1", "fd00::1"])(
 		"rejects DNS results containing unsafe address %s",
@@ -93,7 +110,7 @@ describe("webhook delivery", () => {
 				{ address, family: address.includes(":") ? 6 : 4 },
 			]);
 			await expect(
-				Effect.runPromise(sendWebhook("https://example.com", "private-token", {}))
+				Effect.runPromise(sendWebhook("https://example.com", signingSecret, { eventId: "event" }))
 			).rejects.toThrow("Invalid webhook destination");
 			expect(request).not.toHaveBeenCalled();
 		}
@@ -101,7 +118,7 @@ describe("webhook delivery", () => {
 	it("treats redirects as failed deliveries without following them", async () => {
 		const { request } = transport(302);
 		await expect(
-			Effect.runPromise(sendWebhook("https://example.com", "private-token", {}))
+			Effect.runPromise(sendWebhook("https://example.com", signingSecret, { eventId: "event" }))
 		).rejects.toThrow("Webhook returned HTTP 302");
 		expect(request).toHaveBeenCalledOnce();
 	});
@@ -116,7 +133,9 @@ describe("webhook delivery", () => {
 		) => {
 			completeLookup = () => callback(null, [{ address: "8.8.8.8", family: 4 }]);
 		}) as typeof dns.lookup);
-		const result = Effect.runPromise(sendWebhook("https://example.com", "private-token", {}));
+		const result = Effect.runPromise(
+			sendWebhook("https://example.com", signingSecret, { eventId: "event" })
+		);
 		const assertion = expect(result).rejects.toThrow("Webhook delivery timed out");
 		await vi.advanceTimersByTimeAsync(10_000);
 		await assertion;
@@ -126,7 +145,9 @@ describe("webhook delivery", () => {
 	it("times out a connected receiver and destroys its request", async () => {
 		vi.useFakeTimers();
 		const { req } = transport();
-		const result = Effect.runPromise(sendWebhook("https://example.com", "private-token", {}));
+		const result = Effect.runPromise(
+			sendWebhook("https://example.com", signingSecret, { eventId: "event" })
+		);
 		const assertion = expect(result).rejects.toThrow("Webhook delivery timed out");
 		await vi.advanceTimersByTimeAsync(10_000);
 		await assertion;
@@ -135,9 +156,12 @@ describe("webhook delivery", () => {
 	it("aborts the request on interruption", async () => {
 		const { req, request } = transport();
 		const controller = new AbortController();
-		const result = Effect.runPromise(sendWebhook("https://example.com", "private-token", {}), {
-			signal: controller.signal,
-		});
+		const result = Effect.runPromise(
+			sendWebhook("https://example.com", signingSecret, { eventId: "event" }),
+			{
+				signal: controller.signal,
+			}
+		);
 		await vi.waitFor(() => expect(request).toHaveBeenCalled());
 		controller.abort();
 		await expect(result).rejects.toThrow();
@@ -145,7 +169,9 @@ describe("webhook delivery", () => {
 	});
 	it("redacts native error messages", async () => {
 		const { req, request } = transport();
-		const result = Effect.runPromise(sendWebhook("https://example.com", "private-token", {}));
+		const result = Effect.runPromise(
+			sendWebhook("https://example.com", signingSecret, { eventId: "event" })
+		);
 		await vi.waitFor(() => expect(request).toHaveBeenCalled());
 		req.emit("error", new Error("private-token https://example.com"));
 		await expect(result).rejects.toThrow("Webhook delivery failed");

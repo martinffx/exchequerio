@@ -20,5 +20,5 @@ export const monitorJob: MonitorJob = {
 		conditions: [{ balanceType: "posted", operator: ">", value: "0" }],
 	},
 	webhookUrl: "https://secret.example/hook",
-	webhookToken: "encrypted-secret",
+	webhookSigningSecret: "encrypted-secret",
 };

@@ -123,7 +123,7 @@ describe("atomic balance monitor capture", () => {
 				conditions: [{ balanceType: "posted" as const, operator: ">" as const, value: "0" }],
 			},
 			webhookUrl: "https://example.com/original",
-			webhookToken: "original-ciphertext",
+			webhookSigningSecret: "original-ciphertext",
 		};
 		if (monitored) await db.insert(LedgerAccountBalanceMonitorsTable).values(monitor);
 		const entries = (amount: number | string) => [
@@ -348,7 +348,7 @@ describe("atomic balance monitor capture", () => {
 				]);
 				if (enabled)
 					await client.query(
-						"INSERT INTO ledger_account_balance_monitors (id, organization_id, ledger_id, account_id, alert_condition, webhook_url, webhook_token) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+						"INSERT INTO ledger_account_balance_monitors (id, organization_id, ledger_id, account_id, alert_condition, webhook_url, webhook_signing_secret) VALUES ($1,$2,$3,$4,$5,$6,$7)",
 						[
 							f.monitor.id,
 							f.monitor.organizationId,
@@ -356,7 +356,7 @@ describe("atomic balance monitor capture", () => {
 							f.monitor.accountId,
 							f.monitor.alertCondition,
 							f.monitor.webhookUrl,
-							f.monitor.webhookToken,
+							f.monitor.webhookSigningSecret,
 						]
 					);
 				else
@@ -401,7 +401,11 @@ describe("atomic balance monitor capture", () => {
 		await f.create("posted");
 		await db
 			.update(LedgerAccountBalanceMonitorsTable)
-			.set({ webhookUrl: "https://example.com/new", webhookToken: "new-ciphertext", lockVersion: 2 })
+			.set({
+				webhookUrl: "https://example.com/new",
+				webhookSigningSecret: "new-ciphertext",
+				lockVersion: 2,
+			})
 			.where(eq(LedgerAccountBalanceMonitorsTable.id, f.monitor.id));
 		await db
 			.delete(LedgerAccountBalanceMonitorsTable)
@@ -409,7 +413,7 @@ describe("atomic balance monitor capture", () => {
 		expect(f.events()[0]).toMatchObject({
 			monitorVersion: 1,
 			webhookUrl: f.monitor.webhookUrl,
-			webhookToken: f.monitor.webhookToken,
+			webhookSigningSecret: f.monitor.webhookSigningSecret,
 		});
 	});
 	it("captures exact large amounts and retains Asset details after renaming", async () => {
