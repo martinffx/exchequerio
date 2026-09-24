@@ -1,5 +1,7 @@
+import { ConflictError } from "@/lib/errors";
+import type { CategoryBalanceRecord, CategoryBalances } from "./LedgerAccountCategoryEntity";
 import { encodeUuid } from "@/lib/utils";
-import { and, desc, eq, getTableColumns } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import { DatabaseTag, type EffectDrizzleDatabase, postgresErrorCode } from "@/db";
 import { postgresConstraint } from "@/db/errors";
@@ -15,10 +17,15 @@ import {
 	mapCategoryInfrastructureError,
 } from "./LedgerAccountCategoryErrors";
 import {
+	LedgersTable,
+	AssetsTable,
+	LedgerAccountsTable,
 	LedgerAccountCategoriesTable,
 	LedgerAccountCategoryAccountsTable,
 	LedgerAccountCategoryParentsTable,
 } from "@/db/schema";
+
+type CategoryBalancesRepositoryError = CategoryGetRepositoryError | ConflictError;
 
 type CategoryListRepositoryError = CategoryInfrastructureError;
 type CategoryGetRepositoryError = CategoryNotFound | CategoryInfrastructureError;
@@ -39,6 +46,12 @@ type CategoryLinkParentRepositoryError =
 type CategoryUnlinkParentRepositoryError = CategoryNotFound | CategoryInfrastructureError;
 
 interface LedgerAccountCategoryRepo {
+	getLedgerAccountCategoryBalances(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID
+	): Effect.Effect<CategoryBalances, CategoryBalancesRepositoryError>;
+
 	listLedgerAccountCategories(
 		organizationId: OrgID,
 		ledgerId: LedgerID,
@@ -118,6 +131,61 @@ const requireUpsertedCategory = (
 
 class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 	constructor(private readonly db: EffectDrizzleDatabase) {}
+
+	getLedgerAccountCategoryBalances(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID
+	): Effect.Effect<CategoryBalances, CategoryBalancesRepositoryError> {
+		return Effect.suspend(() =>
+			this.db.execute<CategoryBalanceRecord>(
+				sql`
+   WITH RECURSIVE root AS (
+    SELECT id, normal_balance FROM ${LedgerAccountCategoriesTable}
+    WHERE organization_id = ${encodeUuid(organizationId)} AND ledger_id = ${encodeUuid(ledgerId)} AND id = ${encodeUuid(categoryId)}
+   ), descendants(id) AS (
+    SELECT id FROM root
+    UNION
+    SELECT links.category_id FROM ${LedgerAccountCategoryParentsTable} links
+    JOIN descendants ON descendants.id = links.parent_category_id
+    WHERE links.organization_id = ${encodeUuid(organizationId)} AND links.ledger_id = ${encodeUuid(ledgerId)}
+   ), members AS (
+    SELECT DISTINCT links.account_id FROM ${LedgerAccountCategoryAccountsTable} links
+    JOIN descendants ON descendants.id = links.category_id
+    WHERE links.organization_id = ${encodeUuid(organizationId)} AND links.ledger_id = ${encodeUuid(ledgerId)}
+   ), totals AS (
+    SELECT accounts.asset_id,
+     SUM(accounts.posted_debits)::text AS posted_debits, SUM(accounts.posted_credits)::text AS posted_credits,
+     SUM(accounts.pending_debits)::text AS pending_debits, SUM(accounts.pending_credits)::text AS pending_credits
+    FROM ${LedgerAccountsTable} accounts JOIN members ON members.account_id = accounts.id
+    WHERE accounts.organization_id = ${encodeUuid(organizationId)} AND accounts.ledger_id = ${encodeUuid(ledgerId)}
+    GROUP BY accounts.asset_id
+   )
+   SELECT root.id, root.normal_balance AS "normalBalance",
+    COALESCE((SELECT jsonb_agg(jsonb_build_object(
+     'id', assets.id, 'code', assets.code, 'minorUnitExponent', assets.minor_unit_exponent,
+     'postedDebits', totals.posted_debits, 'postedCredits', totals.posted_credits,
+     'pendingDebits', totals.pending_debits, 'pendingCredits', totals.pending_credits
+    ) ORDER BY assets.id) FROM totals JOIN ${AssetsTable} assets ON assets.id = totals.asset_id
+    WHERE assets.organization_id = ${encodeUuid(organizationId)}), '[]'::jsonb) AS assets
+   FROM root
+  `,
+				"objects"
+			)
+		).pipe(
+			Effect.mapError(mapCategoryInfrastructureError),
+			Effect.flatMap(
+				(rows): Effect.Effect<CategoryBalances, CategoryBalancesRepositoryError> =>
+					rows.length === 0
+						? Effect.fail(new CategoryNotFound(`Category not found: ${categoryId.toString()}`))
+						: Effect.try({
+								try: () => LedgerAccountCategoryEntity.balancesFromRecord(rows[0]),
+								catch: cause =>
+									cause instanceof ConflictError ? cause : new CategoryPersistenceDecodingFailure(cause),
+							})
+			)
+		);
+	}
 
 	listLedgerAccountCategories(
 		organizationId: OrgID,
@@ -301,37 +369,94 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 		categoryId: LedgerAccountCategoryID,
 		parentCategoryId: LedgerAccountCategoryID
 	): Effect.Effect<void, CategoryLinkParentRepositoryError> {
-		return Effect.gen({ self: this }, function* () {
-			yield* this.getLedgerAccountCategory(organizationId, ledgerId, categoryId);
-			yield* this.getLedgerAccountCategory(organizationId, ledgerId, parentCategoryId);
-			if (categoryId.toString() === parentCategoryId.toString())
-				return yield* Effect.fail(new CategoryConflict("Category cannot be its own parent"));
-			yield* this.db
-				.insert(LedgerAccountCategoryParentsTable)
-				.values({
-					organizationId: encodeUuid(organizationId),
-					ledgerId: encodeUuid(ledgerId),
-					categoryId: encodeUuid(categoryId),
-					parentCategoryId: encodeUuid(parentCategoryId),
-				})
-				.onConflictDoNothing()
-				.pipe(
-					Effect.mapError(cause => {
-						if (postgresErrorCode(cause) === "23514")
-							return new CategoryConflict("Category cannot be its own parent", { cause });
-						if (postgresErrorCode(cause) === "23503") {
-							const constraint = postgresConstraint(cause);
-							if (constraint === "ledger_account_category_parents_child_ownership_fk")
-								return new CategoryNotFound(`Category not found: ${categoryId.toString()}`, { cause });
-							if (constraint === "ledger_account_category_parents_parent_ownership_fk")
-								return new CategoryNotFound(`Category not found: ${parentCategoryId.toString()}`, {
-									cause,
-								});
-						}
-						return mapCategoryInfrastructureError(cause);
-					})
-				);
-		}).pipe(Effect.asVoid);
+		return this.db
+			.transaction(
+				tx =>
+					Effect.gen(function* () {
+						// ponytail: serialize parent additions per Ledger; finer locks only if contention warrants it.
+						const [ledger] = yield* tx
+							.select({ id: LedgersTable.id })
+							.from(LedgersTable)
+							.where(
+								and(
+									eq(LedgersTable.organizationId, encodeUuid(organizationId)),
+									eq(LedgersTable.id, encodeUuid(ledgerId))
+								)
+							)
+							.for("no key update", { noWait: true });
+						if (!ledger)
+							return yield* Effect.fail(
+								new CategoryNotFound(`Category not found: ${categoryId.toString()}`)
+							);
+						const repository = new LedgerAccountCategoryRepoLive(tx);
+						yield* repository.getLedgerAccountCategory(organizationId, ledgerId, categoryId);
+						yield* repository.getLedgerAccountCategory(organizationId, ledgerId, parentCategoryId);
+						if (categoryId.toString() === parentCategoryId.toString())
+							return yield* Effect.fail(
+								new CategoryConflict("Category cannot be its own parent", { retryable: false })
+							);
+						const cycles = yield* tx
+							.execute<{ cycle: boolean }>(
+								sql`
+    WITH RECURSIVE descendants(id) AS (
+     SELECT ${encodeUuid(categoryId)}::uuid
+     UNION
+     SELECT links.category_id FROM ${LedgerAccountCategoryParentsTable} links
+     JOIN descendants ON descendants.id = links.parent_category_id
+     WHERE links.organization_id = ${encodeUuid(organizationId)} AND links.ledger_id = ${encodeUuid(ledgerId)}
+    )
+    SELECT EXISTS(SELECT 1 FROM descendants WHERE id = ${encodeUuid(parentCategoryId)})
+     AND NOT EXISTS(SELECT 1 FROM ${LedgerAccountCategoryParentsTable}
+      WHERE organization_id = ${encodeUuid(organizationId)} AND ledger_id = ${encodeUuid(ledgerId)}
+      AND category_id = ${encodeUuid(categoryId)} AND parent_category_id = ${encodeUuid(parentCategoryId)}) AS cycle
+   `,
+								"objects"
+							)
+							.pipe(Effect.mapError(mapCategoryInfrastructureError));
+						if (cycles[0].cycle)
+							return yield* Effect.fail(
+								new CategoryConflict("Category link would create a cycle", { retryable: false })
+							);
+						yield* tx
+							.insert(LedgerAccountCategoryParentsTable)
+							.values({
+								organizationId: encodeUuid(organizationId),
+								ledgerId: encodeUuid(ledgerId),
+								categoryId: encodeUuid(categoryId),
+								parentCategoryId: encodeUuid(parentCategoryId),
+							})
+							.onConflictDoNothing()
+							.pipe(
+								Effect.mapError(cause => {
+									if (postgresErrorCode(cause) === "23514")
+										return new CategoryConflict("Category cannot be its own parent", { cause });
+									if (postgresErrorCode(cause) === "23503") {
+										const constraint = postgresConstraint(cause);
+										if (constraint === "ledger_account_category_parents_child_ownership_fk")
+											return new CategoryNotFound(`Category not found: ${categoryId.toString()}`, { cause });
+										if (constraint === "ledger_account_category_parents_parent_ownership_fk")
+											return new CategoryNotFound(`Category not found: ${parentCategoryId.toString()}`, {
+												cause,
+											});
+									}
+									return mapCategoryInfrastructureError(cause);
+								})
+							);
+					}),
+				{ isolationLevel: "read committed" }
+			)
+			.pipe(
+				Effect.mapError(cause => {
+					if (cause instanceof CategoryNotFound || cause instanceof CategoryConflict) return cause;
+					if (postgresErrorCode(cause) === "55P03")
+						return new CategoryConflict("Category graph is busy; retry the parent link", {
+							cause,
+							retryable: true,
+						});
+					return mapCategoryInfrastructureError(cause);
+				}),
+				Effect.asVoid
+			);
 	}
 
 	unlinkCategoryFromParent(
@@ -374,6 +499,7 @@ const ledgerAccountCategoryRepoLayer = Layer.effect(
 );
 
 export type {
+	CategoryBalancesRepositoryError,
 	CategoryDeleteRepositoryError,
 	CategoryGetRepositoryError,
 	CategoryLinkAccountRepositoryError,

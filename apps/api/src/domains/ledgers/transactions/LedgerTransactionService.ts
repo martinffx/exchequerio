@@ -1,7 +1,5 @@
-import {
-	LedgerAccountBalanceMonitorPublisher,
-	type LedgerAccountBalanceMonitorJobPayload,
-} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
+import { type LedgerAccountBalanceMonitorJobPayload } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
+import { LedgerAccountBalanceMonitorPublisher } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService";
 import { Clock, Context, Effect, Layer, Option, Schedule } from "effect";
 import { DateTime } from "luxon";
 

@@ -1,7 +1,536 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI operations 1`] = `
+exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI operations 1`] = `
 {
+  "balances": {
+    "description": "Current balances by Asset for all distinct descendant Accounts, using one snapshot and the Category's normal balance. Membership changes after the snapshot appear on the next read.",
+    "operationId": "getLedgerAccountCategoryBalances",
+    "parameters": [
+      {
+        "description": "The ledger's ID",
+        "in": "path",
+        "name": "ledgerId",
+        "required": true,
+        "schema": {
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "description": "Unique identifier for the ledger account category.",
+        "in": "path",
+        "name": "categoryId",
+        "required": true,
+        "schema": {
+          "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "assets": {
+                  "items": {
+                    "properties": {
+                      "assetCode": {
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z0-9._:-]+$",
+                        "type": "string",
+                      },
+                      "assetId": {
+                        "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                        "type": "string",
+                      },
+                      "balances": {
+                        "items": {
+                          "properties": {
+                            "amount": {
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
+                              "type": "string",
+                            },
+                            "balanceType": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "pending",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "posted",
+                                  ],
+                                  "type": "string",
+                                },
+                                {
+                                  "enum": [
+                                    "availableBalance",
+                                  ],
+                                  "type": "string",
+                                },
+                              ],
+                            },
+                            "credits": {
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
+                              "type": "string",
+                            },
+                            "debits": {
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "balanceType",
+                            "credits",
+                            "debits",
+                            "amount",
+                          ],
+                          "type": "object",
+                        },
+                        "type": "array",
+                      },
+                      "minorUnitExponent": {
+                        "maximum": 18,
+                        "minimum": 0,
+                        "type": "integer",
+                      },
+                    },
+                    "required": [
+                      "assetId",
+                      "assetCode",
+                      "minorUnitExponent",
+                      "balances",
+                    ],
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+                "categoryId": {
+                  "description": "Unique identifier for the ledger account category.",
+                  "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                  "type": "string",
+                },
+                "normalBalance": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "debit",
+                      ],
+                      "type": "string",
+                    },
+                    {
+                      "enum": [
+                        "credit",
+                      ],
+                      "type": "string",
+                    },
+                  ],
+                },
+              },
+              "required": [
+                "categoryId",
+                "normalBalance",
+                "assets",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    400,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "BAD_REQUEST",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    401,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "UNAUTHORIZED",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    403,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "FORBIDDEN",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    404,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "NOT_FOUND",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    409,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "CONFLICT",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    429,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "TOO_MANY_REQUESTS",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    500,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "INTERNAL_SERVER_ERROR",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "detail": {
+                  "type": "string",
+                },
+                "instance": {
+                  "type": "string",
+                },
+                "retryable": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    503,
+                  ],
+                  "type": "number",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "traceId": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "SERVICE_UNAVAILABLE",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "status",
+                "title",
+                "detail",
+                "instance",
+                "traceId",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "description": "Default Response",
+      },
+    },
+    "summary": "Get Ledger Account Category balances",
+    "tags": [
+      "Ledger Account Categories",
+    ],
+  },
   "create": {
     "description": "Create Ledger Account Category",
     "operationId": "createLedgerAccountCategory",
@@ -69,7 +598,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+              "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
               "properties": {
                 "created": {
                   "description": "Timestamp of when the ledger account category was created.",
@@ -133,7 +662,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
             },
           },
         },
-        "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+        "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
       },
       "400": {
         "content": {
@@ -963,7 +1492,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+              "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
               "properties": {
                 "created": {
                   "description": "Timestamp of when the ledger account category was created.",
@@ -1027,7 +1556,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
             },
           },
         },
-        "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+        "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
       },
       "400": {
         "content": {
@@ -2255,7 +2784,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
           "application/json": {
             "schema": {
               "items": {
-                "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+                "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
                 "properties": {
                   "created": {
                     "description": "Timestamp of when the ledger account category was created.",
@@ -3588,7 +4117,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+              "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
               "properties": {
                 "created": {
                   "description": "Timestamp of when the ledger account category was created.",
@@ -3652,7 +4181,7 @@ exports[`LedgerAccountCategoryRoutes > locks all nine generated Category OpenAPI
             },
           },
         },
-        "description": "A ledger account category is a grouping of Ledger Accounts. Balance aggregation is not yet available. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+        "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
       },
       "400": {
         "content": {

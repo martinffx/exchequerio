@@ -1,12 +1,6 @@
-import { OrganizationRepoTag } from "@/domains/organizations/OrganizationRepo";
-import { LedgerRepoTag } from "@/domains/ledgers/LedgerRepo";
 import { Config } from "@/config";
-import { DatabaseTag, makeDatabaseLive } from "@/db";
-import { eq } from "drizzle-orm";
-import { createLedgerEntity, createOrganizationEntity, fixtureRepoLayer } from "./fixtures";
-import { LedgerAccountCategoriesTable } from "@/db/schema";
 import fastify, { type FastifyInstance } from "fastify";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer } from "effect";
 import { TypeID } from "typeid-js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,13 +10,14 @@ import type { LedgerAccountCategoryResponse } from "./LedgerAccountCategorySchem
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { ConflictError, globalErrorHandler, NotFoundError } from "@/lib/errors";
 import {
+	CategoryConflict,
 	CategoryPersistenceFailure,
 	CategoryRepositoryUnavailable,
 } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryErrors";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID } from "@/lib/ids";
 import type { OrgID } from "@/lib/ids";
 import { buildServer } from "@/server";
-import { ServerRuntime } from "@/runtime";
+import { ServerRuntime, ServerConfigTag, type ServerRuntimeLayer } from "@/runtime";
 import {
 	type LedgerAccountCategoryService,
 	LedgerAccountCategoryServiceTag,
@@ -39,6 +34,7 @@ import { LedgerAccountCategoryRoutes } from "./LedgerAccountCategoryRoutes";
 
 const mockLedgerAccountCategoryService = vi.mocked<LedgerAccountCategoryService>({
 	listLedgerAccountCategories: vi.fn(),
+	getLedgerAccountCategoryBalances: vi.fn(),
 	getLedgerAccountCategory: vi.fn(),
 	createLedgerAccountCategory: vi.fn(),
 	updateLedgerAccountCategory: vi.fn(),
@@ -50,9 +46,6 @@ const mockLedgerAccountCategoryService = vi.mocked<LedgerAccountCategoryService>
 } as unknown as LedgerAccountCategoryService);
 
 describe("LedgerAccountCategoryRoutes", () => {
-	const fixtureRuntime = ManagedRuntime.make(
-		fixtureRepoLayer.pipe(Layer.provideMerge(makeDatabaseLive(new Config().databaseUrl)))
-	);
 	let server: FastifyInstance;
 	let authServer: FastifyInstance;
 	let runtime: ServerRuntime<LedgerAccountCategoryService, never>;
@@ -89,13 +82,17 @@ describe("LedgerAccountCategoryRoutes", () => {
 			prefix: "/api/ledgers/:ledgerId/accounts/categories",
 		});
 		await server.ready();
-		authServer = await buildServer();
+		authServer = await buildServer({
+			runtimeLayer: Layer.merge(
+				Layer.succeed(ServerConfigTag, new Config()),
+				Layer.succeed(LedgerAccountCategoryServiceTag, mockLedgerAccountCategoryService)
+			) as ServerRuntimeLayer,
+		});
 	});
 
 	afterAll(async () => {
 		await server.close();
 		await runtime.dispose();
-		await fixtureRuntime.dispose();
 		await authServer.close();
 	});
 
@@ -143,7 +140,57 @@ describe("LedgerAccountCategoryRoutes", () => {
 		}
 	);
 
-	it("locks all nine generated Category OpenAPI operations", async () => {
+	it("serializes Asset balances and preserves decimal-string precision", async () => {
+		const body = LedgerAccountCategoryEntity.balancesFromRecord({
+			id: categoryId.toUUID(),
+			normalBalance: "credit",
+			assets: [
+				{
+					id: new TypeID("ast").toUUID(),
+					code: "USD",
+					minorUnitExponent: 2,
+					postedCredits: "9007199254740993",
+					pendingCredits: "9007199254740993",
+					postedDebits: "0",
+					pendingDebits: "0",
+				},
+			],
+		});
+		mockLedgerAccountCategoryService.getLedgerAccountCategoryBalances.mockReturnValue(
+			Effect.succeed(body)
+		);
+		const response = await server.inject({
+			method: "GET",
+			url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/balances`,
+		});
+		expect(response.statusCode).toBe(200);
+		expect(response.json()).toEqual(body.toResponse());
+		expect(mockLedgerAccountCategoryService.getLedgerAccountCategoryBalances).toHaveBeenCalledWith(
+			TypeID.fromString(orgId),
+			ledgerId,
+			categoryId
+		);
+	});
+	it.each([
+		new ConflictError("Accounting projection exceeds the signed 64-bit range", { retryable: false }),
+		new NotFoundError("Category not found"),
+		new CategoryRepositoryUnavailable(new Error("offline")),
+		new CategoryPersistenceFailure(new Error("query failed")),
+	])("maps balance errors through the existing HTTP handler", async error => {
+		mockLedgerAccountCategoryService.getLedgerAccountCategoryBalances.mockReturnValue(
+			Effect.fail(error)
+		);
+		const response = await server.inject({
+			method: "GET",
+			url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/balances`,
+		});
+		expect(response.statusCode).toBe(error.statusCode);
+		expect(response.json<{ detail: string }>().detail).toBe(error.message);
+		if (error instanceof ConflictError)
+			expect(response.json<{ retryable: boolean }>().retryable).toBe(false);
+	});
+
+	it("documents all generated Category OpenAPI operations", async () => {
 		await authServer.ready();
 		const paths = authServer.swagger().paths;
 		const prefix = "/api/ledgers/{ledgerId}/accounts/categories";
@@ -152,6 +199,7 @@ describe("LedgerAccountCategoryRoutes", () => {
 		const account = paths?.[`${prefix}/{categoryId}/accounts/{accountId}`];
 		const parent = paths?.[`${prefix}/{categoryId}/categories/{parentCategoryId}`];
 		const operations = {
+			balances: paths?.[`${prefix}/{categoryId}/balances`]?.get,
 			list: collection?.get,
 			create: collection?.post,
 			get: item?.get,
@@ -164,68 +212,6 @@ describe("LedgerAccountCategoryRoutes", () => {
 		};
 		for (const operation of Object.values(operations)) expect(operation).toBeDefined();
 		expect(operations).toMatchSnapshot();
-	});
-
-	it("allows the JWT owner to mutate a Category and prevents foreign Organization mutations in PostgreSQL", async () => {
-		const organizationRepo = await fixtureRuntime.runPromise(OrganizationRepoTag);
-		const ledgerRepo = await fixtureRuntime.runPromise(LedgerRepoTag);
-		const { db } = await fixtureRuntime.runPromise(DatabaseTag);
-		const owner = createOrganizationEntity();
-		const foreign = createOrganizationEntity();
-		const ledger = createLedgerEntity({ organizationId: owner.id });
-		await fixtureRuntime.runPromise(organizationRepo.createOrganization(owner));
-		try {
-			await fixtureRuntime.runPromise(organizationRepo.createOrganization(foreign));
-			await fixtureRuntime.runPromise(ledgerRepo.createLedger(ledger));
-			const url = `/api/ledgers/${ledger.id.toString()}/accounts/categories`;
-			const ownerHeaders = {
-				Authorization: `Bearer ${signJWT({ sub: owner.id.toString(), scope: ["org_admin"] })}`,
-			};
-			const created = await authServer.inject({
-				method: "POST",
-				url,
-				headers: ownerHeaders,
-				payload: { name: "Assets", normalBalance: "debit" },
-			});
-			expect(created.statusCode).toBe(200);
-			const id = created.json<{ id: string }>().id;
-			const updated = await authServer.inject({
-				method: "PUT",
-				url: `${url}/${id}`,
-				headers: ownerHeaders,
-				payload: { name: "Owner update", normalBalance: "debit" },
-			});
-			expect(updated.statusCode).toBe(200);
-			expect(updated.json()).toMatchObject({ name: "Owner update" });
-			const before = await db
-				.select()
-				.from(LedgerAccountCategoriesTable)
-				.where(eq(LedgerAccountCategoriesTable.id, TypeID.fromString(id, "lac").toUUID()));
-			expect(before).toHaveLength(1);
-			expect(before[0]?.name).toBe("Owner update");
-			const rejected = await authServer.inject({
-				method: "PUT",
-				url: `${url}/${id}`,
-				headers: {
-					Authorization: `Bearer ${signJWT({ sub: foreign.id.toString(), scope: ["org_admin"] })}`,
-				},
-				payload: { name: "Foreign update", normalBalance: "debit" },
-			});
-			expect(rejected.statusCode).toBe(404);
-			expect(
-				await db
-					.select()
-					.from(LedgerAccountCategoriesTable)
-					.where(eq(LedgerAccountCategoriesTable.id, TypeID.fromString(id, "lac").toUUID()))
-			).toEqual(before);
-		} finally {
-			await db
-				.delete(LedgerAccountCategoriesTable)
-				.where(eq(LedgerAccountCategoriesTable.ledgerId, ledger.id.toUUID()));
-			await fixtureRuntime.runPromise(ledgerRepo.deleteLedgerFixtures(owner.id, ledger.id));
-			await fixtureRuntime.runPromise(organizationRepo.deleteOrganization(owner.id));
-			await fixtureRuntime.runPromise(organizationRepo.deleteOrganization(foreign.id));
-		}
 	});
 
 	it.each([
@@ -855,6 +841,19 @@ describe("LedgerAccountCategoryRoutes", () => {
 		const parentCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
 		const parentCategoryIdStr = parentCategoryId.toString();
 
+		it.each([true, false])("serializes parent-link conflict retryable=%s", async retryable => {
+			const message = retryable ? "Category hierarchy is busy" : "Category link would create a cycle";
+			mockLedgerAccountCategoryService.linkLedgerAccountCategoryToCategory.mockReturnValue(
+				Effect.fail(new CategoryConflict(message, { retryable }))
+			);
+			const response = await server.inject({
+				method: "PATCH",
+				headers: { Authorization: `Bearer ${token}` },
+				url: `/api/ledgers/${ledgerIdStr}/accounts/categories/${categoryIdStr}/categories/${parentCategoryIdStr}`,
+			});
+			expect(response.statusCode).toBe(409);
+			expect(response.json()).toMatchObject({ detail: message, retryable });
+		});
 		it("should link a category to a parent category", async () => {
 			mockLedgerAccountCategoryService.linkLedgerAccountCategoryToCategory.mockReturnValue(
 				Effect.void

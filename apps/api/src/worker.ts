@@ -1,3 +1,4 @@
+import { deliverBalanceMonitor } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService";
 import {
 	makeLedgerAccountBalanceMonitorJobWorker,
 	makeLedgerAccountBalanceMonitorJobStore,
@@ -13,9 +14,9 @@ const store = makeLedgerAccountBalanceMonitorJobStore(config.valkeyUrl);
 const runtime = ManagedRuntime.make(
 	Layer.mergeAll(
 		store,
-		makeLedgerAccountBalanceMonitorJobWorker(config.balanceMonitorEncryptionKey).pipe(
-			Layer.provide(store)
-		)
+		makeLedgerAccountBalanceMonitorJobWorker((payload, attempt) =>
+			deliverBalanceMonitor(payload, config.balanceMonitorEncryptionKey, attempt)
+		).pipe(Layer.provide(store))
 	)
 );
 let stopping = false;

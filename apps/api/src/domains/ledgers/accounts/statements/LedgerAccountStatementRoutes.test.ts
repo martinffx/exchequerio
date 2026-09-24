@@ -1,3 +1,4 @@
+import { Config } from "@/config";
 import fastifySwagger from "@fastify/swagger";
 import { Effect, Layer } from "effect";
 import fastify, { type FastifyInstance } from "fastify";
@@ -7,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { signJWT } from "@/auth";
 import { ConflictError, globalErrorHandler, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID, OrgID } from "@/lib/ids";
-import { ServerRuntime } from "@/runtime";
+import { ServerRuntime, ServerConfigTag, type ServerRuntimeLayer } from "@/runtime";
 import { buildServer } from "@/server";
 
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
@@ -150,7 +151,12 @@ describe("LedgerAccountStatementRoutes", () => {
 	});
 
 	it("registers the production GET route behind authentication", async () => {
-		const server = await buildServer();
+		const server = await buildServer({
+			runtimeLayer: Layer.merge(
+				Layer.succeed(ServerConfigTag, new Config()),
+				Layer.succeed(LedgerAccountStatementServiceTag, service())
+			) as ServerRuntimeLayer,
+		});
 		servers.push(server);
 
 		const response = await server.inject({
@@ -162,7 +168,12 @@ describe("LedgerAccountStatementRoutes", () => {
 	});
 
 	it("registers the production POST route with write permission", async () => {
-		const server = await buildServer();
+		const server = await buildServer({
+			runtimeLayer: Layer.merge(
+				Layer.succeed(ServerConfigTag, new Config()),
+				Layer.succeed(LedgerAccountStatementServiceTag, service())
+			) as ServerRuntimeLayer,
+		});
 		servers.push(server);
 		const tokenReadOnly = signJWT({
 			sub: orgId.toString(),

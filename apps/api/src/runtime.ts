@@ -1,7 +1,5 @@
-import {
-	ledgerAccountBalanceMonitorPublisherLayer,
-	makeLedgerAccountBalanceMonitorJobStore,
-} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
+import { makeLedgerAccountBalanceMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
+import { ledgerAccountBalanceMonitorPublisherLayer } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService";
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";

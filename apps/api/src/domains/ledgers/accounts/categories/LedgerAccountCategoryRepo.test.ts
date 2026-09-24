@@ -1,4 +1,22 @@
-import { AssetsTable } from "@/db/schema";
+import { Client, Pool, type PoolClient } from "pg";
+import { INT64_MAX } from "@/lib/amounts";
+import { ConflictError } from "@/lib/errors";
+import {
+	newOrgID,
+	newLedgerID,
+	type LedgerAccountCategoryID,
+	type LedgerAccountID,
+	type LedgerID,
+	type OrgID,
+} from "@/lib/ids";
+import {
+	AssetsTable,
+	LedgerAccountsTable,
+	LedgersTable,
+	LedgerAccountCategoriesTable,
+	LedgerAccountCategoryAccountsTable,
+	LedgerAccountCategoryParentsTable,
+} from "@/db/schema";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,
@@ -14,6 +32,7 @@ import {
 	type DrizzleDatabase,
 	type EffectDrizzleDatabase,
 	makeDatabaseLive,
+	postgresErrorCode,
 } from "@/db";
 import { AccountNotFound } from "@/domains/ledgers/accounts/AccountErrors";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
@@ -25,24 +44,21 @@ import {
 	CategoryPersistenceFailure,
 	CategoryRepositoryUnavailable,
 } from "./LedgerAccountCategoryErrors";
-import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
 import {
 	createLedgerAccountEntity,
+	createLedgerAccountCategoryFixture,
 	createLedgerEntity,
 	createOrganizationEntity,
 	fixtureRepoLayer,
 } from "./fixtures";
-import {
-	LedgerAccountCategoriesTable,
-	LedgerAccountCategoryAccountsTable,
-	LedgerAccountCategoryParentsTable,
-} from "@/db/schema";
 import {
 	type LedgerAccountCategoryRepo,
 	LedgerAccountCategoryRepoLive,
 	LedgerAccountCategoryRepoTag,
 	ledgerAccountCategoryRepoLayer,
 } from "./LedgerAccountCategoryRepo";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 describe("LedgerAccountCategoryRepo", () => {
 	let db: DrizzleDatabase;
@@ -210,7 +226,19 @@ describe("LedgerAccountCategoryRepo", () => {
 	});
 
 	describe("getLedgerAccountCategory", () => {
-		it("should treat malformed stored metadata as absent", async () => {
+		it.each([
+			// oxlint-disable-next-line unicorn/no-null -- PostgreSQL stores nullable metadata as null.
+			null,
+			"",
+			"broken",
+			"null",
+			"[]",
+			'"text"',
+			"12",
+			'{"value":12}',
+			'{"value":null}',
+			'{"value":{}}',
+		])("treats malformed stored metadata %s as absent", async metadata => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			await db.insert(LedgerAccountCategoriesTable).values({
 				id: categoryId.toUUID(),
@@ -218,7 +246,7 @@ describe("LedgerAccountCategoryRepo", () => {
 				ledgerId: testLedgerId.toUUID(),
 				name: "Malformed metadata",
 				normalBalance: "debit",
-				metadata: "{not-json",
+				metadata,
 			});
 
 			const category = await runtime.runPromise(
@@ -1261,8 +1289,10 @@ describe("LedgerAccountCategoryRepo", () => {
 				)
 			);
 
-			const getCategory = vi.spyOn(ledgerAccountCategoryRepo, "getLedgerAccountCategory");
-			const insert = vi.spyOn(effectDb, "insert");
+			const getCategory = vi.spyOn(
+				LedgerAccountCategoryRepoLive.prototype,
+				"getLedgerAccountCategory"
+			);
 			await runtime.runPromise(
 				ledgerAccountCategoryRepo.linkCategoryToParent(
 					testOrgId,
@@ -1276,7 +1306,12 @@ describe("LedgerAccountCategoryRepo", () => {
 				[testOrgId, testLedgerId, childCategoryId],
 				[testOrgId, testLedgerId, parentCategoryId],
 			]);
-			expect(getCategory.mock.invocationCallOrder[1]).toBeLessThan(insert.mock.invocationCallOrder[0]);
+			expect(
+				await db
+					.select()
+					.from(LedgerAccountCategoryParentsTable)
+					.where(eq(LedgerAccountCategoryParentsTable.categoryId, childCategoryId.toUUID()))
+			).toMatchObject([{ parentCategoryId: parentCategoryId.toUUID() }]);
 			getCategory.mockRestore();
 
 			// Cleanup
@@ -2058,15 +2093,28 @@ describe("LedgerAccountCategoryRepo", () => {
 				testOrgId,
 				testLedgerId
 			);
-			const repository = new LedgerAccountCategoryRepoLive({
+			const transaction = {
+				select: () => ({
+					from: () => ({
+						where: () => ({ for: () => Effect.succeed([{ id: testLedgerId.toUUID() }]) }),
+					}),
+				}),
+				execute: () => Effect.succeed([{ cycle: false }]),
 				insert: () => ({
 					values: () => ({
 						onConflictDoUpdate: () => ({ returning: () => Effect.fail(cause) }),
 						onConflictDoNothing: () => Effect.fail(cause),
 					}),
 				}),
+			};
+			const repository = new LedgerAccountCategoryRepoLive({
+				...transaction,
+				transaction: (run: (tx: EffectDrizzleDatabase) => Effect.Effect<void, unknown>) =>
+					run(transaction as never),
 			} as never);
-			vi.spyOn(repository, "getLedgerAccountCategory").mockReturnValue(Effect.succeed(entity));
+			vi
+				.spyOn(LedgerAccountCategoryRepoLive.prototype, "getLedgerAccountCategory")
+				.mockReturnValue(Effect.succeed(entity));
 			const program =
 				operation === "upsert"
 					? repository.upsertLedgerAccountCategory(entity)
@@ -2305,4 +2353,746 @@ describe("LedgerAccountCategoryRepo", () => {
 			if (Result.isFailure(result)) expect(result.failure).toBeInstanceOf(ErrorType);
 		});
 	});
+
+	async function category(normalBalance: "debit" | "credit" = "debit") {
+		const entity = createLedgerAccountCategoryFixture({
+			organizationId: testOrgId,
+			ledgerId: testLedgerId,
+			normalBalance,
+		});
+		await runtime.runPromise(ledgerAccountCategoryRepo.upsertLedgerAccountCategory(entity));
+		return entity.id;
+	}
+	async function account(
+		categoryId: LedgerAccountCategoryID,
+		counters: Partial<typeof LedgerAccountsTable.$inferInsert> = {}
+	) {
+		const entity = createLedgerAccountEntity({
+			organizationId: testOrgId,
+			ledgerId: testLedgerId,
+			name: `Balance member ${++testCounter}`,
+		});
+		await db.insert(LedgerAccountsTable).values({ ...entity.toRow(), ...counters });
+		await runtime.runPromise(
+			ledgerAccountCategoryRepo.linkAccountToCategory(testOrgId, testLedgerId, categoryId, entity.id)
+		);
+		return entity.id;
+	}
+	const read = (id: LedgerAccountCategoryID) =>
+		runtime.runPromise(
+			ledgerAccountCategoryRepo.getLedgerAccountCategoryBalances(testOrgId, testLedgerId, id)
+		);
+
+	describe("getLedgerAccountCategoryBalances", () => {
+		it.each([
+			["ECONNREFUSED", CategoryRepositoryUnavailable],
+			["XX000", CategoryPersistenceFailure],
+		] as const)("maps balance query failure %s without losing its cause", async (code, ErrorType) => {
+			const cause = Object.assign(new Error("query failure"), { code });
+			const repository = new LedgerAccountCategoryRepoLive({
+				execute: () => Effect.fail(cause),
+			} as never);
+			const error = await Effect.runPromise(
+				Effect.flip(
+					repository.getLedgerAccountCategoryBalances(
+						testOrgId,
+						testLedgerId,
+						new TypeID("lac") as LedgerAccountCategoryID
+					)
+				)
+			);
+			expect(error).toBeInstanceOf(ErrorType);
+			expect(error.cause).toBe(cause);
+		});
+
+		it("distinguishes empty, absent and foreign categories", async () => {
+			const root = await category();
+			expect(await read(root)).toMatchObject({
+				categoryId: root.toString(),
+				normalBalance: "debit",
+				assets: [],
+			});
+			expect(
+				await runtime.runPromise(
+					Effect.flip(
+						ledgerAccountCategoryRepo.getLedgerAccountCategoryBalances(newOrgID(), testLedgerId, root)
+					)
+				)
+			).toBeInstanceOf(CategoryNotFound);
+			expect(
+				await runtime.runPromise(
+					Effect.flip(
+						ledgerAccountCategoryRepo.getLedgerAccountCategoryBalances(testOrgId, newLedgerID(), root)
+					)
+				)
+			).toBeInstanceOf(CategoryNotFound);
+			expect(
+				await runtime.runPromise(
+					Effect.flip(
+						ledgerAccountCategoryRepo.getLedgerAccountCategoryBalances(
+							testOrgId,
+							testLedgerId,
+							new TypeID("lac") as LedgerAccountCategoryID
+						)
+					)
+				)
+			).toBeInstanceOf(CategoryNotFound);
+		});
+		it.each(["debit", "credit"] as const)(
+			"uses %s Category orientation, not Account availability",
+			async normalBalance => {
+				const root = await category(normalBalance);
+				await account(root, {
+					postedDebits: 100n,
+					postedCredits: 20n,
+					pendingDebits: 150n,
+					pendingCredits: 50n,
+				});
+				const result = await read(root);
+				expect(result.assets[0]).toEqual({
+					assetId: TypeID.fromUUID("ast", testOrgId.toUUID()).toString(),
+					assetCode: "USD",
+					minorUnitExponent: 2,
+					balances: [
+						{
+							balanceType: "pending",
+							debits: 150n,
+							credits: 50n,
+							amount: normalBalance === "debit" ? 100n : -100n,
+						},
+						{
+							balanceType: "posted",
+							debits: 100n,
+							credits: 20n,
+							amount: normalBalance === "debit" ? 80n : -80n,
+						},
+						{
+							balanceType: "availableBalance",
+							debits: normalBalance === "debit" ? 100n : 150n,
+							credits: normalBalance === "debit" ? 50n : 20n,
+							amount: normalBalance === "debit" ? 50n : -130n,
+						},
+					],
+				});
+			}
+		);
+		it("counts shared descendants once and remains safe with a stored cycle", async () => {
+			const root = await category();
+			const left = await category();
+			const right = await category();
+			const leaf = await category();
+			for (const [child, parent] of [
+				[left, root],
+				[right, root],
+				[leaf, left],
+				[leaf, right],
+			]) {
+				await runtime.runPromise(
+					ledgerAccountCategoryRepo.linkCategoryToParent(testOrgId, testLedgerId, child, parent)
+				);
+			}
+			const member = await account(leaf, { postedDebits: 7n, pendingDebits: 7n });
+			await runtime.runPromise(
+				ledgerAccountCategoryRepo.linkAccountToCategory(testOrgId, testLedgerId, root, member)
+			);
+			expect((await read(root)).assets[0].balances[1].amount).toBe(7n);
+			await db.insert(LedgerAccountCategoryParentsTable).values({
+				organizationId: testOrgId.toUUID(),
+				ledgerId: testLedgerId.toUUID(),
+				categoryId: root.toUUID(),
+				parentCategoryId: leaf.toUUID(),
+			});
+			expect((await read(root)).assets[0].balances[1].amount).toBe(7n);
+			await runtime.runPromise(
+				ledgerAccountCategoryRepo.unlinkAccountFromCategory(testOrgId, testLedgerId, root, member)
+			);
+			expect((await read(root)).assets[0].balances[1].amount).toBe(7n);
+			await runtime.runPromise(
+				ledgerAccountCategoryRepo.unlinkAccountFromCategory(testOrgId, testLedgerId, leaf, member)
+			);
+			expect((await read(root)).assets).toEqual([]);
+		});
+		it("groups by immutable Asset ID, retains zeros and reads renamed Asset metadata", async () => {
+			const root = await category();
+			const other = new TypeID("ast");
+			await db.insert(AssetsTable).values({
+				id: other.toUUID(),
+				organizationId: testOrgId.toUUID(),
+				code: "EUR",
+				name: "Euro",
+				minorUnitExponent: 3,
+			});
+			await account(root);
+			await account(root, { assetId: other.toUUID(), postedDebits: 123n, pendingDebits: 123n });
+			await db.update(AssetsTable).set({ code: "EUR:OLD" }).where(eq(AssetsTable.id, other.toUUID()));
+			await db.insert(AssetsTable).values({
+				id: new TypeID("ast").toUUID(),
+				organizationId: testOrgId.toUUID(),
+				code: "EUR",
+				name: "Replacement",
+				minorUnitExponent: 0,
+			});
+			const result = await read(root);
+			expect(result.assets.map(value => value.assetId)).toEqual(
+				[TypeID.fromUUID("ast", testOrgId.toUUID()).toString(), other.toString()].sort()
+			);
+			expect(result.assets.find(value => value.assetId === other.toString())).toMatchObject({
+				assetCode: "EUR:OLD",
+				minorUnitExponent: 3,
+			});
+			expect(
+				result.assets
+					.find(value => value.assetId === TypeID.fromUUID("ast", testOrgId.toUUID()).toString())
+					?.balances.every(value => value.amount === 0n)
+			).toBe(true);
+		});
+
+		it("reads committed membership while a new link is uncommitted", async () => {
+			const root = await category();
+			const holding = await category();
+			const member = await account(holding, { pendingDebits: 500n, postedDebits: 500n });
+			const client = new Client({ connectionString: new Config().databaseUrl });
+			await client.connect();
+			try {
+				await client.query("BEGIN");
+				await client.query(
+					"INSERT INTO ledger_account_category_accounts (organization_id, ledger_id, category_id, account_id) VALUES ($1, $2, $3, $4)",
+					[testOrgId.toUUID(), testLedgerId.toUUID(), root.toUUID(), member.toUUID()]
+				);
+				expect((await read(root)).assets).toEqual([]);
+				await client.query("COMMIT");
+				expect((await read(root)).assets[0].balances[1].amount).toBe(500n);
+			} finally {
+				await client.query("ROLLBACK");
+				await client.end();
+			}
+		});
+		it("never includes half of an uncommitted multi-Account projection update", async () => {
+			const root = await category();
+			const first = await account(root);
+			const second = await account(root);
+			const client = new Client({ connectionString: new Config().databaseUrl });
+			await client.connect();
+			try {
+				await client.query("BEGIN");
+				await client.query(
+					"UPDATE ledger_accounts SET pending_debits = 100, posted_debits = 100 WHERE id = $1",
+					[first.toUUID()]
+				);
+				expect((await read(root)).assets[0].balances[1]).toMatchObject({
+					amount: 0n,
+					credits: 0n,
+					debits: 0n,
+				});
+				await client.query(
+					"UPDATE ledger_accounts SET pending_credits = 100, posted_credits = 100 WHERE id = $1",
+					[second.toUUID()]
+				);
+				await client.query("COMMIT");
+				expect((await read(root)).assets[0].balances[1]).toMatchObject({
+					amount: 0n,
+					credits: 100n,
+					debits: 100n,
+				});
+			} finally {
+				await client.query("ROLLBACK");
+				await client.end();
+			}
+		});
+		it("preserves exact int64 totals and rejects overflowing counters even when net is zero", async () => {
+			const root = await category();
+			await account(root, { postedCredits: INT64_MAX - 1n, pendingCredits: INT64_MAX - 1n });
+			await account(root, { postedCredits: 1n, pendingCredits: 1n });
+			expect((await read(root)).assets[0].balances[1].credits).toBe(INT64_MAX);
+			await account(root, {
+				postedCredits: 1n,
+				pendingCredits: 1n,
+				postedDebits: INT64_MAX,
+				pendingDebits: INT64_MAX,
+			});
+			await account(root, { postedDebits: 1n, pendingDebits: 1n });
+			const error = await runtime.runPromise(
+				Effect.flip(
+					ledgerAccountCategoryRepo.getLedgerAccountCategoryBalances(testOrgId, testLedgerId, root)
+				)
+			);
+			expect(error).toBeInstanceOf(ConflictError);
+			expect(error).toMatchObject({ retryable: false });
+		});
+	});
+	describe("linkCategoryToParent concurrency", () => {
+		it.each(["reverse", "longer"])(
+			"rejects a concurrent %s cycle, then rejects its retry after commit",
+			async shape => {
+				const a = await category();
+				const b = await category();
+				const tail = shape === "reverse" ? b : await category();
+				if (shape === "longer")
+					await runtime.runPromise(
+						ledgerAccountCategoryRepo.linkCategoryToParent(testOrgId, testLedgerId, b, tail)
+					);
+				let markEntered!: () => void;
+				const entered = new Promise<void>(resolve => {
+					markEntered = resolve;
+				});
+				let release!: () => void;
+				const released = new Promise<void>(resolve => {
+					release = resolve;
+				});
+				const mutation = runtime.runPromise(
+					effectDb
+						.transaction(tx =>
+							Effect.gen(function* () {
+								yield* new LedgerAccountCategoryRepoLive(tx).linkCategoryToParent(
+									testOrgId,
+									testLedgerId,
+									a,
+									b
+								);
+								markEntered();
+								yield* Effect.promise(() => released);
+							})
+						)
+						.pipe(Effect.result)
+				);
+				const request = () =>
+					runtime.runPromise(
+						ledgerAccountCategoryRepo
+							.linkCategoryToParent(testOrgId, testLedgerId, tail, a)
+							.pipe(Effect.flip, Effect.timeout("2 seconds"))
+					);
+				try {
+					await Promise.race([entered, mutation]);
+					try {
+						const busy = await request();
+						expect(busy).toBeInstanceOf(CategoryConflict);
+						expect(postgresErrorCode(busy.cause)).toBe("55P03");
+						expect(busy).toMatchObject({ retryable: true });
+						const stored = await db
+							.select()
+							.from(LedgerAccountCategoryParentsTable)
+							.where(eq(LedgerAccountCategoryParentsTable.categoryId, tail.toUUID()));
+						expect(stored).toHaveLength(0);
+					} finally {
+						release();
+						expect(Result.isSuccess(await mutation)).toBe(true);
+					}
+					const cycle = await request();
+					expect(cycle).toBeInstanceOf(CategoryConflict);
+					expect(cycle).toMatchObject({
+						retryable: false,
+						message: "Category link would create a cycle",
+					});
+					await runtime.runPromise(
+						ledgerAccountCategoryRepo.linkCategoryToParent(testOrgId, testLedgerId, a, b)
+					);
+				} finally {
+					release();
+					await mutation;
+				}
+			}
+		);
+
+		it("releases the guard on rollback and allows reads, Account writes and another Ledger while held", async () => {
+			const a = await category();
+			const b = await category();
+			const member = await account(a, { normalBalance: "debit" });
+
+			const otherLedger = newLedgerID();
+			const otherChild = new TypeID("lac") as LedgerAccountCategoryID;
+			const otherParent = new TypeID("lac") as LedgerAccountCategoryID;
+			await db
+				.insert(LedgersTable)
+				.values({ id: otherLedger.toUUID(), organizationId: testOrgId.toUUID(), name: "Independent" });
+			await db.insert(LedgerAccountCategoriesTable).values(
+				[otherChild, otherParent].map(id => ({
+					organizationId: testOrgId.toUUID(),
+					ledgerId: otherLedger.toUUID(),
+					id: id.toUUID(),
+					name: "Independent",
+					normalBalance: "debit" as const,
+				}))
+			);
+			let markEntered!: () => void;
+			const entered = new Promise<void>(resolve => {
+				markEntered = resolve;
+			});
+			let release!: () => void;
+			const released = new Promise<void>(resolve => {
+				release = resolve;
+			});
+			const rollback = new Error("Rollback test link");
+			const mutation = runtime.runPromise(
+				effectDb
+					.transaction(tx =>
+						Effect.gen(function* () {
+							yield* new LedgerAccountCategoryRepoLive(tx).linkCategoryToParent(
+								testOrgId,
+								testLedgerId,
+								a,
+								b
+							);
+							markEntered();
+							yield* Effect.promise(() => released);
+							return yield* Effect.fail(rollback);
+						})
+					)
+					.pipe(Effect.result)
+			);
+
+			try {
+				await Promise.race([entered, mutation]);
+				const conflict = await runtime.runPromise(
+					ledgerAccountCategoryRepo
+						.linkCategoryToParent(testOrgId, testLedgerId, b, a)
+						.pipe(Effect.flip, Effect.timeout("2 seconds"))
+				);
+				expect(conflict).toBeInstanceOf(CategoryConflict);
+				expect(conflict).toMatchObject({ retryable: true });
+				expect(postgresErrorCode(conflict.cause)).toBe("55P03");
+				await runtime.runPromise(
+					ledgerAccountCategoryRepo
+						.linkCategoryToParent(testOrgId, otherLedger, otherChild, otherParent)
+						.pipe(Effect.timeout("2 seconds"))
+				);
+				expect((await read(a)).assets[0].balances[1].amount).toBe(0n);
+				const insertedAccount = createLedgerAccountEntity({
+					organizationId: testOrgId,
+					ledgerId: testLedgerId,
+					name: "Guard-compatible insert",
+				});
+				await db.transaction(async tx => {
+					await tx.execute(sql`SET LOCAL statement_timeout = '2s'`);
+					await tx.insert(LedgerAccountsTable).values(insertedAccount.toRow());
+					await tx
+						.update(LedgerAccountsTable)
+						.set({ postedDebits: 10n, pendingDebits: 10n })
+						.where(eq(LedgerAccountsTable.id, member.toUUID()));
+				});
+				expect((await read(a)).assets[0].balances[1].amount).toBe(10n);
+			} finally {
+				release();
+				expect(await mutation).toMatchObject({ failure: rollback });
+				await db
+					.delete(LedgerAccountCategoriesTable)
+					.where(eq(LedgerAccountCategoriesTable.ledgerId, otherLedger.toUUID()));
+				await runtime.runPromise(ledgerRepo.deleteLedgerFixtures(testOrgId, otherLedger));
+			}
+			await runtime.runPromise(
+				ledgerAccountCategoryRepo.linkCategoryToParent(testOrgId, testLedgerId, b, a)
+			);
+			const stored = await db
+				.select()
+				.from(LedgerAccountCategoryParentsTable)
+				.where(eq(LedgerAccountCategoryParentsTable.categoryId, a.toUUID()));
+			expect(stored).toHaveLength(0);
+		});
+	});
 });
+
+describe("Migration compatibility", () => {
+	const migrationsDirectory = join(import.meta.dirname, "../../../../../migrations");
+	const legacyMigrationNames = [
+		"20251206175734_normal_retro_girl",
+		"20251207122110_narrow_tigra",
+		"20251210214057_damp_deathbird",
+		"20260806203446_blue_kid_colt",
+		"20260809203355_worthless_chimera",
+		"20260826080418_transactions_effect",
+	];
+	const categoryOwnershipMigration = "20260829170957_category_ownership";
+
+	const executeMigration = async (client: PoolClient, name: string) => {
+		const migration = await readFile(join(migrationsDirectory, name, "migration.sql"), "utf8");
+		for (const statement of migration.split("--> statement-breakpoint")) {
+			if (statement.trim()) await client.query(statement);
+		}
+	};
+
+	const withLegacyDatabase = async (run: (client: PoolClient) => Promise<void>) => {
+		const configuredUrl = new URL(new Config().databaseUrl);
+		const databaseName = `exchequer_category_migration_${crypto.randomUUID().replaceAll("-", "")}`;
+		const adminUrl = new URL(configuredUrl);
+		adminUrl.pathname = "/postgres";
+		adminUrl.search = "";
+		const admin = new Pool({ connectionString: adminUrl.toString(), max: 1 });
+		const databaseUrl = new URL(configuredUrl);
+		databaseUrl.pathname = `/${databaseName}`;
+		const pool = new Pool({ connectionString: databaseUrl.toString(), max: 1 });
+
+		try {
+			await admin.query(`CREATE DATABASE "${databaseName}"`);
+			const client = await pool.connect();
+			try {
+				for (const migration of legacyMigrationNames) await executeMigration(client, migration);
+				await run(client);
+			} finally {
+				client.release();
+			}
+		} finally {
+			await pool.end();
+			await admin.query(`DROP DATABASE IF EXISTS "${databaseName}"`);
+			await admin.end();
+		}
+	};
+
+	const applyCategoryOwnershipMigration = async (client: PoolClient) => {
+		await client.query("BEGIN");
+		try {
+			await executeMigration(client, categoryOwnershipMigration);
+			await client.query("COMMIT");
+		} catch (error) {
+			await client.query("ROLLBACK");
+			throw error;
+		}
+	};
+
+	describe("Ledger Account Category ownership migration", () => {
+		it("backfills valid ownership and preserves relationships", async () => {
+			await withLegacyDatabase(async client => {
+				await seedOwnershipGraph(client);
+				await client.query(`
+				INSERT INTO ledger_account_category_accounts (category_id, account_id)
+				VALUES ('category-1', 'account-1');
+				INSERT INTO ledger_account_category_parents (category_id, parent_category_id)
+				VALUES ('category-2', 'category-1');
+			`);
+
+				await applyCategoryOwnershipMigration(client);
+
+				expect(
+					(
+						await client.query(`
+						SELECT id, organization_id, ledger_id
+						FROM ledger_account_categories WHERE id IN ('category-1', 'category-2') ORDER BY id
+					`)
+					).rows
+				).toEqual([
+					{ id: "category-1", organization_id: "org-1", ledger_id: "ledger-1" },
+					{ id: "category-2", organization_id: "org-1", ledger_id: "ledger-1" },
+				]);
+				expect(
+					(
+						await client.query(`
+						SELECT organization_id, ledger_id, category_id, account_id
+						FROM ledger_account_category_accounts
+					`)
+					).rows
+				).toEqual([
+					{
+						organization_id: "org-1",
+						ledger_id: "ledger-1",
+						category_id: "category-1",
+						account_id: "account-1",
+					},
+				]);
+				expect(
+					(
+						await client.query(`
+						SELECT organization_id, ledger_id, category_id, parent_category_id
+						FROM ledger_account_category_parents
+					`)
+					).rows
+				).toEqual([
+					{
+						organization_id: "org-1",
+						ledger_id: "ledger-1",
+						category_id: "category-2",
+						parent_category_id: "category-1",
+					},
+				]);
+			});
+		}, 30_000);
+
+		it.each([
+			{ scope: "Ledger", accountId: "account-2" },
+			{ scope: "Organization", accountId: "account-3" },
+		])(
+			"aborts for a cross-$scope Account relationship without changing the schema or data",
+			async ({ accountId }) => {
+				await withLegacyDatabase(async client => {
+					await seedOwnershipGraph(client);
+					await client.query(
+						`INSERT INTO ledger_account_category_accounts (category_id, account_id)
+				VALUES ('category-1', $1)`,
+						[accountId]
+					);
+
+					await expect(applyCategoryOwnershipMigration(client)).rejects.toThrow(
+						"category ownership migration found Account relationships outside the Category Organization or Ledger"
+					);
+					expect(
+						(
+							await client.query(`
+						SELECT count(*)::int AS count FROM information_schema.columns
+						WHERE table_name = 'ledger_account_categories' AND column_name = 'organization_id'
+					`)
+						).rows[0]
+					).toEqual({ count: 0 });
+					expect(
+						(await client.query("SELECT category_id, account_id FROM ledger_account_category_accounts"))
+							.rows
+					).toEqual([{ category_id: "category-1", account_id: accountId }]);
+				});
+			},
+			30_000
+		);
+
+		it.each([
+			{ scope: "Ledger", parentId: "category-3" },
+			{ scope: "Organization", parentId: "category-4" },
+		])(
+			"aborts for a cross-$scope parent relationship without changing the schema or data",
+			async ({ parentId }) => {
+				await withLegacyDatabase(async client => {
+					await seedOwnershipGraph(client);
+					await client.query(
+						`INSERT INTO ledger_account_category_parents (category_id, parent_category_id)
+				VALUES ('category-1', $1)`,
+						[parentId]
+					);
+
+					await expect(applyCategoryOwnershipMigration(client)).rejects.toThrow(
+						"category ownership migration found parent relationships outside the child Category Organization or Ledger"
+					);
+					expect(
+						(
+							await client.query(`
+						SELECT count(*)::int AS count FROM information_schema.columns
+						WHERE table_name = 'ledger_account_category_parents' AND column_name = 'organization_id'
+					`)
+						).rows[0]
+					).toEqual({ count: 0 });
+					expect(
+						(
+							await client.query(
+								"SELECT category_id, parent_category_id FROM ledger_account_category_parents"
+							)
+						).rows
+					).toEqual([{ category_id: "category-1", parent_category_id: parentId }]);
+				});
+			},
+			30_000
+		);
+
+		it("installs composite ownership constraints", async () => {
+			await withLegacyDatabase(async client => {
+				await seedOwnershipGraph(client);
+				await applyCategoryOwnershipMigration(client);
+
+				await expect(
+					client.query(`
+					INSERT INTO ledger_account_categories (
+						id, organization_id, ledger_id, name, normal_balance
+					) VALUES ('category-invalid', 'org-2', 'ledger-1', 'Invalid', 'debit')
+				`)
+				).rejects.toMatchObject({
+					code: "23503",
+					constraint: "ledger_account_categories_organization_ledger_fk",
+				});
+
+				await expect(
+					client.query(`
+					INSERT INTO ledger_account_category_accounts (
+						organization_id, ledger_id, category_id, account_id
+					) VALUES ('org-1', 'ledger-1', 'category-1', 'account-2')
+				`)
+				).rejects.toMatchObject({
+					code: "23503",
+					constraint: "ledger_account_category_accounts_account_ownership_fk",
+				});
+
+				await expect(
+					client.query(`
+					INSERT INTO ledger_account_category_accounts (
+						organization_id, ledger_id, category_id, account_id
+					) VALUES ('org-1', 'ledger-1', 'category-3', 'account-1')
+				`)
+				).rejects.toMatchObject({
+					code: "23503",
+					constraint: "ledger_account_category_accounts_category_ownership_fk",
+				});
+
+				await expect(
+					client.query(`
+					INSERT INTO ledger_account_category_parents (
+						organization_id, ledger_id, category_id, parent_category_id
+					) VALUES ('org-1', 'ledger-1', 'category-1', 'category-3')
+				`)
+				).rejects.toMatchObject({
+					code: "23503",
+					constraint: "ledger_account_category_parents_parent_ownership_fk",
+				});
+
+				await expect(
+					client.query(`
+					INSERT INTO ledger_account_category_parents (
+						organization_id, ledger_id, category_id, parent_category_id
+					) VALUES ('org-1', 'ledger-1', 'category-3', 'category-1')
+				`)
+				).rejects.toMatchObject({
+					code: "23503",
+					constraint: "ledger_account_category_parents_child_ownership_fk",
+				});
+			});
+		}, 30_000);
+
+		it("preserves Category and Account relationship cascades", async () => {
+			await withLegacyDatabase(async client => {
+				await seedOwnershipGraph(client);
+				await applyCategoryOwnershipMigration(client);
+				await client.query(`
+				INSERT INTO ledger_account_category_accounts (
+					organization_id, ledger_id, category_id, account_id
+				) VALUES
+					('org-1', 'ledger-1', 'category-1', 'account-1'),
+					('org-1', 'ledger-1', 'category-2', 'account-1');
+				INSERT INTO ledger_account_category_parents (
+					organization_id, ledger_id, category_id, parent_category_id
+				) VALUES ('org-1', 'ledger-1', 'category-2', 'category-1');
+			`);
+
+				await client.query("DELETE FROM ledger_account_categories WHERE id = 'category-1'");
+
+				expect(
+					(
+						await client.query(`
+						SELECT category_id, account_id FROM ledger_account_category_accounts
+					`)
+					).rows
+				).toEqual([{ category_id: "category-2", account_id: "account-1" }]);
+				expect(
+					(await client.query("SELECT count(*)::int AS count FROM ledger_account_category_parents"))
+						.rows[0]
+				).toEqual({ count: 0 });
+
+				await client.query("DELETE FROM ledger_accounts WHERE id = 'account-1'");
+
+				expect(
+					(await client.query("SELECT count(*)::int AS count FROM ledger_account_category_accounts"))
+						.rows[0]
+				).toEqual({ count: 0 });
+			});
+		}, 30_000);
+	});
+});
+
+const seedOwnershipGraph = async (client: PoolClient) => {
+	await client.query(`
+	INSERT INTO organizations_table (id, name) VALUES ('org-1', 'One'), ('org-2', 'Two');
+	INSERT INTO ledgers (id, organization_id, name)
+	VALUES ('ledger-1', 'org-1', 'One'), ('ledger-2', 'org-1', 'Two'), ('ledger-3', 'org-2', 'Three');
+	INSERT INTO ledger_accounts (
+		id, organization_id, ledger_id, name, normal_balance, currency_code
+	) VALUES
+		('account-1', 'org-1', 'ledger-1', 'Cash', 'debit', 'USD'),
+		('account-2', 'org-1', 'ledger-2', 'Cash', 'debit', 'USD'),
+		('account-3', 'org-2', 'ledger-3', 'Cash', 'debit', 'USD');
+	INSERT INTO ledger_account_categories (id, ledger_id, name, normal_balance)
+	VALUES
+		('category-1', 'ledger-1', 'Assets', 'debit'),
+		('category-2', 'ledger-1', 'Current assets', 'debit'),
+		('category-3', 'ledger-2', 'Other ledger', 'debit'),
+		('category-4', 'ledger-3', 'Other organization', 'debit');
+`);
+};

@@ -51,7 +51,7 @@ _Avoid_: Account Holder, bank account, wallet
 The Debit or Credit orientation of an Account or Category. A debit-normal balance is Debits minus Credits; a credit-normal balance is Credits minus Debits.
 
 **Ledger Account Category**:
-A reusable rollup of Accounts and other Categories that reports a balance vector by Asset. Categories form an acyclic graph, may have multiple parents, and count each descendant Account once within a queried Category even when multiple paths reach it.
+A reusable rollup of Accounts and other Categories that reports a balance vector by Asset. Categories form an acyclic graph, may have multiple parents, and count each descendant Account once within a queried Category even when multiple paths reach it. A current Category Balance includes the full current balances of its current descendant Accounts, including balances that predate membership.
 _Avoid_: Parent account, nested ledger
 
 **Position**:
@@ -116,7 +116,7 @@ The projected balance calculated from Posted and Pending Transactions.
 _Avoid_: Pending-only balance
 
 **Available Balance**:
-The conservative spendable projection that includes Posted increases and both Posted and Pending decreases, while excluding Pending increases.
+The conservative spendable projection that includes Posted increases and both Posted and Pending decreases, while excluding Pending increases. For a Category, increases and decreases follow the Category's Normal Balance, regardless of its descendant Accounts' orientations.
 _Avoid_: Posted balance, cash balance
 
 **Negative Balance**:

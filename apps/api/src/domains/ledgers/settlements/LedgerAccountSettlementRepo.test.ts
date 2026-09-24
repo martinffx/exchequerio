@@ -1,3 +1,5 @@
+import { LedgerTransactionEntriesTable } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { TypeID, typeid } from "typeid-js";
 import { Asset } from "@/domains/assets/Asset";
 import { AssetRepoTag, assetRepoLayer, type AssetRepo } from "@/domains/assets/AssetRepo";
@@ -8,7 +10,7 @@ import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
-import { makeDatabaseLive } from "@/db";
+import { DatabaseTag, makeDatabaseLive } from "@/db";
 import { Organization } from "@/domains/organizations/Organization";
 import {
 	organizationRepoLayer,
@@ -54,7 +56,7 @@ const layers = Layer.mergeAll(
 );
 
 /** Repository services supplied by the test runtime. */
-type Services = Layer.Success<typeof layers>;
+type Services = Layer.Success<typeof layers> | import("@/db").Database;
 let runtime: ManagedRuntime.ManagedRuntime<Services, never>;
 let organizations: OrganizationRepo;
 let assets: AssetRepo;
@@ -205,7 +207,9 @@ const draft = (owner: Owner, allowEitherDirection = false) =>
 	});
 
 beforeAll(async () => {
-	runtime = ManagedRuntime.make(layers.pipe(Layer.provide(makeDatabaseLive(config.databaseUrl))));
+	runtime = ManagedRuntime.make(
+		layers.pipe(Layer.provideMerge(makeDatabaseLive(config.databaseUrl)))
+	);
 	organizations = await runtime.runPromise(OrganizationRepoTag);
 	assets = await runtime.runPromise(AssetRepoTag);
 	ledgers = await runtime.runPromise(LedgerRepoTag);
@@ -1298,4 +1302,54 @@ describe("Settlement Asset accounting", () => {
 			)[0]
 		).toMatchObject({ amount: "9007199254740993", ...owner.asset, assetCode: "USD.NEW" });
 	});
+});
+
+describe("Settlement netting limits", () => {
+	it.each(["cancellation", "positive overflow", "negative overflow"] as const)(
+		"handles %s when building accounting from stored sources",
+		async scenario => {
+			const owner = await runtime.runPromise(context());
+			const entity = await runtime.runPromise(draft(owner, true));
+			const negative = scenario === "negative overflow";
+			const directions =
+				scenario === "cancellation"
+					? (["debit", "debit", "credit"] as const)
+					: ([negative ? "credit" : "debit", negative ? "credit" : "debit"] as const);
+			const members = [];
+			const { db } = await runtime.runPromise(DatabaseTag);
+			for (const [index, direction] of directions.entries()) {
+				const member = await runtime.runPromise(source(owner, 1n, direction));
+				members.push(member.entry.id.toString());
+				await db
+					.update(LedgerTransactionEntriesTable)
+					.set({ amount: scenario === "cancellation" || index === 0 ? 9223372036854775807n : 1n })
+					.where(eq(LedgerTransactionEntriesTable.transactionId, member.transaction.id.toUUID()));
+			}
+			await runtime.runPromise(
+				repo.changeEntries(owner.organizationId, owner.ledgerId, entity.id, members, true)
+			);
+			const effect = repo
+				.prepareSettlement(
+					owner.organizationId,
+					owner.ledgerId,
+					entity.id,
+					{ status: "pending" },
+					now()
+				)
+				.pipe(
+					Effect.andThen(repo.buildTransaction(owner.organizationId, owner.ledgerId, entity.id, now()))
+				);
+			if (scenario === "cancellation")
+				expect(Option.getOrThrow((await runtime.runPromise(effect)).entries)[0].amount).toBe(
+					9223372036854775807n
+				);
+			else {
+				await expect(runtime.runPromise(effect)).rejects.toMatchObject({ statusCode: 409 });
+				expect(
+					(await runtime.runPromise(repo.getSettlement(owner.organizationId, owner.ledgerId, entity.id)))
+						.status
+				).toBe("drafting");
+			}
+		}
+	);
 });

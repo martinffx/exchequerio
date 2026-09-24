@@ -1,5 +1,6 @@
 import { isPostgresUnavailable } from "@/db";
 import {
+	type HttpErrorOptions,
 	ConflictError,
 	InternalServerError,
 	NotFoundError,
@@ -13,7 +14,7 @@ class CategoryNotFound extends NotFoundError {
 }
 
 class CategoryConflict extends ConflictError {
-	constructor(message: string, options?: ErrorOptions) {
+	constructor(message: string, options?: HttpErrorOptions) {
 		super(message, options);
 	}
 }

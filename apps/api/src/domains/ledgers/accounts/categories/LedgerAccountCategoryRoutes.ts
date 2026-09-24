@@ -27,6 +27,7 @@ import {
 	LedgerAccountCategoryIdParams as LedgerAccountCategoryIdParameters,
 	LedgerAccountCategoryRequest,
 	LedgerAccountCategoryResponse,
+	LedgerAccountCategoryBalancesResponse,
 	LinkAccountToCategoryParams as LinkAccountToCategoryParameters,
 	LinkCategoryToCategoryParams as LinkCategoryToCategoryParameters,
 	type LinkLedgerAccountCategoryToCategoryRequest,
@@ -52,6 +53,51 @@ const validateMetadata: preValidationAsyncHookHandler = async request => {
 
 const TAGS = ["Ledger Account Categories"];
 const LedgerAccountCategoryRoutes: FastifyPluginAsync = async server => {
+	server.get<{ Params: LedgerIdParameters & LedgerAccountCategoryIdParameters }>(
+		"/:categoryId/balances",
+		{
+			schema: {
+				operationId: "getLedgerAccountCategoryBalances",
+				tags: TAGS,
+				summary: "Get Ledger Account Category balances",
+				description:
+					"Current balances by Asset for all distinct descendant Accounts, using one snapshot and the Category's normal balance. Membership changes after the snapshot appear on the next read.",
+				params: Type.Composite([LedgerIdParameters, LedgerAccountCategoryIdParameters]),
+				response: {
+					200: LedgerAccountCategoryBalancesResponse,
+					400: BadRequestErrorResponse,
+					401: UnauthorizedErrorResponse,
+					403: ForbiddenErrorResponse,
+					404: NotFoundErrorResponse,
+					409: ConflictErrorResponse,
+					429: TooManyRequestsErrorResponse,
+					500: InternalServerErrorResponse,
+					503: ServiceUnavailableErrorResponse,
+				},
+			},
+			preHandler: server.hasPermissions(["ledger:account:category:read"]),
+		},
+		async rq => {
+			const effect = Effect.all([
+				parseId<"lgr", LedgerID>("lgr", rq.params.ledgerId),
+				parseId<"lac", LedgerAccountCategoryID>("lac", rq.params.categoryId),
+			]).pipe(
+				Effect.flatMap(([ledgerId, categoryId]) =>
+					LedgerAccountCategoryServiceTag.use(service =>
+						service.getLedgerAccountCategoryBalances(rq.token.orgId, ledgerId, categoryId)
+					)
+				)
+			);
+			const result = await rq.server.runtime.runPromise(Effect.result(effect));
+			return Result.match(result, {
+				onSuccess: balances => balances.toResponse(),
+				onFailure: error => {
+					throw error;
+				},
+			});
+		}
+	);
+
 	server.get<{ Params: LedgerIdParameters; Querystring: PaginationQuery }>(
 		"/",
 		{

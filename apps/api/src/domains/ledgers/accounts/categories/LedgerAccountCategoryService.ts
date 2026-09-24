@@ -4,9 +4,10 @@ import {
 	LedgerServiceTag,
 	type LedgerService,
 } from "@/domains/ledgers/LedgerService";
-import { LedgerAccountCategoryEntity } from "./LedgerAccountCategoryEntity";
+import { LedgerAccountCategoryEntity, type CategoryBalances } from "./LedgerAccountCategoryEntity";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
 import {
+	type CategoryBalancesRepositoryError,
 	type CategoryDeleteRepositoryError,
 	type CategoryGetRepositoryError,
 	type CategoryLinkAccountRepositoryError,
@@ -38,6 +39,20 @@ class LedgerAccountCategoryService {
 		private readonly repository: LedgerAccountCategoryRepo,
 		private readonly ledgerService: Pick<LedgerService, "getLedger">
 	) {}
+
+	getLedgerAccountCategoryBalances(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		categoryId: LedgerAccountCategoryID
+	): Effect.Effect<CategoryBalances, LedgerGetError | CategoryBalancesRepositoryError> {
+		return this.ledgerService
+			.getLedger(organizationId, ledgerId)
+			.pipe(
+				Effect.flatMap(() =>
+					this.repository.getLedgerAccountCategoryBalances(organizationId, ledgerId, categoryId)
+				)
+			);
+	}
 
 	listLedgerAccountCategories(
 		organizationId: OrgID,
