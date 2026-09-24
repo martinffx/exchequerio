@@ -13,12 +13,22 @@ when the current task requires it.
 
 ## Project-specific rules
 
-- Test changed behavior and one contract per active boundary.
-- Do not repeat the same scenarios through routes, services, repositories, and
-  full-stack suites.
-- Reuse existing database test Layers and fixtures.
-- Create a reusable harness only after a second current consumer demonstrates the
-  same setup.
+- Test through exactly three boundaries: repositories, services, and routes. Use the owning
+  `*Repo.test.ts`, `*Service.test.ts`, or `*Routes.test.ts` suite.
+- Repository tests own persistence, transactions, queries, concurrency, decoding, database errors,
+  and migration compatibility. Use PostgreSQL and reuse existing database Layers and fixtures.
+- Service tests exercise business rules and orchestration with stubbed repositories and external
+  dependencies. Entities and helpers are exercised through their callers, not standalone suites.
+- Route tests own validation, authentication, permissions, serialization, HTTP errors, and request
+  lifecycle behavior. Stub services; do not add HTTP-to-database journeys.
+- Job handlers delegate to services. Verify delegation with a stubbed service and publication with
+  mocked EffectMQ enqueue operations. Test our behavior, not EffectMQ's claiming, scheduling,
+  acknowledgement, recovery, or retention implementation.
+- Fixtures may construct entities directly; assertions must exercise the owning boundary. Moving
+  helper assertions into a differently named file is not sufficient.
+- Do not repeat scenarios across layers or add standalone entity, helper, Job, migration, or
+  full-stack suites. Remove redundant dependency tests instead of wrapping dependencies to retain them.
+- Create a reusable harness only after a second current consumer demonstrates the same setup.
 - Before testing a wrapper extensively, question whether the wrapper should exist.
 
 Comprehensive testing patterns using Vitest for unit testing, MSW for API mocking, and snapshot testing for complex object validation.
@@ -41,18 +51,18 @@ bun add -d @vitest/coverage-v8
 ### Basic Test Structure
 
 ```typescript
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-describe('UserService', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+describe("UserService", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
 
-  it('creates user with valid data', async () => {
-    const result = await userService.create({ name: 'Alice' })
-    expect(result).toMatchObject({ name: 'Alice' })
-  })
-})
+	it("creates user with valid data", async () => {
+		const result = await userService.create({ name: "Alice" });
+		expect(result).toMatchObject({ name: "Alice" });
+	});
+});
 ```
 
 ## Typed Mock Objects
@@ -60,68 +70,66 @@ describe('UserService', () => {
 Create type-safe mocks for dependency injection using `vi.mocked()`:
 
 ```typescript
-import { vi } from 'vitest'
-import type { UserRepository } from './user-repository'
+import { vi } from "vitest";
+import type { UserRepository } from "./user-repository";
 
 // Mock the entire module
-vi.mock('./user-repository')
+vi.mock("./user-repository");
 
 // Get typed mock instance
 const mockUserRepo = vi.mocked<UserRepository>({
-  findById: vi.fn(),
-  save: vi.fn(),
-  delete: vi.fn(),
-})
+	findById: vi.fn(),
+	save: vi.fn(),
+	delete: vi.fn(),
+});
 
 // Type-safe mock return values
 mockUserRepo.findById.mockResolvedValue({
-  id: '123',
-  name: 'Alice',
-  email: 'alice@example.com',
-})
+	id: "123",
+	name: "Alice",
+	email: "alice@example.com",
+});
 
 // Assertions with full type safety
-expect(mockUserRepo.findById).toHaveBeenCalledWith('123')
+expect(mockUserRepo.findById).toHaveBeenCalledWith("123");
 ```
 
 ### Mock Return Values
 
 ```typescript
 // Single return value
-mockRepo.findById.mockResolvedValue(user)
+mockRepo.findById.mockResolvedValue(user);
 
 // Multiple calls, different returns
-mockRepo.findById
-  .mockResolvedValueOnce(null)
-  .mockResolvedValueOnce(user)
+mockRepo.findById.mockResolvedValueOnce(null).mockResolvedValueOnce(user);
 
 // Conditional logic
-mockRepo.findById.mockImplementation(async (id) => {
-  if (id === '123') return user
-  return null
-})
+mockRepo.findById.mockImplementation(async id => {
+	if (id === "123") return user;
+	return null;
+});
 
 // Throw errors
-mockRepo.save.mockRejectedValue(new Error('Database error'))
+mockRepo.save.mockRejectedValue(new Error("Database error"));
 ```
 
 ### Spy on Real Implementations
 
 ```typescript
-import { vi } from 'vitest'
-import { emailService } from './email-service'
+import { vi } from "vitest";
+import { emailService } from "./email-service";
 
 // Spy on method without replacing it
-vi.spyOn(emailService, 'send')
+vi.spyOn(emailService, "send");
 
 // Call real implementation
-await emailService.send({ to: 'alice@example.com', subject: 'Test' })
+await emailService.send({ to: "alice@example.com", subject: "Test" });
 
 // Assert it was called
-expect(emailService.send).toHaveBeenCalledOnce()
+expect(emailService.send).toHaveBeenCalledOnce();
 
 // Temporarily override return value
-emailService.send.mockResolvedValueOnce({ messageId: 'test-123' })
+emailService.send.mockResolvedValueOnce({ messageId: "test-123" });
 ```
 
 See [references/mocking.md](./references/mocking.md) for comprehensive mocking patterns including module mocks, class mocks, stateful handlers, and dependency injection.
@@ -131,32 +139,32 @@ See [references/mocking.md](./references/mocking.md) for comprehensive mocking p
 Mock HTTP requests at the network level for integration tests:
 
 ```typescript
-import { http, HttpResponse } from 'msw'
-import { setupServer } from 'msw/node'
-import { afterAll, afterEach, beforeAll } from 'vitest'
+import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
+import { afterAll, afterEach, beforeAll } from "vitest";
 
 // Define handlers
 const handlers = [
-  http.get('/api/users/:id', ({ params }) => {
-    return HttpResponse.json({
-      id: params.id,
-      name: 'Alice',
-      email: 'alice@example.com',
-    })
-  }),
+	http.get("/api/users/:id", ({ params }) => {
+		return HttpResponse.json({
+			id: params.id,
+			name: "Alice",
+			email: "alice@example.com",
+		});
+	}),
 
-  http.post('/api/users', async ({ request }) => {
-    const body = await request.json()
-    return HttpResponse.json({ id: '123', ...body }, { status: 201 })
-  }),
-]
+	http.post("/api/users", async ({ request }) => {
+		const body = await request.json();
+		return HttpResponse.json({ id: "123", ...body }, { status: 201 });
+	}),
+];
 
 // Setup server
-const server = setupServer(...handlers)
+const server = setupServer(...handlers);
 
-beforeAll(() => server.listen())
-afterEach(() => server.resetHandlers())
-afterAll(() => server.close())
+beforeAll(() => server.listen());
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 ```
 
 See [references/msw.md](./references/msw.md) for advanced MSW patterns including error simulation, delays, and per-test overrides.
@@ -166,35 +174,35 @@ See [references/msw.md](./references/msw.md) for advanced MSW patterns including
 Validate complex objects and output without manual assertions:
 
 ```typescript
-import { it, expect } from 'vitest'
+import { it, expect } from "vitest";
 
-it('generates correct user profile', () => {
-  const profile = generateUserProfile(user)
+it("generates correct user profile", () => {
+	const profile = generateUserProfile(user);
 
-  // Snapshot entire object
-  expect(profile).toMatchSnapshot()
-})
+	// Snapshot entire object
+	expect(profile).toMatchSnapshot();
+});
 
 // Handle dynamic values (dates, IDs)
-it('creates order with timestamp', () => {
-  const order = createOrder(items)
+it("creates order with timestamp", () => {
+	const order = createOrder(items);
 
-  expect(order).toMatchSnapshot({
-    id: expect.any(String),
-    createdAt: expect.any(Date),
-  })
-})
+	expect(order).toMatchSnapshot({
+		id: expect.any(String),
+		createdAt: expect.any(Date),
+	});
+});
 
 // Inline snapshots for small objects
-it('formats error message', () => {
-  const error = formatError(new Error('Failed'))
-  expect(error).toMatchInlineSnapshot(`
+it("formats error message", () => {
+	const error = formatError(new Error("Failed"));
+	expect(error).toMatchInlineSnapshot(`
     {
       "message": "Failed",
       "code": "UNKNOWN_ERROR",
     }
-  `)
-})
+  `);
+});
 ```
 
 See [references/snapshot-testing.md](./references/snapshot-testing.md) for snapshot maintenance, custom serializers, and best practices.
@@ -203,60 +211,60 @@ See [references/snapshot-testing.md](./references/snapshot-testing.md) for snaps
 
 ```typescript
 // Promises
-it('loads user data', async () => {
-  const user = await userService.findById('123')
-  expect(user).toBeDefined()
-})
+it("loads user data", async () => {
+	const user = await userService.findById("123");
+	expect(user).toBeDefined();
+});
 
 // Callbacks
-it('calls callback on completion', () => {
-  return new Promise<void>((resolve) => {
-    processData(data, (result) => {
-      expect(result).toBe(expected)
-      resolve()
-    })
-  })
-})
+it("calls callback on completion", () => {
+	return new Promise<void>(resolve => {
+		processData(data, result => {
+			expect(result).toBe(expected);
+			resolve();
+		});
+	});
+});
 
 // Timers
-it('retries after delay', async () => {
-  vi.useFakeTimers()
+it("retries after delay", async () => {
+	vi.useFakeTimers();
 
-  const promise = retryOperation()
-  vi.advanceTimersByTime(1000)
+	const promise = retryOperation();
+	vi.advanceTimersByTime(1000);
 
-  const result = await promise
-  expect(result).toBe('success')
+	const result = await promise;
+	expect(result).toBe("success");
 
-  vi.useRealTimers()
-})
+	vi.useRealTimers();
+});
 ```
 
 ## Test Organization
 
 ```typescript
 // Group related tests
-describe('UserService', () => {
-  describe('create', () => {
-    it('succeeds with valid data', () => {})
-    it('throws on duplicate email', () => {})
-  })
+describe("UserService", () => {
+	describe("create", () => {
+		it("succeeds with valid data", () => {});
+		it("throws on duplicate email", () => {});
+	});
 
-  describe('update', () => {
-    it('updates existing user', () => {})
-    it('throws on not found', () => {})
-  })
-})
+	describe("update", () => {
+		it("updates existing user", () => {});
+		it("throws on not found", () => {});
+	});
+});
 
 // Shared setup
-describe('authenticated requests', () => {
-  beforeEach(() => {
-    mockAuth.isAuthenticated.mockReturnValue(true)
-  })
+describe("authenticated requests", () => {
+	beforeEach(() => {
+		mockAuth.isAuthenticated.mockReturnValue(true);
+	});
 
-  it('allows user creation', () => {})
-  it('allows user deletion', () => {})
-})
+	it("allows user creation", () => {});
+	it("allows user deletion", () => {});
+});
 ```
 
 ## Guidelines
@@ -289,64 +297,62 @@ describe('authenticated requests', () => {
 
 ```typescript
 class UserService {
-  constructor(
-    private repo: UserRepository,
-    private email: EmailService,
-  ) {}
+	constructor(
+		private repo: UserRepository,
+		private email: EmailService
+	) {}
 
-  async create(data: CreateUserInput) {
-    const user = await this.repo.save(data)
-    await this.email.sendWelcome(user.email)
-    return user
-  }
+	async create(data: CreateUserInput) {
+		const user = await this.repo.save(data);
+		await this.email.sendWelcome(user.email);
+		return user;
+	}
 }
 
 // Test with mocks
-it('sends welcome email on create', async () => {
-  const mockRepo = vi.mocked<UserRepository>({
-    save: vi.fn().mockResolvedValue(savedUser),
-  })
-  const mockEmail = vi.mocked<EmailService>({
-    sendWelcome: vi.fn().mockResolvedValue(undefined),
-  })
+it("sends welcome email on create", async () => {
+	const mockRepo = vi.mocked<UserRepository>({
+		save: vi.fn().mockResolvedValue(savedUser),
+	});
+	const mockEmail = vi.mocked<EmailService>({
+		sendWelcome: vi.fn().mockResolvedValue(undefined),
+	});
 
-  const service = new UserService(mockRepo, mockEmail)
-  await service.create(userData)
+	const service = new UserService(mockRepo, mockEmail);
+	await service.create(userData);
 
-  expect(mockEmail.sendWelcome).toHaveBeenCalledWith('alice@example.com')
-})
+	expect(mockEmail.sendWelcome).toHaveBeenCalledWith("alice@example.com");
+});
 ```
 
 ### Testing Error Boundaries
 
 ```typescript
-it('handles repository errors gracefully', async () => {
-  mockRepo.save.mockRejectedValue(new Error('Database error'))
+it("handles repository errors gracefully", async () => {
+	mockRepo.save.mockRejectedValue(new Error("Database error"));
 
-  await expect(
-    service.create(userData)
-  ).rejects.toThrow('Failed to create user')
+	await expect(service.create(userData)).rejects.toThrow("Failed to create user");
 
-  // Verify cleanup or rollback occurred
-  expect(mockEmail.sendWelcome).not.toHaveBeenCalled()
-})
+	// Verify cleanup or rollback occurred
+	expect(mockEmail.sendWelcome).not.toHaveBeenCalled();
+});
 ```
 
 ### Testing Race Conditions
 
 ```typescript
-it('handles concurrent requests correctly', async () => {
-  const promises = [
-    service.processOrder(order1),
-    service.processOrder(order2),
-    service.processOrder(order3),
-  ]
+it("handles concurrent requests correctly", async () => {
+	const promises = [
+		service.processOrder(order1),
+		service.processOrder(order2),
+		service.processOrder(order3),
+	];
 
-  const results = await Promise.all(promises)
+	const results = await Promise.all(promises);
 
-  expect(results).toHaveLength(3)
-  expect(new Set(results.map(r => r.id)).size).toBe(3)
-})
+	expect(results).toHaveLength(3);
+	expect(new Set(results.map(r => r.id)).size).toBe(3);
+});
 ```
 
 ## Debugging Tests

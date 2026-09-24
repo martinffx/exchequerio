@@ -5,6 +5,8 @@ changes from false to true during a committed balance change. It stays quiet whi
 remains true and can emit again after becoming false. Monitoring never rejects a Transaction based
 on its Amount or resulting Balance.
 
+Balance Monitors support individual Accounts only. Category balance alerts are not supported.
+
 ## API contract
 
 Use the existing Account-scoped `balance-monitors` collection and item endpoints. Ledger and Account scope comes

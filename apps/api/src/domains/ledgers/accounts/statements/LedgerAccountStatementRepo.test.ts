@@ -98,6 +98,22 @@ describe("LedgerAccountStatementRepoLive", () => {
 			updated: new Date("2025-01-03T00:00:00.000Z"),
 		});
 
+	// oxlint-disable-next-line unicorn/no-null -- PostgreSQL stores nullable metadata as null.
+	it.each([null, "not-json", JSON.stringify({ count: 1 })])(
+		"ignores malformed stored metadata %s",
+		async metadata => {
+			const input = statement();
+			await runtime.runPromise(repository.createStatement(input, organizationId));
+			await db
+				.update(LedgerAccountStatementsTable)
+				.set({ metadata })
+				.where(eq(LedgerAccountStatementsTable.id, input.id.toUUID()));
+			expect(
+				(await runtime.runPromise(repository.getStatement(input.id, organizationId))).metadata
+			).toBeUndefined();
+		}
+	);
+
 	it("creates and gets a Statement by Statement ID alone", async () => {
 		const input = statement();
 		const created = await runtime.runPromise(repository.createStatement(input, organizationId));

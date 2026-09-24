@@ -9,7 +9,7 @@ import { registerAuth, signJWT } from "@/auth";
 import { Config } from "@/config";
 import { globalErrorHandler, InternalServerError } from "@/lib/errors";
 import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/lib/ids";
-import { ServerRuntime } from "@/runtime";
+import { ServerRuntime, ServerConfigTag, type ServerRuntimeLayer } from "@/runtime";
 import { buildServer } from "@/server";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
@@ -263,7 +263,15 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 	] as const)(
 		"protects the production $method route with $status",
 		async ({ method, headers, status }) => {
-			const server = await buildServer();
+			const server = await buildServer({
+				runtimeLayer: Layer.merge(
+					Layer.succeed(ServerConfigTag, new Config()),
+					Layer.succeed(
+						LedgerAccountBalanceMonitorServiceTag,
+						service() as unknown as LedgerAccountBalanceMonitorService
+					)
+				) as ServerRuntimeLayer,
+			});
 			servers.push(server);
 			const response = await server.inject({
 				method,

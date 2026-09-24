@@ -14,7 +14,10 @@ import {
 import type { OrganizationRepo } from "./OrganizationRepo";
 import { OrganizationRepoTag } from "./OrganizationRepo";
 import type { OrganizationIdGenerator } from "./OrganizationIdGenerator";
-import { OrganizationIdGeneratorTag } from "./OrganizationIdGenerator";
+import {
+	OrganizationIdGeneratorTag,
+	organizationIdGeneratorLayer,
+} from "./OrganizationIdGenerator";
 import {
 	OrganizationService,
 	OrganizationServiceTag,
@@ -192,4 +195,16 @@ describe("OrganizationService", () => {
 		expectTypeOf<OrganizationUpdateError>().toMatchTypeOf<HttpError>();
 		expectTypeOf<OrganizationDeleteError>().toMatchTypeOf<HttpError>();
 	});
+});
+
+it("creates Organizations with canonical IDs from the production generator", async () => {
+	const generator = await Effect.runPromise(
+		OrganizationIdGeneratorTag.pipe(Effect.provide(organizationIdGeneratorLayer))
+	);
+	const created = await Effect.runPromise(
+		new OrganizationService(repo, generator).createOrganization({ name: "Generated" })
+	);
+	expect(created.id.toString()).toMatch(/^org_/);
+	expect(TypeID.fromString(created.id.toString()).toUUID()).toBe(created.id.toUUID());
+	expect(repo.createOrganization).toHaveBeenCalledWith(created);
 });

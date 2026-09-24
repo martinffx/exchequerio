@@ -1,10 +1,12 @@
 import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures";
 import {
 	LedgerAccountBalanceMonitorJob,
-	LedgerAccountBalanceMonitorPublisher,
-	ledgerAccountBalanceMonitorPublisherLayer,
 	type LedgerAccountBalanceMonitorJobPayload,
 } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
+import {
+	LedgerAccountBalanceMonitorPublisher,
+	ledgerAccountBalanceMonitorPublisherLayer,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService";
 import { MemoryJobStore } from "effect-mq";
 import { randomUUID } from "node:crypto";
 import { Effect, Option } from "effect";

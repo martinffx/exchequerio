@@ -83,6 +83,28 @@ Enable `Settings.throwOnInvalid` in API startup, tests, and benchmarks, with the
 decoding boundaries using `Effect.try` and the existing error types; serialize with `.toISO()`
 without repeated validity checks, null guards, or empty-string fallbacks.
 
+## Testing boundaries
+
+Test application behavior at exactly three boundaries:
+
+- **Repositories:** persistence, queries, transactions, concurrency, row decoding, and database
+  errors. Use PostgreSQL for database coverage. Migration compatibility checks belong in the
+  owning repository suite and may use isolated legacy databases.
+- **Services:** business rules and orchestration, with repositories and external dependencies
+  stubbed. Exercise entities and shared helpers through the service operations that use them.
+- **Routes:** validation, authentication, permissions, serialization, HTTP errors, and request
+  lifecycle behavior, with services stubbed.
+
+Use `*Repo.test.ts`, `*Service.test.ts`, and `*Routes.test.ts` suites. Fixtures may construct domain
+objects directly; assertions must exercise the owning boundary. Do not create standalone entity,
+helper, Job, migration, or full-stack journey suites, or duplicate the same contract across layers.
+A filename change alone does not establish a testing boundary.
+
+Jobs are thin adapters that call services. Test handler delegation with a stubbed service and test
+publication with mocked EffectMQ enqueue operations. Test our retry policy, captured payloads,
+failure handling, webhook security, and shutdown draining through services. Do not retest EffectMQ's
+queue machinery or introduce repository wrappers solely to test it.
+
 ## Validation
 
 Start PostgreSQL before targeted integration tests when it is not already running.

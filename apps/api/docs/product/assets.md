@@ -75,11 +75,14 @@ Transactions return `400`; unavailable scoped Assets return `404`.
 
 ## Availability and cutover
 
-Category metadata responses omit `balances`; current Category balances are available from
-`GET /api/ledgers/:ledgerId/accounts/categories/:categoryId/balances`, grouped by Asset. Monitor
-`balances` and Statement `startingBalances`/`endingBalances` remain omitted until their calculations
-are implemented. These responses do not report fabricated zero balances.
-Statement Asset details come from the associated Account within the authenticated Organization.
+Category metadata responses omit `balances`. Retrieve current Category balances, grouped by Asset,
+from `GET /api/ledgers/:ledgerId/accounts/categories/:categoryId/balances`.
+
+Balance Monitors support individual Accounts only. Categories provide balances on demand and do
+not support alerts.
+
+Statement responses currently omit `startingBalances` and `endingBalances`. Statement Asset details
+come from the associated Account within the authenticated Organization.
 
 The Asset migration requires empty currency-bearing accounting tables. It locks and checks those
 tables, then fails without changing existing data when records remain. Use a fresh development

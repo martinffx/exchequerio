@@ -2,10 +2,12 @@ import { monitorJob } from "@/domains/ledgers/accounts/balance-monitors/fixtures
 import { MemoryJobStore } from "effect-mq";
 import {
 	LedgerAccountBalanceMonitorJob,
-	LedgerAccountBalanceMonitorPublisher,
-	ledgerAccountBalanceMonitorPublisherLayer,
 	type LedgerAccountBalanceMonitorJobPayload,
 } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
+import {
+	LedgerAccountBalanceMonitorPublisher,
+	ledgerAccountBalanceMonitorPublisherLayer,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService";
 import { Asset } from "@/domains/assets/Asset";
 import { NotFoundError } from "@/lib/errors";
 import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
@@ -497,4 +499,98 @@ it("completes accounting and idempotency while background enqueue is still block
 		finish();
 		await publisherRuntime.dispose();
 	}
+});
+
+describe("Transaction construction through the service", () => {
+	beforeEach(() => {
+		repository.createTransaction.mockImplementation(value =>
+			Effect.succeed({ transaction: value, monitorJobs: [] })
+		);
+	});
+	it.each([undefined, "2027-01-01T00:00:00.000Z"])(
+		"uses creation time or explicit effective time %s",
+		async effectiveAt => {
+			const result = await runtime.runPromise(
+				service.createTransaction(organizationId, ledgerId, idempotencyKey, {
+					...createRequest,
+					effectiveAt,
+				})
+			);
+			expect(result.effectiveAt.toMillis()).toBe(
+				effectiveAt === undefined ? result.created.toMillis() : Date.parse(effectiveAt)
+			);
+		}
+	);
+	it("rejects malformed effective time before creation", async () => {
+		expect(
+			await runtime.runPromise(
+				Effect.flip(
+					service.createTransaction(organizationId, ledgerId, idempotencyKey, {
+						...createRequest,
+						effectiveAt: "not-a-timestamp",
+					})
+				)
+			)
+		).toBeInstanceOf(TransactionValidationFailure);
+		expect(repository.createTransaction).not.toHaveBeenCalled();
+	});
+	it.each(["9007199254740993", "9223372036854775807"])(
+		"preserves exact amounts %s and allows aggregate totals above int64",
+		async amount => {
+			const ledgerEntries = createRequest.ledgerEntries
+				.flatMap(entry => [entry, { ...entry, accountId: newLedgerAccountID().toString() }])
+				.map(entry => ({ ...entry, amount }));
+			const result = await runtime.runPromise(
+				service.createTransaction(organizationId, ledgerId, idempotencyKey, {
+					...createRequest,
+					ledgerEntries,
+				})
+			);
+			expect(Option.getOrThrow(result.entries).map(entry => entry.amount)).toEqual(
+				Array(4).fill(BigInt(amount))
+			);
+		}
+	);
+	it("rejects independently unbalanced Assets even when their codes match", async () => {
+		assets.getAsset.mockImplementation((orgId, selector) =>
+			Effect.succeed(
+				Asset.fromRequest(
+					TypeID.fromString(selector.toString(), "ast"),
+					orgId,
+					{ code: "EUR", name: "Euro", minorUnitExponent: 2 },
+					DateTime.utc()
+				)
+			)
+		);
+		const ledgerEntries = createRequest.ledgerEntries.map(
+			({ assetCode: _assetCode, ...entry }, i) => ({
+				...entry,
+				assetId: `ast_0000000000000000000000000${i + 1}`,
+			})
+		);
+		await expect(
+			runtime.runPromise(
+				service.createTransaction(organizationId, ledgerId, idempotencyKey, {
+					...createRequest,
+					ledgerEntries,
+				})
+			)
+		).rejects.toThrow("balance by Asset");
+		expect(repository.createTransaction).not.toHaveBeenCalled();
+	});
+});
+
+it("rejects positive Entry quantities beyond int64 before persistence", async () => {
+	await expect(
+		runtime.runPromise(
+			service.createTransaction(organizationId, ledgerId, idempotencyKey, {
+				...createRequest,
+				ledgerEntries: createRequest.ledgerEntries.map(entry => ({
+					...entry,
+					amount: "9223372036854775808",
+				})),
+			})
+		)
+	).rejects.toThrow();
+	expect(repository.createTransaction).not.toHaveBeenCalled();
 });

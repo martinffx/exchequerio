@@ -598,3 +598,50 @@ it("rejects numeric amounts and ambiguous asset selectors before the service", a
 	}
 	expect(implementation.createTransaction).not.toHaveBeenCalled();
 });
+
+it.each(["01", "-0", "+1", "1.0", "1e3", " 1", "1 ", "", "-9223372036854775809", "0", "-1", 100])(
+	"rejects invalid Entry amount %s before the service",
+	async amount => {
+		const implementation = service();
+		const { server } = await buildRouteServer(implementation);
+		const response = await server.inject({
+			method: "POST",
+			url: `/api/ledgers/${ledgerId.toString()}/transactions`,
+			headers: { "idempotency-key": "invalid-amount" },
+			payload: {
+				...createBody,
+				ledgerEntries: createBody.ledgerEntries.map(entry => ({ ...entry, amount })),
+			},
+		});
+		expect(response.statusCode).toBe(400);
+		expect(implementation.createTransaction).not.toHaveBeenCalled();
+	}
+);
+it("serializes exact Entry amounts and effective time through HTTP", async () => {
+	const entity = Effect.runSync(
+		LedgerTransaction.fromCreateRequest(transactionId, organizationId, ledgerId, {
+			...createBody,
+			ledgerEntries: createBody.ledgerEntries.map(entry => ({
+				...entry,
+				amount: "9223372036854775807",
+				assetId: "ast_00000000000000000000000001",
+				minorUnitExponent: 2,
+			})),
+		})
+	);
+	const implementation = service();
+	vi.mocked(implementation.getTransaction).mockReturnValue(Effect.succeed(entity));
+	const { server } = await buildRouteServer(implementation);
+	const response = await server.inject({
+		method: "GET",
+		url: `/api/ledgers/${ledgerId.toString()}/transactions/${transactionId.toString()}`,
+	});
+	expect(response.statusCode).toBe(200);
+	expect(response.json()).toMatchObject({
+		effectiveAt: createBody.effectiveAt,
+		ledgerEntries: [
+			expect.objectContaining({ amount: "9223372036854775807" }),
+			expect.objectContaining({ amount: "9223372036854775807" }),
+		],
+	});
+});

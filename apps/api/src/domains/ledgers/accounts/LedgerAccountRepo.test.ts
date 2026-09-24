@@ -1,6 +1,6 @@
 import { TypeID } from "typeid-js";
-import { eq } from "drizzle-orm";
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { eq, sql } from "drizzle-orm";
+import { Cause, Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
@@ -18,12 +18,14 @@ import {
 import { Organization } from "@/domains/organizations/Organization";
 import {
 	AccountNameConflict,
+	AccountRepositoryUnavailable,
 	AccountPersistenceDecodingFailure,
 	AccountPersistenceFailure,
 	AccountVersionConflict,
 } from "./AccountErrors";
 import {
 	type LedgerAccountRepo,
+	LedgerAccountRepoLive,
 	LedgerAccountRepoTag,
 	ledgerAccountRepoLayer,
 } from "./LedgerAccountRepo";
@@ -367,12 +369,25 @@ describe("LedgerAccountRepoLive", () => {
 	});
 
 	it("returns a typed decoding failure for an invalid timestamp", async () => {
-		const row = ledgerAccountCreate(newOrgID(), newLedgerID()).toRow() as LedgerAccountRow;
-		const error = await Effect.runPromise(
-			Effect.flip(LedgerAccount.fromRow({ ...row, created: new Date(Number.NaN) }, fallbackAsset))
+		const { organizationId, ledgerId } = await createOrganizationAndLedger();
+		const record = await runtime.runPromise(
+			repository.createAccount(ledgerAccountCreate(organizationId, ledgerId))
 		);
-
-		expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
+		await database.db
+			.update(LedgerAccountsTable)
+			.set({ created: sql`'infinity'::timestamptz` })
+			.where(eq(LedgerAccountsTable.id, record.id.toUUID()));
+		try {
+			const error = await runtime.runPromise(
+				Effect.flip(repository.getAccount(organizationId, ledgerId, record.id))
+			);
+			expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
+		} finally {
+			await database.db
+				.update(LedgerAccountsTable)
+				.set({ created: new Date() })
+				.where(eq(LedgerAccountsTable.id, record.id.toUUID()));
+		}
 	});
 
 	it("maps duplicate names but not ID collisions to their public Conflict", async () => {
@@ -513,4 +528,23 @@ describe("LedgerAccountRepoLive", () => {
 			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, id.toUUID()));
 		}
 	});
+});
+
+describe("Wrapped database failures", () => {
+	it.each([
+		[{ code: "23505", constraint: "unique_account_name_per_ledger" }, AccountNameConflict],
+		[{ code: "57P01" }, AccountRepositoryUnavailable],
+	] as const)(
+		"maps wrapped PostgreSQL error %# through createAccount",
+		async (failure, ErrorType) => {
+			const cause = { cause: Cause.fail(failure) };
+			const repository = new LedgerAccountRepoLive({
+				insert: () => ({ values: () => ({ returning: () => Effect.fail(cause) }) }),
+			} as never);
+			const error = await Effect.runPromise(
+				Effect.flip(repository.createAccount(ledgerAccountCreate(newOrgID(), newLedgerID())))
+			);
+			expect(error).toBeInstanceOf(ErrorType);
+		}
+	);
 });

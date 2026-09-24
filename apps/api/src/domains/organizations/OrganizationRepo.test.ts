@@ -77,6 +77,27 @@ describe("OrganizationRepoLive", () => {
 		expect(columns.rows.filter(column => column.data_type !== "uuid")).toEqual([]);
 	});
 
+	it.each([
+		"01890f00-0000-7000-8000-000000000001",
+		"00000000-0000-0000-0000-000000000001",
+		"00000000-0000-0000-0000-000000000000",
+		"ffffffff-ffff-ffff-ffff-ffffffffffff",
+	])("preserves every UUID bit for %s", async uuid => {
+		const id = TypeID.fromUUID("org", uuid);
+		organizationIds.add(id);
+		await runtime.runPromise(
+			repository.createOrganization(Organization.fromRequest(id, { name: "UUID boundary" }))
+		);
+		expect(
+			Option.getOrThrow(await runtime.runPromise(repository.getOrganization(id))).id.toString()
+		).toBe(id.toString());
+		const rows = await database.db
+			.select()
+			.from(OrganizationsTable)
+			.where(eq(OrganizationsTable.id, uuid));
+		expect(rows[0]?.id).toBe(uuid);
+	});
+
 	it("orders lists by ID and applies pagination limits in PostgreSQL", async () => {
 		await create("Ordered A");
 		await create("Ordered B");
@@ -170,16 +191,20 @@ describe("OrganizationRepoLive", () => {
 	});
 
 	it("returns a typed decoding failure for an invalid persisted timestamp", async () => {
-		const organization = await create("Invalid timestamp");
-		const [row] = await database.db
-			.select()
-			.from(OrganizationsTable)
-			.where(eq(OrganizationsTable.id, organization.id.toUUID()));
-		if (!row) throw new Error("Missing Organization fixture");
-		const error = await runtime.runPromise(
-			Effect.flip(Organization.fromRow({ ...row, created: new Date(Number.NaN) }))
-		);
-		expect(error).toBeInstanceOf(OrganizationPersistenceDecodingFailure);
+		const record = await create("Invalid timestamp");
+		await database.db
+			.update(OrganizationsTable)
+			.set({ created: sql`'infinity'::timestamptz` })
+			.where(eq(OrganizationsTable.id, record.id.toUUID()));
+		try {
+			const error = await runtime.runPromise(Effect.flip(repository.getOrganization(record.id)));
+			expect(error).toBeInstanceOf(OrganizationPersistenceDecodingFailure);
+		} finally {
+			await database.db
+				.update(OrganizationsTable)
+				.set({ created: new Date() })
+				.where(eq(OrganizationsTable.id, record.id.toUUID()));
+		}
 	});
 
 	it.each(["not-an-organization", "lgr_01h2x3y4z5a6b7c8d9e0f1g2h3"])(

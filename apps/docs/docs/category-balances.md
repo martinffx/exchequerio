@@ -54,6 +54,8 @@ Missing or inaccessible Ledgers and Categories return `404`. If any resulting am
 
 This endpoint provides current balances, without historical queries, filtering, or pagination. Query cost grows with Category membership, so measure the effect of frequent reads for large Categories.
 
+Category balance alerts are not supported.
+
 Category linking prevents new cycles, including when links are added concurrently. A link that would create a cycle returns `409` with `retryable: false`. Concurrent parent-link additions or Ledger changes can cause linking to return `409` with `retryable: true`; retry the request after the competing operation finishes. The server does not retry automatically. Duplicate links remain successful once contention clears.
 
 Existing cycles are preserved. Balance reads terminate safely on them and count every reachable Account once.

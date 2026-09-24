@@ -1,5 +1,5 @@
 import { TypeID } from "typeid-js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -174,13 +174,23 @@ describe("LedgerRepoLive", () => {
 	});
 
 	it("returns a typed decoding failure for an invalid timestamp", async () => {
-		const organizationId = newOrgID();
-		const row = ledgerWrite(organizationId).toCreateRow();
-		const error = await Effect.runPromise(
-			Effect.flip(Ledger.fromRow({ ...row, created: new Date(Number.NaN) }))
-		);
-
-		expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);
+		const organizationId = await createOrganization();
+		const record = await runtime.runPromise(repository.createLedger(ledgerWrite(organizationId)));
+		await database.db
+			.update(LedgersTable)
+			.set({ created: sql`'infinity'::timestamptz` })
+			.where(eq(LedgersTable.id, record.id.toUUID()));
+		try {
+			const error = await runtime.runPromise(
+				Effect.flip(repository.getLedger(organizationId, record.id))
+			);
+			expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);
+		} finally {
+			await database.db
+				.update(LedgersTable)
+				.set({ created: new Date() })
+				.where(eq(LedgersTable.id, record.id.toUUID()));
+		}
 	});
 
 	it("creates duplicate names with application timestamps", async () => {
