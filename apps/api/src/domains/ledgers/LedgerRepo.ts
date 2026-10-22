@@ -256,17 +256,18 @@ class LedgerRepoLive implements LedgerRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID
 	): Effect.Effect<void, LedgerDeleteRepositoryError> {
-		const lockedLedgerWhere = and(
-			eq(LedgersTable.organizationId, encodeUuid(organizationId)),
-			eq(LedgersTable.id, encodeUuid(ledgerId))
-		);
 		return this.db
 			.transaction(tx =>
 				Effect.gen(function* () {
 					const ledger = yield* tx
 						.select({ id: LedgersTable.id })
 						.from(LedgersTable)
-						.where(lockedLedgerWhere)
+						.where(
+							and(
+								eq(LedgersTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgersTable.id, encodeUuid(ledgerId))
+							)
+						)
 						.for("update");
 					if (ledger.length === 0) return;
 					// Left unrun so it stays a SQL subquery.
@@ -314,7 +315,14 @@ class LedgerRepoLive implements LedgerRepo {
 								eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
-					yield* tx.delete(LedgersTable).where(lockedLedgerWhere);
+					yield* tx
+						.delete(LedgersTable)
+						.where(
+							and(
+								eq(LedgersTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgersTable.id, encodeUuid(ledgerId))
+							)
+						);
 				})
 			)
 			.pipe(Effect.mapError(mapLedgerDeleteError));
