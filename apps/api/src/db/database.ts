@@ -1,17 +1,14 @@
 import { PgClient } from "@effect/sql-pg";
 import * as PgDrizzle from "drizzle-orm/effect-postgres";
-import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Context, Effect, Layer } from "effect";
 import { Pool, types } from "pg";
 import { schemaRelations } from "./schema";
 
-type DrizzleDatabase = NodePgDatabase<typeof schemaRelations>;
 type EffectDrizzleDatabase = PgDrizzle.EffectPgDatabase<typeof schemaRelations>;
 
 const drizzleParsedTypeIds = new Set([1184, 1114, 1082, 1186, 1231, 1115, 1185, 1187, 1182]);
 
 abstract class Database {
-	abstract readonly db: DrizzleDatabase;
 	abstract readonly effectDb: EffectDrizzleDatabase;
 }
 
@@ -23,14 +20,11 @@ const defaultPoolFactory: PoolFactory = connectionString =>
 	new Pool({ connectionString, connectionTimeoutMillis: 2_000 });
 
 class DatabaseLive extends Database {
-	readonly db: DrizzleDatabase;
-
 	constructor(
 		private readonly pool: Pool,
 		readonly effectDb: EffectDrizzleDatabase
 	) {
 		super();
-		this.db = drizzle({ client: pool, relations: schemaRelations });
 	}
 
 	close(): Effect.Effect<void> {
@@ -72,5 +66,5 @@ const makeDatabaseLive = (connectionString: string, createPool: PoolFactory = de
 		})
 	);
 
-export type { DrizzleDatabase, EffectDrizzleDatabase, PoolFactory };
+export type { EffectDrizzleDatabase, PoolFactory };
 export { Database, DatabaseLive, DatabaseTag, makeDatabaseLive };
