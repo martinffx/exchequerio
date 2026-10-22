@@ -3,11 +3,10 @@
 	"spec": "docs/specs/2026-10-22-repos-effect-drizzle/design.md",
 	"goal": "Run every repository, test fixture and bench through DatabaseTag.effectDb and delete the Promise node-postgres Drizzle client, with no behaviour change.",
 	"preserved_behavior": [
-		"Organization and Ledger API responses, status codes and error types are unchanged",
-		"Error mapping is unchanged: 23503 maps to OrganizationHasDependents, LedgerHasDependents or OrganizationNotFound; unavailable maps to *RepositoryUnavailable",
-		"Query predicates, ordering and pagination are unchanged",
-		"deleteLedgerFixtures keeps its FOR UPDATE lock, delete order, settlements subquery and no-op when the Ledger is absent",
-		"Date and timestamp decoding is unchanged"
+		"Organization and Ledger API responses, status codes, error bodies and OpenAPI are unchanged",
+		"Repository interfaces, error types and error mapping are unchanged",
+		"SQL predicates, ordering, pagination and locking are unchanged; deleteLedgerFixtures keeps its FOR UPDATE lock, delete order, settlements subquery and no-op when the Ledger is absent",
+		"Row decoding is unchanged"
 	],
 	"phases": [
 		{
@@ -19,11 +18,12 @@
 					"name": "Organization persistence runs through effectDb",
 					"depends_on": [],
 					"inputs": [
-						"design.md Architecture section",
+						"design.md Architecture and US-1 to US-3",
 						"Target query style in apps/api/src/domains/assets/AssetRepo.ts",
-						"Error chain walked by postgresErrorCode in apps/api/src/db/errors.ts (EffectDrizzleQueryError -> SqlError -> pg error)"
+						"Error chain walked by postgresErrorCode in apps/api/src/db/errors.ts",
+						"Effect.flip plus postgresErrorCode assertion pattern at apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.test.ts:2752"
 					],
-					"description": "Stub-test-fix. First add a PostgreSQL repo test for the uncovered contract: deleting an Organization that still has a Ledger fails with OrganizationHasDependents. Then change the OrganizationRepoLive constructor to EffectDrizzleDatabase, replace each Effect.tryPromise({try, catch}) with query.pipe(Effect.mapError(<same mapper>), <same continuation>), and have the layer pass database.effectDb. Interface, tag, mappers and entity decoding are unchanged. Rewrite the 6 database.db fixture uses in OrganizationRepo.test.ts. Allowed assertion changes: the column-introspection query at line 68 uses effectDb.execute<Row>(sql, \"objects\") and asserts on the returned array instead of .rows, because default mode returns the raw QueryResult; the cause.code 22P02 assertion at lines 214-218 becomes postgresErrorCode(await runtime.runPromise(Effect.flip(...))), following LedgerAccountCategoryRepo.test.ts:2752.",
+					"description": "Stub-test-fix. First add one PostgreSQL repo test: deleting an Organization that has a Ledger fails with OrganizationHasDependents. The Organization test runtime has no Ledger repo, so insert a LedgersTable row directly through effectDb and delete it in a finally block; otherwise afterAll's fail-fast deleteOrganization loop stops at the first OrganizationHasDependents and leaks the remaining test Organizations. Then change the OrganizationRepoLive constructor to EffectDrizzleDatabase, replace each Effect.tryPromise({try, catch}) with query.pipe(Effect.mapError(<same mapper>), <same continuation>), and have the layer pass database.effectDb. Interface, tag, mappers and entity decoding are unchanged. Move the database.db fixture uses in OrganizationRepo.test.ts to effectDb. Two assertion changes are allowed: the column-introspection query at line 68 uses effectDb.execute<Row>(sql, \"objects\") and asserts on the returned array instead of .rows, because default mode returns the raw QueryResult; the cause.code 22P02 assertion at lines 214-218 becomes postgresErrorCode(...) on the flipped Effect error.",
 					"files": {
 						"reuse": [
 							"apps/api/src/db/errors.ts",
@@ -40,14 +40,15 @@
 					"new_abstractions": [],
 					"validation": {
 						"tests": [
-							"OrganizationRepo.test.ts: delete of an Organization with a Ledger fails with OrganizationHasDependents (new)",
+							"OrganizationRepo.test.ts: delete of an Organization that has a Ledger fails with OrganizationHasDependents (new)",
 							"OrganizationRepo.test.ts: existing list, get, create, update and delete cases pass with only the two listed assertion changes",
 							"OrganizationService and Organization route tests pass unchanged"
 						],
 						"acceptance": [
 							"OrganizationRepoLive depends on EffectDrizzleDatabase and no longer uses Effect.tryPromise",
 							"organizationRepoLayer passes database.effectDb",
-							"No remaining database.db use in OrganizationRepo.test.ts"
+							"No remaining database.db use in OrganizationRepo.test.ts",
+							"The new test leaves no Ledger or Organization rows behind"
 						]
 					}
 				},
@@ -56,12 +57,13 @@
 					"name": "Ledger persistence and fixture cleanup run through effectDb",
 					"depends_on": [],
 					"inputs": [
-						"design.md Architecture section",
+						"design.md Architecture and US-2",
 						"Effect transaction pattern in apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts:641",
 						"FOR UPDATE inside a transaction in apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRepo.ts:114",
-						"Current async deleteLedgerFixtures at apps/api/src/domains/ledgers/LedgerRepo.ts:255"
+						"Current async deleteLedgerFixtures at apps/api/src/domains/ledgers/LedgerRepo.ts:255",
+						"Existing deleteLedgerFixtures coverage at apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRepo.test.ts:235-330"
 					],
-					"description": "Stub-test-fix. First add PostgreSQL repo tests to LedgerRepo.test.ts: deleteLedgerFixtures removes a Ledger that has accounts and transactions; deleteLedgerFixtures is a no-op when the Ledger is absent; deleteLedger with dependents fails with LedgerHasDependents (only if not already covered). Then apply the T1 translation to the five CRUD methods. Rewrite deleteLedgerFixtures as this.db.transaction(tx => Effect.gen(...)) followed by Effect.mapError(mapLedgerDeleteError), keeping the same statement order, the FOR UPDATE lock and the early return when the Ledger is missing. Do not yield* the settlements select: pass it unrun to inArray so it stays a SQL subquery, otherwise the delete would use a fetched id list instead. The layer passes database.effectDb. Rewrite the 6 database.db fixture uses in LedgerRepo.test.ts.",
+					"description": "Apply the T1 translation to the five CRUD methods. Rewrite deleteLedgerFixtures as this.db.transaction(tx => Effect.gen(...)) with Effect.mapError(mapLedgerDeleteError) outside the transaction, keeping the same statement order, the FOR UPDATE lock and the early return when the Ledger is missing. Do not yield* the settlements select: pass it unrun to inArray so it stays a SQL subquery, otherwise the delete would use a fetched id list. The layer passes database.effectDb. Move the database.db fixture uses in LedgerRepo.test.ts to effectDb. No new deleteLedgerFixtures tests: the existing settlement repo tests already cover a Ledger with settlement entries (the subquery path), the wrong-Organization and absent-Ledger no-ops, and the rollback under lock_timeout.",
 					"files": {
 						"reuse": [
 							"apps/api/src/domains/ledgers/LedgerErrors.ts",
@@ -77,16 +79,14 @@
 					"new_abstractions": [],
 					"validation": {
 						"tests": [
-							"LedgerRepo.test.ts: deleteLedgerFixtures removes a Ledger with accounts and transactions (new)",
-							"LedgerRepo.test.ts: deleteLedgerFixtures on an absent Ledger completes without error (new)",
-							"LedgerRepo.test.ts: existing create, list, get, update and delete cases pass",
-							"Settlement and category repo tests that call deleteLedgerFixtures pass"
+							"LedgerRepo.test.ts: existing create, list, get, update and delete cases pass"
 						],
 						"acceptance": [
 							"LedgerRepoLive depends on EffectDrizzleDatabase and contains no Effect.tryPromise or async transaction",
 							"ledgerRepoLayer passes database.effectDb",
 							"Settlements are matched by subquery in deleteLedgerFixtures",
-							"No remaining database.db use in LedgerRepo.test.ts"
+							"No remaining database.db use in LedgerRepo.test.ts",
+							"Settlement and category repo suites are verified by T5's full-suite run, because T3a and T3b edit those files in parallel"
 						]
 					}
 				}
@@ -97,37 +97,63 @@
 			"name": "Fixtures and benches on effectDb",
 			"tasks": [
 				{
-					"id": "T3",
-					"name": "Repo test fixtures use effectDb",
+					"id": "T3a",
+					"name": "Category and transaction repo test fixtures use effectDb",
 					"depends_on": [],
 					"inputs": [
 						"Client access pattern at apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.test.ts:87",
-						"Effect.flip plus postgresErrorCode pattern at LedgerAccountCategoryRepo.test.ts:2752"
+						"Eager insert builder at apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.ts:305-308",
+						"design.md Coverage gaps and US-2"
 					],
-					"description": "In each listed test file, obtain the client with (await runtime.runPromise(DatabaseTag)).effectDb and run each fixture query through runtime.runPromise(...), including destructured { db } uses and Database[\"db\"] types. Assertions stay unchanged except two listed exceptions in LedgerAccountCategoryRepo.test.ts: the async db.transaction at :2764 (SET LOCAL statement_timeout, insert, update) becomes an Effect transaction with the same statements; and vi.spyOn(db, \"insert\") at :964 is pointed at effectDb, which makes its not.toHaveBeenCalled assertion real instead of vacuous. That second change is intentional.",
+					"description": "Get effectDb with (await runtime.runPromise(DatabaseTag)).effectDb and run each fixture query through runtime.runPromise(...), including (await runtime.runPromise(DatabaseTag)).db uses and Database[\"db\"] types. In LedgerAccountCategoryRepo.test.ts the async db.transaction at :2764 (SET LOCAL statement_timeout, insert, update) becomes an Effect transaction with the same statements. The four spies at :964, :1535, :1559 and :1626 watch the Promise client the repo never calls, so their not.toHaveBeenCalled assertions can never fail. Do not retarget them: at :964 the insert builder is created eagerly so a retargeted spy would fail, and the other three insert through tx so a retargeted spy would stay vacuous. Replace each spy with an assertion on database state, for example that no row exists in ledger_account_category_accounts, and keep each test's other assertions unchanged.",
 					"files": {
 						"reuse": [],
 						"create": [],
 						"modify": [
-							"apps/api/src/domains/assets/AssetRepo.test.ts",
-							"apps/api/src/domains/ledgers/accounts/LedgerAccountRepo.test.ts",
-							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.test.ts",
-							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRepo.test.ts",
-							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRepo.test.ts",
-							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.test.ts",
-							"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.test.ts"
+							"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.test.ts",
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.test.ts"
 						],
 						"delete": []
 					},
 					"new_abstractions": [],
 					"validation": {
 						"tests": [
-							"All seven listed suites pass",
+							"LedgerAccountCategoryRepo.test.ts and LedgerTransactionRepo.test.ts pass",
 							"Category guard test still runs its insert and update inside one transaction",
-							"Category spy at :964 now targets effectDb and its not.toHaveBeenCalled assertion passes for real"
+							"The four replaced spy tests assert database state and pass"
 						],
 						"acceptance": [
-							"No database.db, Database[\"db\"] or destructured { db } from DatabaseTag remains in the seven files"
+							"No database.db, (await runtime.runPromise(DatabaseTag)).db, Database[\"db\"] or destructured { db } remains in these two files"
+						]
+					}
+				},
+				{
+					"id": "T3b",
+					"name": "Remaining repo test fixtures use effectDb",
+					"depends_on": [],
+					"inputs": [
+						"Client access pattern at apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.test.ts:87"
+					],
+					"description": "Apply the same mechanical rewrite as T3a: obtain effectDb from each file's runtime and run fixture queries through runtime.runPromise(...), including the { db } destructure at LedgerAccountSettlementRepo.test.ts:1319 and the Database[\"db\"] type at LedgerAccountStatementRepo.test.ts:37. Assertions stay unchanged.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/assets/AssetRepo.test.ts",
+							"apps/api/src/domains/ledgers/accounts/LedgerAccountRepo.test.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRepo.test.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRepo.test.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.test.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"AssetRepo, LedgerAccountRepo, LedgerAccountSettlementRepo, LedgerAccountBalanceMonitorRepo and LedgerAccountStatementRepo suites pass"
+						],
+						"acceptance": [
+							"No database.db, (await runtime.runPromise(DatabaseTag)).db, Database[\"db\"] or destructured { db } remains in these five files"
 						]
 					}
 				},
@@ -136,11 +162,11 @@
 					"name": "Benches use effectDb",
 					"depends_on": [],
 					"inputs": [
-						"apps/api/test/bench/category-balances.bench.ts",
-						"apps/api/test/bench/transaction.bench.ts, cleanupFixtures at :212",
+						"apps/api/test/bench/transaction.bench.ts: DrizzleDatabase at :26, :212, :430; cleanupFixtures at :212; fixture runtime disposed at :482 after cleanup at :478",
+						"apps/api/test/bench/category-balances.bench.ts: database.db at :41-121, no DrizzleDatabase import",
 						"tsconfig.json includes test/bench so benches are type-checked"
 					],
-					"description": "Change the DrizzleDatabase types to EffectDrizzleDatabase and run fixture queries through the runtime. cleanupFixtures in transaction.bench.ts has no runtime in scope, so use Effect.runPromise(db.transaction(...)) inside the existing retry wrapper, keeping the same delete order. The tx.execute results are never read, so the result shape does not matter there.",
+					"description": "In transaction.bench.ts change the DrizzleDatabase types to EffectDrizzleDatabase and run fixture queries through the runtime. cleanupFixtures uses Effect.runPromise(db.transaction(...)) inside the existing retry wrapper, keeping the same delete order; this is safe because effect-postgres queries need no context and the call runs before the fixture runtime is disposed. In category-balances.bench.ts replace the database.db uses with effectDb through the runtime.",
 					"files": {
 						"reuse": [],
 						"create": [],
@@ -170,12 +196,12 @@
 				{
 					"id": "T5",
 					"name": "Database exposes only effectDb",
-					"depends_on": ["T1", "T2", "T3", "T4"],
+					"depends_on": ["T1", "T2", "T3a", "T3b", "T4"],
 					"inputs": [
 						"apps/api/src/db/database.ts",
 						"apps/api/src/db/index.ts"
 					],
-					"description": "Remove the db field, the DrizzleDatabase type and the drizzle-orm/node-postgres import and construction from database.ts, and drop the DrizzleDatabase export from index.ts. Keep pool, close(), PoolFactory and the pool type-parser setup. Nothing constructs a Database object in tests, so no test doubles need changing.",
+					"description": "Remove the db field, the DrizzleDatabase type and the drizzle-orm/node-postgres import and construction from database.ts, and drop the DrizzleDatabase export from index.ts. Keep pool, close(), PoolFactory, the pool type-parser override and PgClient.fromPool. Nothing constructs a Database object in tests, so no test doubles need changing.",
 					"files": {
 						"reuse": [],
 						"create": [],
@@ -188,11 +214,11 @@
 					"new_abstractions": [],
 					"validation": {
 						"tests": [
-							"pnpm --filter=@exchequerio/api test passes in full",
+							"pnpm --filter=@exchequerio/api test passes in full, including the settlement repo suite (deleteLedgerFixtures evidence) and the category repo suite",
 							"pnpm run check passes"
 						],
 						"acceptance": [
-							"rg 'drizzle-orm/node-postgres|DrizzleDatabase|database\\.db\\b|\\{ *db *\\} *=.*DatabaseTag|Database\\[\"db\"\\]' apps/api returns nothing",
+							"rg '\\bDrizzleDatabase\\b|drizzle-orm/node-postgres|database\\.db\\b|\\)\\.db\\b|\\{ *db *\\} *=.*DatabaseTag|Database\\[\"db\"\\]' apps/api returns nothing",
 							"Database exposes only effectDb"
 						]
 					}
