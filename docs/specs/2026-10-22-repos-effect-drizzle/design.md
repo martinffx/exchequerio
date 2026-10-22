@@ -9,8 +9,8 @@
 ## Scope
 - **In scope:**
   - Move `OrganizationRepo` and `LedgerRepo` to `effectDb`.
-  - Move every `database.db`, `{ db }` and `Database["db"]` use in the 9 repository test files and both benches to `effectDb`.
-  - Add PostgreSQL repo tests for the contracts this migration puts at risk.
+  - Move every `database.db`, `{ db }` and `Database["db"]` use in the 9 repository test files to `effectDb`. In the benches, `transaction.bench.ts` changes its `DrizzleDatabase` types and `category-balances.bench.ts` changes its `database.db` uses.
+  - Add one PostgreSQL repo test for the Organization-dependents contract.
   - Delete `Database.db`, `DrizzleDatabase` and the node-postgres `drizzle()` client.
 - **Out of scope:**
   - A shared fixture helper.
@@ -24,17 +24,16 @@
 ## User Stories
 - US-1 (must): As a maintainer, I want every repository, test fixture and bench to use the single Effect Drizzle client, so that database access has one execution and error model.
   - Given the API is running, when any Organization or Ledger endpoint is called, then its SQL runs through `effectDb`.
-  - Given the migration is complete, then `rg 'drizzle-orm/node-postgres|DrizzleDatabase|database\.db\b|\{ *db *\} *=.*DatabaseTag|Database\["db"\]' apps/api` returns nothing and `pnpm run check` passes.
+  - Given the migration is complete, then `rg '\bDrizzleDatabase\b|drizzle-orm/node-postgres|database\.db\b|\)\.db\b|\{ *db *\} *=.*DatabaseTag|Database\["db"\]' apps/api` returns nothing and `pnpm run check` passes. The `\b` matters: plain `DrizzleDatabase` also matches `EffectDrizzleDatabase`, which stays.
 - US-2 (must): As an API client, I want no behaviour change.
   - Given the existing Organization, Ledger, service and route tests, when they run after the migration, then they pass.
   - Test changes are limited to fixture plumbing plus these listed exceptions:
     - `OrganizationRepo.test.ts:68` uses `effectDb.execute(sql, "objects")`;
     - `OrganizationRepo.test.ts:214` asserts the pg code through `postgresErrorCode` on the flipped Effect error;
-    - the spy at `LedgerAccountCategoryRepo.test.ts:964` targets `effectDb`.
+    - the four spies at `LedgerAccountCategoryRepo.test.ts:964,1535,1559,1626` become database-state assertions (for example, no row in `ledger_account_category_accounts`).
 - US-3 (must): As a maintainer, I want the contracts this migration puts at risk covered by PostgreSQL repo tests, so that a regression in error wrapping or transactions actually fails a test.
-  - Given an Organization that has a Ledger, when it is deleted, then the repo fails with `OrganizationHasDependents`.
-  - Given a Ledger with accounts and transactions, when `deleteLedgerFixtures` runs, then the Ledger and all its dependents are gone.
-  - Given an absent Ledger, when `deleteLedgerFixtures` runs, then it completes without error.
+  - Given an Organization that has a Ledger, when it is deleted, then the repo fails with `OrganizationHasDependents`. This is a new test.
+  - Given the existing settlement repo tests (`LedgerAccountSettlementRepo.test.ts:235-330`), when `deleteLedgerFixtures` runs, then they show it cleans up a Ledger with settlement entries (the `inArray` subquery path), no-ops for a wrong Organization or an absent Ledger, and rolls back under `lock_timeout`. They must pass; no new tests are added for this.
 
 ## Constraints
 - This is a behaviour-preserving migration. None of the following change:
@@ -72,10 +71,11 @@
 ### Coverage gaps
 These contracts have no PostgreSQL test today:
 - Organization 23503 → `OrganizationHasDependents`. Only stubbed, at `OrganizationService.test.ts:182`.
-- `deleteLedgerFixtures` cleanup and its no-op branch. Not called in `LedgerRepo.test.ts`.
 - Unavailable → `*RepositoryUnavailable`, in either repo.
 
-The spy at `LedgerAccountCategoryRepo.test.ts:964` watches the Promise client, which the repo never calls, so its assertion can never fail.
+`deleteLedgerFixtures` is already covered by the settlement repo tests (`LedgerAccountSettlementRepo.test.ts:235-330`), not by `LedgerRepo.test.ts`.
+
+The spies at `LedgerAccountCategoryRepo.test.ts:964,1535,1559,1626` watch the Promise client, which the repo never calls, so their `not.toHaveBeenCalled` assertions can never fail. Retargeting them to `effectDb` does not help: at `:964` the insert builder is created eagerly (`LedgerAccountCategoryRepo.ts:305-308`), so the retargeted spy would fail; the other three inserts run through `tx`, so a retargeted spy would stay vacuous.
 
 ### Research
 | Concern | Existing solution | Decision | Current requirement |
@@ -87,7 +87,7 @@ The spy at `LedgerAccountCategoryRepo.test.ts:964` watches the Promise client, w
 | Repo interfaces, tags, layers | `OrganizationRepo`, `LedgerRepo` | reuse | US-2 |
 | Test client access | `LedgerAccountCategoryRepo.test.ts:87` | reuse | US-1 |
 | Error-code assertions | `Effect.flip` + `postgresErrorCode`, as at `LedgerAccountCategoryRepo.test.ts:2752` | reuse | US-2 |
-| Repo tests for uncovered contracts | none | new | US-3 |
+| Organization-dependents repo test | none | new | US-3 |
 | `Database.db`, `DrizzleDatabase`, node-postgres `drizzle()` | `src/db/database.ts`, `src/db/index.ts` | delete | US-1 |
 
 ## Architecture
@@ -105,9 +105,9 @@ The spy at `LedgerAccountCategoryRepo.test.ts:964` watches the Promise client, w
   - The node-postgres `drizzle()` construction and the `DrizzleDatabase` type and export are deleted.
 - **External seam.** There is no new untrusted input. Requests are parsed in routes; rows are decoded in entities.
 - **Test seams.**
-  - Repo integration tests against PostgreSQL are the only layer that proves SQL, mapping and transactions. US-3 tests go in `OrganizationRepo.test.ts` and `LedgerRepo.test.ts`.
+  - Repo integration tests against PostgreSQL are the only layer that proves SQL, mapping and transactions. The new US-3 test goes in `OrganizationRepo.test.ts`; it inserts a Ledger directly through `effectDb` and removes it in a `finally`, so `afterAll`'s fail-fast Organization cleanup does not leak. `deleteLedgerFixtures` is verified by the existing settlement repo tests.
   - Service and route tests stub the repos and are unchanged.
-  - Fixtures get `effectDb` from each file's runtime and wrap queries inline in `runtime.runPromise`. `transaction.bench.ts` `cleanupFixtures` has no runtime, so it uses `Effect.runPromise`; effect-postgres queries need no context.
+  - Fixtures get `effectDb` from each file's runtime and wrap queries inline in `runtime.runPromise`. `transaction.bench.ts` `cleanupFixtures` uses `Effect.runPromise`: a runtime is in scope, but effect-postgres queries need no context and the call runs before the runtime is disposed.
 - **Ordering.** `Database.db` is deleted only after every repo, test and bench has stopped using it.
 
 ## API Design
@@ -128,13 +128,13 @@ No schema changes and no migrations. The `deleteLedgerFixtures` settlements subq
   - "No client returned" maps to `*PersistenceFailure` instead of `*RepositoryUnavailable`, and the unavailable mapping has no PostgreSQL test.
   - The `effectDb` name stays.
   - Most of the diff is test churn: about 90 inline `runtime.runPromise` wrappers.
-  - The three listed test changes. The spy change intentionally makes a vacuous assertion real.
+  - The listed test changes. The four spy replacements swap vacuous assertions for database-state checks.
 
 ## Verification
 - With PostgreSQL running, `pnpm --filter=@exchequerio/api test` passes, including the new US-3 tests.
 - `pnpm run check` passes. This type-checks both benches.
 - Each bench runs once to completion.
-- The US-1 `rg` returns nothing.
+- The US-1 `rg` (with `\bDrizzleDatabase\b`) returns nothing.
 
 ## Open Questions
 None.
