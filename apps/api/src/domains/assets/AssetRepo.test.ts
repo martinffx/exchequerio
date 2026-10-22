@@ -24,21 +24,31 @@ let database: Database;
 beforeAll(async () => {
 	service = await runtime.runPromise(AssetServiceTag);
 	database = await runtime.runPromise(DatabaseTag);
-	await database.db.insert(OrganizationsTable).values([
-		{ id: orgId.toUUID(), name: "Asset tests" },
-		{ id: otherOrgId.toUUID(), name: "Other Asset tests" },
-	]);
+	await runtime.runPromise(
+		database.effectDb.insert(OrganizationsTable).values([
+			{ id: orgId.toUUID(), name: "Asset tests" },
+			{ id: otherOrgId.toUUID(), name: "Other Asset tests" },
+		])
+	);
 });
 
 afterAll(async () => {
 	if (database) {
 		for (const id of [orgId, otherOrgId]) {
-			await database.db
-				.delete(LedgerAccountsTable)
-				.where(eq(LedgerAccountsTable.organizationId, id.toUUID()));
-			await database.db.delete(LedgersTable).where(eq(LedgersTable.organizationId, id.toUUID()));
-			await database.db.delete(AssetsTable).where(eq(AssetsTable.organizationId, id.toUUID()));
-			await database.db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id.toUUID()));
+			await runtime.runPromise(
+				database.effectDb
+					.delete(LedgerAccountsTable)
+					.where(eq(LedgerAccountsTable.organizationId, id.toUUID()))
+			);
+			await runtime.runPromise(
+				database.effectDb.delete(LedgersTable).where(eq(LedgersTable.organizationId, id.toUUID()))
+			);
+			await runtime.runPromise(
+				database.effectDb.delete(AssetsTable).where(eq(AssetsTable.organizationId, id.toUUID()))
+			);
+			await runtime.runPromise(
+				database.effectDb.delete(OrganizationsTable).where(eq(OrganizationsTable.id, id.toUUID()))
+			);
 		}
 	}
 	await runtime.dispose();
@@ -59,10 +69,12 @@ describe("Asset persistence", () => {
 		expect(asset.id).toBeInstanceOf(TypeID);
 		expect(DateTime.isDateTime(asset.created)).toBe(true);
 		expect(asset.created.zoneName).toBe("UTC");
-		const [stored] = await database.db
-			.select()
-			.from(AssetsTable)
-			.where(eq(AssetsTable.id, encodeUuid(asset.id)));
+		const [stored] = await runtime.runPromise(
+			database.effectDb
+				.select()
+				.from(AssetsTable)
+				.where(eq(AssetsTable.id, encodeUuid(asset.id)))
+		);
 		expect(asset.toRow()).toEqual(stored);
 		expect(asset.metadata).toEqual({ source: "manual" });
 		expect(asset.id.toString()).toMatch(/^ast_[0-9a-z]{26}$/);
@@ -117,10 +129,12 @@ describe("Asset persistence", () => {
 					minorUnitExponent: 2,
 				})
 			);
-			await database.db
-				.update(AssetsTable)
-				.set({ metadata })
-				.where(eq(AssetsTable.id, encodeUuid(asset.id)));
+			await runtime.runPromise(
+				database.effectDb
+					.update(AssetsTable)
+					.set({ metadata })
+					.where(eq(AssetsTable.id, encodeUuid(asset.id)))
+			);
 			const error = await runtime.runPromise(Effect.flip(service.getAsset(orgId, asset.id)));
 			expect(error).toBeInstanceOf(InternalServerError);
 			expect(error.message).toBe("Persisted Asset could not be decoded");
@@ -145,21 +159,27 @@ describe("Asset persistence", () => {
 		);
 		const ledgerId = newLedgerID().toUUID();
 		const accountId = newLedgerAccountID().toUUID();
-		await database.db
-			.insert(LedgersTable)
-			.values({ id: ledgerId, organizationId: orgId.toUUID(), name: "Asset reference" });
-		await database.db.insert(LedgerAccountsTable).values({
-			id: accountId,
-			organizationId: orgId.toUUID(),
-			ledgerId,
-			assetId: encodeUuid(asset.id),
-			name: "Referenced",
-			normalBalance: "credit",
-		});
+		await runtime.runPromise(
+			database.effectDb
+				.insert(LedgersTable)
+				.values({ id: ledgerId, organizationId: orgId.toUUID(), name: "Asset reference" })
+		);
+		await runtime.runPromise(
+			database.effectDb.insert(LedgerAccountsTable).values({
+				id: accountId,
+				organizationId: orgId.toUUID(),
+				ledgerId,
+				assetId: encodeUuid(asset.id),
+				name: "Referenced",
+				normalBalance: "credit",
+			})
+		);
 		expect(
 			await runtime.runPromise(Effect.flip(service.deleteAsset(orgId, asset.id)))
 		).toBeInstanceOf(ConflictError);
-		await database.db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, accountId));
+		await runtime.runPromise(
+			database.effectDb.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, accountId))
+		);
 		await runtime.runPromise(service.deleteAsset(orgId, asset.id));
 		expect(await runtime.runPromise(Effect.flip(service.getAsset(orgId, asset.id)))).toBeInstanceOf(
 			NotFoundError

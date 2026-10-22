@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { buildServer } from "@/server";
 import { Config } from "@/config";
-import { DatabaseTag, makeDatabaseLive, type Database } from "@/db";
+import { DatabaseTag, makeDatabaseLive, type EffectDrizzleDatabase } from "@/db";
 import { signJWT } from "@/auth";
 import {
 	AssetsTable,
@@ -30,95 +30,123 @@ const assets = [new TypeID("ast"), new TypeID("ast")];
 const categories = Array.from({ length: 4 }, () => new TypeID("lac"));
 const accounts = Array.from({ length: 10_000 }, () => new TypeID("lat"));
 const ownership = { organizationId: org.toUUID(), ledgerId: ledger.toUUID() };
-let database: Database;
+let effectDb: EffectDrizzleDatabase;
 let server: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let authorization: string;
 
 beforeAll(async () => {
 	authorization = `Bearer ${signJWT({ sub: org.toString(), scope: ["super_admin"] })}`;
-	database = await runtime.runPromise(DatabaseTag);
-	await database.db
-		.insert(OrganizationsTable)
-		.values({ id: org.toUUID(), name: "Category balance benchmark" });
-	await database.db
-		.insert(LedgersTable)
-		.values({ id: ledger.toUUID(), organizationId: org.toUUID(), name: "Benchmark" });
-	await database.db.insert(AssetsTable).values(
-		assets.map((id, i) => ({
-			id: id.toUUID(),
-			organizationId: org.toUUID(),
-			code: i === 0 ? "USD" : "EUR",
-			name: "Benchmark Asset",
-			minorUnitExponent: 2,
-		}))
+	effectDb = (await runtime.runPromise(DatabaseTag)).effectDb;
+	await runtime.runPromise(
+		effectDb
+			.insert(OrganizationsTable)
+			.values({ id: org.toUUID(), name: "Category balance benchmark" })
 	);
-	await database.db.insert(LedgerAccountCategoriesTable).values(
-		categories.map(id => ({
-			...ownership,
-			id: id.toUUID(),
-			name: id.toString(),
-			normalBalance: "debit" as const,
-		}))
+	await runtime.runPromise(
+		effectDb
+			.insert(LedgersTable)
+			.values({ id: ledger.toUUID(), organizationId: org.toUUID(), name: "Benchmark" })
 	);
-	await database.db.insert(LedgerAccountCategoryParentsTable).values(
-		[
-			[1, 0],
-			[2, 0],
-			[3, 1],
-			[3, 2],
-		].map(([child, parent]) => ({
-			...ownership,
-			categoryId: categories[child].toUUID(),
-			parentCategoryId: categories[parent].toUUID(),
-		}))
+	await runtime.runPromise(
+		effectDb.insert(AssetsTable).values(
+			assets.map((id, i) => ({
+				id: id.toUUID(),
+				organizationId: org.toUUID(),
+				code: i === 0 ? "USD" : "EUR",
+				name: "Benchmark Asset",
+				minorUnitExponent: 2,
+			}))
+		)
 	);
-	for (let start = 0; start < accounts.length; start += 500) {
-		const batch = accounts.slice(start, start + 500);
-		await database.db.insert(LedgerAccountsTable).values(
-			batch.map((id, i) => ({
+	await runtime.runPromise(
+		effectDb.insert(LedgerAccountCategoriesTable).values(
+			categories.map(id => ({
 				...ownership,
 				id: id.toUUID(),
 				name: id.toString(),
-				normalBalance: i % 2 === 0 ? ("debit" as const) : ("credit" as const),
-				assetId: assets[Math.floor((start + i) / 2) % 2].toUUID(),
+				normalBalance: "debit" as const,
 			}))
+		)
+	);
+	await runtime.runPromise(
+		effectDb.insert(LedgerAccountCategoryParentsTable).values(
+			[
+				[1, 0],
+				[2, 0],
+				[3, 1],
+				[3, 2],
+			].map(([child, parent]) => ({
+				...ownership,
+				categoryId: categories[child].toUUID(),
+				parentCategoryId: categories[parent].toUUID(),
+			}))
+		)
+	);
+	for (let start = 0; start < accounts.length; start += 500) {
+		const batch = accounts.slice(start, start + 500);
+		await runtime.runPromise(
+			effectDb.insert(LedgerAccountsTable).values(
+				batch.map((id, i) => ({
+					...ownership,
+					id: id.toUUID(),
+					name: id.toString(),
+					normalBalance: i % 2 === 0 ? ("debit" as const) : ("credit" as const),
+					assetId: assets[Math.floor((start + i) / 2) % 2].toUUID(),
+				}))
+			)
 		);
-		await database.db
+		await runtime.runPromise(
+			effectDb
+				.insert(LedgerAccountCategoryAccountsTable)
+				.values(
+					batch.map(id => ({ ...ownership, accountId: id.toUUID(), categoryId: categories[3].toUUID() }))
+				)
+		);
+	}
+	await runtime.runPromise(
+		effectDb
 			.insert(LedgerAccountCategoryAccountsTable)
 			.values(
-				batch.map(id => ({ ...ownership, accountId: id.toUUID(), categoryId: categories[3].toUUID() }))
-			);
-	}
-	await database.db
-		.insert(LedgerAccountCategoryAccountsTable)
-		.values(
-			accounts
-				.slice(0, 1000)
-				.map(id => ({ ...ownership, accountId: id.toUUID(), categoryId: categories[0].toUUID() }))
-		);
+				accounts
+					.slice(0, 1000)
+					.map(id => ({ ...ownership, accountId: id.toUUID(), categoryId: categories[0].toUUID() }))
+			)
+	);
 	server = await buildServer();
 	server.log.level = "silent";
 	baseUrl = await server.listen({ port: 0, host: "127.0.0.1" });
 });
 afterAll(async () => {
 	if (server) await server.close();
-	if (database) {
-		await database.db
-			.delete(LedgerTransactionEntriesTable)
-			.where(eq(LedgerTransactionEntriesTable.organizationId, org.toUUID()));
-		await database.db
-			.delete(LedgerTransactionsTable)
-			.where(eq(LedgerTransactionsTable.organizationId, org.toUUID()));
-		await database.db
-			.delete(LedgerAccountCategoriesTable)
-			.where(eq(LedgerAccountCategoriesTable.organizationId, org.toUUID()));
-		await database.db
-			.delete(LedgerAccountsTable)
-			.where(eq(LedgerAccountsTable.organizationId, org.toUUID()));
-		await database.db.delete(LedgersTable).where(eq(LedgersTable.organizationId, org.toUUID()));
-		await database.db.delete(AssetsTable).where(eq(AssetsTable.organizationId, org.toUUID()));
-		await database.db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, org.toUUID()));
+	if (effectDb) {
+		await runtime.runPromise(
+			effectDb
+				.delete(LedgerTransactionEntriesTable)
+				.where(eq(LedgerTransactionEntriesTable.organizationId, org.toUUID()))
+		);
+		await runtime.runPromise(
+			effectDb
+				.delete(LedgerTransactionsTable)
+				.where(eq(LedgerTransactionsTable.organizationId, org.toUUID()))
+		);
+		await runtime.runPromise(
+			effectDb
+				.delete(LedgerAccountCategoriesTable)
+				.where(eq(LedgerAccountCategoriesTable.organizationId, org.toUUID()))
+		);
+		await runtime.runPromise(
+			effectDb.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.organizationId, org.toUUID()))
+		);
+		await runtime.runPromise(
+			effectDb.delete(LedgersTable).where(eq(LedgersTable.organizationId, org.toUUID()))
+		);
+		await runtime.runPromise(
+			effectDb.delete(AssetsTable).where(eq(AssetsTable.organizationId, org.toUUID()))
+		);
+		await runtime.runPromise(
+			effectDb.delete(OrganizationsTable).where(eq(OrganizationsTable.id, org.toUUID()))
+		);
 	}
 	await runtime.dispose();
 });

@@ -23,7 +23,7 @@ import {
 import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "@/domains/ledgers/LedgerRepo";
 import { AssetsTable, OrganizationsTable } from "@/db/schema";
 import { buildServer } from "@/server";
-import type { DrizzleDatabase } from "@/db";
+import type { EffectDrizzleDatabase } from "@/db";
 
 interface BenchmarkScenario {
 	name: string;
@@ -209,7 +209,7 @@ async function setupFixtures(
 	};
 }
 
-async function cleanupFixtures(db: DrizzleDatabase, orgId: OrgID): Promise<void> {
+async function cleanupFixtures(db: EffectDrizzleDatabase, orgId: OrgID): Promise<void> {
 	// Retry cleanup to handle transient failures from straggler connections
 	await retry(
 		{
@@ -226,9 +226,11 @@ async function cleanupFixtures(db: DrizzleDatabase, orgId: OrgID): Promise<void>
 				// This ensures atomicity even if there are straggler connections from the server
 				const orgIdStr = orgId.toUUID();
 
-				await db.transaction(async tx => {
-					// 1. Delete all settlements and settlement entries
-					await tx.execute(sql`
+				await Effect.runPromise(
+					db.transaction(tx =>
+						Effect.gen(function* () {
+							// 1. Delete all settlements and settlement entries
+							yield* tx.execute(sql`
 						DELETE FROM ledger_account_settlement_entries
 						WHERE settlement_id IN (
 							SELECT id FROM ledger_account_settlements
@@ -236,46 +238,48 @@ async function cleanupFixtures(db: DrizzleDatabase, orgId: OrgID): Promise<void>
 						)
 					`);
 
-					await tx.execute(sql`
+							yield* tx.execute(sql`
 						DELETE FROM ledger_account_settlements
 						WHERE organization_id = ${orgIdStr}
 					`);
 
-					// 2. Delete all transaction entries and transactions
-					await tx.execute(sql`
+							// 2. Delete all transaction entries and transactions
+							yield* tx.execute(sql`
 						DELETE FROM ledger_transaction_entries
 						WHERE organization_id = ${orgIdStr}
 					`);
 
-					await tx.execute(sql`
+							yield* tx.execute(sql`
 						DELETE FROM ledger_transactions
 						WHERE organization_id = ${orgIdStr}
 					`);
 
-					// 3. Delete all accounts
-					await tx.execute(sql`
+							// 3. Delete all accounts
+							yield* tx.execute(sql`
 						DELETE FROM ledger_accounts
 						WHERE organization_id = ${orgIdStr}
 					`);
 
-					// 4. Delete all ledgers
-					await tx.execute(sql`
+							// 4. Delete all ledgers
+							yield* tx.execute(sql`
 						DELETE FROM ledgers
 						WHERE organization_id = ${orgIdStr}
 					`);
 
-					// 5. Delete organization-owned Assets after their Accounts
-					await tx.execute(sql`
+							// 5. Delete organization-owned Assets after their Accounts
+							yield* tx.execute(sql`
 						DELETE FROM assets
 						WHERE organization_id = ${orgIdStr}
 					`);
 
-					// 6. Delete the organization
-					await tx.execute(sql`
+							// 6. Delete the organization
+							yield* tx.execute(sql`
 						DELETE FROM organizations_table
 						WHERE id = ${orgIdStr}
 					`);
-				});
+						})
+					)
+				);
 			} catch (error) {
 				console.error("Cleanup attempt failed:", error);
 				throw error; // Let retry handle it
@@ -427,7 +431,7 @@ describe("Transaction Creation Benchmarks", () => {
 			)
 		)
 	);
-	let db: DrizzleDatabase;
+	let effectDb: EffectDrizzleDatabase;
 	let ledgerRepo: LedgerRepo;
 	let accountRepo: LedgerAccountRepo;
 	let sharedOrgId: OrgID;
@@ -435,7 +439,7 @@ describe("Transaction Creation Benchmarks", () => {
 	const results: BenchmarkResult[] = [];
 
 	beforeAll(async () => {
-		db = (await fixtureRuntime.runPromise(DatabaseTag)).db;
+		effectDb = (await fixtureRuntime.runPromise(DatabaseTag)).effectDb;
 
 		ledgerRepo = await fixtureRuntime.runPromise(LedgerRepoTag);
 		accountRepo = await fixtureRuntime.runPromise(LedgerAccountRepoTag);
@@ -443,19 +447,23 @@ describe("Transaction Creation Benchmarks", () => {
 		// Create shared organization for all tests
 		console.log("Creating shared organization...");
 		sharedOrgId = new TypeID("org");
-		await db.insert(OrganizationsTable).values({
-			id: sharedOrgId.toUUID(),
-			name: "Benchmark Organization",
-			description: "Shared organization for all benchmark tests",
-		});
+		await fixtureRuntime.runPromise(
+			effectDb.insert(OrganizationsTable).values({
+				id: sharedOrgId.toUUID(),
+				name: "Benchmark Organization",
+				description: "Shared organization for all benchmark tests",
+			})
+		);
 		sharedAssetId = new TypeID("ast").toString();
-		await db.insert(AssetsTable).values({
-			id: TypeID.fromString(sharedAssetId).toUUID(),
-			organizationId: sharedOrgId.toUUID(),
-			code: "USD",
-			name: "US Dollar",
-			minorUnitExponent: 2,
-		});
+		await fixtureRuntime.runPromise(
+			effectDb.insert(AssetsTable).values({
+				id: TypeID.fromString(sharedAssetId).toUUID(),
+				organizationId: sharedOrgId.toUUID(),
+				code: "USD",
+				name: "US Dollar",
+				minorUnitExponent: 2,
+			})
+		);
 		console.log(`Shared organization created: ${sharedOrgId.toString()}\n`);
 
 		// Start server
@@ -475,7 +483,7 @@ describe("Transaction Creation Benchmarks", () => {
 
 		// Cleanup all fixtures using our test repos
 		console.log("Cleaning up all fixtures...");
-		await cleanupFixtures(db, sharedOrgId);
+		await cleanupFixtures(effectDb, sharedOrgId);
 		console.log("Cleanup complete\n");
 
 		// Close the fixture runtime and its database pools
