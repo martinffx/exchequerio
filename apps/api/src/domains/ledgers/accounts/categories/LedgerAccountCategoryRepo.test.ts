@@ -27,13 +27,7 @@ import { eq, sql } from "drizzle-orm";
 import { TypeID } from "typeid-js";
 import { Effect, Layer, ManagedRuntime, Result } from "effect";
 import { Config } from "@/config";
-import {
-	DatabaseTag,
-	type DrizzleDatabase,
-	type EffectDrizzleDatabase,
-	makeDatabaseLive,
-	postgresErrorCode,
-} from "@/db";
+import { DatabaseTag, type EffectDrizzleDatabase, makeDatabaseLive, postgresErrorCode } from "@/db";
 import { AccountNotFound } from "@/domains/ledgers/accounts/AccountErrors";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import { LedgerAccountCategoryEntity } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryEntity";
@@ -61,7 +55,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 describe("LedgerAccountCategoryRepo", () => {
-	let db: DrizzleDatabase;
 	let organizationRepo: OrganizationRepo;
 	let ledgerRepo: LedgerRepo;
 	let ledgerAccountRepo: LedgerAccountRepo;
@@ -79,7 +72,6 @@ describe("LedgerAccountCategoryRepo", () => {
 	let testCounter = 0;
 
 	beforeAll(async () => {
-		db = (await runtime.runPromise(DatabaseTag)).db;
 		organizationRepo = await runtime.runPromise(OrganizationRepoTag);
 		ledgerRepo = await runtime.runPromise(LedgerRepoTag);
 		ledgerAccountRepo = await runtime.runPromise(LedgerAccountRepoTag);
@@ -92,13 +84,15 @@ describe("LedgerAccountCategoryRepo", () => {
 			name: "Category Test Org",
 		});
 		await runtime.runPromise(organizationRepo.createOrganization(orgEntity));
-		await db.insert(AssetsTable).values({
-			id: testOrgId.toUUID(),
-			organizationId: testOrgId.toUUID(),
-			code: "USD",
-			name: "Dollar",
-			minorUnitExponent: 2,
-		});
+		await runtime.runPromise(
+			effectDb.insert(AssetsTable).values({
+				id: testOrgId.toUUID(),
+				organizationId: testOrgId.toUUID(),
+				code: "USD",
+				name: "Dollar",
+				minorUnitExponent: 2,
+			})
+		);
 
 		// Create test ledger
 		testLedgerId = new TypeID("lgr") as LedgerID;
@@ -112,11 +106,15 @@ describe("LedgerAccountCategoryRepo", () => {
 
 	afterAll(async () => {
 		try {
-			await db
-				.delete(LedgerAccountCategoriesTable)
-				.where(eq(LedgerAccountCategoriesTable.ledgerId, testLedgerId.toUUID()));
+			await runtime.runPromise(
+				effectDb
+					.delete(LedgerAccountCategoriesTable)
+					.where(eq(LedgerAccountCategoriesTable.ledgerId, testLedgerId.toUUID()))
+			);
 			await runtime.runPromise(ledgerRepo.deleteLedgerFixtures(testOrgId, testLedgerId));
-			await db.delete(AssetsTable).where(eq(AssetsTable.organizationId, testOrgId.toUUID()));
+			await runtime.runPromise(
+				effectDb.delete(AssetsTable).where(eq(AssetsTable.organizationId, testOrgId.toUUID()))
+			);
 			await runtime.runPromise(organizationRepo.deleteOrganization(testOrgId));
 		} finally {
 			await runtime.dispose();
@@ -195,15 +193,17 @@ describe("LedgerAccountCategoryRepo", () => {
 				new TypeID("lac"),
 				new TypeID("lac"),
 			] as LedgerAccountCategoryID[];
-			await db.insert(LedgerAccountCategoriesTable).values(
-				ids.map((id, index) => ({
-					id: id.toUUID(),
-					organizationId: testOrgId.toUUID(),
-					ledgerId: testLedgerId.toUUID(),
-					name: "Ordered Category",
-					normalBalance: "debit" as const,
-					created: new Date(["2024-01-03", "2024-01-01", "2024-01-02"][index]),
-				}))
+			await runtime.runPromise(
+				effectDb.insert(LedgerAccountCategoriesTable).values(
+					ids.map((id, index) => ({
+						id: id.toUUID(),
+						organizationId: testOrgId.toUUID(),
+						ledgerId: testLedgerId.toUUID(),
+						name: "Ordered Category",
+						normalBalance: "debit" as const,
+						created: new Date(["2024-01-03", "2024-01-01", "2024-01-02"][index]),
+					}))
+				)
 			);
 			try {
 				const categories = await runtime.runPromise(
@@ -240,14 +240,16 @@ describe("LedgerAccountCategoryRepo", () => {
 			'{"value":{}}',
 		])("treats malformed stored metadata %s as absent", async metadata => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
-			await db.insert(LedgerAccountCategoriesTable).values({
-				id: categoryId.toUUID(),
-				organizationId: testOrgId.toUUID(),
-				ledgerId: testLedgerId.toUUID(),
-				name: "Malformed metadata",
-				normalBalance: "debit",
-				metadata,
-			});
+			await runtime.runPromise(
+				effectDb.insert(LedgerAccountCategoriesTable).values({
+					id: categoryId.toUUID(),
+					organizationId: testOrgId.toUUID(),
+					ledgerId: testLedgerId.toUUID(),
+					name: "Malformed metadata",
+					normalBalance: "debit",
+					metadata,
+				})
+			);
 
 			const category = await runtime.runPromise(
 				ledgerAccountCategoryRepo.getLedgerAccountCategory(testOrgId, testLedgerId, categoryId)
@@ -263,14 +265,16 @@ describe("LedgerAccountCategoryRepo", () => {
 			"classifies infinite %s during decoding and deletes without decoding",
 			async field => {
 				const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
-				await db.insert(LedgerAccountCategoriesTable).values({
-					id: categoryId.toUUID(),
-					organizationId: testOrgId.toUUID(),
-					ledgerId: testLedgerId.toUUID(),
-					name: "Infinite timestamp",
-					normalBalance: "debit",
-					[field]: sql`'infinity'::timestamptz`,
-				});
+				await runtime.runPromise(
+					effectDb.insert(LedgerAccountCategoriesTable).values({
+						id: categoryId.toUUID(),
+						organizationId: testOrgId.toUUID(),
+						ledgerId: testLedgerId.toUUID(),
+						name: "Infinite timestamp",
+						normalBalance: "debit",
+						[field]: sql`'infinity'::timestamptz`,
+					})
+				);
 				try {
 					const result = await runtime.runPromise(
 						Effect.result(
@@ -288,10 +292,12 @@ describe("LedgerAccountCategoryRepo", () => {
 					);
 				}
 				expect(
-					await db
-						.select()
-						.from(LedgerAccountCategoriesTable)
-						.where(eq(LedgerAccountCategoriesTable.id, categoryId.toUUID()))
+					await runtime.runPromise(
+						effectDb
+							.select()
+							.from(LedgerAccountCategoriesTable)
+							.where(eq(LedgerAccountCategoriesTable.id, categoryId.toUUID()))
+					)
 				).toEqual([]);
 			}
 		);
@@ -961,7 +967,6 @@ describe("LedgerAccountCategoryRepo", () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const accountId = new TypeID("lat") as LedgerAccountID;
 			const getAccount = vi.spyOn(ledgerAccountRepo, "getAccount");
-			const insert = vi.spyOn(db, "insert");
 
 			await expect(
 				runtime.runPromise(
@@ -970,7 +975,14 @@ describe("LedgerAccountCategoryRepo", () => {
 			).rejects.toThrow(`Category not found: ${categoryId.toString()}`);
 
 			expect(getAccount).not.toHaveBeenCalled();
-			expect(insert).not.toHaveBeenCalled();
+			expect(
+				await runtime.runPromise(
+					effectDb
+						.select()
+						.from(LedgerAccountCategoryAccountsTable)
+						.where(eq(LedgerAccountCategoryAccountsTable.categoryId, categoryId.toUUID()))
+				)
+			).toEqual([]);
 		});
 
 		it("should throw error when account doesn't exist", async () => {
@@ -1307,10 +1319,12 @@ describe("LedgerAccountCategoryRepo", () => {
 				[testOrgId, testLedgerId, parentCategoryId],
 			]);
 			expect(
-				await db
-					.select()
-					.from(LedgerAccountCategoryParentsTable)
-					.where(eq(LedgerAccountCategoryParentsTable.categoryId, childCategoryId.toUUID()))
+				await runtime.runPromise(
+					effectDb
+						.select()
+						.from(LedgerAccountCategoryParentsTable)
+						.where(eq(LedgerAccountCategoryParentsTable.categoryId, childCategoryId.toUUID()))
+				)
 			).toMatchObject([{ parentCategoryId: parentCategoryId.toUUID() }]);
 			getCategory.mockRestore();
 
@@ -1532,7 +1546,6 @@ describe("LedgerAccountCategoryRepo", () => {
 				)
 			);
 
-			const insert = vi.spyOn(db, "insert");
 			await expect(
 				runtime.runPromise(
 					ledgerAccountCategoryRepo.linkCategoryToParent(
@@ -1543,7 +1556,14 @@ describe("LedgerAccountCategoryRepo", () => {
 					)
 				)
 			).rejects.toThrow("Category cannot be its own parent");
-			expect(insert).not.toHaveBeenCalled();
+			expect(
+				await runtime.runPromise(
+					effectDb
+						.select()
+						.from(LedgerAccountCategoryParentsTable)
+						.where(eq(LedgerAccountCategoryParentsTable.categoryId, childCategoryId.toUUID()))
+				)
+			).toEqual([]);
 
 			// Cleanup
 			await runtime.runPromise(
@@ -1556,7 +1576,6 @@ describe("LedgerAccountCategoryRepo", () => {
 
 		it("should report not found before self-link conflict for a missing category", async () => {
 			const categoryId = new TypeID("lac") as LedgerAccountCategoryID;
-			const insert = vi.spyOn(db, "insert");
 
 			await expect(
 				runtime.runPromise(
@@ -1564,7 +1583,14 @@ describe("LedgerAccountCategoryRepo", () => {
 				)
 			).rejects.toThrow(`Category not found: ${categoryId.toString()}`);
 
-			expect(insert).not.toHaveBeenCalled();
+			expect(
+				await runtime.runPromise(
+					effectDb
+						.select()
+						.from(LedgerAccountCategoryParentsTable)
+						.where(eq(LedgerAccountCategoryParentsTable.categoryId, categoryId.toUUID()))
+				)
+			).toEqual([]);
 		});
 
 		it("should throw error when child category doesn't exist", async () => {
@@ -1623,7 +1649,6 @@ describe("LedgerAccountCategoryRepo", () => {
 		it("should report the child first when both child and parent are missing", async () => {
 			const childCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
 			const parentCategoryId = new TypeID("lac") as LedgerAccountCategoryID;
-			const insert = vi.spyOn(db, "insert");
 
 			await expect(
 				runtime.runPromise(
@@ -1636,7 +1661,14 @@ describe("LedgerAccountCategoryRepo", () => {
 				)
 			).rejects.toThrow(`Category not found: ${childCategoryId.toString()}`);
 
-			expect(insert).not.toHaveBeenCalled();
+			expect(
+				await runtime.runPromise(
+					effectDb
+						.select()
+						.from(LedgerAccountCategoryParentsTable)
+						.where(eq(LedgerAccountCategoryParentsTable.categoryId, childCategoryId.toUUID()))
+				)
+			).toEqual([]);
 		});
 
 		it("should throw error when parent category doesn't exist", async () => {
@@ -2264,14 +2296,18 @@ describe("LedgerAccountCategoryRepo", () => {
 				ledgerAccountCategoryRepo.linkCategoryToParent(testOrgId, testLedgerId, childId, parentId)
 			);
 
-			const [accountLink] = await db
-				.select()
-				.from(LedgerAccountCategoryAccountsTable)
-				.where(eq(LedgerAccountCategoryAccountsTable.categoryId, childId.toUUID()));
-			const [parentLink] = await db
-				.select()
-				.from(LedgerAccountCategoryParentsTable)
-				.where(eq(LedgerAccountCategoryParentsTable.categoryId, childId.toUUID()));
+			const [accountLink] = await runtime.runPromise(
+				effectDb
+					.select()
+					.from(LedgerAccountCategoryAccountsTable)
+					.where(eq(LedgerAccountCategoryAccountsTable.categoryId, childId.toUUID()))
+			);
+			const [parentLink] = await runtime.runPromise(
+				effectDb
+					.select()
+					.from(LedgerAccountCategoryParentsTable)
+					.where(eq(LedgerAccountCategoryParentsTable.categoryId, childId.toUUID()))
+			);
 			expect(accountLink).toMatchObject({
 				organizationId: testOrgId.toUUID(),
 				ledgerId: testLedgerId.toUUID(),
@@ -2372,7 +2408,9 @@ describe("LedgerAccountCategoryRepo", () => {
 			ledgerId: testLedgerId,
 			name: `Balance member ${++testCounter}`,
 		});
-		await db.insert(LedgerAccountsTable).values({ ...entity.toRow(), ...counters });
+		await runtime.runPromise(
+			effectDb.insert(LedgerAccountsTable).values({ ...entity.toRow(), ...counters })
+		);
 		await runtime.runPromise(
 			ledgerAccountCategoryRepo.linkAccountToCategory(testOrgId, testLedgerId, categoryId, entity.id)
 		);
@@ -2496,12 +2534,14 @@ describe("LedgerAccountCategoryRepo", () => {
 				ledgerAccountCategoryRepo.linkAccountToCategory(testOrgId, testLedgerId, root, member)
 			);
 			expect((await read(root)).assets[0].balances[1].amount).toBe(7n);
-			await db.insert(LedgerAccountCategoryParentsTable).values({
-				organizationId: testOrgId.toUUID(),
-				ledgerId: testLedgerId.toUUID(),
-				categoryId: root.toUUID(),
-				parentCategoryId: leaf.toUUID(),
-			});
+			await runtime.runPromise(
+				effectDb.insert(LedgerAccountCategoryParentsTable).values({
+					organizationId: testOrgId.toUUID(),
+					ledgerId: testLedgerId.toUUID(),
+					categoryId: root.toUUID(),
+					parentCategoryId: leaf.toUUID(),
+				})
+			);
 			expect((await read(root)).assets[0].balances[1].amount).toBe(7n);
 			await runtime.runPromise(
 				ledgerAccountCategoryRepo.unlinkAccountFromCategory(testOrgId, testLedgerId, root, member)
@@ -2515,23 +2555,29 @@ describe("LedgerAccountCategoryRepo", () => {
 		it("groups by immutable Asset ID, retains zeros and reads renamed Asset metadata", async () => {
 			const root = await category();
 			const other = new TypeID("ast");
-			await db.insert(AssetsTable).values({
-				id: other.toUUID(),
-				organizationId: testOrgId.toUUID(),
-				code: "EUR",
-				name: "Euro",
-				minorUnitExponent: 3,
-			});
+			await runtime.runPromise(
+				effectDb.insert(AssetsTable).values({
+					id: other.toUUID(),
+					organizationId: testOrgId.toUUID(),
+					code: "EUR",
+					name: "Euro",
+					minorUnitExponent: 3,
+				})
+			);
 			await account(root);
 			await account(root, { assetId: other.toUUID(), postedDebits: 123n, pendingDebits: 123n });
-			await db.update(AssetsTable).set({ code: "EUR:OLD" }).where(eq(AssetsTable.id, other.toUUID()));
-			await db.insert(AssetsTable).values({
-				id: new TypeID("ast").toUUID(),
-				organizationId: testOrgId.toUUID(),
-				code: "EUR",
-				name: "Replacement",
-				minorUnitExponent: 0,
-			});
+			await runtime.runPromise(
+				effectDb.update(AssetsTable).set({ code: "EUR:OLD" }).where(eq(AssetsTable.id, other.toUUID()))
+			);
+			await runtime.runPromise(
+				effectDb.insert(AssetsTable).values({
+					id: new TypeID("ast").toUUID(),
+					organizationId: testOrgId.toUUID(),
+					code: "EUR",
+					name: "Replacement",
+					minorUnitExponent: 0,
+				})
+			);
 			const result = await read(root);
 			expect(result.assets.map(value => value.assetId)).toEqual(
 				[TypeID.fromUUID("ast", testOrgId.toUUID()).toString(), other.toString()].sort()
@@ -2668,10 +2714,12 @@ describe("LedgerAccountCategoryRepo", () => {
 						expect(busy).toBeInstanceOf(CategoryConflict);
 						expect(postgresErrorCode(busy.cause)).toBe("55P03");
 						expect(busy).toMatchObject({ retryable: true });
-						const stored = await db
-							.select()
-							.from(LedgerAccountCategoryParentsTable)
-							.where(eq(LedgerAccountCategoryParentsTable.categoryId, tail.toUUID()));
+						const stored = await runtime.runPromise(
+							effectDb
+								.select()
+								.from(LedgerAccountCategoryParentsTable)
+								.where(eq(LedgerAccountCategoryParentsTable.categoryId, tail.toUUID()))
+						);
 						expect(stored).toHaveLength(0);
 					} finally {
 						release();
@@ -2701,17 +2749,21 @@ describe("LedgerAccountCategoryRepo", () => {
 			const otherLedger = newLedgerID();
 			const otherChild = new TypeID("lac") as LedgerAccountCategoryID;
 			const otherParent = new TypeID("lac") as LedgerAccountCategoryID;
-			await db
-				.insert(LedgersTable)
-				.values({ id: otherLedger.toUUID(), organizationId: testOrgId.toUUID(), name: "Independent" });
-			await db.insert(LedgerAccountCategoriesTable).values(
-				[otherChild, otherParent].map(id => ({
-					organizationId: testOrgId.toUUID(),
-					ledgerId: otherLedger.toUUID(),
-					id: id.toUUID(),
-					name: "Independent",
-					normalBalance: "debit" as const,
-				}))
+			await runtime.runPromise(
+				effectDb
+					.insert(LedgersTable)
+					.values({ id: otherLedger.toUUID(), organizationId: testOrgId.toUUID(), name: "Independent" })
+			);
+			await runtime.runPromise(
+				effectDb.insert(LedgerAccountCategoriesTable).values(
+					[otherChild, otherParent].map(id => ({
+						organizationId: testOrgId.toUUID(),
+						ledgerId: otherLedger.toUUID(),
+						id: id.toUUID(),
+						name: "Independent",
+						normalBalance: "debit" as const,
+					}))
+				)
 			);
 			let markEntered!: () => void;
 			const entered = new Promise<void>(resolve => {
@@ -2761,30 +2813,38 @@ describe("LedgerAccountCategoryRepo", () => {
 					ledgerId: testLedgerId,
 					name: "Guard-compatible insert",
 				});
-				await db.transaction(async tx => {
-					await tx.execute(sql`SET LOCAL statement_timeout = '2s'`);
-					await tx.insert(LedgerAccountsTable).values(insertedAccount.toRow());
-					await tx
-						.update(LedgerAccountsTable)
-						.set({ postedDebits: 10n, pendingDebits: 10n })
-						.where(eq(LedgerAccountsTable.id, member.toUUID()));
-				});
+				await runtime.runPromise(
+					effectDb.transaction(tx =>
+						Effect.gen(function* () {
+							yield* tx.execute(sql`SET LOCAL statement_timeout = '2s'`);
+							yield* tx.insert(LedgerAccountsTable).values(insertedAccount.toRow());
+							yield* tx
+								.update(LedgerAccountsTable)
+								.set({ postedDebits: 10n, pendingDebits: 10n })
+								.where(eq(LedgerAccountsTable.id, member.toUUID()));
+						})
+					)
+				);
 				expect((await read(a)).assets[0].balances[1].amount).toBe(10n);
 			} finally {
 				release();
 				expect(await mutation).toMatchObject({ failure: rollback });
-				await db
-					.delete(LedgerAccountCategoriesTable)
-					.where(eq(LedgerAccountCategoriesTable.ledgerId, otherLedger.toUUID()));
+				await runtime.runPromise(
+					effectDb
+						.delete(LedgerAccountCategoriesTable)
+						.where(eq(LedgerAccountCategoriesTable.ledgerId, otherLedger.toUUID()))
+				);
 				await runtime.runPromise(ledgerRepo.deleteLedgerFixtures(testOrgId, otherLedger));
 			}
 			await runtime.runPromise(
 				ledgerAccountCategoryRepo.linkCategoryToParent(testOrgId, testLedgerId, b, a)
 			);
-			const stored = await db
-				.select()
-				.from(LedgerAccountCategoryParentsTable)
-				.where(eq(LedgerAccountCategoryParentsTable.categoryId, a.toUUID()));
+			const stored = await runtime.runPromise(
+				effectDb
+					.select()
+					.from(LedgerAccountCategoryParentsTable)
+					.where(eq(LedgerAccountCategoryParentsTable.categoryId, a.toUUID()))
+			);
 			expect(stored).toHaveLength(0);
 		});
 	});

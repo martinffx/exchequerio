@@ -4,7 +4,7 @@ import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Config } from "@/config";
-import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
+import { type EffectDrizzleDatabase, DatabaseTag, makeDatabaseLive } from "@/db";
 import { NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID, OrgID } from "@/lib/ids";
 import {
@@ -34,48 +34,62 @@ describe("LedgerAccountStatementRepoLive", () => {
 	);
 	const runtime = ManagedRuntime.make(layer);
 	let repository: LedgerAccountStatementRepo;
-	let db: Database["db"];
+	let db: EffectDrizzleDatabase;
 
 	beforeAll(async () => {
 		repository = await runtime.runPromise(LedgerAccountStatementRepoTag);
-		db = (await runtime.runPromise(DatabaseTag)).db;
-		await db.insert(OrganizationsTable).values({
-			id: organizationId.toUUID(),
-			name: "Statement repository organization",
-		});
-		await db.insert(LedgersTable).values({
-			id: ledgerId.toUUID(),
-			organizationId: organizationId.toUUID(),
-			name: "Statement repository ledger",
-		});
-		await db.insert(AssetsTable).values({
-			id: TypeID.fromString(asset.assetId).toUUID(),
-			organizationId: organizationId.toUUID(),
-			code: asset.assetCode,
-			name: "Asset",
-			minorUnitExponent: asset.minorUnitExponent,
-		});
-		await db.insert(LedgerAccountsTable).values({
-			id: accountId.toUUID(),
-			organizationId: organizationId.toUUID(),
-			ledgerId: ledgerId.toUUID(),
-			name: "Statement repository account",
-			normalBalance: "debit",
-			assetId: TypeID.fromString(asset.assetId).toUUID(),
-		});
+		db = (await runtime.runPromise(DatabaseTag)).effectDb;
+		await runtime.runPromise(
+			db.insert(OrganizationsTable).values({
+				id: organizationId.toUUID(),
+				name: "Statement repository organization",
+			})
+		);
+		await runtime.runPromise(
+			db.insert(LedgersTable).values({
+				id: ledgerId.toUUID(),
+				organizationId: organizationId.toUUID(),
+				name: "Statement repository ledger",
+			})
+		);
+		await runtime.runPromise(
+			db.insert(AssetsTable).values({
+				id: TypeID.fromString(asset.assetId).toUUID(),
+				organizationId: organizationId.toUUID(),
+				code: asset.assetCode,
+				name: "Asset",
+				minorUnitExponent: asset.minorUnitExponent,
+			})
+		);
+		await runtime.runPromise(
+			db.insert(LedgerAccountsTable).values({
+				id: accountId.toUUID(),
+				organizationId: organizationId.toUUID(),
+				ledgerId: ledgerId.toUUID(),
+				name: "Statement repository account",
+				normalBalance: "debit",
+				assetId: TypeID.fromString(asset.assetId).toUUID(),
+			})
+		);
 	});
 
 	afterAll(async () => {
 		try {
-			await db
-				.delete(LedgerAccountStatementsTable)
-				.where(eq(LedgerAccountStatementsTable.ledgerId, ledgerId.toUUID()));
-			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, accountId.toUUID()));
-			await db.delete(LedgersTable).where(eq(LedgersTable.id, ledgerId.toUUID()));
-			await db
-				.delete(AssetsTable)
-				.where(eq(AssetsTable.id, TypeID.fromString(asset.assetId).toUUID()));
-			await db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, organizationId.toUUID()));
+			await runtime.runPromise(
+				db
+					.delete(LedgerAccountStatementsTable)
+					.where(eq(LedgerAccountStatementsTable.ledgerId, ledgerId.toUUID()))
+			);
+			await runtime.runPromise(
+				db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, accountId.toUUID()))
+			);
+			await runtime.runPromise(db.delete(LedgersTable).where(eq(LedgersTable.id, ledgerId.toUUID())));
+			await runtime.runPromise(
+				db.delete(AssetsTable).where(eq(AssetsTable.id, TypeID.fromString(asset.assetId).toUUID()))
+			);
+			await runtime.runPromise(
+				db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, organizationId.toUUID()))
+			);
 		} finally {
 			await runtime.dispose();
 		}
@@ -104,10 +118,12 @@ describe("LedgerAccountStatementRepoLive", () => {
 		async metadata => {
 			const input = statement();
 			await runtime.runPromise(repository.createStatement(input, organizationId));
-			await db
-				.update(LedgerAccountStatementsTable)
-				.set({ metadata })
-				.where(eq(LedgerAccountStatementsTable.id, input.id.toUUID()));
+			await runtime.runPromise(
+				db
+					.update(LedgerAccountStatementsTable)
+					.set({ metadata })
+					.where(eq(LedgerAccountStatementsTable.id, input.id.toUUID()))
+			);
 			expect(
 				(await runtime.runPromise(repository.getStatement(input.id, organizationId))).metadata
 			).toBeUndefined();
@@ -149,10 +165,12 @@ describe("LedgerAccountStatementRepoLive", () => {
 				)
 			)
 		).toBeInstanceOf(NotFoundError);
-		await db
-			.update(AssetsTable)
-			.set({ code: "RENAMED" })
-			.where(eq(AssetsTable.id, TypeID.fromString(asset.assetId).toUUID()));
+		await runtime.runPromise(
+			db
+				.update(AssetsTable)
+				.set({ code: "RENAMED" })
+				.where(eq(AssetsTable.id, TypeID.fromString(asset.assetId).toUUID()))
+		);
 		const found = await runtime.runPromise(repository.getStatement(input.id, organizationId));
 		expect(found.toResponse()).toMatchObject({
 			assetId: asset.assetId,

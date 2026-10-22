@@ -100,13 +100,15 @@ describe("LedgerAccountRepoLive", () => {
 			ledgerRepository.createLedger(Ledger.fromRequest(ledgerId, organizationId, { name: "Ledger" }))
 		);
 		const asset = { assetId: new TypeID("ast").toString(), assetCode: "USD", minorUnitExponent: 2 };
-		await database.db.insert(AssetsTable).values({
-			id: TypeID.fromString(asset.assetId).toUUID(),
-			organizationId: organizationId.toUUID(),
-			code: asset.assetCode,
-			name: "Dollar",
-			minorUnitExponent: asset.minorUnitExponent,
-		});
+		await runtime.runPromise(
+			database.effectDb.insert(AssetsTable).values({
+				id: TypeID.fromString(asset.assetId).toUUID(),
+				organizationId: organizationId.toUUID(),
+				code: asset.assetCode,
+				name: "Dollar",
+				minorUnitExponent: asset.minorUnitExponent,
+			})
+		);
 		assets.set(organizationId.toString(), asset);
 		resources.push({ organizationId, ledgerId });
 		return { organizationId, ledgerId };
@@ -122,9 +124,11 @@ describe("LedgerAccountRepoLive", () => {
 					await runtime.runPromise(repository.deleteAccount(organizationId, ledgerId, account.id));
 				}
 				await runtime.runPromise(ledgerRepository.deleteLedger(organizationId, ledgerId));
-				await database.db
-					.delete(AssetsTable)
-					.where(eq(AssetsTable.organizationId, organizationId.toUUID()));
+				await runtime.runPromise(
+					database.effectDb
+						.delete(AssetsTable)
+						.where(eq(AssetsTable.organizationId, organizationId.toUUID()))
+				);
 				await runtime.runPromise(organizationRepository.deleteOrganization(organizationId));
 			}
 		} finally {
@@ -266,19 +270,23 @@ describe("LedgerAccountRepoLive", () => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const record = ledgerAccountCreate(organizationId, ledgerId);
 		const amount = 9007199254740993n;
-		await database.db.insert(LedgerAccountsTable).values({
-			...record.toRow(),
-			pendingAmount: amount,
-			postedAmount: amount,
-			availableAmount: amount,
-			pendingDebits: amount,
-			postedDebits: amount,
-			availableDebits: amount,
-		});
-		await database.db
-			.update(AssetsTable)
-			.set({ code: "RENAMED" })
-			.where(eq(AssetsTable.id, TypeID.fromString(record.assetId).toUUID()));
+		await runtime.runPromise(
+			database.effectDb.insert(LedgerAccountsTable).values({
+				...record.toRow(),
+				pendingAmount: amount,
+				postedAmount: amount,
+				availableAmount: amount,
+				pendingDebits: amount,
+				postedDebits: amount,
+				availableDebits: amount,
+			})
+		);
+		await runtime.runPromise(
+			database.effectDb
+				.update(AssetsTable)
+				.set({ code: "RENAMED" })
+				.where(eq(AssetsTable.id, TypeID.fromString(record.assetId).toUUID()))
+		);
 		const loaded = Option.getOrThrow(
 			await runtime.runPromise(repository.getAccount(organizationId, ledgerId, record.id))
 		);
@@ -355,11 +363,13 @@ describe("LedgerAccountRepoLive", () => {
 			name: testCase.label,
 			normalBalance: testCase.normalBalance,
 		});
-		const db = database.db;
-		await db.insert(LedgerAccountsTable).values({
-			...record.toRow(),
-			...testCase.stored,
-		});
+		const db = database.effectDb;
+		await runtime.runPromise(
+			db.insert(LedgerAccountsTable).values({
+				...record.toRow(),
+				...testCase.stored,
+			})
+		);
 
 		const decoded = await runtime.runPromise(
 			repository.getAccount(organizationId, ledgerId, record.id)
@@ -373,20 +383,24 @@ describe("LedgerAccountRepoLive", () => {
 		const record = await runtime.runPromise(
 			repository.createAccount(ledgerAccountCreate(organizationId, ledgerId))
 		);
-		await database.db
-			.update(LedgerAccountsTable)
-			.set({ created: sql`'infinity'::timestamptz` })
-			.where(eq(LedgerAccountsTable.id, record.id.toUUID()));
+		await runtime.runPromise(
+			database.effectDb
+				.update(LedgerAccountsTable)
+				.set({ created: sql`'infinity'::timestamptz` })
+				.where(eq(LedgerAccountsTable.id, record.id.toUUID()))
+		);
 		try {
 			const error = await runtime.runPromise(
 				Effect.flip(repository.getAccount(organizationId, ledgerId, record.id))
 			);
 			expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
 		} finally {
-			await database.db
-				.update(LedgerAccountsTable)
-				.set({ created: new Date() })
-				.where(eq(LedgerAccountsTable.id, record.id.toUUID()));
+			await runtime.runPromise(
+				database.effectDb
+					.update(LedgerAccountsTable)
+					.set({ created: new Date() })
+					.where(eq(LedgerAccountsTable.id, record.id.toUUID()))
+			);
 		}
 	});
 
@@ -508,16 +522,18 @@ describe("LedgerAccountRepoLive", () => {
 	])("returns a typed decoding failure for $label", async testCase => {
 		const { organizationId, ledgerId } = await createOrganizationAndLedger();
 		const id = newLedgerAccountID();
-		const db = database.db;
+		const db = database.effectDb;
 		const row = ledgerAccountCreate(organizationId, ledgerId, {
 			name: `Malformed ${testCase.label}`,
 		}).toRow();
-		await db.insert(LedgerAccountsTable).values({
-			...row,
-			id: id.toUUID(),
-			metadata: testCase.metadata ?? row.metadata,
-			lockVersion: testCase.lockVersion,
-		});
+		await runtime.runPromise(
+			db.insert(LedgerAccountsTable).values({
+				...row,
+				id: id.toUUID(),
+				metadata: testCase.metadata ?? row.metadata,
+				lockVersion: testCase.lockVersion,
+			})
+		);
 
 		try {
 			const error = await runtime.runPromise(
@@ -525,7 +541,9 @@ describe("LedgerAccountRepoLive", () => {
 			);
 			expect(error).toBeInstanceOf(AccountPersistenceDecodingFailure);
 		} finally {
-			await db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, id.toUUID()));
+			await runtime.runPromise(
+				db.delete(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, id.toUUID()))
+			);
 		}
 	});
 });

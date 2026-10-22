@@ -3,11 +3,20 @@ import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
-import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
+import {
+	type Database,
+	DatabaseTag,
+	type EffectDrizzleDatabase,
+	makeDatabaseLive,
+	postgresErrorCode,
+} from "@/db";
 import type { OrgID } from "@/lib/ids";
-import { OrganizationsTable } from "../../db/schema";
+import { LedgersTable, OrganizationsTable } from "../../db/schema";
 import { Organization } from "./Organization";
-import { OrganizationPersistenceDecodingFailure } from "./OrganizationErrors";
+import {
+	OrganizationHasDependents,
+	OrganizationPersistenceDecodingFailure,
+} from "./OrganizationErrors";
 import {
 	type OrganizationRepo,
 	OrganizationRepoTag,
@@ -27,11 +36,11 @@ describe("OrganizationRepoLive", () => {
 		ManagedRuntime.make(organizationRepoLive);
 
 	let repository: OrganizationRepo;
-	let database: Database;
+	let effectDb: EffectDrizzleDatabase;
 
 	beforeAll(async () => {
 		repository = await runtime.runPromise(OrganizationRepoTag);
-		database = await runtime.runPromise(DatabaseTag);
+		effectDb = (await runtime.runPromise(DatabaseTag)).effectDb;
 	});
 
 	const create = (name: string, description?: string) => {
@@ -56,25 +65,32 @@ describe("OrganizationRepoLive", () => {
 
 	it("stores the embedded UUID and restores the same public TypeID", async () => {
 		const organization = await create("UUID storage");
-		const rows = await database.db
-			.select()
-			.from(OrganizationsTable)
-			.where(eq(OrganizationsTable.id, organization.id.toUUID()));
+		const rows = await runtime.runPromise(
+			effectDb
+				.select()
+				.from(OrganizationsTable)
+				.where(eq(OrganizationsTable.id, organization.id.toUUID()))
+		);
 		expect(rows[0]?.id).toBe(organization.id.toUUID());
 		const restored = Option.getOrThrow(
 			await runtime.runPromise(repository.getOrganization(organization.id))
 		);
 		expect(restored.toResponse().id).toBe(organization.id.toString());
-		const columns = await database.db.execute<{
-			table_name: string;
-			column_name: string;
-			data_type: string;
-		}>(sql`
+		const columns = await runtime.runPromise(
+			effectDb.execute<{
+				table_name: string;
+				column_name: string;
+				data_type: string;
+			}>(
+				sql`
 			SELECT table_name, column_name, data_type FROM information_schema.columns
 			WHERE table_schema = 'public' AND (column_name = 'id' OR right(column_name, 3) = '_id')
-		`);
-		expect(columns.rows.length).toBeGreaterThan(0);
-		expect(columns.rows.filter(column => column.data_type !== "uuid")).toEqual([]);
+		`,
+				"objects"
+			)
+		);
+		expect(columns.length).toBeGreaterThan(0);
+		expect(columns.filter(column => column.data_type !== "uuid")).toEqual([]);
 	});
 
 	it.each([
@@ -91,10 +107,9 @@ describe("OrganizationRepoLive", () => {
 		expect(
 			Option.getOrThrow(await runtime.runPromise(repository.getOrganization(id))).id.toString()
 		).toBe(id.toString());
-		const rows = await database.db
-			.select()
-			.from(OrganizationsTable)
-			.where(eq(OrganizationsTable.id, uuid));
+		const rows = await runtime.runPromise(
+			effectDb.select().from(OrganizationsTable).where(eq(OrganizationsTable.id, uuid))
+		);
 		expect(rows[0]?.id).toBe(uuid);
 	});
 
@@ -190,32 +205,59 @@ describe("OrganizationRepoLive", () => {
 		);
 	});
 
+	it("rejects deleting an Organization that has a Ledger", async () => {
+		const organization = await create("Has Ledger");
+		const ledgerId = new TypeID("lgr").toUUID();
+		await runtime.runPromise(
+			effectDb.insert(LedgersTable).values({
+				id: ledgerId,
+				organizationId: organization.id.toUUID(),
+				name: "Dependent Ledger",
+			})
+		);
+		try {
+			const error = await runtime.runPromise(
+				Effect.flip(repository.deleteOrganization(organization.id))
+			);
+			expect(error).toBeInstanceOf(OrganizationHasDependents);
+		} finally {
+			await runtime.runPromise(effectDb.delete(LedgersTable).where(eq(LedgersTable.id, ledgerId)));
+		}
+	});
+
 	it("returns a typed decoding failure for an invalid persisted timestamp", async () => {
 		const record = await create("Invalid timestamp");
-		await database.db
-			.update(OrganizationsTable)
-			.set({ created: sql`'infinity'::timestamptz` })
-			.where(eq(OrganizationsTable.id, record.id.toUUID()));
+		await runtime.runPromise(
+			effectDb
+				.update(OrganizationsTable)
+				.set({ created: sql`'infinity'::timestamptz` })
+				.where(eq(OrganizationsTable.id, record.id.toUUID()))
+		);
 		try {
 			const error = await runtime.runPromise(Effect.flip(repository.getOrganization(record.id)));
 			expect(error).toBeInstanceOf(OrganizationPersistenceDecodingFailure);
 		} finally {
-			await database.db
-				.update(OrganizationsTable)
-				.set({ created: new Date() })
-				.where(eq(OrganizationsTable.id, record.id.toUUID()));
+			await runtime.runPromise(
+				effectDb
+					.update(OrganizationsTable)
+					.set({ created: new Date() })
+					.where(eq(OrganizationsTable.id, record.id.toUUID()))
+			);
 		}
 	});
 
 	it.each(["not-an-organization", "lgr_01h2x3y4z5a6b7c8d9e0f1g2h3"])(
 		"rejects non-UUID ID %s in PostgreSQL",
 		async invalidId => {
-			await expect(
-				database.db.insert(OrganizationsTable).values({
-					id: invalidId,
-					name: "Malformed Organization",
-				})
-			).rejects.toMatchObject({ cause: { code: "22P02" } });
+			const error = await runtime.runPromise(
+				Effect.flip(
+					effectDb.insert(OrganizationsTable).values({
+						id: invalidId,
+						name: "Malformed Organization",
+					})
+				)
+			);
+			expect(postgresErrorCode(error)).toBe("22P02");
 		}
 	);
 });

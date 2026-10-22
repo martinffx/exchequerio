@@ -45,55 +45,69 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 	beforeAll(async () => {
 		repository = await runtime.runPromise(LedgerAccountBalanceMonitorRepoTag);
 		database = await runtime.runPromise(DatabaseTag);
-		const db = database.db;
-		await db.insert(OrganizationsTable).values({
-			id: organizationId.toUUID(),
-			name: "Balance Monitor repository test",
-		});
-		await db.insert(LedgersTable).values({
-			id: ledgerId.toUUID(),
-			organizationId: organizationId.toUUID(),
-			name: "Ledger",
-		});
-		await db.insert(AssetsTable).values({
-			id: assetId.toUUID(),
-			organizationId: organizationId.toUUID(),
-			code: "USD",
-			name: "Dollar",
-			minorUnitExponent: 2,
-		});
-		await db.insert(LedgerAccountsTable).values(
-			accountIds.map((accountId, index) => ({
-				id: accountId.toUUID(),
+		const db = database.effectDb;
+		await runtime.runPromise(
+			db.insert(OrganizationsTable).values({
+				id: organizationId.toUUID(),
+				name: "Balance Monitor repository test",
+			})
+		);
+		await runtime.runPromise(
+			db.insert(LedgersTable).values({
+				id: ledgerId.toUUID(),
 				organizationId: organizationId.toUUID(),
-				ledgerId: ledgerId.toUUID(),
-				name: `Account ${index}`,
-				normalBalance: "debit" as const,
-				assetId: assetId.toUUID(),
-			}))
+				name: "Ledger",
+			})
+		);
+		await runtime.runPromise(
+			db.insert(AssetsTable).values({
+				id: assetId.toUUID(),
+				organizationId: organizationId.toUUID(),
+				code: "USD",
+				name: "Dollar",
+				minorUnitExponent: 2,
+			})
+		);
+		await runtime.runPromise(
+			db.insert(LedgerAccountsTable).values(
+				accountIds.map((accountId, index) => ({
+					id: accountId.toUUID(),
+					organizationId: organizationId.toUUID(),
+					ledgerId: ledgerId.toUUID(),
+					name: `Account ${index}`,
+					normalBalance: "debit" as const,
+					assetId: assetId.toUUID(),
+				}))
+			)
 		);
 	});
 
 	afterAll(async () => {
 		try {
-			const db = database.db;
-			await db.delete(LedgerAccountBalanceMonitorsTable).where(
-				inArray(
-					LedgerAccountBalanceMonitorsTable.accountId,
-					accountIds.map(accountId => accountId.toUUID())
+			const db = database.effectDb;
+			await runtime.runPromise(
+				db.delete(LedgerAccountBalanceMonitorsTable).where(
+					inArray(
+						LedgerAccountBalanceMonitorsTable.accountId,
+						accountIds.map(accountId => accountId.toUUID())
+					)
 				)
 			);
-			await db.delete(LedgerAccountsTable).where(
-				inArray(
-					LedgerAccountsTable.id,
-					accountIds.map(accountId => accountId.toUUID())
+			await runtime.runPromise(
+				db.delete(LedgerAccountsTable).where(
+					inArray(
+						LedgerAccountsTable.id,
+						accountIds.map(accountId => accountId.toUUID())
+					)
 				)
 			);
-			await db.delete(LedgersTable).where(inArray(LedgersTable.id, [ledgerId.toUUID()]));
-			await db.delete(AssetsTable).where(eq(AssetsTable.id, assetId.toUUID()));
-			await db
-				.delete(OrganizationsTable)
-				.where(inArray(OrganizationsTable.id, [organizationId.toUUID()]));
+			await runtime.runPromise(
+				db.delete(LedgersTable).where(inArray(LedgersTable.id, [ledgerId.toUUID()]))
+			);
+			await runtime.runPromise(db.delete(AssetsTable).where(eq(AssetsTable.id, assetId.toUUID())));
+			await runtime.runPromise(
+				db.delete(OrganizationsTable).where(inArray(OrganizationsTable.id, [organizationId.toUUID()]))
+			);
 		} finally {
 			await runtime.dispose();
 		}
@@ -127,10 +141,12 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 	it("creates a baseline and versions edits and deletion without changing Account balances or version", async () => {
 		const original = make();
 		const before = (
-			await database.db
-				.select()
-				.from(LedgerAccountsTable)
-				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			await runtime.runPromise(
+				database.effectDb
+					.select()
+					.from(LedgerAccountsTable)
+					.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			)
 		)[0];
 		const created = await runtime.runPromise(repository.createMonitor(original));
 		expect(created.toResponse()).toMatchObject({
@@ -138,16 +154,20 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			alertCondition: request.alertCondition,
 		});
 		let account = (
-			await database.db
-				.select()
-				.from(LedgerAccountsTable)
-				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			await runtime.runPromise(
+				database.effectDb
+					.select()
+					.from(LedgerAccountsTable)
+					.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			)
 		)[0];
 		expect(account).toEqual(before);
-		await database.db
-			.update(LedgerAccountsTable)
-			.set({ lockVersion: before.lockVersion + 2 })
-			.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()));
+		await runtime.runPromise(
+			database.effectDb
+				.update(LedgerAccountsTable)
+				.set({ lockVersion: before.lockVersion + 2 })
+				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+		);
 		const updated = Option.getOrThrow(
 			await runtime.runPromise(
 				repository.updateMonitor(
@@ -169,17 +189,21 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 			true
 		);
 		account = (
-			await database.db
-				.select()
-				.from(LedgerAccountsTable)
-				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			await runtime.runPromise(
+				database.effectDb
+					.select()
+					.from(LedgerAccountsTable)
+					.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			)
 		)[0];
 		expect(account).toEqual({ ...before, lockVersion: before.lockVersion + 2 });
 		expect(
-			await database.db
-				.select()
-				.from(LedgerAccountBalanceMonitorsTable)
-				.where(eq(LedgerAccountBalanceMonitorsTable.id, created.row.id))
+			await runtime.runPromise(
+				database.effectDb
+					.select()
+					.from(LedgerAccountBalanceMonitorsTable)
+					.where(eq(LedgerAccountBalanceMonitorsTable.id, created.row.id))
+			)
 		).toEqual([]);
 	});
 	it("isolates Organization, Ledger and Account reads and mutations", async () => {
@@ -230,7 +254,9 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 	});
 	it("preserves created-descending pagination", async () => {
 		const rows = [0, 1, 2].map(index => ({ ...make().row, created: new Date(999999999000 + index) }));
-		await database.db.insert(LedgerAccountBalanceMonitorsTable).values(rows);
+		await runtime.runPromise(
+			database.effectDb.insert(LedgerAccountBalanceMonitorsTable).values(rows)
+		);
 		const all = await runtime.runPromise(repository.listMonitors(scope, { offset: 0, limit: 100 }));
 		const page = await runtime.runPromise(repository.listMonitors(scope, { offset: 1, limit: 1 }));
 		expect(page[0].row.id).toBe(all[1].row.id);
@@ -246,18 +272,22 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 	it("rolls back duplicate creates without changing the count", async () => {
 		const record = await runtime.runPromise(repository.createMonitor(make()));
 		const before = (
-			await database.db
-				.select()
-				.from(LedgerAccountsTable)
-				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			await runtime.runPromise(
+				database.effectDb
+					.select()
+					.from(LedgerAccountsTable)
+					.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			)
 		)[0];
 		const error = await runtime.runPromise(Effect.flip(repository.createMonitor(record)));
 		expect(error).toMatchObject({ statusCode: 500, message: "Internal Server Error" });
 		const after = (
-			await database.db
-				.select()
-				.from(LedgerAccountsTable)
-				.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			await runtime.runPromise(
+				database.effectDb
+					.select()
+					.from(LedgerAccountsTable)
+					.where(eq(LedgerAccountsTable.id, accountIds[0].toUUID()))
+			)
 		)[0];
 		expect(after).toEqual(before);
 	});
@@ -303,10 +333,12 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		);
 		await runtime.runPromise(repository.createMonitor(monitor));
 		await runtime.runPromise(repository.deleteMonitor(unusedScope, monitor.id));
-		const deleted = await database.db
-			.delete(LedgerAccountsTable)
-			.where(eq(LedgerAccountsTable.id, accountIds[1].toUUID()))
-			.returning();
+		const deleted = await runtime.runPromise(
+			database.effectDb
+				.delete(LedgerAccountsTable)
+				.where(eq(LedgerAccountsTable.id, accountIds[1].toUUID()))
+				.returning()
+		);
 		expect(deleted).toHaveLength(1);
 	});
 });

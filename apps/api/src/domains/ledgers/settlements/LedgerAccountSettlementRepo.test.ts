@@ -1316,14 +1316,16 @@ describe("Settlement netting limits", () => {
 					? (["debit", "debit", "credit"] as const)
 					: ([negative ? "credit" : "debit", negative ? "credit" : "debit"] as const);
 			const members = [];
-			const { db } = await runtime.runPromise(DatabaseTag);
+			const { effectDb: db } = await runtime.runPromise(DatabaseTag);
 			for (const [index, direction] of directions.entries()) {
 				const member = await runtime.runPromise(source(owner, 1n, direction));
 				members.push(member.entry.id.toString());
-				await db
-					.update(LedgerTransactionEntriesTable)
-					.set({ amount: scenario === "cancellation" || index === 0 ? 9223372036854775807n : 1n })
-					.where(eq(LedgerTransactionEntriesTable.transactionId, member.transaction.id.toUUID()));
+				await runtime.runPromise(
+					db
+						.update(LedgerTransactionEntriesTable)
+						.set({ amount: scenario === "cancellation" || index === 0 ? 9223372036854775807n : 1n })
+						.where(eq(LedgerTransactionEntriesTable.transactionId, member.transaction.id.toUUID()))
+				);
 			}
 			await runtime.runPromise(
 				repo.changeEntries(owner.organizationId, owner.ledgerId, entity.id, members, true)

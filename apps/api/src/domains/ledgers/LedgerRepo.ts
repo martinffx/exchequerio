@@ -1,7 +1,7 @@
 import { encodeUuid } from "@/lib/utils";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
-import { DatabaseTag, type DrizzleDatabase } from "@/db";
+import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import { OrganizationNotFound } from "@/domains/organizations";
 import type { LedgerID, OrgID } from "@/lib/ids";
 import {
@@ -121,7 +121,7 @@ class LedgerRepoLive implements LedgerRepo {
 	 *
 	 * @param db - Database used for all Ledger reads and writes.
 	 */
-	constructor(private readonly db: DrizzleDatabase) {}
+	constructor(private readonly db: EffectDrizzleDatabase) {}
 
 	/**
 	 * Lists tenant-scoped Ledgers in ascending identifier order.
@@ -134,20 +134,18 @@ class LedgerRepoLive implements LedgerRepo {
 		organizationId: OrgID,
 		{ limit, offset }: LedgerListQuery
 	): Effect.Effect<Ledger[], LedgerInfrastructureError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db
-					.select(publicColumns)
-					.from(LedgersTable)
-					.where(eq(LedgersTable.organizationId, encodeUuid(organizationId)))
-					.orderBy(asc(LedgersTable.id))
-					.limit(limit)
-					.offset(offset),
-			catch: mapLedgerInfrastructureError,
-		}).pipe(
-			Effect.flatMap(rows => Effect.all(rows.map(row => Ledger.fromRow(row)))),
-			Effect.map(ledgers => ledgers.flatMap(ledger => Option.toArray(ledger)))
-		);
+		return this.db
+			.select(publicColumns)
+			.from(LedgersTable)
+			.where(eq(LedgersTable.organizationId, encodeUuid(organizationId)))
+			.orderBy(asc(LedgersTable.id))
+			.limit(limit)
+			.offset(offset)
+			.pipe(
+				Effect.mapError(mapLedgerInfrastructureError),
+				Effect.flatMap(rows => Effect.all(rows.map(row => Ledger.fromRow(row)))),
+				Effect.map(ledgers => ledgers.flatMap(ledger => Option.toArray(ledger)))
+			);
 	}
 
 	/**
@@ -161,20 +159,20 @@ class LedgerRepoLive implements LedgerRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID
 	): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db
-					.select(publicColumns)
-					.from(LedgersTable)
-					.where(
-						and(
-							eq(LedgersTable.id, encodeUuid(ledgerId)),
-							eq(LedgersTable.organizationId, encodeUuid(organizationId))
-						)
-					)
-					.limit(1),
-			catch: mapLedgerInfrastructureError,
-		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
+		return this.db
+			.select(publicColumns)
+			.from(LedgersTable)
+			.where(
+				and(
+					eq(LedgersTable.id, encodeUuid(ledgerId)),
+					eq(LedgersTable.organizationId, encodeUuid(organizationId))
+				)
+			)
+			.limit(1)
+			.pipe(
+				Effect.mapError(mapLedgerInfrastructureError),
+				Effect.flatMap(rows => Ledger.fromRow(rows[0]))
+			);
 	}
 
 	/**
@@ -184,13 +182,15 @@ class LedgerRepoLive implements LedgerRepo {
 	 * @returns An Effect containing the inserted Ledger.
 	 */
 	createLedger(record: Ledger): Effect.Effect<Ledger, LedgerCreateRepositoryError> {
-		return Effect.tryPromise({
-			try: () => this.db.insert(LedgersTable).values(record.toCreateRow()).returning(publicColumns),
-			catch: mapLedgerCreateError,
-		}).pipe(
-			Effect.flatMap(rows => Ledger.fromRow(rows[0])),
-			Effect.flatMap(requireCreatedLedger)
-		);
+		return this.db
+			.insert(LedgersTable)
+			.values(record.toCreateRow())
+			.returning(publicColumns)
+			.pipe(
+				Effect.mapError(mapLedgerCreateError),
+				Effect.flatMap(rows => Ledger.fromRow(rows[0])),
+				Effect.flatMap(requireCreatedLedger)
+			);
 	}
 
 	/**
@@ -200,20 +200,20 @@ class LedgerRepoLive implements LedgerRepo {
 	 * @returns An Effect containing the updated Ledger, or `Option.none()` when no row matches.
 	 */
 	updateLedger(record: Ledger): Effect.Effect<Option.Option<Ledger>, LedgerInfrastructureError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db
-					.update(LedgersTable)
-					.set(record.toUpdateRow())
-					.where(
-						and(
-							eq(LedgersTable.id, encodeUuid(record.id)),
-							eq(LedgersTable.organizationId, encodeUuid(record.organizationId))
-						)
-					)
-					.returning(publicColumns),
-			catch: mapLedgerInfrastructureError,
-		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
+		return this.db
+			.update(LedgersTable)
+			.set(record.toUpdateRow())
+			.where(
+				and(
+					eq(LedgersTable.id, encodeUuid(record.id)),
+					eq(LedgersTable.organizationId, encodeUuid(record.organizationId))
+				)
+			)
+			.returning(publicColumns)
+			.pipe(
+				Effect.mapError(mapLedgerInfrastructureError),
+				Effect.flatMap(rows => Ledger.fromRow(rows[0]))
+			);
 	}
 
 	/**
@@ -227,19 +227,19 @@ class LedgerRepoLive implements LedgerRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID
 	): Effect.Effect<Option.Option<Ledger>, LedgerDeleteRepositoryError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db
-					.delete(LedgersTable)
-					.where(
-						and(
-							eq(LedgersTable.id, encodeUuid(ledgerId)),
-							eq(LedgersTable.organizationId, encodeUuid(organizationId))
-						)
-					)
-					.returning(publicColumns),
-			catch: mapLedgerDeleteError,
-		}).pipe(Effect.flatMap(rows => Ledger.fromRow(rows[0])));
+		return this.db
+			.delete(LedgersTable)
+			.where(
+				and(
+					eq(LedgersTable.id, encodeUuid(ledgerId)),
+					eq(LedgersTable.organizationId, encodeUuid(organizationId))
+				)
+			)
+			.returning(publicColumns)
+			.pipe(
+				Effect.mapError(mapLedgerDeleteError),
+				Effect.flatMap(rows => Ledger.fromRow(rows[0]))
+			);
 	}
 	/**
 	 * Deletes a scoped test Ledger and all its accounting fixtures atomically.
@@ -256,20 +256,20 @@ class LedgerRepoLive implements LedgerRepo {
 		organizationId: OrgID,
 		ledgerId: LedgerID
 	): Effect.Effect<void, LedgerDeleteRepositoryError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db.transaction(async tx => {
-					const ledger = await tx
+		const lockedLedgerWhere = and(
+			eq(LedgersTable.organizationId, encodeUuid(organizationId)),
+			eq(LedgersTable.id, encodeUuid(ledgerId))
+		);
+		return this.db
+			.transaction(tx =>
+				Effect.gen(function* () {
+					const ledger = yield* tx
 						.select({ id: LedgersTable.id })
 						.from(LedgersTable)
-						.where(
-							and(
-								eq(LedgersTable.organizationId, encodeUuid(organizationId)),
-								eq(LedgersTable.id, encodeUuid(ledgerId))
-							)
-						)
+						.where(lockedLedgerWhere)
 						.for("update");
 					if (ledger.length === 0) return;
+					// Left unrun so it stays a SQL subquery.
 					const settlements = tx
 						.select({ id: LedgerAccountSettlementsTable.id })
 						.from(LedgerAccountSettlementsTable)
@@ -279,10 +279,10 @@ class LedgerRepoLive implements LedgerRepo {
 								eq(LedgerAccountSettlementsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
-					await tx
+					yield* tx
 						.delete(LedgerAccountSettlementEntriesTable)
 						.where(inArray(LedgerAccountSettlementEntriesTable.settlementId, settlements));
-					await tx
+					yield* tx
 						.delete(LedgerTransactionEntriesTable)
 						.where(
 							and(
@@ -290,7 +290,7 @@ class LedgerRepoLive implements LedgerRepo {
 								eq(LedgerTransactionEntriesTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
-					await tx
+					yield* tx
 						.delete(LedgerTransactionsTable)
 						.where(
 							and(
@@ -298,7 +298,7 @@ class LedgerRepoLive implements LedgerRepo {
 								eq(LedgerTransactionsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
-					await tx
+					yield* tx
 						.delete(LedgerAccountSettlementsTable)
 						.where(
 							and(
@@ -306,7 +306,7 @@ class LedgerRepoLive implements LedgerRepo {
 								eq(LedgerAccountSettlementsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
-					await tx
+					yield* tx
 						.delete(LedgerAccountsTable)
 						.where(
 							and(
@@ -314,23 +314,16 @@ class LedgerRepoLive implements LedgerRepo {
 								eq(LedgerAccountsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
-					await tx
-						.delete(LedgersTable)
-						.where(
-							and(
-								eq(LedgersTable.organizationId, encodeUuid(organizationId)),
-								eq(LedgersTable.id, encodeUuid(ledgerId))
-							)
-						);
-				}),
-			catch: mapLedgerDeleteError,
-		});
+					yield* tx.delete(LedgersTable).where(lockedLedgerWhere);
+				})
+			)
+			.pipe(Effect.mapError(mapLedgerDeleteError));
 	}
 }
 
 const ledgerRepoLayer = Layer.effect(
 	LedgerRepoTag,
-	DatabaseTag.pipe(Effect.map(database => new LedgerRepoLive(database.db)))
+	DatabaseTag.pipe(Effect.map(database => new LedgerRepoLive(database.effectDb)))
 );
 
 export type {
