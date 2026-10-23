@@ -1,9 +1,18 @@
+import { Effect } from "effect";
 import { DateTime } from "luxon";
-import { TypeID } from "typeid-js";
+import type { TypeID } from "typeid-js";
 import type { LedgerAccountStatementRow } from "@/db/schema";
-import type { AssetSummary } from "@/lib/AssetSchema";
-import { assertInt64 } from "@/lib/amounts";
-import { BadRequestError } from "@/lib/errors";
+import { INT64_MAX, INT64_MIN } from "@/lib/amounts";
+import { BadRequestError, ConflictError } from "@/lib/errors";
+import type {
+	LedgerAccountID,
+	LedgerAccountStatementID,
+	LedgerID,
+	LedgerTransactionEntryID,
+	LedgerTransactionID,
+} from "@/lib/ids";
+import { parseDate, parseUuid } from "@/lib/utils";
+import { StatementPersistenceDecodingFailure } from "./StatementErrors";
 import type {
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,
@@ -21,10 +30,14 @@ type StatementTotals = {
 	unpostedDebits: bigint;
 };
 
+const inRange = (value: bigint) => value >= INT64_MIN && value <= INT64_MAX;
+
+type StatementPeriod = { startDatetime: Date; endDatetime: Date };
+
 const calculateStatementBalances = (
 	normalBalance: StatementSnapshot["normalBalance"],
 	totals: StatementTotals
-): StatementSnapshot["startingBalances"] => {
+): Effect.Effect<StatementSnapshot["startingBalances"], ConflictError> => {
 	const { postedCredits, postedDebits, unpostedCredits, unpostedDebits } = totals;
 	const pendingCredits = postedCredits + unpostedCredits;
 	const pendingDebits = postedDebits + unpostedDebits;
@@ -37,78 +50,128 @@ const calculateStatementBalances = (
 			debits: normalBalance === "debit" ? postedDebits : pendingDebits,
 		},
 	];
-	return counters.map(balance => ({
+	const balances = counters.map(balance => ({
 		balanceType: balance.balanceType,
-		credits: assertInt64(balance.credits).toString(),
-		debits: assertInt64(balance.debits).toString(),
-		amount: assertInt64(
-			normalBalance === "debit" ? balance.debits - balance.credits : balance.credits - balance.debits
-		).toString(),
+		credits: balance.credits,
+		debits: balance.debits,
+		amount:
+			normalBalance === "debit" ? balance.debits - balance.credits : balance.credits - balance.debits,
 	}));
+	return balances.every(b => inRange(b.credits) && inRange(b.debits) && inRange(b.amount))
+		? Effect.succeed(
+				balances.map(b => ({
+					balanceType: b.balanceType,
+					credits: b.credits.toString(),
+					debits: b.debits.toString(),
+					amount: b.amount.toString(),
+				}))
+			)
+		: Effect.fail(
+				new ConflictError("Accounting projection exceeds the signed 64-bit range", { retryable: false })
+			);
 };
 
 const validateStatementPeriod = (
 	request: Pick<LedgerAccountStatementRequest, "startDatetime" | "endDatetime">
-): { startDatetime: Date; endDatetime: Date } => {
-	const start = DateTime.fromISO(request.startDatetime, { zone: "utc" });
-	const end = DateTime.fromISO(request.endDatetime, { zone: "utc" });
-	if (!start.isValid || !end.isValid || start.toMillis() >= end.toMillis()) {
-		throw new BadRequestError(
-			"Statement startDatetime must precede endDatetime and both must be valid timestamps"
-		);
-	}
-	return { startDatetime: start.toJSDate(), endDatetime: end.toJSDate() };
+): Effect.Effect<StatementPeriod, BadRequestError> => {
+	const message =
+		"Statement startDatetime must precede endDatetime and both must be valid timestamps";
+	return Effect.try({
+		try: () => ({
+			start: DateTime.fromISO(request.startDatetime, { zone: "utc" }),
+			end: DateTime.fromISO(request.endDatetime, { zone: "utc" }),
+		}),
+		catch: parseError => new BadRequestError(message, { cause: parseError }),
+	}).pipe(
+		Effect.filterOrFail(
+			({ start, end }) => start.toMillis() < end.toMillis(),
+			() => new BadRequestError(message)
+		),
+		Effect.map(({ start, end }) => ({ startDatetime: start.toJSDate(), endDatetime: end.toJSDate() }))
+	);
 };
 
-const typeId = (prefix: string, uuid: string): string => TypeID.fromUUID(prefix, uuid).toString();
-const toAssetSummary = (asset: AssetSummary): AssetSummary => ({
-	assetId: typeId("ast", asset.assetId),
-	assetCode: asset.assetCode,
-	minorUnitExponent: asset.minorUnitExponent,
-});
-
 /** Snapshots store native UUIDs; responses expose prefixed TypeIDs. */
-const toEntryResponse = (entry: StatementEntry): StatementEntry => ({
-	...entry,
-	id: typeId("lte", entry.id),
-	accountId: typeId("lat", entry.accountId),
-	assetId: typeId("ast", entry.assetId),
-	transaction: { ...entry.transaction, id: typeId("ltr", entry.transaction.id) },
-});
+const decodeStatementEntry = (
+	entry: StatementEntry
+): Effect.Effect<StatementEntry, StatementPersistenceDecodingFailure> =>
+	Effect.gen(function* () {
+		const id = yield* parseUuid<"lte", LedgerTransactionEntryID>("lte", entry.id);
+		const accountId = yield* parseUuid<"lat", LedgerAccountID>("lat", entry.accountId);
+		const assetId = yield* parseUuid<"ast", TypeID<"ast">>("ast", entry.assetId);
+		const transactionId = yield* parseUuid<"ltr", LedgerTransactionID>("ltr", entry.transaction.id);
+		return {
+			...entry,
+			id: id.toString(),
+			accountId: accountId.toString(),
+			assetId: assetId.toString(),
+			transaction: { ...entry.transaction, id: transactionId.toString() },
+		};
+	}).pipe(Effect.mapError(cause => new StatementPersistenceDecodingFailure(cause)));
+
+type DecodedStatement = {
+	id: LedgerAccountStatementID;
+	ledgerId: LedgerID;
+	accountId: LedgerAccountID;
+	assetId: TypeID<"ast">;
+	startDatetime: DateTime;
+	endDatetime: DateTime;
+	created: DateTime;
+	updated: DateTime;
+};
 
 class LedgerAccountStatement {
-	private constructor(private readonly record: StatementRecord) {}
-	static fromRow(record: StatementRecord): LedgerAccountStatement {
-		return new LedgerAccountStatement(record);
+	private constructor(
+		private readonly record: StatementRecord,
+		private readonly decoded: DecodedStatement
+	) {}
+	static fromRow(
+		record: StatementRecord
+	): Effect.Effect<LedgerAccountStatement, StatementPersistenceDecodingFailure> {
+		return Effect.gen(function* () {
+			const decoded: DecodedStatement = {
+				id: yield* parseUuid<"lst", LedgerAccountStatementID>("lst", record.id),
+				ledgerId: yield* parseUuid<"lgr", LedgerID>("lgr", record.ledgerId),
+				accountId: yield* parseUuid<"lat", LedgerAccountID>("lat", record.accountId),
+				assetId: yield* parseUuid<"ast", TypeID<"ast">>("ast", record.snapshot.assetId),
+				startDatetime: yield* parseDate(record.startDatetime),
+				endDatetime: yield* parseDate(record.endDatetime),
+				created: yield* parseDate(record.created),
+				updated: yield* parseDate(record.updated),
+			};
+			return new LedgerAccountStatement(record, decoded);
+		}).pipe(Effect.mapError(cause => new StatementPersistenceDecodingFailure(cause)));
 	}
-	get id(): string {
-		return typeId("lst", this.record.id);
+	get id(): LedgerAccountStatementID {
+		return this.decoded.id;
 	}
 	toResponse(): LedgerAccountStatementResponse {
-		const row = this.record;
+		const { record, decoded } = this;
 		return {
-			id: typeId("lst", row.id),
-			ledgerId: typeId("lgr", row.ledgerId),
-			accountId: typeId("lat", row.accountId),
-			startDatetime: row.startDatetime.toISOString(),
-			endDatetime: row.endDatetime.toISOString(),
-			ledgerAccountVersion: row.ledgerAccountVersion,
-			normalBalance: row.snapshot.normalBalance,
-			...toAssetSummary(row.snapshot),
-			startingBalances: row.snapshot.startingBalances,
-			endingBalances: row.snapshot.endingBalances,
-			description: row.description ?? undefined,
-			metadata: row.metadata ?? undefined,
-			lockVersion: row.lockVersion,
-			created: row.created.toISOString(),
-			updated: row.updated.toISOString(),
+			id: decoded.id.toString(),
+			ledgerId: decoded.ledgerId.toString(),
+			accountId: decoded.accountId.toString(),
+			startDatetime: decoded.startDatetime.toISO(),
+			endDatetime: decoded.endDatetime.toISO(),
+			ledgerAccountVersion: record.ledgerAccountVersion,
+			normalBalance: record.snapshot.normalBalance,
+			assetId: decoded.assetId.toString(),
+			assetCode: record.snapshot.assetCode,
+			minorUnitExponent: record.snapshot.minorUnitExponent,
+			startingBalances: record.snapshot.startingBalances,
+			endingBalances: record.snapshot.endingBalances,
+			description: record.description ?? undefined,
+			metadata: record.metadata ?? undefined,
+			lockVersion: record.lockVersion,
+			created: decoded.created.toISO(),
+			updated: decoded.updated.toISO(),
 		};
 	}
 }
 export {
 	LedgerAccountStatement,
 	calculateStatementBalances,
-	toEntryResponse,
+	decodeStatementEntry,
 	validateStatementPeriod,
 };
-export type { StatementRecord, StatementTotals };
+export type { StatementPeriod, StatementRecord, StatementTotals };

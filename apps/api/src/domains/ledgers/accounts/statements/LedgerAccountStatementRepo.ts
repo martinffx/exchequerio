@@ -1,23 +1,17 @@
 import { and, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-import { DatabaseTag, type EffectDrizzleDatabase, isPostgresUnavailable } from "@/db";
+import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import { AssetsTable, LedgerAccountsTable, LedgerAccountStatementsTable } from "@/db/schema";
-import {
-	BadRequestError,
-	ConflictError,
-	HttpError,
-	InternalServerError,
-	NotFoundError,
-	ServiceUnavailableError,
-} from "@/lib/errors";
+import { BadRequestError, ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID, OrgID } from "@/lib/ids";
 import { encodeUuid } from "@/lib/utils";
 import {
 	calculateStatementBalances,
+	decodeStatementEntry,
 	LedgerAccountStatement,
 	type StatementRecord,
 	type StatementTotals,
-	validateStatementPeriod,
+	type StatementPeriod,
 } from "./LedgerAccountStatement";
 import {
 	type LedgerAccountStatementRequest,
@@ -28,24 +22,41 @@ import {
 	type StatementSnapshot,
 	type StatementUpdateRequest,
 } from "./LedgerAccountStatementSchema";
+import {
+	mapStatementInfrastructureError,
+	type StatementInfrastructureError,
+	StatementPersistenceFailure,
+} from "./StatementErrors";
 
 type Scope = [organizationId: OrgID, ledgerId: LedgerID, accountId: LedgerAccountID];
+type StatementReadError = NotFoundError | StatementInfrastructureError;
+type StatementCreateError =
+	| BadRequestError
+	| ConflictError
+	| NotFoundError
+	| StatementInfrastructureError;
+type StatementUpdateError = ConflictError | NotFoundError | StatementInfrastructureError;
 interface LedgerAccountStatementRepo {
 	getStatement(
 		...args: [...Scope, id: LedgerAccountStatementID]
-	): Effect.Effect<LedgerAccountStatement, unknown>;
+	): Effect.Effect<LedgerAccountStatement, StatementReadError>;
 	listStatements(
 		...args: [...Scope, query: StatementListQuery]
-	): Effect.Effect<LedgerAccountStatement[], unknown>;
+	): Effect.Effect<LedgerAccountStatement[], StatementReadError>;
 	getEntries(
 		...args: [...Scope, id: LedgerAccountStatementID, query: StatementListQuery]
-	): Effect.Effect<StatementEntry[], unknown>;
+	): Effect.Effect<StatementEntry[], StatementReadError>;
 	createStatement(
-		...args: [...Scope, id: LedgerAccountStatementID, request: LedgerAccountStatementRequest]
-	): Effect.Effect<LedgerAccountStatement, unknown>;
+		...args: [
+			...Scope,
+			id: LedgerAccountStatementID,
+			request: LedgerAccountStatementRequest,
+			period: StatementPeriod,
+		]
+	): Effect.Effect<LedgerAccountStatement, StatementCreateError>;
 	updateAnnotations(
 		...args: [...Scope, id: LedgerAccountStatementID, request: StatementUpdateRequest]
-	): Effect.Effect<LedgerAccountStatement, unknown>;
+	): Effect.Effect<LedgerAccountStatement, StatementUpdateError>;
 }
 const LedgerAccountStatementRepoTag = Context.Service<LedgerAccountStatementRepo>(
 	"LedgerAccountStatementRepo"
@@ -61,15 +72,12 @@ const scopeWhere = (organizationId: OrgID, ledgerId: LedgerID, accountId: Ledger
 		eq(table.ledgerId, encodeUuid(ledgerId)),
 		eq(table.accountId, encodeUuid(accountId))
 	);
-const mapError = (cause: unknown) =>
-	cause instanceof HttpError
-		? cause
-		: isPostgresUnavailable(cause)
-			? new ServiceUnavailableError("Statement database unavailable", { cause })
-			: new InternalServerError("Statement database operation failed", { cause });
-const requireStatement = (rows: StatementRecord[], id: LedgerAccountStatementID) =>
+const requireStatement = (
+	rows: StatementRecord[],
+	id: LedgerAccountStatementID
+): Effect.Effect<LedgerAccountStatement, StatementReadError> =>
 	rows[0]
-		? Effect.succeed(LedgerAccountStatement.fromRow(rows[0]))
+		? LedgerAccountStatement.fromRow(rows[0])
 		: Effect.fail(new NotFoundError(`Statement not found: ${id.toString()}`));
 // One expression defines both the copied document and its exact serialized byte count.
 const entryDocument = sql`jsonb_strip_nulls(jsonb_build_object(
@@ -90,7 +98,9 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 			.limit(1)
 			.pipe(
 				Effect.flatMap(rows => requireStatement(rows, id)),
-				Effect.mapError(mapError)
+				Effect.catchTag("EffectDrizzleQueryError", cause =>
+					Effect.fail(mapStatementInfrastructureError(cause))
+				)
 			);
 	}
 	listStatements(...[organizationId, ledgerId, accountId, query]: [...Scope, StatementListQuery]) {
@@ -115,8 +125,12 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 				.orderBy(desc(table.created), desc(table.id))
 				.limit(query.limit)
 				.offset(query.offset);
-			return rows.map(row => LedgerAccountStatement.fromRow(row));
-		}).pipe(Effect.mapError(mapError));
+			return yield* Effect.forEach(rows, row => LedgerAccountStatement.fromRow(row));
+		}).pipe(
+			Effect.catchTag("EffectDrizzleQueryError", cause =>
+				Effect.fail(mapStatementInfrastructureError(cause))
+			)
+		);
 	}
 	getEntries(
 		...[organizationId, ledgerId, accountId, id, query]: [
@@ -135,24 +149,25 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 				})
 				.from(table)
 				.where(and(scopeWhere(organizationId, ledgerId, accountId), eq(table.id, encodeUuid(id))));
-			return rows[0]?.entries ?? [];
-		}).pipe(Effect.mapError(mapError));
+			return yield* Effect.forEach(rows[0]?.entries ?? [], entry => decodeStatementEntry(entry));
+		}).pipe(
+			Effect.catchTag("EffectDrizzleQueryError", cause =>
+				Effect.fail(mapStatementInfrastructureError(cause))
+			)
+		);
 	}
 	createStatement(
-		...[organizationId, ledgerId, accountId, id, request]: [
+		...[organizationId, ledgerId, accountId, id, request, period]: [
 			...Scope,
 			LedgerAccountStatementID,
 			LedgerAccountStatementRequest,
+			StatementPeriod,
 		]
 	) {
 		return this.db
 			.transaction(
 				tx =>
 					Effect.gen(function* () {
-						const period = yield* Effect.try({
-							try: () => validateStatementPeriod(request),
-							catch: cause => cause,
-						});
 						const accounts = yield* tx
 							.select({
 								normalBalance: LedgerAccountsTable.normalBalance,
@@ -203,19 +218,15 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 							closing[key] += BigInt(row.amount);
 							if (row.opening) opening[key] += BigInt(row.amount);
 						}
-						const header = yield* Effect.try({
-							try: () =>
-								({
-									normalBalance: account.normalBalance,
-									assetId: account.assetId,
-									assetCode: account.assetCode,
-									minorUnitExponent: account.minorUnitExponent,
-									startingBalances: calculateStatementBalances(account.normalBalance, opening),
-									endingBalances: calculateStatementBalances(account.normalBalance, closing),
-									entries: [],
-								}) satisfies StatementSnapshot,
-							catch: cause => cause,
-						});
+						const header = {
+							normalBalance: account.normalBalance,
+							assetId: account.assetId,
+							assetCode: account.assetCode,
+							minorUnitExponent: account.minorUnitExponent,
+							startingBalances: yield* calculateStatementBalances(account.normalBalance, opening),
+							endingBalances: yield* calculateStatementBalances(account.normalBalance, closing),
+							entries: [],
+						} satisfies StatementSnapshot;
 						const inPeriod = sql`${eligible} AND t.effective_at >= ${period.startDatetime.toISOString()}::timestamptz AND t.effective_at < ${period.endDatetime.toISOString()}::timestamptz`;
 						const sizes = yield* tx.execute<{ count: string; bytes: string }>(
 							sql`SELECT count(*)::text AS count, (octet_length((${JSON.stringify(header)}::jsonb)::text) + coalesce(sum(octet_length(preflight.document::text)), 0) + greatest(count(*) - 1, 0) * 2)::text AS bytes FROM (SELECT ${entryDocument} AS document ${inPeriod} LIMIT ${MAX_STATEMENT_ENTRIES + 1}) preflight`,
@@ -244,11 +255,20 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 								snapshot: sql`${JSON.stringify(header)}::jsonb || jsonb_build_object('entries', (SELECT coalesce(jsonb_agg(${entryDocument} ORDER BY t.effective_at, e.id), '[]'::jsonb) ${inPeriod}))`,
 							})
 							.returning(summary);
-						return yield* requireStatement(rows, id);
+						const row = rows[0];
+						if (!row)
+							return yield* Effect.fail(
+								new StatementPersistenceFailure(new Error("Statement insert returned no row"))
+							);
+						return yield* LedgerAccountStatement.fromRow(row);
 					}),
 				{ isolationLevel: "repeatable read" }
 			)
-			.pipe(Effect.mapError(mapError));
+			.pipe(
+				Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], cause =>
+					Effect.fail(mapStatementInfrastructureError(cause))
+				)
+			);
 	}
 	updateAnnotations(
 		...[organizationId, ledgerId, accountId, id, request]: [
@@ -281,8 +301,12 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 				return yield* Effect.fail(
 					new ConflictError("Statement annotations were modified; reload and retry")
 				);
-			return LedgerAccountStatement.fromRow(rows[0]);
-		}).pipe(Effect.mapError(mapError));
+			return yield* LedgerAccountStatement.fromRow(rows[0]);
+		}).pipe(
+			Effect.catchTag("EffectDrizzleQueryError", cause =>
+				Effect.fail(mapStatementInfrastructureError(cause))
+			)
+		);
 	}
 }
 const ledgerAccountStatementRepoLayer = Layer.effect(
@@ -294,4 +318,7 @@ export {
 	LedgerAccountStatementRepoLive,
 	LedgerAccountStatementRepoTag,
 	ledgerAccountStatementRepoLayer,
+	type StatementCreateError,
+	type StatementReadError,
+	type StatementUpdateError,
 };

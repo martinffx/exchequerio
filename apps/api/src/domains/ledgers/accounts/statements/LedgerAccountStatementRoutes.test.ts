@@ -12,6 +12,7 @@ import { ServerConfigTag, ServerRuntime, type ServerRuntimeLayer } from "@/runti
 import { buildServer } from "@/server";
 import { calculateStatementBalances, LedgerAccountStatement } from "./LedgerAccountStatement";
 import { LedgerAccountStatementRoutes } from "./LedgerAccountStatementRoutes";
+import { StatementPersistenceFailure } from "./StatementErrors";
 import {
 	LedgerAccountStatementService,
 	LedgerAccountStatementServiceTag,
@@ -28,34 +29,38 @@ const request = {
 	endDatetime: "2026-02-01T00:00:00.000Z",
 	metadata: { period: "January" },
 };
-const balances = calculateStatementBalances("credit", {
-	postedCredits: 20n,
-	postedDebits: 5n,
-	unpostedCredits: 8n,
-	unpostedDebits: 4n,
-});
-const stored = LedgerAccountStatement.fromRow({
-	id: encodeUuid(statementId),
-	organizationId: encodeUuid(orgId),
-	ledgerId: encodeUuid(ledgerId),
-	accountId: encodeUuid(accountId),
-	startDatetime: new Date(request.startDatetime),
-	endDatetime: new Date(request.endDatetime),
-	ledgerAccountVersion: 7,
-	snapshot: {
-		normalBalance: "credit",
-		assetId: encodeUuid(assetId),
-		assetCode: "TOKENS",
-		minorUnitExponent: 6,
-		startingBalances: balances,
-		endingBalances: balances,
-	},
-	description: "January",
-	metadata: request.metadata,
-	lockVersion: 2,
-	created: new Date(request.endDatetime),
-	updated: new Date(request.endDatetime),
-});
+const balances = Effect.runSync(
+	calculateStatementBalances("credit", {
+		postedCredits: 20n,
+		postedDebits: 5n,
+		unpostedCredits: 8n,
+		unpostedDebits: 4n,
+	})
+);
+const stored = Effect.runSync(
+	LedgerAccountStatement.fromRow({
+		id: encodeUuid(statementId),
+		organizationId: encodeUuid(orgId),
+		ledgerId: encodeUuid(ledgerId),
+		accountId: encodeUuid(accountId),
+		startDatetime: new Date(request.startDatetime),
+		endDatetime: new Date(request.endDatetime),
+		ledgerAccountVersion: 7,
+		snapshot: {
+			normalBalance: "credit",
+			assetId: encodeUuid(assetId),
+			assetCode: "TOKENS",
+			minorUnitExponent: 6,
+			startingBalances: balances,
+			endingBalances: balances,
+		},
+		description: "January",
+		metadata: request.metadata,
+		lockVersion: 2,
+		created: new Date(request.endDatetime),
+		updated: new Date(request.endDatetime),
+	})
+);
 const makeService = () =>
 	new LedgerAccountStatementService(
 		{
@@ -152,6 +157,33 @@ describe("Statement HTTP contract", () => {
 		});
 		expect((await server.inject({ method: "GET", url: `${prefix}?limit=101` })).statusCode).toBe(400);
 	});
+	it("returns the repository's decoded Entries unchanged", async () => {
+		const entry = {
+			id: new TypeID("lte").toString(),
+			accountId: accountId.toString(),
+			direction: "credit" as const,
+			amount: "5",
+			assetId: assetId.toString(),
+			assetCode: "TOKENS",
+			minorUnitExponent: 6,
+			created: request.startDatetime,
+			transaction: {
+				id: new TypeID("ltr").toString(),
+				lockVersion: 1,
+				status: "posted" as const,
+				effectiveAt: request.startDatetime,
+			},
+		};
+		const service = makeService();
+		vi.spyOn(service, "getLedgerAccountStatementEntries").mockReturnValue(Effect.succeed([entry]));
+		const { server } = await buildRouteServer(service);
+		const response = await server.inject({
+			method: "GET",
+			url: `${prefix}/${statementId.toString()}/entries`,
+		});
+		expect(response.statusCode).toBe(200);
+		expect(response.json()).toEqual([entry]);
+	});
 	it("requires an expected annotation version and maps stale versions to conflict", async () => {
 		const { server, service } = await buildRouteServer();
 		const update = vi
@@ -197,7 +229,9 @@ describe("Statement HTTP contract", () => {
 		vi
 			.spyOn(service, "getLedgerAccountStatement")
 			.mockReturnValueOnce(Effect.fail(new NotFoundError("Statement not found")))
-			.mockReturnValueOnce(Effect.fail(new Error("private database details")));
+			.mockReturnValueOnce(
+				Effect.fail(new StatementPersistenceFailure(new Error("private database details")))
+			);
 		expect(
 			(await server.inject({ method: "GET", url: `${prefix}/${statementId.toString()}` })).statusCode
 		).toBe(404);

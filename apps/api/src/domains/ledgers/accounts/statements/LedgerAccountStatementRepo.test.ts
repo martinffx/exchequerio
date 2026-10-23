@@ -21,6 +21,18 @@ import {
 	LedgerAccountStatementRepoTag,
 	ledgerAccountStatementRepoLayer,
 } from "./LedgerAccountStatementRepo";
+import {
+	mapStatementInfrastructureError,
+	StatementPersistenceDecodingFailure,
+	StatementPersistenceFailure,
+	StatementRepositoryUnavailable,
+} from "./StatementErrors";
+
+const parsed = (request: { startDatetime: string; endDatetime: string }) => ({
+	startDatetime: new Date(request.startDatetime),
+	endDatetime: new Date(request.endDatetime),
+});
+const lteId = (uuid: string) => TypeID.fromUUID("lte", uuid).toString();
 
 describe("LedgerAccountStatementRepoLive", () => {
 	const organizationId = new TypeID("org") as OrgID;
@@ -41,7 +53,12 @@ describe("LedgerAccountStatementRepoLive", () => {
 	const page = { offset: 0, limit: 100 };
 	const create = (request = period) =>
 		runtime.runPromise(
-			repository.createStatement(...scope, new TypeID("lst") as LedgerAccountStatementID, request)
+			repository.createStatement(
+				...scope,
+				new TypeID("lst") as LedgerAccountStatementID,
+				request,
+				parsed(request)
+			)
 		);
 	const addEntry = async (
 		effectiveAt: string,
@@ -125,15 +142,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 		const response = statement.toResponse();
 		expect(response.startingBalances).toEqual(response.endingBalances);
 		expect(response).not.toHaveProperty("entries");
-		expect(
-			await runtime.runPromise(
-				repository.getEntries(
-					...scope,
-					TypeID.fromString(statement.id) as LedgerAccountStatementID,
-					page
-				)
-			)
-		).toEqual([]);
+		expect(await runtime.runPromise(repository.getEntries(...scope, statement.id, page))).toEqual([]);
 	});
 	it("captures effective-time boundaries, status, balances and preserves copies after source replacement", async () => {
 		await addEntry("2024-12-31T23:59:59.000Z", "posted", "debit", 100n);
@@ -142,9 +151,9 @@ describe("LedgerAccountStatementRepoLive", () => {
 		await addEntry(period.endDatetime, "posted", "debit", 400n);
 		await addEntry("2025-01-12T00:00:00.000Z", "voided", "debit", 900n);
 		const statement = await create();
-		const id = TypeID.fromString(statement.id) as LedgerAccountStatementID;
+		const id = statement.id;
 		const entries = await runtime.runPromise(repository.getEntries(...scope, id, page));
-		expect(entries.map(entry => entry.id)).toEqual([pending.id, posted.id]);
+		expect(entries.map(entry => entry.id)).toEqual([lteId(pending.id), lteId(posted.id)]);
 		expect(statement.toResponse().startingBalances).toEqual(
 			expect.arrayContaining([expect.objectContaining({ balanceType: "posted", amount: "100" })])
 		);
@@ -177,7 +186,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 	});
 	it("scopes reads, lists and annotation writes and atomically rejects one concurrent stale writer", async () => {
 		const statement = await create();
-		const id = TypeID.fromString(statement.id) as LedgerAccountStatementID;
+		const id = statement.id;
 		const wrongOrg = new TypeID("org") as OrgID;
 		for (const operation of [
 			repository.getStatement(wrongOrg, ledgerId, accountId, id),
@@ -188,7 +197,8 @@ describe("LedgerAccountStatementRepoLive", () => {
 				ledgerId,
 				accountId,
 				new TypeID("lst") as LedgerAccountStatementID,
-				period
+				period,
+				parsed(period)
 			),
 			repository.getEntries(wrongOrg, ledgerId, accountId, id, page),
 			repository.listStatements(wrongOrg, ledgerId, accountId, page),
@@ -216,17 +226,34 @@ describe("LedgerAccountStatementRepoLive", () => {
 		expect(cleared.toResponse().startingBalances).toEqual(statement.toResponse().startingBalances);
 		expect(cleared.toResponse().endingBalances).toEqual(statement.toResponse().endingBalances);
 	});
-	it("rejects reversed periods without saving a statement", async () => {
-		expect(
-			await runtime.runPromise(
-				Effect.flip(
-					repository.createStatement(...scope, new TypeID("lst") as LedgerAccountStatementID, {
-						startDatetime: period.endDatetime,
-						endDatetime: period.startDatetime,
-					})
-				)
-			)
-		).toBeInstanceOf(BadRequestError);
+	it("returns Entries with TypeID-form ids", async () => {
+		const entry = await addEntry("2031-01-15T00:00:00.000Z", "posted", "debit", 7n);
+		const statement = await create({
+			startDatetime: "2031-01-01T00:00:00.000Z",
+			endDatetime: "2031-02-01T00:00:00.000Z",
+		});
+		const [saved] = await runtime.runPromise(repository.getEntries(...scope, statement.id, page));
+		expect(saved?.id).toBe(lteId(entry.id));
+		expect(saved?.accountId).toBe(accountId.toString());
+		expect(saved?.assetId).toBe(assetId.toString());
+		expect(saved?.transaction.id).toBe(TypeID.fromUUID("ltr", entry.transactionId).toString());
+	});
+	it("returns a typed decoding failure for a stored infinite timestamp", async () => {
+		const statement = await create();
+		await db
+			.update(LedgerAccountStatementsTable)
+			.set({ created: sql`'infinity'::timestamptz` })
+			.where(eq(LedgerAccountStatementsTable.id, statement.id.toUUID()));
+		try {
+			const error = await runtime.runPromise(
+				Effect.flip(repository.getStatement(...scope, statement.id))
+			);
+			expect(error).toBeInstanceOf(StatementPersistenceDecodingFailure);
+		} finally {
+			await db
+				.delete(LedgerAccountStatementsTable)
+				.where(eq(LedgerAccountStatementsTable.id, statement.id.toUUID()));
+		}
 	});
 	it("pages saved Entries in effective-time/ID order and lists summaries newest first", async () => {
 		const request = {
@@ -247,9 +274,9 @@ describe("LedgerAccountStatementRepoLive", () => {
 			status: "posted",
 		});
 		const statement = await create(request);
-		const id = TypeID.fromString(statement.id) as LedgerAccountStatementID;
+		const id = statement.id;
 		const all = await runtime.runPromise(repository.getEntries(...scope, id, page));
-		expect(all.map(entry => entry.id)).toEqual([first.id, secondId].sort());
+		expect(all.map(entry => entry.id)).toEqual([lteId(first.id), lteId(secondId)].sort());
 		expect(
 			await runtime.runPromise(repository.getEntries(...scope, id, { offset: 1, limit: 1 }))
 		).toEqual(all.slice(1));
@@ -274,7 +301,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 		const saved = await create(request);
 		expect(
 			await runtime.runPromise(
-				repository.getEntries(...scope, TypeID.fromString(saved.id) as LedgerAccountStatementID, {
+				repository.getEntries(...scope, saved.id, {
 					offset: 9999,
 					limit: 1,
 				})
@@ -283,7 +310,9 @@ describe("LedgerAccountStatementRepoLive", () => {
 		await addEntry(request.startDatetime, "posted", "debit", 1n);
 		const id = new TypeID("lst") as LedgerAccountStatementID;
 		expect(
-			await runtime.runPromise(Effect.flip(repository.createStatement(...scope, id, request)))
+			await runtime.runPromise(
+				Effect.flip(repository.createStatement(...scope, id, request, parsed(request)))
+			)
 		).toBeInstanceOf(BadRequestError);
 		expect(
 			await runtime.runPromise(Effect.flip(repository.getStatement(...scope, id)))
@@ -326,7 +355,9 @@ describe("LedgerAccountStatementRepoLive", () => {
 		const observedRepository = new LedgerAccountStatementRepoLive(observedDb);
 		const id = new TypeID("lst") as LedgerAccountStatementID;
 		expect(
-			await runtime.runPromise(Effect.flip(observedRepository.createStatement(...scope, id, request)))
+			await runtime.runPromise(
+				Effect.flip(observedRepository.createStatement(...scope, id, request, parsed(request)))
+			)
 		).toBeInstanceOf(BadRequestError);
 		expect(queryResults).toContainEqual([expect.objectContaining({ count: "10001" })]);
 		expect(
@@ -344,7 +375,9 @@ describe("LedgerAccountStatementRepoLive", () => {
 		);
 		const id = new TypeID("lst") as LedgerAccountStatementID;
 		expect(
-			await runtime.runPromise(Effect.flip(repository.createStatement(...scope, id, request)))
+			await runtime.runPromise(
+				Effect.flip(repository.createStatement(...scope, id, request, parsed(request)))
+			)
 		).toBeInstanceOf(BadRequestError);
 		expect(
 			await runtime.runPromise(Effect.flip(repository.getStatement(...scope, id)))
@@ -357,7 +390,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 		const [size] = await db
 			.select({ bytes: sql<number>`octet_length(${LedgerAccountStatementsTable.snapshot}::text)` })
 			.from(LedgerAccountStatementsTable)
-			.where(eq(LedgerAccountStatementsTable.id, TypeID.fromString(small.id).toUUID()));
+			.where(eq(LedgerAccountStatementsTable.id, small.id.toUUID()));
 		const padding = 16777216 - size!.bytes;
 		await db.execute(
 			sql`UPDATE ledger_transaction_entries SET metadata = jsonb_build_object('large', repeat('x', ${padding}))::text WHERE id = ${entry.id}::uuid`
@@ -366,13 +399,15 @@ describe("LedgerAccountStatementRepoLive", () => {
 		const [stored] = await db
 			.select({ bytes: sql<number>`octet_length(${LedgerAccountStatementsTable.snapshot}::text)` })
 			.from(LedgerAccountStatementsTable)
-			.where(eq(LedgerAccountStatementsTable.id, TypeID.fromString(exact.id).toUUID()));
+			.where(eq(LedgerAccountStatementsTable.id, exact.id.toUUID()));
 		expect(stored?.bytes).toBe(16777216);
 		await db.execute(
 			sql`UPDATE ledger_transaction_entries SET metadata = jsonb_build_object('large', repeat('x', ${padding + 1}))::text WHERE id = ${entry.id}::uuid`
 		);
 		expect(
-			await runtime.runPromise(Effect.flip(repository.createStatement(...scope, id, request)))
+			await runtime.runPromise(
+				Effect.flip(repository.createStatement(...scope, id, request, parsed(request)))
+			)
 		).toBeInstanceOf(BadRequestError);
 	}, 15000);
 
@@ -431,7 +466,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 		const concurrentRepository = new LedgerAccountStatementRepoLive(observedDb);
 		const id = new TypeID("lst") as LedgerAccountStatementID;
 		const statement = await runtime.runPromise(
-			concurrentRepository.createStatement(...scope, id, request)
+			concurrentRepository.createStatement(...scope, id, request, parsed(request))
 		);
 		expect(committed).toBe(true);
 		expect(statement.toResponse().ledgerAccountVersion).toBe(1);
@@ -441,11 +476,9 @@ describe("LedgerAccountStatementRepoLive", () => {
 		]);
 		const latest = await create(request);
 		expect(latest.toResponse().ledgerAccountVersion).toBe(2);
-		expect(
-			await runtime.runPromise(
-				repository.getEntries(...scope, TypeID.fromString(latest.id) as LedgerAccountStatementID, page)
-			)
-		).toMatchObject([{ amount: "9", transaction: { status: "posted", lockVersion: 2 } }]);
+		expect(await runtime.runPromise(repository.getEntries(...scope, latest.id, page))).toMatchObject([
+			{ amount: "9", transaction: { status: "posted", lockVersion: 2 } },
+		]);
 	});
 	it("carries historical balances through a period without activity", async () => {
 		const statement = await create({
@@ -456,15 +489,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 		expect(statement.toResponse().startingBalances.some(balance => balance.amount !== "0")).toBe(
 			true
 		);
-		expect(
-			await runtime.runPromise(
-				repository.getEntries(
-					...scope,
-					TypeID.fromString(statement.id) as LedgerAccountStatementID,
-					page
-				)
-			)
-		).toEqual([]);
+		expect(await runtime.runPromise(repository.getEntries(...scope, statement.id, page))).toEqual([]);
 	});
 	it("rejects a period whose summed balances leave the signed 64-bit range without saving", async () => {
 		const request = {
@@ -476,10 +501,24 @@ describe("LedgerAccountStatementRepoLive", () => {
 		await addEntry("2094-12-02T00:00:00.000Z", "posted", "credit", max);
 		const id = new TypeID("lst") as LedgerAccountStatementID;
 		expect(
-			await runtime.runPromise(Effect.flip(repository.createStatement(...scope, id, request)))
+			await runtime.runPromise(
+				Effect.flip(repository.createStatement(...scope, id, request, parsed(request)))
+			)
 		).toBeInstanceOf(ConflictError);
 		expect(
 			await runtime.runPromise(Effect.flip(repository.getStatement(...scope, id)))
 		).toBeInstanceOf(NotFoundError);
+	});
+	it("maps connection loss to unavailable and other database failures to a persistence failure", () => {
+		const unavailable = Object.assign(new Error("connection terminated unexpectedly"), {
+			_tag: "SqlError" as const,
+		});
+		const rejected = Object.assign(new Error("syntax error"), { _tag: "SqlError" as const });
+		expect(mapStatementInfrastructureError(unavailable as never)).toBeInstanceOf(
+			StatementRepositoryUnavailable
+		);
+		expect(mapStatementInfrastructureError(rejected as never)).toBeInstanceOf(
+			StatementPersistenceFailure
+		);
 	});
 });

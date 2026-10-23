@@ -14,7 +14,6 @@ import {
 import { IdempotencyHeaders } from "@/lib/IdempotencySchema";
 import { parseId } from "@/lib/utils";
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID } from "@/lib/ids";
-import { toEntryResponse } from "./LedgerAccountStatement";
 import {
 	LedgerAccountStatementIdParameters,
 	LedgerAccountStatementRequest,
@@ -142,7 +141,7 @@ const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
 			);
 			const result = await request.server.runtime.runPromise(Effect.result(effect));
 			return Result.match(result, {
-				onSuccess: entries => entries.map(entry => toEntryResponse(entry)),
+				onSuccess: entries => entries,
 				onFailure: error => {
 					throw error;
 				},

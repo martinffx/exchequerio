@@ -1,7 +1,12 @@
 import { Context, Effect, Layer, Option } from "effect";
-import { BadRequestError, NotFoundError } from "@/lib/errors";
+import type { InvalidId } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
-import { type IdempotencyService, IdempotencyServiceTag } from "@/lib/IdempotencyService";
+import {
+	type IdempotencyPending,
+	type IdempotencyService,
+	type IdempotencyUnavailable,
+	IdempotencyServiceTag,
+} from "@/lib/IdempotencyService";
 import {
 	newLedgerAccountStatementID,
 	type LedgerAccountID,
@@ -9,16 +14,22 @@ import {
 	type LedgerID,
 	type OrgID,
 } from "@/lib/ids";
+import type { LedgerAccountStatement } from "./LedgerAccountStatement";
 import { validateStatementPeriod } from "./LedgerAccountStatement";
 import {
 	type LedgerAccountStatementRepo,
 	LedgerAccountStatementRepoTag,
+	type StatementCreateError,
+	type StatementReadError,
+	type StatementUpdateError,
 } from "./LedgerAccountStatementRepo";
 import type {
 	LedgerAccountStatementRequest,
+	StatementEntry,
 	StatementListQuery,
 	StatementUpdateRequest,
 } from "./LedgerAccountStatementSchema";
+import { isStatementInfrastructureError } from "./StatementErrors";
 
 /** Orchestrates scoped Statements and replay-safe generation. */
 class LedgerAccountStatementService {
@@ -32,7 +43,7 @@ class LedgerAccountStatementService {
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID,
 		id: LedgerAccountStatementID
-	) {
+	): Effect.Effect<LedgerAccountStatement, StatementReadError> {
 		return this.repository.getStatement(organizationId, ledgerId, accountId, id);
 	}
 	listLedgerAccountStatements(
@@ -40,7 +51,7 @@ class LedgerAccountStatementService {
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID,
 		query: StatementListQuery
-	) {
+	): Effect.Effect<LedgerAccountStatement[], StatementReadError> {
 		return this.repository.listStatements(organizationId, ledgerId, accountId, query);
 	}
 	getLedgerAccountStatementEntries(
@@ -49,7 +60,7 @@ class LedgerAccountStatementService {
 		accountId: LedgerAccountID,
 		id: LedgerAccountStatementID,
 		query: StatementListQuery
-	) {
+	): Effect.Effect<StatementEntry[], StatementReadError> {
 		return this.repository.getEntries(organizationId, ledgerId, accountId, id, query);
 	}
 	updateLedgerAccountStatement(
@@ -58,7 +69,7 @@ class LedgerAccountStatementService {
 		accountId: LedgerAccountID,
 		id: LedgerAccountStatementID,
 		request: StatementUpdateRequest
-	) {
+	): Effect.Effect<LedgerAccountStatement, StatementUpdateError> {
 		return this.repository.updateAnnotations(organizationId, ledgerId, accountId, id, request);
 	}
 	createLedgerAccountStatement(
@@ -67,9 +78,12 @@ class LedgerAccountStatementService {
 		accountId: LedgerAccountID,
 		key: string,
 		request: LedgerAccountStatementRequest
-	) {
+	): Effect.Effect<
+		LedgerAccountStatement,
+		StatementCreateError | InvalidId | IdempotencyPending | IdempotencyUnavailable
+	> {
 		return Effect.gen({ self: this }, function* () {
-			yield* Effect.try({ try: () => validateStatementPeriod(request), catch: error => error });
+			const period = yield* validateStatementPeriod(request);
 			const action = "statements.create";
 			const claim = yield* this.idempotency.claim(organizationId, action, key);
 			if (Option.isSome(claim)) {
@@ -77,16 +91,23 @@ class LedgerAccountStatementService {
 				return yield* this.repository.getStatement(organizationId, ledgerId, accountId, id);
 			}
 			const result = yield* this.repository
-				.createStatement(organizationId, ledgerId, accountId, newLedgerAccountStatementID(), request)
+				.createStatement(
+					organizationId,
+					ledgerId,
+					accountId,
+					newLedgerAccountStatementID(),
+					request,
+					period
+				)
 				.pipe(
 					// An uncertain database outcome must retain its claim, as with Transactions.
 					Effect.tapError(error =>
-						error instanceof BadRequestError || error instanceof NotFoundError
-							? this.idempotency.release(organizationId, action, key).pipe(Effect.ignore)
-							: Effect.void
+						isStatementInfrastructureError(error)
+							? Effect.void
+							: this.idempotency.release(organizationId, action, key).pipe(Effect.ignore)
 					)
 				);
-			yield* this.idempotency.complete(organizationId, action, key, result.id);
+			yield* this.idempotency.complete(organizationId, action, key, result.id.toString());
 			return result;
 		});
 	}
