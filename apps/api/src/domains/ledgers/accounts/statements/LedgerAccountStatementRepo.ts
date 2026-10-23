@@ -28,7 +28,6 @@ import {
 	StatementPersistenceFailure,
 } from "./StatementErrors";
 
-type Scope = [organizationId: OrgID, ledgerId: LedgerID, accountId: LedgerAccountID];
 type StatementReadError = NotFoundError | StatementInfrastructureError;
 type StatementCreateError =
 	| BadRequestError
@@ -38,24 +37,38 @@ type StatementCreateError =
 type StatementUpdateError = ConflictError | NotFoundError | StatementInfrastructureError;
 interface LedgerAccountStatementRepo {
 	getStatement(
-		...args: [...Scope, id: LedgerAccountStatementID]
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID
 	): Effect.Effect<LedgerAccountStatement, StatementReadError>;
 	listStatements(
-		...args: [...Scope, query: StatementListQuery]
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		query: StatementListQuery
 	): Effect.Effect<LedgerAccountStatement[], StatementReadError>;
 	getEntries(
-		...args: [...Scope, id: LedgerAccountStatementID, query: StatementListQuery]
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID,
+		query: StatementListQuery
 	): Effect.Effect<StatementEntry[], StatementReadError>;
 	createStatement(
-		...args: [
-			...Scope,
-			id: LedgerAccountStatementID,
-			request: LedgerAccountStatementRequest,
-			period: StatementPeriod,
-		]
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID,
+		request: LedgerAccountStatementRequest,
+		period: StatementPeriod
 	): Effect.Effect<LedgerAccountStatement, StatementCreateError>;
 	updateAnnotations(
-		...args: [...Scope, id: LedgerAccountStatementID, request: StatementUpdateRequest]
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID,
+		request: StatementUpdateRequest
 	): Effect.Effect<LedgerAccountStatement, StatementUpdateError>;
 }
 const LedgerAccountStatementRepoTag = Context.Service<LedgerAccountStatementRepo>(
@@ -90,7 +103,12 @@ const entryDocument = sql`jsonb_strip_nulls(jsonb_build_object(
 
 class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 	constructor(private readonly db: EffectDrizzleDatabase) {}
-	getStatement(...[organizationId, ledgerId, accountId, id]: [...Scope, LedgerAccountStatementID]) {
+	getStatement(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID
+	) {
 		return this.db
 			.select(summary)
 			.from(table)
@@ -103,7 +121,12 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 				)
 			);
 	}
-	listStatements(...[organizationId, ledgerId, accountId, query]: [...Scope, StatementListQuery]) {
+	listStatements(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		query: StatementListQuery
+	) {
 		return Effect.gen({ self: this }, function* () {
 			const accounts = yield* this.db
 				.select({ id: LedgerAccountsTable.id })
@@ -133,11 +156,11 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		);
 	}
 	getEntries(
-		...[organizationId, ledgerId, accountId, id, query]: [
-			...Scope,
-			LedgerAccountStatementID,
-			StatementListQuery,
-		]
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID,
+		query: StatementListQuery
 	) {
 		return Effect.gen({ self: this }, function* () {
 			yield* this.getStatement(organizationId, ledgerId, accountId, id);
@@ -157,12 +180,12 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		);
 	}
 	createStatement(
-		...[organizationId, ledgerId, accountId, id, request, period]: [
-			...Scope,
-			LedgerAccountStatementID,
-			LedgerAccountStatementRequest,
-			StatementPeriod,
-		]
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID,
+		request: LedgerAccountStatementRequest,
+		period: StatementPeriod
 	) {
 		return this.db
 			.transaction(
@@ -271,11 +294,11 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 			);
 	}
 	updateAnnotations(
-		...[organizationId, ledgerId, accountId, id, request]: [
-			...Scope,
-			LedgerAccountStatementID,
-			StatementUpdateRequest,
-		]
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID,
+		request: StatementUpdateRequest
 	) {
 		return Effect.gen({ self: this }, function* () {
 			yield* this.getStatement(organizationId, ledgerId, accountId, id);
