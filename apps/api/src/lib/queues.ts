@@ -1,7 +1,24 @@
-import { Effect, Layer } from "effect";
+import { Effect, Fiber, Layer } from "effect";
 import { Redis } from "effect/unstable/persistence";
 import { RedisJobStore } from "effect-mq/redis";
 import { Redis as IoRedis } from "ioredis";
+
+/**
+ * Traces a Valkey command as a client span only under an existing parent span.
+ * effect-mq runs parentless poll/renew/stalled loops; spanning them would flood root spans.
+ */
+export const withValkeySpan = <A, E, R>(
+	command: string,
+	effect: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> =>
+	Effect.suspend(() => {
+		if (Fiber.getCurrent()?.currentSpan === undefined) return effect;
+		const operation = command.toUpperCase();
+		return Effect.withSpan(effect, `valkey.${operation}`, {
+			kind: "client",
+			attributes: { "db.system.name": "valkey", "db.operation.name": operation },
+		});
+	});
 
 export const makeJobStore = (valkeyUrl: string, options: RedisJobStore.RedisJobStoreOptions) => {
 	const redisLayer = Layer.effect(
@@ -22,10 +39,13 @@ export const makeJobStore = (valkeyUrl: string, options: RedisJobStore.RedisJobS
 			);
 			return yield* Redis.make({
 				send: <A = unknown>(command: string, ...args: ReadonlyArray<string>) =>
-					Effect.tryPromise({
-						try: () => client.call(command, ...args) as Promise<A>,
-						catch: cause => new Redis.RedisError({ cause }),
-					}),
+					withValkeySpan(
+						command,
+						Effect.tryPromise({
+							try: () => client.call(command, ...args) as Promise<A>,
+							catch: cause => new Redis.RedisError({ cause }),
+						})
+					),
 				subscribe: (channel, onMessage) =>
 					Effect.gen(function* () {
 						const subscriber = yield* Effect.acquireRelease(

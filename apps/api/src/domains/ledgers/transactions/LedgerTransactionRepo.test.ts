@@ -2,10 +2,11 @@ import { type LedgerAccountBalanceMonitorJobPayload } from "@/domains/ledgers/ac
 import { Client, Pool, type PoolClient } from "pg";
 import { TypeID } from "typeid-js";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Metric, Option } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Config } from "@/config";
+import { ledgerTransactionsPosted } from "@/lib/metrics";
 import { type EffectDrizzleDatabase, DatabaseTag, makeDatabaseLive } from "@/db";
 import { AccountNotFound, LedgerAccountAssetMismatch } from "@/domains/ledgers/accounts";
 import {
@@ -94,6 +95,11 @@ const persist = (
 		)
 	);
 
+const count = async (path: "create" | "post" | "settlement") =>
+	Number(
+		(await Effect.runPromise(Metric.value(Metric.withAttributes(ledgerTransactionsPosted, { path }))))
+			.count
+	);
 describe("LedgerTransactionRepoLive", () => {
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
 	const layer = Layer.merge(
@@ -649,6 +655,150 @@ describe("LedgerTransactionRepoLive", () => {
 			)
 		);
 		expect(error).toBeInstanceOf(TransactionLifecycleConflict);
+	});
+
+	describe("posted transaction counter", () => {
+		const counts = async () => ({
+			create: await count("create"),
+			post: await count("post"),
+			settlement: await count("settlement"),
+		});
+		const delta = async (run: () => Promise<unknown>) => {
+			const before = await counts();
+			await run();
+			const after = await counts();
+			return {
+				create: after.create - before.create,
+				post: after.post - before.post,
+				settlement: after.settlement - before.settlement,
+			};
+		};
+		const setup = async () => {
+			const { organizationId, ledgerId } = await createLedger();
+			const debit = await createAccount(organizationId, ledgerId, "debit");
+			const credit = await createAccount(organizationId, ledgerId, "credit");
+			const entries = [
+				{ accountId: debit, direction: "debit", amount: "10" },
+				{ accountId: credit, direction: "credit", amount: "10" },
+			] as const;
+			const create = (status: "pending" | "posted") =>
+				runtime.runPromise(
+					persist(
+						repository,
+						organizationId,
+						ledgerId,
+						newLedgerTransactionID(),
+						request(status, entries)
+					)
+				);
+			const settlement = async (targetStatus: "pending" | "posted") => {
+				const settlementId = newLedgerAccountSettlementID();
+				await runtime.runPromise(
+					database.insert(LedgerAccountSettlementsTable).values({
+						id: settlementId.toUUID(),
+						organizationId: organizationId.toUUID(),
+						ledgerId: ledgerId.toUUID(),
+						settledAccountId: debit.toUUID(),
+						contraAccountId: credit.toUUID(),
+						assetId: TypeID.fromString(summary(debit).assetId).toUUID(),
+						status: "processing",
+						targetStatus,
+					})
+				);
+				const ordinary = Effect.runSync(
+					LedgerTransaction.fromCreateRequest(
+						newLedgerTransactionID(),
+						organizationId,
+						ledgerId,
+						request(targetStatus, entries)
+					)
+				);
+				const generated = Effect.runSync(LedgerTransaction.create({ ...ordinary, settlementId }));
+				return { settlementId, generated };
+			};
+			const setTarget = (
+				settlementId: ReturnType<typeof newLedgerAccountSettlementID>,
+				target: string
+			) =>
+				runtime.runPromise(
+					database
+						.update(LedgerAccountSettlementsTable)
+						.set({ targetStatus: target as "posted" })
+						.where(eq(LedgerAccountSettlementsTable.id, settlementId.toUUID()))
+				);
+			const postTx = (id: ReturnType<typeof newLedgerTransactionID>) =>
+				repository.postTransaction(organizationId, ledgerId, id, DateTime.utc());
+			return { organizationId, ledgerId, create, settlement, setTarget, postTx };
+		};
+
+		it("counts a transaction created as posted, not as pending", async () => {
+			const f = await setup();
+			expect(await delta(() => f.create("posted"))).toEqual({ create: 1, post: 0, settlement: 0 });
+			expect(await delta(() => f.create("pending"))).toEqual({ create: 0, post: 0, settlement: 0 });
+		});
+
+		it("counts a real post once and ignores re-posting", async () => {
+			const f = await setup();
+			const pending = await f.create("pending");
+			const post = () => runtime.runPromise(f.postTx(pending.id));
+			expect(await delta(post)).toEqual({ create: 0, post: 1, settlement: 0 });
+			expect(await delta(post)).toEqual({ create: 0, post: 0, settlement: 0 });
+		});
+
+		it("does not count a post that fails with a lifecycle conflict", async () => {
+			const f = await setup();
+			const pending = await f.create("pending");
+			await runtime.runPromise(
+				repository.voidTransaction(f.organizationId, f.ledgerId, pending.id, DateTime.utc())
+			);
+			const error = await delta(async () => {
+				const failure = await runtime.runPromise(f.postTx(pending.id).pipe(Effect.flip));
+				expect(failure).toBeInstanceOf(TransactionLifecycleConflict);
+			});
+			expect(error).toEqual({ create: 0, post: 0, settlement: 0 });
+		});
+
+		it("counts settlement accounting created posted once, not an existing replay", async () => {
+			const f = await setup();
+			const { generated } = await f.settlement("posted");
+			const run = () => runtime.runPromise(repository.createSettlementTransaction(generated));
+			expect(await delta(run)).toEqual({ create: 0, post: 0, settlement: 1 });
+			expect(await delta(run)).toEqual({ create: 0, post: 0, settlement: 0 });
+		});
+
+		it("counts a settlement post transition once and not a void or an already-posted retry", async () => {
+			const f = await setup();
+			const posting = await f.settlement("pending");
+			await runtime.runPromise(repository.createSettlementTransaction(posting.generated));
+			await f.setTarget(posting.settlementId, "posted");
+			const post = () =>
+				runtime.runPromise(
+					repository.postSettlementTransaction(
+						f.organizationId,
+						f.ledgerId,
+						posting.settlementId,
+						DateTime.utc()
+					)
+				);
+			expect(await delta(post)).toEqual({ create: 0, post: 0, settlement: 1 });
+			expect(await delta(post)).toEqual({ create: 0, post: 0, settlement: 0 });
+
+			const voiding = await f.settlement("pending");
+			await runtime.runPromise(repository.createSettlementTransaction(voiding.generated));
+			await f.setTarget(voiding.settlementId, "voided");
+			expect(
+				await delta(() =>
+					runtime.runPromise(
+						repository.voidSettlementTransaction(
+							f.organizationId,
+							f.ledgerId,
+							voiding.settlementId,
+							DateTime.utc()
+						)
+					)
+				)
+			).toEqual({ create: 0, post: 0, settlement: 0 });
+		});
 	});
 
 	it("rejects an Entry Asset that does not match its Account", async () => {

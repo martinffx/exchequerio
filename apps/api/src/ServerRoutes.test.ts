@@ -299,7 +299,20 @@ describe("Effect HTTP edge", () => {
 
 	const tokenAs = tokenFor(organizationId);
 	const token = () => tokenAs(["super_admin"]);
-	const call = makeRequest(token);
+	const request = makeRequest(token);
+	/** `request` plus a `traceId` option that is sent as a sampled W3C `traceparent` header. */
+	const call = (
+		method: string,
+		path: string,
+		{ traceId, ...options }: NonNullable<Parameters<typeof request>[2]> & { traceId?: string } = {}
+	) =>
+		request(method, path, {
+			...options,
+			headers: {
+				...(traceId === undefined ? {} : { traceparent: `00-${traceId}-b7ad6b7169203331-01` }),
+				...options.headers,
+			},
+		});
 
 	afterEach(() => {
 		logs.length = 0;
@@ -431,6 +444,7 @@ describe("Effect HTTP edge", () => {
 		});
 
 		const uuidV7 = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}";
+		const traceId = "0af7651916cd43dd8448eb211c80319c";
 		it.each([
 			[BadRequestError, 400, "BAD_REQUEST", "Bad Request"],
 			[UnauthorizedError, 401, "UNAUTHORIZED", "Unauthorized"],
@@ -445,17 +459,26 @@ describe("Effect HTTP edge", () => {
 			async (ErrorClass, status, type, title) => {
 				const service = stub({ getOrganization: () => Effect.die(new ErrorClass("x")) });
 				const response = await build(service)(
-					call("GET", `/api/organizations/${organizationId.toString()}`)
+					call("GET", `/api/organizations/${organizationId.toString()}`, { traceId })
 				);
 				expect(response.status).toBe(status);
 				const body = (await response.json()) as Record<string, unknown>;
 				expect(body).toMatchObject({ type, status, title, detail: "x" });
 				expect(body.instance).toMatch(new RegExp(`^/instance/${uuidV7}$`));
-				expect(body.traceId).toMatch(new RegExp(`^${uuidV7}$`));
+				expect(body.traceId).toBe(traceId);
 				expect(body).not.toHaveProperty("cause");
 				expect(body).not.toHaveProperty("_tag");
 			}
 		);
+
+		it("carries the request trace id on a declared error", async () => {
+			const service = stub({ getOrganization: () => Effect.fail(new NotFoundError("gone")) });
+			const response = await build(service)(
+				call("GET", `/api/organizations/${organizationId.toString()}`, { traceId })
+			);
+			expect(response.status).toBe(404);
+			expect(((await response.json()) as { traceId: string }).traceId).toBe(traceId);
+		});
 
 		it("mints a fresh instance and traceId for every problem", async () => {
 			const service = stub({ getOrganization: () => Effect.fail(new NotFoundError("gone")) });
@@ -562,6 +585,13 @@ describe("Effect HTTP edge", () => {
 			expect(response.status).toBe(500);
 			expect(await response.json()).toMatchObject({ type: "INTERNAL_SERVER_ERROR", status: 500 });
 			expect(logs.some(entry => entry.level === "Error")).toBe(true);
+		});
+
+		it("carries the request trace id on an unknown-route problem", async () => {
+			const id = "4bf92f3577b34da6a3ce929d0e0e4736";
+			const response = await build()(call("GET", "/api/nope", { traceId: id }));
+			expect(response.status).toBe(404);
+			expect(((await response.json()) as { traceId: string }).traceId).toBe(id);
 		});
 
 		it("renders an unknown route as a NOT_FOUND problem", async () => {

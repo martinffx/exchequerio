@@ -3,6 +3,7 @@ import type Redis from "ioredis";
 
 import { ConflictError, ServiceUnavailableError } from "@/lib/errors";
 import type { OrgID } from "@/lib/ids";
+import { recordIdempotencyClaim } from "@/lib/metrics";
 
 /** Lifetime of an action claim and its stored result, in seconds. */
 const TTL_SECONDS = 15 * 60;
@@ -117,6 +118,15 @@ interface IdempotencyService {
 /** Effect service key for action claims and replay identifiers. */
 const IdempotencyServiceTag = Context.Service<IdempotencyService>("IdempotencyService");
 
+/** Traces a Valkey call as a client span without recording keys or script text. */
+const valkeySpan =
+	(command: "EVAL" | "GET") =>
+	<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+		Effect.withSpan(effect, `valkey.${command}`, {
+			kind: "client",
+			attributes: { "db.system.name": "valkey", "db.operation.name": command },
+		});
+
 /** Builds an Organization- and action-scoped store key. */
 const redisKey = (organizationId: OrgID, action: string, key: string) =>
 	`exchequer:idempotency:${organizationId.toString()}:${action}:${key}`;
@@ -182,6 +192,10 @@ class IdempotencyServiceRedis implements IdempotencyService {
 							? this.awaitResultId(key).pipe(Effect.map(Option.some))
 							: Effect.succeed(Option.fromUndefinedOr(resultId)),
 				})
+			),
+			Effect.tap(claim => recordIdempotencyClaim(Option.isSome(claim) ? "replay" : "new")),
+			Effect.tapError(error =>
+				recordIdempotencyClaim(error instanceof IdempotencyPending ? "pending" : "unavailable")
 			)
 		);
 	}
@@ -196,7 +210,7 @@ class IdempotencyServiceRedis implements IdempotencyService {
 		return Effect.tryPromise({
 			try: async () => parseClaim(await this.client.eval(CLAIM_SCRIPT, 1, key, PENDING, TTL_SECONDS)),
 			catch: cause => new IdempotencyUnavailable(cause),
-		});
+		}).pipe(valkeySpan("EVAL"));
 	}
 
 	/**
@@ -209,7 +223,7 @@ class IdempotencyServiceRedis implements IdempotencyService {
 		return Effect.tryPromise({
 			try: async () => parseStoredResultId(await this.client.get(key)),
 			catch: cause => new IdempotencyUnavailable(cause),
-		});
+		}).pipe(valkeySpan("GET"));
 	}
 
 	/**
@@ -254,7 +268,7 @@ class IdempotencyServiceRedis implements IdempotencyService {
 				if (completed !== "OK") throw new Error("Valkey no longer contains the pending claim");
 			},
 			catch: cause => new IdempotencyUnavailable(cause),
-		});
+		}).pipe(valkeySpan("EVAL"));
 	}
 
 	/**
@@ -274,7 +288,7 @@ class IdempotencyServiceRedis implements IdempotencyService {
 		return Effect.tryPromise({
 			try: () => this.client.eval(RELEASE_SCRIPT, 1, key, PENDING),
 			catch: cause => new IdempotencyUnavailable(cause),
-		}).pipe(Effect.asVoid);
+		}).pipe(valkeySpan("EVAL"), Effect.asVoid);
 	}
 }
 
