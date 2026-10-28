@@ -1,4 +1,6 @@
 import { Effect } from "effect";
+import { createSigner } from "fast-jwt";
+import { Config } from "@/config";
 import { OpenApi } from "effect/unstable/httpapi";
 import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
@@ -32,6 +34,16 @@ const build = (implementation: OrganizationService) => {
 
 const superAdmin = () => signJWT({ sub: organizationId.toString(), scope: ["super_admin"] });
 const request = makeRequest(superAdmin);
+
+const base64url = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+const tokenPayload = { sub: organizationId.toString(), scope: ["super_admin" as const] };
+const unsignedToken = `${base64url({ alg: "none", typ: "JWT" })}.${base64url(tokenPayload)}.`;
+const signedAlgNonePayload = signJWT(tokenPayload);
+const expiredToken = createSigner({ key: new Config().jwtSecret })({
+	...tokenPayload,
+	iat: Math.floor(Date.now() / 1000) - 7200,
+	exp: Math.floor(Date.now() / 1000) - 3600,
+});
 
 const orgPath = `/api/organizations/${organizationId.toString()}`;
 const routes: Array<[string, string, string, unknown]> = [
@@ -120,8 +132,15 @@ describe("OrganizationRoutes", () => {
 				"a non-Organization subject",
 				{ token: signJWT({ sub: "user_01h2x3y4z5a6b7c8d9e0f1g2h3", scope: ["super_admin"] }) },
 			],
+			["an unsigned alg:none token", { token: unsignedToken }],
+			["an expired token", { token: expiredToken }],
+			[
+				"a non-Bearer scheme",
+				{ anonymous: true, headers: { authorization: `Basic ${superAdmin()}` } },
+			],
 		])("returns 401 Invalid token for %s", async (_name, credentials) => {
-			const handler = build(service());
+			const implementation = service();
+			const handler = build(implementation);
 
 			const response = await handler(request("GET", orgPath, credentials));
 
@@ -131,6 +150,15 @@ describe("OrganizationRoutes", () => {
 				status: 401,
 				detail: "Invalid token",
 			});
+			expect(implementation.getOrganization).not.toHaveBeenCalled();
+		});
+
+		it("accepts the alg:none payload when it is signed with the right key", async () => {
+			const handler = build(service());
+
+			const response = await handler(request("GET", orgPath, { token: signedAlgNonePayload }));
+
+			expect(response.status).toBe(200);
 		});
 
 		it("returns 401 before validating an unauthenticated invalid body", async () => {

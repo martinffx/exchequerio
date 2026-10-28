@@ -94,6 +94,25 @@ const sendRequest = (
 		req.end(options.body);
 	});
 
+type OpenApiPaths = { paths: Record<string, Record<string, unknown>> };
+const httpMethods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"]);
+
+const operationKeys = (document: OpenApiPaths) =>
+	Object.entries(document.paths).flatMap(([path, item]) =>
+		Object.keys(item)
+			.filter(method => httpMethods.has(method))
+			.map(method => ({ key: `${method.toUpperCase()} ${path}`, operation: item[method] }))
+	);
+
+const operationsWithoutBearer = (document: OpenApiPaths) =>
+	operationKeys(document)
+		.filter(
+			({ operation }) =>
+				JSON.stringify((operation as { security?: unknown }).security) !==
+				JSON.stringify([{ bearer: [] }])
+		)
+		.map(({ key }) => key);
+
 describe("Request lifecycle", () => {
 	const organizationId = TypeID.fromString<"org">("org_01h2x3y4z5a6b7c8d9e0f1g2h3") as OrgID;
 	const authorization = () => ({
@@ -646,6 +665,26 @@ describe("Effect HTTP edge", () => {
 					scheme.scheme?.toLowerCase(),
 				])
 			).toContainEqual(["http", "bearer"]);
+		});
+
+		it("requires bearer auth on every operation", async () => {
+			const response = await build()(new Request("http://localhost/docs/json"));
+			const document = (await response.json()) as OpenApiPaths;
+
+			const operations = operationKeys(document);
+			// Guards against the loop silently passing over an empty or shrunken set.
+			expect(operations).toHaveLength(50);
+			expect(operationsWithoutBearer(document)).toEqual([]);
+		});
+
+		it("flags an operation without the bearer requirement", () => {
+			const document: OpenApiPaths = {
+				paths: {
+					"/a": { get: { security: [{ bearer: [] }] }, post: {} },
+					"/b": { delete: { security: [] }, parameters: [] },
+				},
+			};
+			expect(operationsWithoutBearer(document)).toEqual(["POST /a", "DELETE /b"]);
 		});
 	});
 
