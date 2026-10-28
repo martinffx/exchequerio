@@ -1,0 +1,422 @@
+{
+	"feature": "effect-otel",
+	"spec": "docs/specs/2026-10-28-effect-otel/design.md",
+	"goal": "Export trace-correlated traces, metrics and logs from the API and balance-monitor worker over OTLP using Effect built-ins, with deep service and repo spans and two domain counters.",
+	"preserved_behavior": [
+		"Routes, status codes, headers, domain rules, persistence and job payloads are unchanged",
+		"The problem-detail shape is unchanged; only the format of the traceId value changes",
+		"With no OTEL_* variables set, nothing is exported and startup and shutdown behave as today",
+		"makeTestWebHandler and appLayer tests run without telemetry and without a collector",
+		"Service and repo methods keep their signatures, error types and results"
+	],
+	"phases": [
+		{
+			"id": "P1",
+			"name": "Export and correlation",
+			"tasks": [
+				{
+					"id": "T1",
+					"name": "Export telemetry from the API and worker, with trace-correlated console logs",
+					"depends_on": [],
+					"inputs": [
+						"design.md Architecture items 1 and 9, API Design configuration",
+						"effect/unstable/observability: Otlp.layerFromConfig, OtlpSerialization.layerProtobuf; effect/unstable/http FetchHttpClient",
+						"apps/api/src/index.ts (NodeRuntime.runMain(Layer.launch(main))) and apps/api/src/worker.ts (ManagedRuntime over store + worker layers)",
+						"effect-mq forks worker loops at layer-build time (node_modules effect-mq Worker.js ~l.570, 779)",
+						"Run pnpm install in the worktree first; it has no node_modules"
+					],
+					"description": "Create makeTelemetryLayer({ serviceName, environment }) composed as Otlp.layerFromConfig({ resource: { serviceName, attributes: { 'deployment.environment.name' } } }) piped through Layer.provideMerge(consoleLoggerLayer), Layer.provide(OtlpSerialization.layerProtobuf), Layer.provide(FetchHttpClient.layer). provideMerge keeps the console logger alongside the OTLP logger whether export is enabled or not. The console logger in production is JSON built with Logger.map(Logger.formatStructured, ...) adding traceId and spanId from fiber.currentSpan (consoleJson omits them); outside production it is Logger.consolePretty. Service names are exchequer-api and exchequer-worker. In index.ts apply the layer with Layer.provide under main. In worker.ts apply it with Layer.provide underneath the merged store+worker layer, NOT as a sibling in Layer.mergeAll, so effect-mq's forked loops inherit the tracer and logger. Never wrap the server layer or the launch in a span: HttpApiBuilder merges the build-time context over the request context and every error would report that one span's trace. Document OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_TRACES_EXPORTER=otlp, OTEL_METRICS_EXPORTER=otlp, OTEL_LOGS_EXPORTER=otlp and OTEL_EXPORTER_OTLP_HEADERS as commented-out entries in apps/api/.env.example and in docker-compose.yml for the api and worker services. No new dependencies and nothing added to the Config class.",
+					"files": {
+						"reuse": [
+							"apps/api/node_modules/effect/src/unstable/observability/Otlp.ts",
+							"apps/api/node_modules/effect/src/unstable/http/FetchHttpClient.ts"
+						],
+						"create": [
+							"apps/api/src/telemetry.ts",
+							"apps/api/src/telemetry.test.ts"
+						],
+						"modify": [
+							"apps/api/src/index.ts",
+							"apps/api/src/worker.ts",
+							"apps/api/.env.example",
+							"docker-compose.yml"
+						],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "makeTelemetryLayer",
+							"requirement": "US-1 export via OTEL_* with no-op when unset; US-5 trace-correlated structured logs",
+							"consumers": ["apps/api/src/index.ts", "apps/api/src/worker.ts"]
+						}
+					],
+					"validation": {
+						"tests": [
+							"with a pinned empty ConfigProvider (not process.env) the layer builds and tears down cleanly and an effect run under it succeeds",
+							"with the three OTEL_*_EXPORTER variables set to otlp and the endpoint pointing at an unreachable port, an effect run under the layer still succeeds and shutdown completes within the exporter shutdown timeout",
+							"in the production environment a log emitted inside Effect.withSpan produces a JSON line containing that span's traceId and spanId"
+						],
+						"acceptance": [
+							"Layer.provide ordering places the telemetry layer under the worker layer, not beside it",
+							"No span wraps the server layer or the launch in index.ts",
+							"pnpm --filter=@exchequerio/api types passes",
+							"Starting the API with no OTEL_* variables exports nothing and logs as pretty console output"
+						]
+					}
+				},
+				{
+					"id": "T2",
+					"name": "Error responses carry the request trace id and the HTTP span carries the organization",
+					"depends_on": [],
+					"inputs": [
+						"design.md Architecture items 3 and 6, US-3",
+						"apps/api/src/lib/errors.ts toProblemDetail (traceId at l.43) and encodeProblem (traceId at l.209)",
+						"apps/api/src/server.ts edgeErrors and problemResponse run inside the HttpMiddleware.tracer span (HttpEffect.toHandled)",
+						"apps/api/src/auth.ts makeAuthenticationLayer provides CurrentToken (OrgToken.orgId)",
+						"errors.test.ts uses Schema.encodeUnknownSync, which runs in a fresh fiber with no span"
+					],
+					"description": "Add currentTraceId() returning Fiber.getCurrent()?.currentSpan?.traceId ?? uuid() and use it for traceId in toProblemDetail and in the encode branch of encodeProblem. The uuid fallback covers code running outside any span, including the sync-encode unit tests. In makeAuthenticationLayer call Effect.annotateCurrentSpan('organization.id', token.orgId) before providing CurrentToken. Replace the uuidv7 assertion at ServerRoutes.test.ts:361; errors.test.ts:71 and 75-81 keep passing because sync encode falls back to uuid.",
+					"files": {
+						"reuse": ["apps/api/src/lib/testing.ts", "apps/api/src/server.ts"],
+						"create": [],
+						"modify": [
+							"apps/api/src/lib/errors.ts",
+							"apps/api/src/auth.ts",
+							"apps/api/src/lib/errors.test.ts",
+							"apps/api/src/ServerRoutes.test.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "currentTraceId",
+							"requirement": "US-3 error traceId equals the request trace id",
+							"consumers": ["toProblemDetail", "encodeProblem"]
+						}
+					],
+					"validation": {
+						"tests": [
+							"web-handler request with traceparent 00-<32hex>-<16hex>-01 to an unknown route returns a 404 problem whose traceId equals the incoming trace id (covers edgeErrors)",
+							"web-handler request with the same traceparent that hits a stubbed service failing with NotFoundError returns a declared-error body whose traceId equals the incoming trace id",
+							"errors.test.ts: Schema.encodeUnknownEffect inside Effect.withSpan yields that span's traceId; outside a span yields a uuid"
+						],
+						"acceptance": [
+							"ServerRoutes.test.ts:361 no longer asserts uuidv7 and asserts the 32-hex trace id",
+							"Existing errors.test.ts uuid assertions still pass unchanged",
+							"pnpm --filter=@exchequerio/api test passes for the touched suites"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P2",
+			"name": "Domain metrics and idempotency Valkey spans",
+			"tasks": [
+				{
+					"id": "T3",
+					"name": "Count idempotency claim outcomes and trace idempotency Valkey calls",
+					"depends_on": [],
+					"inputs": [
+						"design.md Architecture items 2, 4 and 8, US-6",
+						"apps/api/src/lib/IdempotencyService.ts IdempotencyServiceRedis.claim (l.170-187), awaitResultId polling, and the four ioredis call sites (eval/get)",
+						"effect/Metric: Metric.counter, Metric.withAttributes, Metric.update, Metric.value"
+					],
+					"description": "Create lib/metrics.ts exporting two Metric.counters: idempotency_claims (attribute outcome) and ledger_transactions_posted (attribute path). Never use organization or ledger ids as metric attributes. In IdempotencyServiceRedis.claim record outcome new (SET succeeded), replay (stored id returned), pending (IdempotencyPending failure) or unavailable (IdempotencyUnavailable failure). Wrap each of the four ioredis calls in a valkey.<COMMAND> client span (kind client) with db.system.name=valkey and db.operation.name set to the command; never record keys. Keep the span helper local to IdempotencyService unless T5 needs the same helper, in which case extract it then.",
+					"files": {
+						"reuse": ["apps/api/src/lib/IdempotencyService.ts"],
+						"create": ["apps/api/src/lib/metrics.ts"],
+						"modify": [
+							"apps/api/src/lib/IdempotencyService.ts",
+							"apps/api/src/lib/IdempotencyService.test.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "lib/metrics.ts counters",
+							"requirement": "US-6 ledger_transactions_posted and idempotency_claims metrics",
+							"consumers": [
+								"apps/api/src/lib/IdempotencyService.ts",
+								"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts"
+							]
+						}
+					],
+					"validation": {
+						"tests": [
+							"claim on a fresh key increments idempotency_claims{outcome=new} by 1",
+							"claim on a completed key increments outcome=replay by 1",
+							"claim on a pending key that never completes fails IdempotencyPending and increments outcome=pending by 1",
+							"claim against a failing store fails IdempotencyUnavailable and increments outcome=unavailable by 1"
+						],
+						"acceptance": [
+							"Spans contain db.system.name and db.operation.name and no key material",
+							"Counters carry no id attributes",
+							"IdempotencyService public interface and error types unchanged"
+						]
+					}
+				},
+				{
+					"id": "T4",
+					"name": "Count real transaction posts",
+					"depends_on": ["T3"],
+					"inputs": [
+						"design.md Architecture item 7 and Context gotchas",
+						"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts createTransaction (l.331-337, early Effect.fail at l.333), postTransaction (no-op return l.675, db.transaction l.693), postSettlementTransaction (l.509) -> transitionSettlementAccounting (l.553, no-op at l.572), createSettlementTransaction insert (l.491, existing-accounting return l.481)",
+						"apps/api/src/lib/metrics.ts from T3",
+						"LedgerTransactionService.ts retryMutation (l.111-115) re-runs only after a rolled-back transaction"
+					],
+					"description": "Increment ledger_transactions_posted after db.transaction(...) succeeds, never inside the callback. path=create when createTransaction inserts with status posted; path=post when postTransaction performs a real transition (not the l.675 no-op); path=settlement when transitionSettlementAccounting really transitions (return a transitioned flag out of the callback; monitorJobs.length is not a valid flag because it is 0 when there are no monitors) and when createSettlementTransaction inserts a posted transaction (not the existing-accounting return at l.481). No change to returned values or error types beyond carrying the flag internally.",
+					"files": {
+						"reuse": ["apps/api/src/lib/metrics.ts"],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts",
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.test.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"Postgres: creating a transaction as posted increments path=create by exactly 1",
+							"Postgres: posting a pending transaction increments path=post by exactly 1; re-posting it adds 0",
+							"Postgres: a settlement that creates a posted transaction increments path=settlement by 1; a settlement transition that is already at target adds 0",
+							"Postgres: a post that fails with a lifecycle conflict adds 0"
+						],
+						"acceptance": [
+							"Counter is incremented only after the database transaction commits",
+							"Existing LedgerTransactionRepo tests pass unchanged"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P3",
+			"name": "Spans",
+			"tasks": [
+				{
+					"id": "T5",
+					"name": "Trace webhook delivery and job transport without leaking context or flooding root spans",
+					"depends_on": [],
+					"inputs": [
+						"design.md Architecture items 4 and 5, US-4",
+						"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService.ts sendWebhook (l.219, raw node:https)",
+						"apps/api/src/lib/queues.ts Redis.make send (l.24-28) using client.call",
+						"effect-mq worker polls every 5s (LedgerAccountBalanceMonitorJob.ts pollInterval) with parentless claim/renew/stalled loops"
+					],
+					"description": "Wrap sendWebhook in a webhook.deliver client span with attributes http.request.method and http.response.status_code only; no URL, no headers, and do not add a traceparent or b3 header to the outgoing request. In queues.ts, wrap the send command in a valkey.<COMMAND> client span only when a parent span exists (Fiber.getCurrent()?.currentSpan defined), so spans appear as children of the API's enqueue span and the worker's run span while effect-mq's parentless poll loops stay untraced. Reuse the span helper from T3 if it was extracted, otherwise keep a small local helper.",
+					"files": {
+						"reuse": ["apps/api/src/lib/IdempotencyService.ts"],
+						"create": ["apps/api/src/lib/queues.test.ts"],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService.ts",
+							"apps/api/src/lib/queues.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"existing sendWebhook test server (locate the balance-monitor service/job tests that exercise sendWebhook) receives no traceparent or b3 header",
+							"queues.test.ts with a capturing Tracer: send with no parent span creates no span; send inside Effect.withSpan creates a valkey.<COMMAND> child span"
+						],
+						"acceptance": [
+							"webhook.deliver span has no URL or secret attributes",
+							"No root spans are created by the worker's poll loops",
+							"pnpm --filter=@exchequerio/api types passes"
+						]
+					}
+				},
+				{
+					"id": "T6",
+					"name": "Span public service methods: organizations, assets, ledgers",
+					"depends_on": [],
+					"inputs": [
+						"design.md Architecture item 3, attribute policy",
+						"Service classes implement an interface and return Effect via Effect.gen({ self: this }, ...) or pipe chains",
+						"Span name format <Interface>.<method>, e.g. LedgerService.getLedger"
+					],
+					"description": "For every public method, wrap the whole method body with Effect.suspend(() => body).pipe(Effect.withSpan('<Interface>.<method>', { attributes })) so early Effect.fail returns stay inside the span. Attributes: organization.id and ledger.id only when they are method arguments; never amounts, metadata or request bodies. Signatures, error channels and results do not change.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/organizations/OrganizationService.ts",
+							"apps/api/src/domains/assets/AssetService.ts",
+							"apps/api/src/domains/ledgers/LedgerService.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"full API suite passes with no snapshot changes"
+						],
+						"acceptance": [
+							"Every public method in the three services has a span named <Interface>.<method>",
+							"pnpm --filter=@exchequerio/api types passes",
+							"pnpm --filter=@exchequerio/api lint passes"
+						]
+					}
+				},
+				{
+					"id": "T7",
+					"name": "Span public service methods: accounts, categories, statements, balance monitors",
+					"depends_on": ["T5"],
+					"inputs": [
+						"Pattern and attribute policy from T6",
+						"LedgerAccountBalanceMonitorService.ts is also edited by T5 (sendWebhook); apply this task after T5 to avoid conflicts",
+						"AccountService and LedgerAccountBalanceMonitorService are plain classes with inferred return types in places"
+					],
+					"description": "Apply the T6 pattern to every public method of the four services. Keep inferred return types intact; do not add annotations just to satisfy the wrapper.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/AccountService.ts",
+							"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryService.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"full API suite passes with no snapshot changes"
+						],
+						"acceptance": [
+							"Every public method in the four services has a span named <Interface>.<method>",
+							"The T5 webhook.deliver span is unaffected",
+							"types and lint pass"
+						]
+					}
+				},
+				{
+					"id": "T8",
+					"name": "Span public service methods: transactions and settlements",
+					"depends_on": [],
+					"inputs": [
+						"Pattern and attribute policy from T6",
+						"LedgerTransactionService.ts methods createTransaction, createTransactionEntity, updateTransaction, postTransaction, voidTransaction use claim/execute/retryMutation flows",
+						"LedgerAccountSettlementService.ts"
+					],
+					"description": "Apply the T6 pattern to every public method of the two services. The span covers the full method including idempotency claim and publish steps. Attributes: organization.id, ledger.id, and transaction id only if it is an argument.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionService.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementService.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"full API suite passes with no snapshot changes"
+						],
+						"acceptance": [
+							"Every public method in both services has a span named <Interface>.<method>",
+							"Retry behaviour (retryMutation) is unchanged",
+							"types and lint pass"
+						]
+					}
+				},
+				{
+					"id": "T9",
+					"name": "Span public repository methods: organizations, assets, ledgers",
+					"depends_on": [],
+					"inputs": [
+						"design.md Architecture item 3: repo spans carry the name only",
+						"Repos are classes implementing an interface with constructor(private readonly db: EffectDrizzleDatabase)"
+					],
+					"description": "Wrap the whole body of every public repo method with Effect.suspend(() => body).pipe(Effect.withSpan('<Interface>.<method>')). No attributes. Do not span private helpers; sql.execute spans from @effect/sql-pg already nest under these.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/organizations/OrganizationRepo.ts",
+							"apps/api/src/domains/assets/AssetRepo.ts",
+							"apps/api/src/domains/ledgers/LedgerRepo.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"full API suite (Postgres via testcontainers) passes with no snapshot changes"
+						],
+						"acceptance": [
+							"Every public method in the three repos has a span named <Interface>.<method>",
+							"types and lint pass"
+						]
+					}
+				},
+				{
+					"id": "T10",
+					"name": "Span public repository methods: accounts, categories, statements, balance monitors",
+					"depends_on": [],
+					"inputs": [
+						"Pattern from T9"
+					],
+					"description": "Apply the T9 pattern to the four repos. LedgerAccountCategoryRepo has about 9 methods; keep multi-return methods fully inside the span via Effect.suspend.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/LedgerAccountRepo.ts",
+							"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRepo.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"full API suite passes with no snapshot changes"
+						],
+						"acceptance": [
+							"Every public method in the four repos has a span named <Interface>.<method>",
+							"types and lint pass"
+						]
+					}
+				},
+				{
+					"id": "T11",
+					"name": "Span public repository methods: transactions and settlements",
+					"depends_on": ["T4"],
+					"inputs": [
+						"Pattern from T9",
+						"LedgerTransactionRepo.ts is also edited by T4 (counter placement); apply after T4 to avoid conflicts",
+						"LedgerTransactionRepo.ts has up to 21 methods including private helpers; span only the public interface methods"
+					],
+					"description": "Apply the T9 pattern to the two repos. Methods with early Effect.fail returns (for example createTransaction at l.333) must be wrapped whole so the failure is recorded on the span. The T4 counter increments must stay after the database transaction and inside the span.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRepo.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"full API suite passes with no snapshot changes, including the T4 counter tests"
+						],
+						"acceptance": [
+							"Every public method in both repos has a span named <Interface>.<method>",
+							"T4 counter behaviour unchanged",
+							"types and lint pass"
+						]
+					}
+				}
+			]
+		}
+	]
+}
