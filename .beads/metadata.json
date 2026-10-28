@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "exchequerio",
+  "project_id": "c357d08a-25aa-4429-ae44-51c18b6272ff"
+}
