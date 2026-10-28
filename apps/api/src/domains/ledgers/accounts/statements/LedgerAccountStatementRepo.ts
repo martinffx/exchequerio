@@ -70,6 +70,13 @@ interface LedgerAccountStatementRepo {
 		id: LedgerAccountStatementID,
 		request: StatementUpdateRequest
 	): Effect.Effect<LedgerAccountStatement, StatementUpdateError>;
+	/** Repository-only cleanup: there is no Statement delete endpoint. */
+	deleteStatement(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID
+	): Effect.Effect<void, StatementReadError>;
 }
 const LedgerAccountStatementRepoTag = Context.Service<LedgerAccountStatementRepo>(
 	"LedgerAccountStatementRepo"
@@ -325,6 +332,25 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 					new ConflictError("Statement annotations were modified; reload and retry")
 				);
 			return yield* LedgerAccountStatement.fromRow(rows[0]);
+		}).pipe(
+			Effect.catchTag("EffectDrizzleQueryError", cause =>
+				Effect.fail(mapStatementInfrastructureError(cause))
+			)
+		);
+	}
+	deleteStatement(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		accountId: LedgerAccountID,
+		id: LedgerAccountStatementID
+	) {
+		return Effect.gen({ self: this }, function* () {
+			const rows = yield* this.db
+				.delete(table)
+				.where(and(scopeWhere(organizationId, ledgerId, accountId), eq(table.id, encodeUuid(id))))
+				.returning({ id: table.id });
+			if (!rows[0])
+				return yield* Effect.fail(new NotFoundError(`Statement not found: ${id.toString()}`));
 		}).pipe(
 			Effect.catchTag("EffectDrizzleQueryError", cause =>
 				Effect.fail(mapStatementInfrastructureError(cause))

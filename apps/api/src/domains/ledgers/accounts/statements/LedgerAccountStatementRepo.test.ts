@@ -301,7 +301,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 				.where(eq(LedgerAccountStatementsTable.id, statement.id.toUUID()));
 		}
 	});
-	it("lets Ledger fixture cleanup delete a Ledger that has a Statement", async () => {
+	it("deletes one Statement so fixture cleanup can remove its Ledger", async () => {
 		const fixtureOrg = new TypeID("org") as OrgID;
 		const fixtureLedger = new TypeID("lgr") as LedgerID;
 		const fixtureAccount = new TypeID("lat") as LedgerAccountID;
@@ -328,7 +328,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 				normalBalance: "debit",
 				assetId: fixtureAsset.toUUID(),
 			});
-			await runtime.runPromise(
+			const created = await runtime.runPromise(
 				repository.createStatement(
 					fixtureOrg,
 					fixtureLedger,
@@ -338,6 +338,14 @@ describe("LedgerAccountStatementRepoLive", () => {
 					parsed(period)
 				)
 			);
+			await runtime.runPromise(
+				repository.deleteStatement(fixtureOrg, fixtureLedger, fixtureAccount, created.id)
+			);
+			expect(
+				await runtime.runPromise(
+					Effect.flip(repository.deleteStatement(fixtureOrg, fixtureLedger, fixtureAccount, created.id))
+				)
+			).toBeInstanceOf(NotFoundError);
 			await runtime.runPromise(ledgers.deleteLedgerFixtures(fixtureOrg, fixtureLedger));
 			expect(
 				await db

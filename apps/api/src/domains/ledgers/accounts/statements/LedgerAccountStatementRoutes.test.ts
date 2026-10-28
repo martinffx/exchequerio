@@ -69,6 +69,7 @@ const makeService = () =>
 			listStatements: vi.fn(() => Effect.succeed([stored])),
 			getEntries: vi.fn(() => Effect.succeed([])),
 			updateAnnotations: vi.fn(() => Effect.succeed(stored)),
+			deleteStatement: vi.fn(() => Effect.void),
 		},
 		{
 			claim: vi.fn(() => Effect.succeed(Option.none())),
