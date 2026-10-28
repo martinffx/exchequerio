@@ -223,7 +223,7 @@ export const sendWebhook = (
 ): Effect.Effect<void, WebhookDeliveryError> =>
 	Effect.tryPromise({
 		try: signal =>
-			new Promise<void>((resolve, reject) => {
+			new Promise<number | undefined>((resolve, reject) => {
 				let request: ClientRequest | undefined;
 				let finished = false;
 				const finish = (reason?: (typeof WebhookFailure.Type)["reason"], status?: number) => {
@@ -234,7 +234,7 @@ export const sendWebhook = (
 					request?.destroy();
 					if (reason)
 						reject(new WebhookDeliveryError({ reason, ...(status === undefined ? {} : { status }) }));
-					else resolve();
+					else resolve(status);
 				};
 				const abort = () => finish("interrupted");
 				const timer = setTimeout(() => finish("timeout"), 10_000);
@@ -316,7 +316,21 @@ export const sendWebhook = (
 			}),
 		catch: error =>
 			error instanceof WebhookDeliveryError ? error : new WebhookDeliveryError({ reason: "network" }),
-	});
+	}).pipe(
+		// Customer-facing request: no URL, host, headers or trace propagation on the span.
+		Effect.tap(status => (status === undefined ? Effect.void : annotateStatus(status))),
+		Effect.tapError(error =>
+			error.status === undefined ? Effect.void : annotateStatus(error.status)
+		),
+		Effect.asVoid,
+		Effect.withSpan("webhook.deliver", {
+			kind: "client",
+			attributes: { "http.request.method": "POST" },
+		})
+	);
+
+const annotateStatus = (status: number) =>
+	Effect.annotateCurrentSpan("http.response.status_code", status);
 
 export const deliverBalanceMonitor = (
 	payload: LedgerAccountBalanceMonitorJobPayload,

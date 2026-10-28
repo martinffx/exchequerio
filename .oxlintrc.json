@@ -440,6 +440,11 @@
 				"mode": "full"
 			},
 			{
+				"type": "telemetry",
+				"pattern": "src/telemetry.ts",
+				"mode": "full"
+			},
+			{
 				"type": "server",
 				"pattern": "src/server.ts",
 				"mode": "full"
@@ -483,6 +488,11 @@
 			{
 				"type": "lib-queues",
 				"pattern": "src/lib/queues.ts",
+				"mode": "full"
+			},
+			{
+				"type": "lib-metrics",
+				"pattern": "src/lib/metrics.ts",
 				"mode": "full"
 			}
 		],
@@ -989,6 +999,7 @@
 							"monitor-capability",
 							"lib-util",
 							"lib-errors",
+							"lib-metrics",
 							"database",
 							"account-composition",
 							"shared-ids",
@@ -1003,7 +1014,7 @@
 					},
 					{
 						"from": ["idempotency-capability"],
-						"allow": ["lib-errors", "shared-ids"]
+						"allow": ["lib-errors", "lib-metrics", "shared-ids"]
 					},
 					{
 						"from": ["transaction-domain"],
@@ -1131,6 +1142,10 @@
 						"disallow": ["*"]
 					},
 					{
+						"from": ["telemetry"],
+						"disallow": ["*"]
+					},
+					{
 						"from": ["server"],
 						"allow": [
 							"lib-util",
@@ -1152,7 +1167,7 @@
 					},
 					{
 						"from": ["entrypoint"],
-						"allow": ["config", "runtime", "server", "monitor-capability", "monitor-service", "lib-util"]
+						"allow": ["config", "runtime", "server", "telemetry", "monitor-capability", "monitor-service", "lib-util"]
 					},
 					{
 						"from": ["shared-ids"],
@@ -1176,6 +1191,10 @@
 					},
 					{
 						"from": ["lib-queues"],
+						"disallow": ["*"]
+					},
+					{
+						"from": ["lib-metrics"],
 						"disallow": ["*"]
 					}
 				]

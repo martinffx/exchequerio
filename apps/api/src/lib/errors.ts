@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Fiber, Schema } from "effect";
 import { v7 as uuid } from "uuid";
 
 type HttpErrorOptions = ErrorOptions & {
@@ -15,6 +15,9 @@ type ProblemDetail = {
 	readonly traceId: string;
 	readonly retryable?: boolean | undefined;
 };
+
+/** The current span's trace id; a fresh uuid when running outside any span. */
+const currentTraceId = (): string => Fiber.getCurrent()?.currentSpan?.traceId ?? uuid();
 
 /**
  * Shared base of every problem. `detail` and `retryable` are the only encoded fields;
@@ -39,7 +42,7 @@ abstract class HttpError extends Schema.Error<HttpError>("HttpError")({
 			title: this.title,
 			detail: this.message,
 			instance: `/instance/${uuid()}`,
-			traceId: uuid(),
+			traceId: currentTraceId(),
 			retryable: this.retryable,
 		};
 	}

@@ -57,6 +57,11 @@ services:
       - VALKEY_URL=redis://valkey:6379
       - JWT_SECRET=change-me-for-local-development
       - BALANCE_MONITOR_ENCRYPTION_KEY=${BALANCE_MONITOR_ENCRYPTION_KEY:-}
+      # - OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4318
+      # - OTEL_TRACES_EXPORTER=otlp
+      # - OTEL_METRICS_EXPORTER=otlp
+      # - OTEL_LOGS_EXPORTER=otlp
+      # - OTEL_EXPORTER_OTLP_HEADERS=
     ports:
       - 3000:3000
     depends_on:
@@ -81,6 +86,11 @@ services:
     environment:
       - VALKEY_URL=redis://valkey:6379
       - BALANCE_MONITOR_ENCRYPTION_KEY=${BALANCE_MONITOR_ENCRYPTION_KEY:-}
+      # - OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4318
+      # - OTEL_TRACES_EXPORTER=otlp
+      # - OTEL_METRICS_EXPORTER=otlp
+      # - OTEL_LOGS_EXPORTER=otlp
+      # - OTEL_EXPORTER_OTLP_HEADERS=
     depends_on:
       valkey:
         condition: service_healthy

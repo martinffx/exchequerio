@@ -162,7 +162,11 @@ const makeAuthenticationLayer = (secret: string): Layer.Layer<Authentication> =>
 				}).pipe(
 					Effect.tapError(error => Effect.logError(error)),
 					Effect.mapError(() => new UnauthorizedError("Invalid token")),
-					Effect.flatMap(token => Effect.provideService(httpEffect, CurrentToken, token))
+					Effect.flatMap(token =>
+						Effect.annotateCurrentSpan("organization.id", token.orgId.toString()).pipe(
+							Effect.andThen(Effect.provideService(httpEffect, CurrentToken, token))
+						)
+					)
 				);
 			},
 		})

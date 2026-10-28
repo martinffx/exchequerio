@@ -1,8 +1,9 @@
-import { Effect, ManagedRuntime, Option } from "effect";
+import { Effect, ManagedRuntime, Metric, Option } from "effect";
 import Redis from "ioredis";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { newOrgID } from "@/lib/ids";
+import { idempotencyClaims } from "@/lib/metrics";
 import {
 	IdempotencyPending,
 	type IdempotencyService,
@@ -22,6 +23,18 @@ const fixture = () => {
 		action,
 		redisKey: `exchequer:idempotency:${organizationId.toString()}:${action}:${key}`,
 	};
+};
+/** Reads the current count of one idempotency claim outcome. */
+const claimCount = async (outcome: string) =>
+	(await Effect.runPromise(Metric.value(Metric.withAttributes(idempotencyClaims, { outcome }))))
+		.count;
+/** Runs an action and returns how much each claim outcome counter grew. */
+const claimDeltas = async (run: () => Promise<unknown>) => {
+	const outcomes = ["new", "replay", "pending", "unavailable"];
+	const before = await Promise.all(outcomes.map(o => claimCount(o)));
+	await run().catch(() => undefined);
+	const after = await Promise.all(outcomes.map(o => claimCount(o)));
+	return Object.fromEntries(outcomes.map((o, i) => [o, after[i] - before[i]]));
 };
 describe("IdempotencyService", () => {
 	const client = new Redis(new Config().valkeyUrl);
@@ -131,6 +144,27 @@ describe("IdempotencyService", () => {
 				await expect(offlineRuntime.runPromise(use(offlineService))).rejects.toBeInstanceOf(
 					IdempotencyUnavailable
 				);
+		} finally {
+			await offlineRuntime.dispose();
+		}
+	});
+	it("counts exactly one claim outcome per claim", async () => {
+		const f = fixture();
+		const claim = () => runtime.runPromise(service.claim(f.organizationId, f.action, f.key));
+		expect(await claimDeltas(claim)).toEqual({ new: 1, replay: 0, pending: 0, unavailable: 0 });
+		expect(await claimDeltas(claim)).toEqual({ new: 0, replay: 0, pending: 1, unavailable: 0 });
+		await runtime.runPromise(service.complete(f.organizationId, f.action, f.key, "las_result"));
+		expect(await claimDeltas(claim)).toEqual({ new: 0, replay: 1, pending: 0, unavailable: 0 });
+		const offline = new Redis(new Config().valkeyUrl, { lazyConnect: true });
+		offline.disconnect();
+		const offlineRuntime = ManagedRuntime.make(makeIdempotencyService(offline));
+		try {
+			const offlineService = await offlineRuntime.runPromise(IdempotencyServiceTag);
+			expect(
+				await claimDeltas(() =>
+					offlineRuntime.runPromise(offlineService.claim(f.organizationId, f.action, f.key))
+				)
+			).toEqual({ new: 0, replay: 0, pending: 0, unavailable: 1 });
 		} finally {
 			await offlineRuntime.dispose();
 		}

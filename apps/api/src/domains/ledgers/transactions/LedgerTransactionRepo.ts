@@ -7,6 +7,7 @@ import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 
 import { ConflictError } from "@/lib/errors";
+import { recordLedgerTransactionPosted } from "@/lib/metrics";
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import {
 	AccountNotFound,
@@ -335,7 +336,12 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			return Effect.fail(new TransactionSettlementConflict());
 		return this.db
 			.transaction(tx => this.insertAccounting(tx, transaction))
-			.pipe(Effect.mapError(mapTransactionCreateError));
+			.pipe(
+				Effect.tap(() =>
+					transaction.status === "posted" ? recordLedgerTransactionPosted("create") : Effect.void
+				),
+				Effect.mapError(mapTransactionCreateError)
+			);
 	}
 
 	/**
@@ -478,7 +484,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 						transaction.ledgerId,
 						settlementId
 					);
-					if (Option.isSome(existing)) return { transaction: existing.value, monitorJobs: [] };
+					if (Option.isSome(existing))
+						return { transaction: existing.value, monitorJobs: [], inserted: false };
 					if (
 						settlement.status !== "processing" ||
 						settlement.targetStatus !== transaction.status ||
@@ -488,10 +495,19 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 							new TransactionLifecycleConflict(settlement.status, transaction.status)
 						);
 					}
-					return yield* this.insertAccounting(tx, transaction);
+					const mutation = yield* this.insertAccounting(tx, transaction);
+					return { ...mutation, inserted: true };
 				})
 			)
-			.pipe(Effect.mapError(mapTransactionMutationError));
+			.pipe(
+				Effect.tap(({ inserted }) =>
+					inserted && transaction.status === "posted"
+						? recordLedgerTransactionPosted("settlement")
+						: Effect.void
+				),
+				Effect.map(({ transaction: created, monitorJobs }) => ({ transaction: created, monitorJobs })),
+				Effect.mapError(mapTransactionMutationError)
+			);
 	}
 
 	/**
@@ -567,7 +583,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 						ledgerId,
 						settlementId
 					).pipe(Effect.flatMap(requireTransaction));
-					if (current.status === target) return { transaction: current, monitorJobs: [] };
+					if (current.status === target)
+						return { transaction: current, monitorJobs: [], transitioned: false };
 					if (settlement.status !== "processing" || settlement.targetStatus !== target)
 						return yield* Effect.fail(new TransactionLifecycleConflict(settlement.status, target));
 					const next = yield* target === "posted" ? current.toPosted(now) : current.toVoided(now);
@@ -590,10 +607,16 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 						updated,
 						next.id
 					);
-					return { transaction: next, monitorJobs };
+					return { transaction: next, monitorJobs, transitioned: true };
 				})
 			)
-			.pipe(Effect.mapError(mapTransactionMutationError));
+			.pipe(
+				Effect.tap(({ transitioned }) =>
+					transitioned && target === "posted" ? recordLedgerTransactionPosted("settlement") : Effect.void
+				),
+				Effect.map(({ transaction, monitorJobs }) => ({ transaction, monitorJobs })),
+				Effect.mapError(mapTransactionMutationError)
+			);
 	}
 
 	/**
@@ -699,6 +722,7 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 				)
 			);
 
+			yield* recordLedgerTransactionPosted("post");
 			return { transaction, monitorJobs };
 		}).pipe(Effect.mapError(mapTransactionMutationError));
 	}

@@ -6,6 +6,7 @@ import {
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { Config } from "@/config";
 import { encryptSecret } from "@/lib/crypto";
+import { makeTelemetryLayer } from "@/telemetry";
 
 const config = new Config();
 // Validate before starting a worker that could otherwise exhaust jobs with an invalid key.
@@ -17,6 +18,11 @@ const runtime = ManagedRuntime.make(
 		makeLedgerAccountBalanceMonitorJobWorker((payload, attempt) =>
 			deliverBalanceMonitor(payload, config.balanceMonitorEncryptionKey, attempt)
 		).pipe(Layer.provide(store))
+	).pipe(
+		// Underneath, not a sibling: effect-mq forks its loops at layer-build time and must see it.
+		Layer.provide(
+			makeTelemetryLayer({ serviceName: "exchequer-worker", environment: config.environment })
+		)
 	)
 );
 let stopping = false;
