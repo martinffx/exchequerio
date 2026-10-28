@@ -69,7 +69,7 @@ pnpm run dev:docs         # Documentation site only
 
 pnpm run build            # Build all buildable apps
 pnpm run check            # Check formatting, lint, and types
-pnpm run test             # Start PostgreSQL and run Vitest suites
+pnpm run test             # Start Valkey and run Vitest suites (API tests start their own PostgreSQL via Docker)
 pnpm run ci               # Full local CI pipeline
 
 pnpm --filter=@exchequerio/api test
@@ -78,6 +78,7 @@ pnpm --filter=@exchequerio/api db:gen
 pnpm --filter=@exchequerio/api db:migrate
 ```
 
-Tests use Vitest through the package scripts. Start PostgreSQL with `pnpm run docker:up` before
+Tests use Vitest through the package scripts. API tests start a throwaway PostgreSQL container
+(Testcontainers), so Docker must be running; start Valkey with `pnpm run docker:up` before
 targeted API tests when it is not already running. Copy `apps/api/.env.example` to
 `apps/api/.env` for the documented local defaults.

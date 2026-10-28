@@ -52,7 +52,7 @@ Tests run through the repository's Vitest scripts.
 pnpm run test
 
 # Test the API (uses Vitest)
-pnpm --filter=@exchequerio/api test    # Requires PostgreSQL and Valkey
+pnpm --filter=@exchequerio/api test    # Requires Docker (own PostgreSQL container) and Valkey
 
 # Start PostgreSQL and Valkey manually first (optional)
 pnpm run docker:up
