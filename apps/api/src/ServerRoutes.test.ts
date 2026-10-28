@@ -21,9 +21,7 @@ import { IdempotencyPending } from "@/lib/IdempotencyService";
 import type { OrgID } from "@/lib/ids";
 import { OrganizationServiceTag, type OrganizationService } from "@/domains/organizations";
 import { Organization } from "@/domains/organizations/Organization";
-import { Config } from "@/config";
-import { ServerConfigTag } from "@/runtime";
-import { appLayer, makeTestWebHandler } from "@/server";
+import { appLayer, makeTestWebHandler, type TestServiceLayers, testServicesLayer } from "@/server";
 
 const servers: FastifyInstance[] = [];
 
@@ -158,7 +156,7 @@ const deferred = () => {
 };
 
 /** Serves the HTTP app on a real socket (port 0) with the given services; closing `scope` drains it. */
-const listen = async (services: Layer.Layer<Config | OrganizationService>) => {
+const listen = async (overrides: TestServiceLayers = {}) => {
 	const scope = Effect.runSync(Scope.make());
 	const server = await Effect.runPromise(
 		Effect.gen(function* () {
@@ -167,9 +165,9 @@ const listen = async (services: Layer.Layer<Config | OrganizationService>) => {
 				scope
 			);
 			yield* Layer.buildWithScope(
-				HttpRouter.serve(appLayer.pipe(Layer.provide(services)), { disableLogger: true }).pipe(
-					Layer.provide(Layer.succeedContext(context))
-				),
+				HttpRouter.serve(appLayer.pipe(Layer.provide(testServicesLayer(overrides))), {
+					disableLogger: true,
+				}).pipe(Layer.provide(Layer.succeedContext(context))),
 				scope
 			);
 			return Context.get(context, HttpServer.HttpServer);
@@ -238,17 +236,15 @@ describe("Request lifecycle", () => {
 						return yield* outcome();
 					}),
 			} as unknown as OrganizationService;
-			const services = Layer.mergeAll(
-				Layer.succeed(ServerConfigTag, new Config()),
-				Layer.effect(
+			const { port, close } = await listen({
+				organization: Layer.effect(
 					OrganizationServiceTag,
 					Effect.gen(function* () {
 						yield* Effect.addFinalizer(() => Effect.sync(released));
 						return service;
 					})
-				)
-			);
-			const { port, close } = await listen(services);
+				),
+			});
 			try {
 				const received = sendRequest(port, {
 					path: `/api/organizations/${organizationId.toString()}`,
@@ -275,13 +271,11 @@ describe("Request lifecycle", () => {
 
 	it("rejects a request body over 1 MiB with a problem response", async () => {
 		const createOrganization = vi.fn(() => Effect.die(new Error("must not be reached")));
-		const services = Layer.mergeAll(
-			Layer.succeed(ServerConfigTag, new Config()),
-			Layer.succeed(OrganizationServiceTag, {
+		const { port, close } = await listen({
+			organization: Layer.succeed(OrganizationServiceTag, {
 				createOrganization,
-			} as unknown as OrganizationService)
-		);
-		const { port, close } = await listen(services);
+			} as unknown as OrganizationService),
+		});
 		try {
 			const response = await sendRequest(port, {
 				method: "POST",

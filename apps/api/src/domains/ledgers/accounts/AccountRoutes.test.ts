@@ -1,16 +1,14 @@
-import fastifySwagger from "@fastify/swagger";
-import { Effect, Layer, Option } from "effect";
-import fastify, { type FastifyInstance } from "fastify";
+import { Effect, Option } from "effect";
+import { OpenApi } from "effect/unstable/httpapi";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { globalErrorHandler } from "@/lib/errors";
+import { LedgerApi } from "@/api";
+import { signJWT } from "@/auth";
 import type { LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
-import { ServerRuntime } from "@/runtime";
+import { makeTestWebHandler } from "@/server";
 import type { LedgerAccountRow } from "@/db/schema";
 import { AccountHasDependents, AccountNotFound } from "./AccountErrors";
-import { AccountRoutes } from "./AccountRoutes";
 import type { AccountService } from "./AccountService";
-import { AccountServiceTag } from "./AccountService";
 import { LedgerAccount } from "./LedgerAccount";
 
 const organizationId = new TypeID("org") as OrgID;
@@ -68,62 +66,60 @@ const service = (result = account): AccountService =>
 		getAccount: vi.fn(() => Effect.succeed(result)),
 		createAccount: vi.fn(() => Effect.succeed(result)),
 		updateAccount: vi.fn(() => Effect.succeed(result)),
-		deleteAccount: vi.fn(() => Effect.succeed(result)),
+		deleteAccount: vi.fn(() => Effect.void),
 	} as unknown as AccountService);
 
-const servers: FastifyInstance[] = [];
+const disposers: Array<() => Promise<void>> = [];
 
-const buildRouteServer = async (implementation: AccountService) => {
-	const server = fastify();
-	const hasPermissions = vi.fn(() => async () => undefined);
-	server.setErrorHandler(globalErrorHandler);
-	const runtime = new ServerRuntime(Layer.succeed(AccountServiceTag, implementation));
-	server.decorate("runtime", runtime as never);
-	server.decorateRequest("token");
-	server.addHook("preHandler", async request => {
-		request.token = {
-			orgId: organizationId,
-			organizationId,
-			permissions: new Set(["ledger:account:read", "ledger:account:write", "ledger:account:delete"]),
-		} as never;
+const build = (implementation: AccountService) => {
+	const { handler, dispose } = makeTestWebHandler({ account: implementation });
+	disposers.push(dispose);
+	return handler;
+};
+
+const tokenWith = (scope: Parameters<typeof signJWT>[0]["scope"]) =>
+	signJWT({ sub: organizationId.toString(), scope });
+const allPermissions = () => tokenWith(["super_admin"]);
+const request = (
+	method: string,
+	path: string,
+	options: { token?: string; anonymous?: boolean; body?: unknown } = {}
+) => {
+	const token = options.anonymous === true ? undefined : (options.token ?? allPermissions());
+	return new Request(`http://localhost${path}`, {
+		method,
+		headers: {
+			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+			...(options.body === undefined ? {} : { "content-type": "application/json" }),
+		},
+		body: options.body === undefined ? undefined : JSON.stringify(options.body),
 	});
-	server.decorate("hasPermissions", hasPermissions);
-	await server.register(fastifySwagger, {
-		openapi: { info: { title: "Account route test", version: "1" } },
-	});
-	await server.register(AccountRoutes, { prefix: "/api/ledgers/:ledgerId/accounts" });
-	await server.ready();
-	servers.push(server);
-	return { server, hasPermissions };
 };
 
 afterEach(async () => {
-	for (const server of servers.splice(0)) await server.close();
+	for (const dispose of disposers.splice(0)) await dispose();
 });
 
+const collectionPath = `/api/ledgers/${ledgerId.toString()}/accounts`;
+const itemPath = `${collectionPath}/${accountId.toString()}`;
+const createBody = { name: "Cash", normalBalance: "debit", assetCode: "USD" };
+const routes: Array<[string, string, string, unknown]> = [
+	["GET", collectionPath, "ledger:account:read", undefined],
+	["GET", itemPath, "ledger:account:read", undefined],
+	["POST", collectionPath, "ledger:account:write", createBody],
+	["PUT", itemPath, "ledger:account:write", { name: "Operating Cash" }],
+	["DELETE", itemPath, "ledger:account:delete", undefined],
+];
+
 describe("AccountRoutes", () => {
-	it("keeps the five existing permission declarations", async () => {
-		const { hasPermissions } = await buildRouteServer(service());
-
-		expect(hasPermissions.mock.calls).toEqual([
-			[["ledger:account:read"]],
-			[["ledger:account:read"]],
-			[["ledger:account:write"]],
-			[["ledger:account:write"]],
-			[["ledger:account:delete"]],
-		]);
-	});
-
 	it("returns Account-owned Asset once and forwards list pagination", async () => {
 		const implementation = service();
-		const { server } = await buildRouteServer(implementation);
-		const response = await server.inject({
-			method: "GET",
-			url: `/api/ledgers/${ledgerId.toString()}/accounts?offset=10&limit=5`,
-		});
+		const handler = build(implementation);
+		const response = await handler(request("GET", `${collectionPath}?offset=10&limit=5`));
 
-		expect(response.statusCode).toBe(200);
-		expect(response.json()).toMatchObject([
+		expect(response.status).toBe(200);
+		const text = await response.text();
+		expect(JSON.parse(text)).toMatchObject([
 			{
 				id: accountId.toString(),
 				ledgerId: ledgerId.toString(),
@@ -137,7 +133,7 @@ describe("AccountRoutes", () => {
 				updated: "2026-08-09T11:00:00.000Z",
 			},
 		]);
-		expect(response.body).not.toContain('"currency":');
+		expect(text).not.toContain('"currency":');
 		expect(implementation.listAccounts).toHaveBeenCalledWith(organizationId, ledgerId, {
 			offset: 10,
 			limit: 5,
@@ -145,14 +141,11 @@ describe("AccountRoutes", () => {
 	});
 
 	it("serializes stored credit-normal Balances", async () => {
-		const { server } = await buildRouteServer(service(creditNormalAccount));
-		const response = await server.inject({
-			method: "GET",
-			url: `/api/ledgers/${ledgerId.toString()}/accounts/${accountId.toString()}`,
-		});
+		const handler = build(service(creditNormalAccount));
+		const response = await handler(request("GET", itemPath));
 
-		expect(response.statusCode).toBe(200);
-		expect(response.json()).toMatchObject({
+		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject({
 			balances: [
 				{ balanceType: "pending", amount: "-15", credits: "5", debits: "20" },
 				{ balanceType: "posted", amount: "-20", credits: "10", debits: "30" },
@@ -163,42 +156,37 @@ describe("AccountRoutes", () => {
 
 	it("requires create-only fields and returns 201 with Location", async () => {
 		const implementation = service();
-		const { server } = await buildRouteServer(implementation);
-		const url = `/api/ledgers/${ledgerId.toString()}/accounts`;
-		const response = await server.inject({
-			method: "POST",
-			url,
-			payload: {
-				name: "Cash",
-				normalBalance: "debit",
-				assetCode: "US0378331005",
-				ignored: true,
-			},
-		});
+		const handler = build(implementation);
+		const response = await handler(
+			request("POST", collectionPath, {
+				body: { name: "Cash", normalBalance: "debit", assetCode: "US0378331005", ignored: true },
+			})
+		);
 
-		expect(response.statusCode).toBe(201);
-		expect(response.headers.location).toBe(`${url}/${accountId.toString()}`);
+		expect(response.status).toBe(201);
+		expect(response.headers.get("location")).toBe(itemPath);
 		expect(implementation.createAccount).toHaveBeenCalledWith(organizationId, ledgerId, {
 			name: "Cash",
 			normalBalance: "debit",
 			assetCode: "US0378331005",
 		});
 
-		const invalid = await server.inject({ method: "POST", url, payload: { name: "Cash" } });
-		expect(invalid.statusCode).toBe(400);
+		const invalid = await handler(request("POST", collectionPath, { body: { name: "Cash" } }));
+		expect(invalid.status).toBe(400);
+		expect(await invalid.json()).toMatchObject({ type: "BAD_REQUEST", status: 400 });
 	});
 
 	it.each([{ assetId: asset.assetId }, { assetCode: "usd" }])(
 		"accepts one Asset selector %j",
 		async selector => {
 			const implementation = service();
-			const { server } = await buildRouteServer(implementation);
-			const response = await server.inject({
-				method: "POST",
-				url: `/api/ledgers/${ledgerId.toString()}/accounts`,
-				payload: { name: "Cash", normalBalance: "debit", ...selector },
-			});
-			expect(response.statusCode).toBe(201);
+			const handler = build(implementation);
+			const response = await handler(
+				request("POST", collectionPath, {
+					body: { name: "Cash", normalBalance: "debit", ...selector },
+				})
+			);
+			expect(response.status).toBe(201);
 			expect(implementation.createAccount).toHaveBeenCalledWith(organizationId, ledgerId, {
 				name: "Cash",
 				normalBalance: "debit",
@@ -211,31 +199,27 @@ describe("AccountRoutes", () => {
 		"rejects ambiguous or missing selector %j",
 		async selector => {
 			const implementation = service();
-			const { server } = await buildRouteServer(implementation);
-			const response = await server.inject({
-				method: "POST",
-				url: `/api/ledgers/${ledgerId.toString()}/accounts`,
-				payload: { name: "Cash", normalBalance: "debit", ...selector },
-			});
-			expect(response.statusCode).toBe(400);
+			const handler = build(implementation);
+			const response = await handler(
+				request("POST", collectionPath, {
+					body: { name: "Cash", normalBalance: "debit", ...selector },
+				})
+			);
+			expect(response.status).toBe(400);
 			expect(implementation.createAccount).not.toHaveBeenCalled();
 		}
 	);
 
 	it("strips immutable update fields", async () => {
 		const implementation = service();
-		const { server } = await buildRouteServer(implementation);
-		const response = await server.inject({
-			method: "PUT",
-			url: `/api/ledgers/${ledgerId.toString()}/accounts/${accountId.toString()}`,
-			payload: {
-				name: "Operating Cash",
-				normalBalance: "credit",
-				assetCode: "EUR",
-			},
-		});
+		const handler = build(implementation);
+		const response = await handler(
+			request("PUT", itemPath, {
+				body: { name: "Operating Cash", normalBalance: "credit", assetCode: "EUR" },
+			})
+		);
 
-		expect(response.statusCode).toBe(200);
+		expect(response.status).toBe(200);
 		expect(implementation.updateAccount).toHaveBeenCalledWith(organizationId, ledgerId, accountId, {
 			name: "Operating Cash",
 		});
@@ -243,26 +227,23 @@ describe("AccountRoutes", () => {
 
 	it("deletes with an empty 204", async () => {
 		const implementation = service();
-		const { server } = await buildRouteServer(implementation);
-		const response = await server.inject({
-			method: "DELETE",
-			url: `/api/ledgers/${ledgerId.toString()}/accounts/${accountId.toString()}`,
-		});
+		const handler = build(implementation);
+		const response = await handler(request("DELETE", itemPath));
 
-		expect(response.statusCode).toBe(204);
-		expect(response.body).toBe("");
+		expect(response.status).toBe(204);
+		expect(await response.text()).toBe("");
 		expect(implementation.deleteAccount).toHaveBeenCalledWith(organizationId, ledgerId, accountId);
 	});
 
 	it("rejects malformed IDs before invoking the service", async () => {
 		const implementation = service();
-		const { server } = await buildRouteServer(implementation);
-		const response = await server.inject({
-			method: "GET",
-			url: "/api/ledgers/not-a-ledger/accounts/not-an-account",
-		});
+		const handler = build(implementation);
+		const response = await handler(
+			request("GET", "/api/ledgers/not-a-ledger/accounts/not-an-account")
+		);
 
-		expect(response.statusCode).toBe(400);
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ type: "BAD_REQUEST", status: 400 });
 		expect(implementation.getAccount).not.toHaveBeenCalled();
 	});
 
@@ -270,27 +251,99 @@ describe("AccountRoutes", () => {
 		const implementation = service();
 		vi.mocked(implementation.getAccount).mockReturnValue(Effect.fail(new AccountNotFound()));
 		vi.mocked(implementation.deleteAccount).mockReturnValue(Effect.fail(new AccountHasDependents()));
-		const { server } = await buildRouteServer(implementation);
+		const handler = build(implementation);
 
-		const get = await server.inject({
-			method: "GET",
-			url: `/api/ledgers/${ledgerId.toString()}/accounts/${accountId.toString()}`,
-		});
-		const remove = await server.inject({
-			method: "DELETE",
-			url: `/api/ledgers/${ledgerId.toString()}/accounts/${accountId.toString()}`,
-		});
-		expect(get.statusCode).toBe(404);
-		expect(remove.statusCode).toBe(409);
+		const get = await handler(request("GET", itemPath));
+		const remove = await handler(request("DELETE", itemPath));
+		expect(get.status).toBe(404);
+		expect(remove.status).toBe(409);
 	});
 
-	it("advertises operation-specific failures without 429", async () => {
-		const { server } = await buildRouteServer(service());
-		const specification = JSON.stringify(server.swagger());
+	describe("authentication", () => {
+		it("returns 401 Invalid token without a token", async () => {
+			const implementation = service();
+			const handler = build(implementation);
 
-		expect(specification).toContain('"201"');
-		expect(specification).toContain('"204"');
-		expect(specification).toContain('"409"');
-		expect(specification).not.toContain('"429"');
+			const response = await handler(request("GET", collectionPath, { anonymous: true }));
+
+			expect(response.status).toBe(401);
+			expect(await response.json()).toMatchObject({
+				type: "UNAUTHORIZED",
+				status: 401,
+				detail: "Invalid token",
+			});
+			expect(implementation.listAccounts).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("authorization", () => {
+		it.each(routes)(
+			"returns 403 on %s %s for a token without scope",
+			async (method, path, permission, body) => {
+				const implementation = service();
+				const handler = build(implementation);
+
+				const response = await handler(request(method, path, { token: tokenWith([]), body }));
+
+				expect(response.status).toBe(403);
+				expect(await response.json()).toMatchObject({
+					type: "FORBIDDEN",
+					detail: `One of: ${permission}; permissions is required`,
+				});
+				for (const method of Object.values(implementation)) expect(method).not.toHaveBeenCalled();
+			}
+		);
+	});
+
+	describe("OpenAPI", () => {
+		const spec = OpenApi.fromApi(LedgerApi);
+		const groupOperations = (...ids: string[]) =>
+			Object.values(spec.paths)
+				.flatMap(path => Object.values(path ?? {}))
+				.filter(operation =>
+					ids.includes(String((operation as { operationId?: unknown }).operationId))
+				);
+		const operations = (path: string) =>
+			spec.paths[path] as unknown as Record<
+				string,
+				{
+					operationId: string;
+					responses: object;
+					parameters?: Array<{ name: string; in: string; required: boolean }>;
+				}
+			>;
+
+		it("advertises operation-specific failures without 429", () => {
+			const statuses = (path: string, method: string) =>
+				Object.keys(operations(path)[method].responses);
+
+			expect(statuses("/api/ledgers/{ledgerId}/accounts/", "post")).toEqual(
+				expect.arrayContaining(["201", "404", "409"])
+			);
+			expect(statuses("/api/ledgers/{ledgerId}/accounts/{accountId}", "delete")).toEqual(
+				expect.arrayContaining(["204", "409"])
+			);
+			expect(statuses("/api/ledgers/{ledgerId}/accounts/{accountId}", "get")).not.toContain("409");
+			const own = groupOperations(
+				"listLedgerAccounts",
+				"getLedgerAccount",
+				"createLedgerAccount",
+				"updateLedgerAccount",
+				"deleteLedgerAccount"
+			);
+			expect(own).toHaveLength(5);
+			expect(JSON.stringify(own)).not.toContain('"429"');
+		});
+
+		it("documents the list offset and limit as optional", () => {
+			const list = operations("/api/ledgers/{ledgerId}/accounts/").get;
+			expect(list.operationId).toBe("listLedgerAccounts");
+			for (const name of ["offset", "limit"]) {
+				expect(list.parameters?.find(entry => entry.name === name)).toMatchObject({
+					in: "query",
+					required: false,
+				});
+			}
+		});
 	});
 });

@@ -1,6 +1,10 @@
 import { Effect } from "effect";
 import { HttpApi, HttpApiMiddleware, OpenApi, type HttpApiError } from "effect/unstable/httpapi";
 import { Authentication } from "@/auth";
+import { AccountsApi } from "@/domains/ledgers/accounts/AccountApi";
+import { AssetsApi } from "@/domains/assets/AssetApi";
+import { TransactionsApi } from "@/domains/ledgers/transactions/LedgerTransactionApi";
+import { LedgersApi } from "@/domains/ledgers/LedgerApi";
 import { OrganizationApi } from "@/domains/organizations/OrganizationApi";
 import { BadRequestApiError, BadRequestError } from "@/lib/errors";
 
@@ -17,6 +21,12 @@ const requestKinds: ReadonlySet<HttpApiError.HttpApiSchemaError["kind"]> = new S
 	"Payload",
 ]);
 
+// Keyed by endpoint name, which the transform receives as `context.endpoint.identifier`.
+const payloadDetails: Readonly<Record<string, string | undefined>> = {
+	createAsset: "Invalid Asset creation request",
+	updateAsset: "Invalid Asset replacement request",
+};
+
 /**
  * Request kinds (including malformed JSON, which arrives as a Payload error) become a 400 problem
  * with the Effect Schema message as detail. Response kinds (Body, ResponseHeaders) are re-thrown
@@ -24,9 +34,16 @@ const requestKinds: ReadonlySet<HttpApiError.HttpApiSchemaError["kind"]> = new S
  */
 const SchemaErrorTransformLayer = HttpApiMiddleware.layerSchemaErrorTransform(
 	SchemaErrorTransform,
-	schemaError =>
+	(schemaError, { endpoint }) =>
 		requestKinds.has(schemaError.kind)
-			? Effect.fail(new BadRequestError(schemaError.cause.message, { cause: schemaError }))
+			? Effect.fail(
+					new BadRequestError(
+						// Fastify reported one fixed detail for any invalid Asset write body.
+						(schemaError.kind === "Payload" ? payloadDetails[endpoint.identifier] : undefined) ??
+							schemaError.cause.message,
+						{ cause: schemaError }
+					)
+				)
 			: Effect.fail(schemaError)
 );
 
@@ -34,7 +51,7 @@ const SchemaErrorTransformLayer = HttpApiMiddleware.layerSchemaErrorTransform(
 // SchemaErrorTransform is added last so it wraps Authentication and every handler: auth runs first,
 // then request decoding.
 class LedgerApi extends HttpApi.make("ledger")
-	.add(OrganizationApi)
+	.add(OrganizationApi, AssetsApi, LedgersApi, AccountsApi, TransactionsApi)
 	.prefix("/api")
 	.middleware(Authentication)
 	.middleware(SchemaErrorTransform)

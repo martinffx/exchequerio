@@ -1,308 +1,103 @@
-import { Effect, Result } from "effect";
-import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-
-import {
-	BadRequestError,
-	BadRequestProblem,
-	ConflictProblem,
-	ForbiddenProblem,
-	InternalServerProblem,
-	NotFoundProblem,
-	ServiceUnavailableProblem,
-	UnauthorizedProblem,
-} from "@/lib/errors";
-import { parseId } from "@/lib/utils";
+import { Effect } from "effect";
+import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
+import { LedgerApi } from "@/api";
+import { CurrentToken, requirePermissions } from "@/auth";
 import type { LedgerID, LedgerTransactionID } from "@/lib/ids";
-
-import {
-	TransactionCollectionParameters,
-	TransactionCreateHeaders,
-	TransactionCreateRequest,
-	TransactionDeleteResponse,
-	TransactionItemParameters,
-	TransactionListQuery,
-	TransactionListResponse,
-	TransactionUpdateRequest,
-	TransactionResponse,
-} from "./LedgerTransactionSchema";
+import { parseId } from "@/lib/utils";
 import { TransactionServiceTag } from "./LedgerTransactionService";
 
-const requireStringAmounts = async (request: FastifyRequest) => {
-	const body = request.body as { ledgerEntries?: unknown } | undefined;
-	if (
-		body &&
-		Array.isArray(body.ledgerEntries) &&
-		body.ledgerEntries.some(
-			(entry: unknown) =>
-				entry !== null &&
-				typeof entry === "object" &&
-				"amount" in entry &&
-				typeof entry.amount !== "string"
-		)
-	) {
-		throw new BadRequestError("Entry amounts must be decimal strings");
-	}
-};
+const parseLedgerId = (ledgerId: string) => parseId<"lgr", LedgerID>("lgr", ledgerId);
+const parseTransactionId = (transactionId: string) =>
+	parseId<"ltr", LedgerTransactionID>("ltr", transactionId);
 
-const commonErrors = {
-	400: BadRequestProblem,
-	401: UnauthorizedProblem,
-	403: ForbiddenProblem,
-	500: InternalServerProblem,
-	503: ServiceUnavailableProblem,
-};
-
-const parseItemIds = (ledgerId: string, transactionId: string) =>
-	Effect.all([
-		parseId<"lgr", LedgerID>("lgr", ledgerId),
-		parseId<"ltr", LedgerTransactionID>("ltr", transactionId),
-	]);
-
-const TransactionRoutes: FastifyPluginAsync = async server => {
-	server.get<{ Params: TransactionCollectionParameters; Querystring: TransactionListQuery }>(
-		"/",
-		{
-			preHandler: [server.hasPermissions(["ledger:transaction:read"])],
-			schema: {
-				operationId: "listLedgerTransactions",
-				tags: ["Ledger Transactions"],
-				summary: "List Ledger Transactions",
-				params: TransactionCollectionParameters,
-				querystring: TransactionListQuery,
-				response: { 200: TransactionListResponse, 404: NotFoundProblem, ...commonErrors },
-			},
-		},
-		async request => {
-			const effect = parseId<"lgr", LedgerID>("lgr", request.params.ledgerId).pipe(
-				Effect.flatMap(ledgerId =>
-					TransactionServiceTag.use(service =>
-						service.listTransactions(request.token.orgId, ledgerId, request.query)
-					)
-				)
+const TransactionRoutes = HttpApiBuilder.group(LedgerApi, "transactions", handlers =>
+	Effect.gen(function* () {
+		const service = yield* TransactionServiceTag;
+		return handlers
+			.handle("list", ({ params, query }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["ledger:transaction:read"]);
+					const token = yield* CurrentToken;
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
+					const transactions = yield* service.listTransactions(token.orgId, ledgerId, query);
+					return transactions.map(transaction => transaction.toListItemResponse());
+				})
+			)
+			.handle("get", ({ params }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["ledger:transaction:read"]);
+					const token = yield* CurrentToken;
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
+					const transactionId = yield* parseTransactionId(params.transactionId);
+					const transaction = yield* service.getTransaction(token.orgId, ledgerId, transactionId);
+					return transaction.toResponse();
+				})
+			)
+			.handle("create", ({ params, headers, payload }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["ledger:transaction:write"]);
+					const token = yield* CurrentToken;
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
+					const transaction = yield* service.createTransaction(
+						token.orgId,
+						ledgerId,
+						headers["idempotency-key"],
+						payload
+					);
+					return HttpApiSchema.withHeaders({
+						body: transaction.toResponse(),
+						headers: {
+							location: `/api/ledgers/${transaction.ledgerId.toString()}/transactions/${transaction.id.toString()}`,
+						},
+					});
+				})
+			)
+			.handle("update", ({ params, headers, payload }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["ledger:transaction:write"]);
+					const token = yield* CurrentToken;
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
+					const transactionId = yield* parseTransactionId(params.transactionId);
+					const transaction = yield* service.updateTransaction(
+						token.orgId,
+						ledgerId,
+						transactionId,
+						headers["idempotency-key"],
+						payload
+					);
+					return transaction.toResponse();
+				})
+			)
+			.handle("post", ({ params, headers }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["ledger:transaction:write"]);
+					const token = yield* CurrentToken;
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
+					const transactionId = yield* parseTransactionId(params.transactionId);
+					const transaction = yield* service.postTransaction(
+						token.orgId,
+						ledgerId,
+						transactionId,
+						headers["idempotency-key"]
+					);
+					return transaction.toResponse();
+				})
+			)
+			.handle("void", ({ params, headers }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["ledger:transaction:delete"]);
+					const token = yield* CurrentToken;
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
+					const transactionId = yield* parseTransactionId(params.transactionId);
+					yield* service.voidTransaction(
+						token.orgId,
+						ledgerId,
+						transactionId,
+						headers["idempotency-key"]
+					);
+				})
 			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: transactions => transactions.map(transaction => transaction.toListItemResponse()),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.get<{ Params: TransactionItemParameters }>(
-		"/:transactionId",
-		{
-			preHandler: [server.hasPermissions(["ledger:transaction:read"])],
-			schema: {
-				operationId: "getLedgerTransaction",
-				tags: ["Ledger Transactions"],
-				summary: "Get a Ledger Transaction",
-				params: TransactionItemParameters,
-				response: { 200: TransactionResponse, 404: NotFoundProblem, ...commonErrors },
-			},
-		},
-		async request => {
-			const effect = parseItemIds(request.params.ledgerId, request.params.transactionId).pipe(
-				Effect.flatMap(([ledgerId, transactionId]) =>
-					TransactionServiceTag.use(service =>
-						service.getTransaction(request.token.orgId, ledgerId, transactionId)
-					)
-				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: transaction => transaction.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.post<{
-		Params: TransactionCollectionParameters;
-		Headers: TransactionCreateHeaders;
-		Body: TransactionCreateRequest;
-	}>(
-		"/",
-		{
-			preValidation: requireStringAmounts,
-			preHandler: [server.hasPermissions(["ledger:transaction:write"])],
-			schema: {
-				operationId: "createLedgerTransaction",
-				tags: ["Ledger Transactions"],
-				summary: "Create a Ledger Transaction",
-				params: TransactionCollectionParameters,
-				headers: TransactionCreateHeaders,
-				body: TransactionCreateRequest,
-				response: {
-					201: TransactionResponse,
-					404: NotFoundProblem,
-					409: ConflictProblem,
-					...commonErrors,
-				},
-			},
-		},
-		async (request, reply) => {
-			const effect = parseId<"lgr", LedgerID>("lgr", request.params.ledgerId).pipe(
-				Effect.flatMap(ledgerId =>
-					TransactionServiceTag.use(service =>
-						service.createTransaction(
-							request.token.orgId,
-							ledgerId,
-							request.headers["idempotency-key"],
-							request.body
-						)
-					)
-				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: transaction =>
-					reply
-						.status(201)
-						.header(
-							"location",
-							`/api/ledgers/${transaction.ledgerId.toString()}/transactions/${transaction.id.toString()}`
-						)
-						.send(transaction.toResponse()),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.put<{
-		Params: TransactionItemParameters;
-		Headers: TransactionCreateHeaders;
-		Body: TransactionUpdateRequest;
-	}>(
-		"/:transactionId",
-		{
-			preValidation: requireStringAmounts,
-			preHandler: [server.hasPermissions(["ledger:transaction:write"])],
-			schema: {
-				operationId: "updateLedgerTransaction",
-				tags: ["Ledger Transactions"],
-				summary: "Update a Ledger Transaction",
-				params: TransactionItemParameters,
-				headers: TransactionCreateHeaders,
-				body: TransactionUpdateRequest,
-				response: {
-					200: TransactionResponse,
-					404: NotFoundProblem,
-					409: ConflictProblem,
-					...commonErrors,
-				},
-			},
-		},
-		async request => {
-			const effect = parseItemIds(request.params.ledgerId, request.params.transactionId).pipe(
-				Effect.flatMap(([ledgerId, transactionId]) =>
-					TransactionServiceTag.use(service =>
-						service.updateTransaction(
-							request.token.orgId,
-							ledgerId,
-							transactionId,
-							request.headers["idempotency-key"],
-							request.body
-						)
-					)
-				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: transaction => transaction.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.post<{ Params: TransactionItemParameters; Headers: TransactionCreateHeaders }>(
-		"/:transactionId/post",
-		{
-			preHandler: [server.hasPermissions(["ledger:transaction:write"])],
-			schema: {
-				operationId: "postLedgerTransaction",
-				tags: ["Ledger Transactions"],
-				summary: "Post a Ledger Transaction",
-				params: TransactionItemParameters,
-				headers: TransactionCreateHeaders,
-				response: {
-					200: TransactionResponse,
-					404: NotFoundProblem,
-					409: ConflictProblem,
-					...commonErrors,
-				},
-			},
-		},
-		async request => {
-			const effect = parseItemIds(request.params.ledgerId, request.params.transactionId).pipe(
-				Effect.flatMap(([ledgerId, transactionId]) =>
-					TransactionServiceTag.use(service =>
-						service.postTransaction(
-							request.token.orgId,
-							ledgerId,
-							transactionId,
-							request.headers["idempotency-key"]
-						)
-					)
-				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: transaction => transaction.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.delete<{ Params: TransactionItemParameters; Headers: TransactionCreateHeaders }>(
-		"/:transactionId",
-		{
-			preHandler: [server.hasPermissions(["ledger:transaction:delete"])],
-			schema: {
-				operationId: "voidLedgerTransaction",
-				tags: ["Ledger Transactions"],
-				summary: "Void a Ledger Transaction",
-				params: TransactionItemParameters,
-				headers: TransactionCreateHeaders,
-				response: {
-					204: TransactionDeleteResponse,
-					404: NotFoundProblem,
-					409: ConflictProblem,
-					...commonErrors,
-				},
-			},
-		},
-		async (request, reply) => {
-			const effect = parseItemIds(request.params.ledgerId, request.params.transactionId).pipe(
-				Effect.flatMap(([ledgerId, transactionId]) =>
-					TransactionServiceTag.use(service =>
-						service.voidTransaction(
-							request.token.orgId,
-							ledgerId,
-							transactionId,
-							request.headers["idempotency-key"]
-						)
-					)
-				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: () => reply.status(204).send(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-};
+	})
+);
 
 export { TransactionRoutes };

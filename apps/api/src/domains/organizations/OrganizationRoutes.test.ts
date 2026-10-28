@@ -198,9 +198,14 @@ describe("OrganizationRoutes", () => {
 		const spec = OpenApi.fromApi(LedgerApi);
 
 		it("documents the five Organization operations under the Organizations tag", () => {
-			const operations = Object.values(spec.paths).flatMap(path =>
-				Object.values(path ?? {}).filter(operation => !Array.isArray(operation))
-			) as Array<{ operationId: string; tags: string[] }>;
+			const operations = Object.entries(spec.paths)
+				.filter(([route]) => route.startsWith("/api/organizations"))
+				.flatMap(([, path]) =>
+					Object.values(path ?? {}).filter(operation => !Array.isArray(operation))
+				) as Array<{
+				operationId: string;
+				tags: string[];
+			}>;
 
 			expect(operations.map(operation => operation.operationId).sort()).toEqual([
 				"createOrganization",

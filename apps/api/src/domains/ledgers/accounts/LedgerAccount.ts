@@ -124,7 +124,7 @@ class LedgerAccount {
 	 * @param id - Generated Account identifier.
 	 * @param organizationId - Organization that owns the Account.
 	 * @param ledgerId - Ledger that contains the Account.
-	 * @param request - TypeBox-validated creation request.
+	 * @param request - Schema-validated creation request.
 	 * @param asset - Resolved Asset identity and current display attributes.
 	 * @param created - Account creation time, defaulting to the current UTC time.
 	 * @returns The new Account with every Balance initialized to zero.
@@ -166,7 +166,7 @@ class LedgerAccount {
 	/**
 	 * Replaces the mutable Account fields from a validated API request.
 	 *
-	 * @param request - TypeBox-validated update request.
+	 * @param request - Schema-validated update request.
 	 * @param updated - Account update time, defaulting to the current UTC time.
 	 * @returns The updated Account with its Balance and lock version unchanged.
 	 */

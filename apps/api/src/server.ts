@@ -33,41 +33,47 @@ import {
 	type ServerRuntimeLayer,
 	type ServerRuntimeServices,
 } from "@/runtime";
-import { AssetRoutes } from "@/domains/assets";
+import { AssetRoutes } from "@/domains/assets/AssetRoutes";
+import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
+import { AccountRoutes } from "@/domains/ledgers/accounts/AccountRoutes";
+import { AccountServiceTag, type AccountService } from "@/domains/ledgers/accounts/AccountService";
+import { LedgerRoutes } from "@/domains/ledgers/LedgerRoutes";
+import { LedgerServiceTag, type LedgerService } from "@/domains/ledgers/LedgerService";
+import { TransactionRoutes } from "@/domains/ledgers/transactions/LedgerTransactionRoutes";
+import {
+	TransactionServiceTag,
+	type TransactionService,
+} from "@/domains/ledgers/transactions/LedgerTransactionService";
 import { OrganizationRoutes } from "@/domains/organizations/OrganizationRoutes";
 import { OrganizationServiceTag, type OrganizationService } from "@/domains/organizations";
-import { LedgerRoutes } from "@/domains/ledgers";
-import { AccountRoutes } from "@/domains/ledgers/accounts";
-import { LedgerAccountBalanceMonitorRoutes } from "@/domains/ledgers/accounts/balance-monitors";
-import { LedgerAccountStatementRoutes } from "@/domains/ledgers/accounts/statements";
-import { LedgerAccountSettlementRoutes } from "@/domains/ledgers/settlements";
-import { TransactionRoutes } from "@/domains/ledgers/transactions";
-import { LedgerAccountCategoryRoutes } from "@/domains/ledgers/accounts/categories";
 
 const LedgerRouterPlugin: FastifyPluginAsync = async server => {
+	// Legacy Fastify routes load lazily: unported groups cannot be imported alongside the Effect app (removed in T16).
+	const { LedgerAccountCategoryRoutes } =
+		await import("@/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes");
 	await server.register(LedgerAccountCategoryRoutes, {
 		prefix: "/:ledgerId/accounts/categories",
 	});
+	const { LedgerAccountSettlementRoutes } =
+		await import("@/domains/ledgers/settlements/LedgerAccountSettlementRoutes");
 	await server.register(LedgerAccountSettlementRoutes, {
 		prefix: "/:ledgerId/settlements",
 	});
+	const { LedgerAccountStatementRoutes } =
+		await import("@/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes");
 	await server.register(LedgerAccountStatementRoutes, {
 		prefix: "/:ledgerId/accounts/:accountId/statements",
 	});
+	const { LedgerAccountBalanceMonitorRoutes } =
+		await import("@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes");
 	await server.register(LedgerAccountBalanceMonitorRoutes, {
 		prefix: "/:ledgerId/accounts/:accountId/balance-monitors",
 	});
-	await server.register(AccountRoutes, { prefix: "/:ledgerId/accounts" });
-	await server.register(TransactionRoutes, {
-		prefix: "/:ledgerId/transactions",
-	});
-	await server.register(LedgerRoutes);
 };
 
 const RouterPlugin: FastifyPluginAsync = async server => {
 	server.addHook("preHandler", server.auth([server.verifyJWT]));
 
-	await server.register(AssetRoutes, { prefix: "/assets" });
 	await server.register(LedgerRouterPlugin, { prefix: "/ledgers" });
 };
 
@@ -190,7 +196,13 @@ const buildServer = async ({ runtimeLayer }: ServerOpts = {}): Promise<FastifyIn
 };
 
 /** Handler layers for the groups served by HttpApi; the remaining groups are still on Fastify. */
-const handlerLayers = Layer.mergeAll(OrganizationRoutes);
+const handlerLayers = Layer.mergeAll(
+	OrganizationRoutes,
+	LedgerRoutes,
+	AssetRoutes,
+	AccountRoutes,
+	TransactionRoutes
+);
 
 const problemResponse = (error: HttpError) =>
 	HttpServerResponse.jsonUnsafe(error.toProblemDetail(), {
@@ -339,6 +351,10 @@ const makeServerLayer = (config: Config, overrides: ServerRuntimeLayerOverrides 
 
 type TestStubs = {
 	readonly organization?: OrganizationService;
+	readonly ledger?: LedgerService;
+	readonly asset?: AssetService;
+	readonly account?: AccountService;
+	readonly transaction?: TransactionService;
 };
 
 /** A service whose every method dies, so a route test fails loudly if it reaches an unstubbed service. */
@@ -348,24 +364,56 @@ const dieIfCalled = <S extends object>(name: string): S =>
 			Effect.die(new Error(`${name}.${String(property)} called without a test stub`)),
 	});
 
+/** Per-service layer overrides; any service left out is filled by a die-if-called stub. */
+type TestServiceLayers = {
+	readonly organization?: Layer.Layer<OrganizationService> | undefined;
+	readonly ledger?: Layer.Layer<LedgerService> | undefined;
+	readonly asset?: Layer.Layer<AssetService> | undefined;
+	readonly account?: Layer.Layer<AccountService> | undefined;
+	readonly transaction?: Layer.Layer<TransactionService> | undefined;
+};
+
+/**
+ * Every service the HTTP app needs, plus the server `Config`. Each service defaults to a
+ * die-if-called stub, so a newly ported group only needs a line here.
+ */
+const testServicesLayer = (overrides: TestServiceLayers = {}) =>
+	Layer.mergeAll(
+		Layer.succeed(ServerConfigTag, new Config()),
+		overrides.organization ??
+			Layer.succeed(OrganizationServiceTag, dieIfCalled<OrganizationService>("OrganizationService")),
+		overrides.ledger ?? Layer.succeed(LedgerServiceTag, dieIfCalled<LedgerService>("LedgerService")),
+		overrides.asset ?? Layer.succeed(AssetServiceTag, dieIfCalled<AssetService>("AssetService")),
+		overrides.account ??
+			Layer.succeed(AccountServiceTag, dieIfCalled<AccountService>("AccountService")),
+		overrides.transaction ??
+			Layer.succeed(TransactionServiceTag, dieIfCalled<TransactionService>("TransactionService"))
+	);
+
 /** Serves the HTTP app over a web `Request`/`Response` handler with stubbed services and no sockets. */
 const makeTestWebHandler = (
 	stubs: TestStubs = {},
 	/** Extra context for the request fibers, e.g. a capturing `Logger.layer`. */
 	extra: Layer.Layer<never> = Layer.empty
 ) => {
-	const config = new Config();
-	const services = Layer.mergeAll(
-		Layer.succeed(ServerConfigTag, config),
-		Layer.succeed(
-			OrganizationServiceTag,
-			stubs.organization ?? dieIfCalled<OrganizationService>("OrganizationService")
-		)
-	);
+	const services = testServicesLayer({
+		organization:
+			stubs.organization === undefined
+				? undefined
+				: Layer.succeed(OrganizationServiceTag, stubs.organization),
+		ledger: stubs.ledger === undefined ? undefined : Layer.succeed(LedgerServiceTag, stubs.ledger),
+		asset: stubs.asset === undefined ? undefined : Layer.succeed(AssetServiceTag, stubs.asset),
+		account:
+			stubs.account === undefined ? undefined : Layer.succeed(AccountServiceTag, stubs.account),
+		transaction:
+			stubs.transaction === undefined
+				? undefined
+				: Layer.succeed(TransactionServiceTag, stubs.transaction),
+	});
 	return HttpRouter.toWebHandler(Layer.provideMerge(appLayer.pipe(Layer.provide(services)), extra), {
 		disableLogger: true,
 	});
 };
 
-export type { TestStubs };
-export { appLayer, buildServer, makeServerLayer, makeTestWebHandler };
+export type { TestServiceLayers, TestStubs };
+export { appLayer, buildServer, makeServerLayer, makeTestWebHandler, testServicesLayer };

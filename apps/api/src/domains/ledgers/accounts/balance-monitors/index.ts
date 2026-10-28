@@ -8,7 +8,6 @@ const balanceMonitorLayer = (encryptionKey: string) =>
 		Layer.provide(ledgerAccountBalanceMonitorRepoLayer)
 	);
 
-export { LedgerAccountBalanceMonitorRoutes } from "./LedgerAccountBalanceMonitorRoutes";
 export type {
 	LedgerAccountBalanceMonitorListQuery,
 	LedgerAccountBalanceMonitorRequest,

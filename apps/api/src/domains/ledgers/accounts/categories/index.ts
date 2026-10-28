@@ -5,5 +5,4 @@ import { ledgerAccountCategoryServiceLayer } from "./LedgerAccountCategoryServic
 export const ledgerAccountCategoryLayer = ledgerAccountCategoryServiceLayer.pipe(
 	Layer.provide(ledgerAccountCategoryRepoLayer)
 );
-export { LedgerAccountCategoryRoutes } from "./LedgerAccountCategoryRoutes";
 export type { LedgerAccountCategoryService } from "./LedgerAccountCategoryService";
