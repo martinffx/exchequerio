@@ -11,7 +11,7 @@ import {
 } from "@/lib/errors";
 import { Agent, createServer, type IncomingHttpHeaders, request } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope } from "effect";
+import { Cause, Effect, Exit, Layer, Logger, References, Scope } from "effect";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { TypeID } from "typeid-js";
 import { signJWT } from "@/auth";
@@ -19,7 +19,7 @@ import type { OrgID } from "@/lib/ids";
 import { OrganizationServiceTag, type OrganizationService } from "@/domains/organizations";
 import { Organization } from "@/domains/organizations/Organization";
 import { makeTestWebHandler, type TestServiceLayers, testServicesLayer } from "@/lib/testing";
-import { appLayer } from "@/server";
+import { appLayer, serveApp } from "@/server";
 
 const deferred = () => {
 	let resolve!: () => void;
@@ -34,26 +34,32 @@ const until = async (condition: () => boolean) => {
 	for (let i = 0; i < 200 && !condition(); i++) await new Promise(r => setTimeout(r, 5));
 };
 
-/** Serves the HTTP app on a real socket (port 0) with the given services; closing `scope` drains it. */
-const listen = async (overrides: TestServiceLayers = {}) => {
+/**
+ * Serves the HTTP app on a real socket (port 0) through the production `serveApp` composition;
+ * closing `scope` drains it, releases the services, then logs shutdown completion.
+ */
+const listen = async (
+	overrides: TestServiceLayers = {},
+	extra: Layer.Layer<never> = Layer.empty
+) => {
 	const scope = Effect.runSync(Scope.make());
-	const server = await Effect.runPromise(
+	let port = 0;
+	const server = Layer.effectDiscard(
 		Effect.gen(function* () {
-			const context = yield* Layer.buildWithScope(
-				NodeHttpServer.layer(createServer, { port: 0, host: "127.0.0.1" }),
-				scope
-			);
-			yield* Layer.buildWithScope(
-				HttpRouter.serve(appLayer.pipe(Layer.provide(testServicesLayer(overrides))), {
-					disableLogger: true,
-				}).pipe(Layer.provide(Layer.succeedContext(context))),
-				scope
-			);
-			return Context.get(context, HttpServer.HttpServer);
+			port = ((yield* HttpServer.HttpServer).address as { port: number }).port;
 		})
+	).pipe(Layer.provideMerge(NodeHttpServer.layer(createServer, { port: 0, host: "127.0.0.1" })));
+	await Effect.runPromise(
+		Layer.buildWithScope(
+			serveApp(server, testServicesLayer(overrides)).pipe(Layer.provide(extra)),
+			scope
+		)
 	);
-	const { port } = server.address as { port: number };
-	return { port, scope, close: () => Effect.runPromise(Scope.close(scope, Exit.void)) };
+	return {
+		port,
+		scope,
+		close: () => Effect.runPromise(Scope.close(scope, Exit.void).pipe(Effect.provide(extra))),
+	};
 };
 
 const sendRequest = (
@@ -104,7 +110,16 @@ describe("Request lifecycle", () => {
 	] as const)(
 		"drains an in-flight request with %s and connection: close before releasing the services",
 		async (_name, outcome, expectedStatus) => {
-			const released = vi.fn<() => void>();
+			const events: Array<string> = [];
+			const eventLogger = Logger.layer([
+				Logger.make(({ message }) => {
+					const text = JSON.stringify(message);
+					if (text.includes("API shutdown")) events.push(text);
+				}),
+			]);
+			const released = vi.fn<() => void>(() => {
+				events.push("services released");
+			});
 			const started = deferred();
 			const finish = deferred();
 			const service = {
@@ -112,18 +127,22 @@ describe("Request lifecycle", () => {
 					Effect.gen(function* () {
 						started.resolve();
 						yield* Effect.promise(() => finish.promise);
+						events.push("handler finished");
 						return yield* outcome();
 					}),
 			} as unknown as OrganizationService;
-			const { port, close } = await listen({
-				organization: Layer.effect(
-					OrganizationServiceTag,
-					Effect.gen(function* () {
-						yield* Effect.addFinalizer(() => Effect.sync(released));
-						return service;
-					})
-				),
-			});
+			const { port, close } = await listen(
+				{
+					organization: Layer.effect(
+						OrganizationServiceTag,
+						Effect.gen(function* () {
+							yield* Effect.addFinalizer(() => Effect.sync(released));
+							return service;
+						})
+					),
+				},
+				eventLogger
+			);
 			try {
 				const received = sendRequest(port, {
 					path: `/api/organizations/${organizationId.toString()}`,
@@ -141,6 +160,12 @@ describe("Request lifecycle", () => {
 				});
 				await closing;
 				expect(released).toHaveBeenCalledOnce();
+				expect(events).toEqual([
+					'["API shutdown started"]',
+					"handler finished",
+					"services released",
+					'["API shutdown complete"]',
+				]);
 			} finally {
 				finish.resolve();
 				await close();
@@ -684,6 +709,21 @@ describe("Effect HTTP edge", () => {
 				expect(annotations?.["http.request_id"]).toMatch(uuidV7);
 				// The in-memory web handler has no socket, so no remote address is provided.
 				expect(annotations).not.toHaveProperty("http.remote_address");
+			});
+
+			it("annotates the access line with the socket remote address on a real connection", async () => {
+				const { port, close } = await listen({}, capture);
+				try {
+					await sendRequest(port, { path: "/health" });
+					await until(() => accessLine() !== undefined);
+				} finally {
+					await close();
+				}
+				const annotations = accessLine()?.annotations;
+				expect(["127.0.0.1", "::1", "::ffff:127.0.0.1"]).toContain(
+					annotations?.["http.remote_address"]
+				);
+				expect(annotations?.["http.request_id"]).toMatch(uuidV7);
 			});
 
 			it("keeps a valid supplied x-request-id", async () => {

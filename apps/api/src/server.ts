@@ -231,4 +231,28 @@ const appLayer = Layer.mergeAll(
 const makeServerLayer = (config: Config) =>
 	appLayer.pipe(Layer.provide(makeServerRuntimeLayer(config)));
 
-export { appLayer, makeServerLayer };
+const shutdownLog = (message: string) =>
+	Layer.effectDiscard(Effect.addFinalizer(() => Effect.logInfo(message)));
+
+/**
+ * Serves the app on `server` with `services` (the one composition used by the entrypoint and the
+ * tests). Layers are built outermost-first and released in reverse: services are built before the
+ * port opens and released after the drain; "started" is the first finalizer to run, "complete" the last.
+ */
+const serveApp = <SO, SE, SR, VO, VE, VR>(
+	server: Layer.Layer<SO, SE, SR>,
+	services: Layer.Layer<VO, VE, VR>
+) =>
+	// Built after the router, so its finalizer runs before the router's release (which drains in-flight requests).
+	shutdownLog("API shutdown started").pipe(
+		// HttpMiddleware.logger is already a global middleware of the app, so the router's own logger is off.
+		Layer.provideMerge(
+			// review-decision: routing keeps Effect's defaults (case-insensitive, duplicate slashes collapsed, trailing slash ignored) — the only effect is that spellings the old server answered 404 are now served; no route is exposed that was not already registered. Reconsider if a gateway, WAF or auth rule keys on exact-case paths, or if clients are found relying on 404s for those spellings.
+			HttpRouter.serve(appLayer, { disableLogger: true })
+		),
+		Layer.provide(server),
+		Layer.provide(services),
+		Layer.provide(shutdownLog("API shutdown complete"))
+	);
+
+export { appLayer, makeServerLayer, serveApp };
