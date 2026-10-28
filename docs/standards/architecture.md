@@ -34,6 +34,11 @@ Keep transport, orchestration, persistence, domain behavior, and presentation co
 owning layers. Domain entities may transform data at system boundaries and enforce invariants, but
 they do not perform I/O. Code that owns I/O also owns its operational failure translation.
 
+API import boundaries are linted from `.oxlintrc.json`. New API source files must be classified
+into an element there; `boundaries/no-unknown-files` fails lint for any unclassified file. Only
+tests and benchmarks may import the test harness, and only API contracts, routes, and application
+shell modules may import the HTTP transport framework.
+
 Keep domain rules and feature-specific jobs with their owning domain. Extract shared
 infrastructure when another current consumer needs it.
 
