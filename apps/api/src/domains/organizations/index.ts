@@ -25,5 +25,4 @@ export type {
 	OrganizationUpdateError,
 } from "./OrganizationService";
 export { OrganizationServiceTag } from "./OrganizationService";
-export { OrganizationRoutes } from "./OrganizationRoutes";
 export { organizationLayer };

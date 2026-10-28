@@ -1,10 +1,11 @@
 import fastifyAuth from "@fastify/auth";
 import fastifyJwt from "@fastify/jwt";
-import { Effect, Result } from "effect";
-import { createSigner, type SignerSync } from "fast-jwt";
+import { Context, Effect, Layer, Redacted, Result } from "effect";
+import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi";
+import { createSigner, createVerifier, type SignerSync } from "fast-jwt";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Config } from "@/config";
-import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
+import { ForbiddenError, UnauthorizedApiError, UnauthorizedError } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
 import type { OrgID } from "@/lib/ids";
 
@@ -167,5 +168,62 @@ const registerAuth = async (server: FastifyInstance): Promise<void> => {
 	await server.register(fastifyAuth);
 };
 
+/** The authenticated caller's token, provided to handlers by `Authentication`. */
+class CurrentToken extends Context.Service<CurrentToken, OrgToken>()("CurrentToken") {}
+
+class Authentication extends HttpApiMiddleware.Service<
+	Authentication,
+	{ provides: CurrentToken }
+>()("Authentication", {
+	security: { bearer: HttpApiSecurity.bearer },
+	error: UnauthorizedApiError,
+}) {}
+
+/** Verifies bearer JWTs against `secret`; the server layer injects the secret. */
+const makeAuthenticationLayer = (secret: string): Layer.Layer<Authentication> => {
+	const verify = createVerifier({ key: secret });
+	return Layer.succeed(
+		Authentication,
+		Authentication.of({
+			bearer: (httpEffect, { credential }) => {
+				// A missing Authorization header arrives as an empty credential.
+				const raw = Redacted.value(credential);
+				if (raw === "") {
+					return Effect.logError("Missing bearer credential").pipe(
+						Effect.andThen(Effect.fail(new UnauthorizedError("Invalid token")))
+					);
+				}
+				return Effect.try({
+					try: () => new OrgToken(verify(raw) as Token),
+					catch: error => error,
+				}).pipe(
+					Effect.tapError(error => Effect.logError(error)),
+					Effect.mapError(() => new UnauthorizedError("Invalid token")),
+					Effect.flatMap(token => Effect.provideService(httpEffect, CurrentToken, token))
+				);
+			},
+		})
+	);
+};
+
+/** Requires every listed permission on the caller's token (taken from `scope[0]`). */
+const requirePermissions = (
+	requiredPermissions: readonly Permission[]
+): Effect.Effect<void, ForbiddenError, CurrentToken> =>
+	CurrentToken.use(token =>
+		requiredPermissions.every(permission => token.permissions.has(permission))
+			? Effect.void
+			: Effect.fail(
+					new ForbiddenError(`One of: ${requiredPermissions.join(", ")}; permissions is required`)
+				)
+	);
+
 export type { Permission };
-export { registerAuth, signJWT };
+export {
+	Authentication,
+	CurrentToken,
+	makeAuthenticationLayer,
+	registerAuth,
+	requirePermissions,
+	signJWT,
+};

@@ -1,178 +1,60 @@
-import { Effect, Result } from "effect";
-import type { FastifyPluginAsync } from "fastify";
+import { Effect } from "effect";
+import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
+import { LedgerApi } from "@/api";
+import { requirePermissions } from "@/auth";
 import type { OrgID } from "@/lib/ids";
-import {
-	OrganizationCreateRequest,
-	OrganizationIdParameters,
-	OrganizationListQuery,
-	OrganizationResponse,
-	OrganizationUpdateRequest,
-} from "./OrganizationSchema";
-import { OrganizationServiceTag } from "./OrganizationService";
-import {
-	BadRequestProblem,
-	ConflictProblem,
-	ForbiddenProblem,
-	InternalServerProblem,
-	NotFoundProblem,
-	ServiceUnavailableProblem,
-	UnauthorizedProblem,
-} from "@/lib/errors";
 import { parseId } from "@/lib/utils";
+import { OrganizationServiceTag } from "./OrganizationService";
 
-const commonErrors = {
-	400: BadRequestProblem,
-	401: UnauthorizedProblem,
-	403: ForbiddenProblem,
-	500: InternalServerProblem,
-	503: ServiceUnavailableProblem,
-};
-
-const OrganizationRoutes: FastifyPluginAsync = async server => {
-	server.get<{ Querystring: OrganizationListQuery }>(
-		"/",
-		{
-			preHandler: [server.hasPermissions(["organization:read"])],
-			schema: {
-				operationId: "listOrganizations",
-				tags: ["Organizations"],
-				summary: "List Organizations",
-				querystring: OrganizationListQuery,
-				response: { 200: { type: "array", items: OrganizationResponse }, ...commonErrors },
-			},
-		},
-		async rq => {
-			const effect = OrganizationServiceTag.use(service =>
-				service.listOrganizations({
-					offset: rq.query.offset,
-					limit: rq.query.limit,
+// Organization routes are unscoped: the token's Organization is never used.
+const OrganizationRoutes = HttpApiBuilder.group(LedgerApi, "organizations", handlers =>
+	Effect.gen(function* () {
+		const service = yield* OrganizationServiceTag;
+		return handlers
+			.handle("list", ({ query }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["organization:read"]);
+					const organizations = yield* service.listOrganizations({
+						offset: query.offset,
+						limit: query.limit,
+					});
+					return organizations.map(organization => organization.toResponse());
+				})
+			)
+			.handle("get", ({ params }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["organization:read"]);
+					const orgId = yield* parseId<"org", OrgID>("org", params.orgId);
+					const organization = yield* service.getOrganization(orgId);
+					return organization.toResponse();
+				})
+			)
+			.handle("create", ({ payload }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["organization:write"]);
+					const organization = yield* service.createOrganization(payload);
+					return HttpApiSchema.withHeaders({
+						body: organization.toResponse(),
+						headers: { location: `/api/organizations/${organization.id.toString()}` },
+					});
+				})
+			)
+			.handle("update", ({ params, payload }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["organization:write"]);
+					const orgId = yield* parseId<"org", OrgID>("org", params.orgId);
+					const organization = yield* service.updateOrganization(orgId, payload);
+					return organization.toResponse();
+				})
+			)
+			.handle("delete", ({ params }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["organization:delete"]);
+					const orgId = yield* parseId<"org", OrgID>("org", params.orgId);
+					yield* service.deleteOrganization(orgId);
 				})
 			);
-			const result = await rq.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: value => value.map(organization => organization.toResponse()),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.get<{ Params: OrganizationIdParameters }>(
-		"/:orgId",
-		{
-			preHandler: [server.hasPermissions(["organization:read"])],
-			schema: {
-				operationId: "getOrganization",
-				tags: ["Organizations"],
-				summary: "Get an Organization",
-				params: OrganizationIdParameters,
-				response: { 200: OrganizationResponse, 404: NotFoundProblem, ...commonErrors },
-			},
-		},
-		async rq => {
-			const effect = parseId<"org", OrgID>("org", rq.params.orgId).pipe(
-				Effect.flatMap(orgId => OrganizationServiceTag.use(service => service.getOrganization(orgId)))
-			);
-			const result = await rq.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: organization => organization.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.post<{ Body: OrganizationCreateRequest }>(
-		"/",
-		{
-			preHandler: [server.hasPermissions(["organization:write"])],
-			schema: {
-				operationId: "createOrganization",
-				tags: ["Organizations"],
-				summary: "Create an Organization",
-				body: OrganizationCreateRequest,
-				response: { 201: OrganizationResponse, ...commonErrors },
-			},
-		},
-		async (rq, reply) => {
-			const effect = OrganizationServiceTag.use(service => service.createOrganization(rq.body));
-			const result = await rq.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: value =>
-					reply
-						.status(201)
-						.header("location", `/api/organizations/${value.id.toString()}`)
-						.send(value.toResponse()),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.put<{ Params: OrganizationIdParameters; Body: OrganizationUpdateRequest }>(
-		"/:orgId",
-		{
-			preHandler: [server.hasPermissions(["organization:write"])],
-			schema: {
-				operationId: "updateOrganization",
-				tags: ["Organizations"],
-				summary: "Update an Organization",
-				params: OrganizationIdParameters,
-				body: OrganizationUpdateRequest,
-				response: { 200: OrganizationResponse, 404: NotFoundProblem, ...commonErrors },
-			},
-		},
-		async rq => {
-			const effect = parseId<"org", OrgID>("org", rq.params.orgId).pipe(
-				Effect.flatMap(orgId =>
-					OrganizationServiceTag.use(service => service.updateOrganization(orgId, rq.body))
-				)
-			);
-			const result = await rq.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: organization => organization.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.delete<{ Params: OrganizationIdParameters }>(
-		"/:orgId",
-		{
-			preHandler: [server.hasPermissions(["organization:delete"])],
-			schema: {
-				operationId: "deleteOrganization",
-				tags: ["Organizations"],
-				summary: "Delete an Organization",
-				params: OrganizationIdParameters,
-				response: {
-					204: { type: "null" },
-					404: NotFoundProblem,
-					409: ConflictProblem,
-					...commonErrors,
-				},
-			},
-		},
-		async (rq, reply) => {
-			const effect = parseId<"org", OrgID>("org", rq.params.orgId).pipe(
-				Effect.flatMap(orgId =>
-					OrganizationServiceTag.use(service => service.deleteOrganization(orgId))
-				)
-			);
-			const result = await rq.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: () => reply.status(204).send(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-};
+	})
+);
 
 export { OrganizationRoutes };

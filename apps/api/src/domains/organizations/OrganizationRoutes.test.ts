@@ -1,15 +1,14 @@
-import fastify, { type FastifyInstance } from "fastify";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
+import { OpenApi } from "effect/unstable/httpapi";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { globalErrorHandler } from "@/lib/errors";
+import { LedgerApi } from "@/api";
+import { signJWT } from "@/auth";
 import type { OrgID } from "@/lib/ids";
-import { ServerRuntime } from "@/runtime";
+import { makeTestWebHandler } from "@/server";
 import { Organization } from "./Organization";
 import { OrganizationNotFound } from "./OrganizationErrors";
 import type { OrganizationService } from "./OrganizationService";
-import { OrganizationServiceTag } from "./OrganizationService";
-import { OrganizationRoutes } from "./OrganizationRoutes";
 
 const organizationId = TypeID.fromString<"org">("org_01h2x3y4z5a6b7c8d9e0f1g2h3") as OrgID;
 const organization = Organization.fromRequest(organizationId, {
@@ -25,76 +24,90 @@ const service = (): OrganizationService =>
 		deleteOrganization: vi.fn(() => Effect.succeed(organization)),
 	} as unknown as OrganizationService);
 
-const servers: FastifyInstance[] = [];
+const disposers: Array<() => Promise<void>> = [];
 
-const buildRouteServer = async (implementation: OrganizationService) => {
-	const server = fastify();
-	const hasPermissions = vi.fn(() => async () => undefined);
-	server.setErrorHandler(globalErrorHandler);
-	const runtime = new ServerRuntime(Layer.succeed(OrganizationServiceTag, implementation));
-	server.decorate("runtime", runtime as never);
-	server.decorateRequest("token");
-	server.addHook("preHandler", async request => {
-		request.token = {
-			orgId: organizationId,
-			organizationId,
-			permissions: new Set(["organization:read", "organization:write"]),
-		} as never;
+const build = (implementation: OrganizationService) => {
+	const { handler, dispose } = makeTestWebHandler({ organization: implementation });
+	disposers.push(dispose);
+	return handler;
+};
+
+const superAdmin = () => signJWT({ sub: organizationId.toString(), scope: ["super_admin"] });
+const request = (
+	method: string,
+	path: string,
+	options: { token?: string; anonymous?: boolean; body?: unknown } = {}
+) => {
+	const token = options.anonymous === true ? undefined : (options.token ?? superAdmin());
+	return new Request(`http://localhost${path}`, {
+		method,
+		headers: {
+			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+			...(options.body === undefined ? {} : { "content-type": "application/json" }),
+		},
+		body: options.body === undefined ? undefined : JSON.stringify(options.body),
 	});
-	server.decorate("hasPermissions", hasPermissions);
-	await server.register(OrganizationRoutes, { prefix: "/api/organizations" });
-	await server.ready();
-	servers.push(server);
-	return { server, runtime, hasPermissions };
 };
 
 afterEach(async () => {
-	for (const server of servers.splice(0)) await server.close();
+	for (const dispose of disposers.splice(0)) await dispose();
 });
 
-describe("OrganizationRoutes", () => {
-	it("reserves existing routes for platform permissions", async () => {
-		const { hasPermissions } = await buildRouteServer(service());
+const orgPath = `/api/organizations/${organizationId.toString()}`;
+const routes: Array<[string, string, string, unknown]> = [
+	["GET", "/api/organizations", "organization:read", undefined],
+	["GET", orgPath, "organization:read", undefined],
+	["POST", "/api/organizations", "organization:write", { name: "Example" }],
+	["PUT", orgPath, "organization:write", { name: "Example" }],
+	["DELETE", orgPath, "organization:delete", undefined],
+];
 
-		expect(hasPermissions.mock.calls).toEqual([
-			[["organization:read"]],
-			[["organization:read"]],
-			[["organization:write"]],
-			[["organization:write"]],
-			[["organization:delete"]],
-		]);
+describe("OrganizationRoutes", () => {
+	it("lists Organizations with defaulted pagination", async () => {
+		const implementation = service();
+		const handler = build(implementation);
+
+		const response = await handler(request("GET", "/api/organizations"));
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject([{ id: organizationId.toString(), name: "Example" }]);
+		expect(implementation.listOrganizations).toHaveBeenCalledWith({ offset: 0, limit: 20 });
+	});
+
+	it("coerces pagination query strings to integers", async () => {
+		const implementation = service();
+		const handler = build(implementation);
+
+		const response = await handler(request("GET", "/api/organizations?offset=5&limit=10"));
+
+		expect(response.status).toBe(200);
+		expect(implementation.listOrganizations).toHaveBeenCalledWith({ offset: 5, limit: 10 });
 	});
 
 	it("creates through the Effect service with 201 and Location", async () => {
 		const implementation = service();
-		const { server, runtime } = await buildRouteServer(implementation);
-		const runPromise = vi.spyOn(runtime, "runPromise");
+		const handler = build(implementation);
 
-		const response = await server.inject({
-			method: "POST",
-			url: "/api/organizations",
-			payload: { name: "Example" },
-		});
+		const response = await handler(
+			request("POST", "/api/organizations", { body: { name: "Example" } })
+		);
 
-		expect(response.statusCode).toBe(201);
-		expect(response.headers.location).toBe(`/api/organizations/${organizationId.toString()}`);
-		expect(response.json()).toMatchObject({ id: organizationId.toString(), name: "Example" });
-		expect(response.json()).not.toHaveProperty("description");
+		expect(response.status).toBe(201);
+		expect(response.headers.get("location")).toBe(`/api/organizations/${organizationId.toString()}`);
+		const body = await response.json();
+		expect(body).toMatchObject({ id: organizationId.toString(), name: "Example" });
+		expect(body).not.toHaveProperty("description");
 		expect(implementation.createOrganization).toHaveBeenCalledWith({ name: "Example" });
-		expect(runPromise).toHaveBeenCalledOnce();
 	});
 
 	it("deletes through the Effect service with an empty 204 response", async () => {
 		const implementation = service();
-		const { server } = await buildRouteServer(implementation);
+		const handler = build(implementation);
 
-		const response = await server.inject({
-			method: "DELETE",
-			url: `/api/organizations/${organizationId.toString()}`,
-		});
+		const response = await handler(request("DELETE", orgPath));
 
-		expect(response.statusCode).toBe(204);
-		expect(response.body).toBe("");
+		expect(response.status).toBe(204);
+		expect(await response.text()).toBe("");
 		expect(implementation.deleteOrganization).toHaveBeenCalledWith(organizationId);
 	});
 
@@ -103,14 +116,144 @@ describe("OrganizationRoutes", () => {
 		vi
 			.mocked(implementation.getOrganization)
 			.mockReturnValue(Effect.fail(new OrganizationNotFound()));
-		const { server } = await buildRouteServer(implementation);
+		const handler = build(implementation);
 
-		const response = await server.inject({
-			method: "GET",
-			url: `/api/organizations/${organizationId.toString()}`,
+		const response = await handler(request("GET", orgPath));
+
+		expect(response.status).toBe(404);
+		expect(await response.json()).toMatchObject({ type: "NOT_FOUND", status: 404 });
+	});
+
+	it("rejects a malformed Organization ID with a 400 problem", async () => {
+		const handler = build(service());
+
+		const response = await handler(request("GET", "/api/organizations/org_bad"));
+
+		expect(response.status).toBe(400);
+	});
+
+	describe("authentication", () => {
+		it.each([
+			["a missing header", { anonymous: true }],
+			["a bad signature", { token: `${superAdmin().slice(0, -3)}abc` }],
+			[
+				"a non-Organization subject",
+				{ token: signJWT({ sub: "user_01h2x3y4z5a6b7c8d9e0f1g2h3", scope: ["super_admin"] }) },
+			],
+		])("returns 401 Invalid token for %s", async (_name, credentials) => {
+			const handler = build(service());
+
+			const response = await handler(request("GET", orgPath, credentials));
+
+			expect(response.status).toBe(401);
+			expect(await response.json()).toMatchObject({
+				type: "UNAUTHORIZED",
+				status: 401,
+				detail: "Invalid token",
+			});
 		});
 
-		expect(response.statusCode).toBe(404);
-		expect(response.json()).toMatchObject({ type: "NOT_FOUND" });
+		it("returns 401 before validating an unauthenticated invalid body", async () => {
+			const handler = build(service());
+
+			const response = await handler(
+				request("POST", "/api/organizations", { anonymous: true, body: { name: 123 } })
+			);
+
+			expect(response.status).toBe(401);
+		});
+	});
+
+	describe("authorization", () => {
+		it.each(routes)(
+			"returns 403 on %s %s for a token without scope",
+			async (method, path, permission, body) => {
+				const implementation = service();
+				const handler = build(implementation);
+				const token = signJWT({ sub: organizationId.toString(), scope: [] });
+
+				const response = await handler(request(method, path, { token, body }));
+
+				expect(response.status).toBe(403);
+				expect(await response.json()).toMatchObject({
+					type: "FORBIDDEN",
+					detail: `One of: ${permission}; permissions is required`,
+				});
+				expect(implementation.listOrganizations).not.toHaveBeenCalled();
+				expect(implementation.deleteOrganization).not.toHaveBeenCalled();
+			}
+		);
+
+		it.each(routes)("returns 403 on %s %s for org_admin", async (method, path, _permission, body) => {
+			const handler = build(service());
+			const token = signJWT({ sub: organizationId.toString(), scope: ["org_admin"] });
+
+			const response = await handler(request(method, path, { token, body }));
+
+			expect(response.status).toBe(403);
+		});
+	});
+
+	describe("OpenAPI", () => {
+		const spec = OpenApi.fromApi(LedgerApi);
+
+		it("documents the five Organization operations under the Organizations tag", () => {
+			const operations = Object.values(spec.paths).flatMap(path =>
+				Object.values(path ?? {}).filter(operation => !Array.isArray(operation))
+			) as Array<{ operationId: string; tags: string[] }>;
+
+			expect(operations.map(operation => operation.operationId).sort()).toEqual([
+				"createOrganization",
+				"deleteOrganization",
+				"getOrganization",
+				"listOrganizations",
+				"updateOrganization",
+			]);
+			for (const operation of operations) expect(operation.tags).toEqual(["Organizations"]);
+		});
+
+		it("documents the list offset and limit as optional integers", () => {
+			const list = (spec.paths["/api/organizations/"] as unknown as Record<string, unknown>).get as {
+				parameters: Array<{ name: string; in: string; required: boolean; schema: object }>;
+			};
+			const parameter = (name: string) => list.parameters.find(entry => entry.name === name);
+			expect(parameter("offset")).toMatchObject({ in: "query", required: false });
+			expect(parameter("limit")).toMatchObject({ in: "query", required: false });
+		});
+
+		it("documents problem responses without nullable optional fields", () => {
+			const responses = (
+				spec.paths["/api/organizations/{orgId}"] as unknown as Record<
+					string,
+					{ responses: Record<string, unknown> }
+				>
+			).delete.responses;
+			const conflict = responses["409"] as {
+				content: {
+					"application/json": { schema: { properties: Record<string, unknown>; required: string[] } };
+				};
+				headers: Record<string, { required: boolean }>;
+			};
+			const body = conflict.content["application/json"].schema;
+			expect(body.properties.retryable).toEqual({ type: "boolean" });
+			expect(body.required).not.toContain("retryable");
+			expect(conflict.headers["retry-after"]?.required).toBe(false);
+		});
+
+		it("keeps the collection path key and the per-route status sets", () => {
+			expect(Object.keys(spec.paths)).toContain("/api/organizations/");
+			const statuses = (path: string, method: "get" | "post" | "put" | "delete") =>
+				Object.keys(
+					(spec.paths[path] as unknown as Record<string, { responses: object }>)[method].responses
+				).sort();
+			const common = ["400", "401", "403", "500", "503"];
+			const expected = (...codes: string[]) => [...codes, ...common].sort();
+
+			expect(statuses("/api/organizations/", "get")).toEqual(expected("200"));
+			expect(statuses("/api/organizations/", "post")).toEqual(expected("201"));
+			expect(statuses("/api/organizations/{orgId}", "get")).toEqual(expected("200", "404"));
+			expect(statuses("/api/organizations/{orgId}", "put")).toEqual(expected("200", "404"));
+			expect(statuses("/api/organizations/{orgId}", "delete")).toEqual(expected("204", "404", "409"));
+		});
 	});
 });
