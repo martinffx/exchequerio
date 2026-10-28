@@ -6,7 +6,7 @@
 		"All 50 /api routes keep method, path, operationId, permissions, success status, Location/Retry-After headers and body, including per-route oddities (200 creates, 200 empty deletes/links, settlement Location from the raw ledgerId, ignored statement path IDs, raw strings into the balance-monitor service)",
 		"Problem body {type,status,title,detail,instance,traceId,retryable?}; IdempotencyPending stays 409 with Retry-After: 1; errors with status >= 500 are logged with their cause and the cause is never exposed",
 		"401 'Invalid token' for a missing/invalid JWT or a non-canonical org_ sub; 403 'One of: <perms>; permissions is required'; permissions from scope[0] only, all required; settlement PATCH to voided also needs ledger:account:settlement:delete; an authenticated invalid request gets 400 before 403",
-		"Query integer coercion, body defaults, unknown body field stripping (Asset rejects any invalid body with 'Invalid Asset creation/replacement request'), numeric amount and non-string metadata 400s, undeclared response field stripping",
+		"Query integer coercion, body defaults, unknown body field stripping (Asset rejects any invalid body: 'Invalid Asset creation request' on create, 'Invalid Asset replacement request' on replace), numeric amount and non-string metadata 400s, undeclared response field stripping",
 		"GET /health returns 200 {} without auth; the server listens on ::, port 3000; in-flight requests drain on shutdown with connection: close",
 		"Services, repositories, entity logic, DB schema, worker and monitor-jobs are unchanged"
 	],
@@ -33,14 +33,14 @@
 							"apps/api/src/domains/organizations/OrganizationErrors.ts",
 							"apps/api/src/domains/ledgers/LedgerErrors.ts"
 						],
-						"create": ["apps/api/src/lib/errors.test.ts"],
+						"create": [],
 						"modify": ["apps/api/src/lib/errors.ts", "apps/api/src/ServerRoutes.test.ts"],
 						"delete": []
 					},
 					"new_abstractions": [],
 					"validation": {
 						"tests": [
-							"errors.test.ts (encoding contract, moved from ServerRoutes.test.ts:59-99): each of the 8 classes encodes to the body with no _tag and uuidv7 instance/traceId",
+							"Encoding contract (asserted through ServerRoutes.test.ts and the Routes suites, not a standalone errors.test.ts): each of the 8 classes encodes to the body with no _tag and uuidv7 instance/traceId",
 							"retryable appears only when set; ServiceUnavailable is retryable by default",
 							"retryAfterSeconds yields the retry-after header and is not in the body; cause is never encoded",
 							"A union of the [BadRequest, NotFound] schemas encodes an OrganizationNotFound as 404",
@@ -282,7 +282,7 @@
 						"Permissions asset:read|write|delete; operationIds listAssets, getAsset, createAsset, updateAsset, deleteAsset",
 						"Schema-error transform in src/api.ts from T3"
 					],
-					"description": "Convert AssetSchema.ts (additionalProperties false becomes onExcessProperty 'error' on the create and update payloads; ListQuery fields spread). Create AssetApi.ts: list 200; get 200 +404, 409; create 201 + Location /api/assets/{id} +404, 409; update 200 +404, 409; delete 204 +404, 409 (getAsset declares 409 as today). Extend the schema-error transform in api.ts to branch on endpoint name (createAsset, updateAsset) so any invalid payload returns BadRequest with detail 'Invalid Asset creation/replacement request'. Rewrite handlers and register as in the group pattern. Port the tests.",
+					"description": "Convert AssetSchema.ts (additionalProperties false becomes onExcessProperty 'error' on the create and update payloads; ListQuery fields spread). Create AssetApi.ts: list 200; get 200 +404, 409; create 201 + Location /api/assets/{id} +404, 409; update 200 +404, 409; delete 204 +404, 409 (getAsset declares 409 as today). Extend the schema-error transform in api.ts to branch on group and endpoint (assets/create, assets/update) so an invalid create payload returns BadRequest with detail 'Invalid Asset creation request' and an invalid replace payload 'Invalid Asset replacement request'. Rewrite handlers and register as in the group pattern. Port the tests.",
 					"files": {
 						"reuse": ["apps/api/src/domains/assets/AssetService.ts"],
 						"create": ["apps/api/src/domains/assets/AssetApi.ts"],

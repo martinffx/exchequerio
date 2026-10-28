@@ -29,10 +29,14 @@ This is a behaviour-preserving migration with these accepted exceptions. Anythin
 2. The `detail` text of validation 400s changes to the Effect Schema message. Status, type and title are unchanged.
 3. Authentication runs before request validation, so an unauthenticated invalid request gets 401 instead of 400. Authorization (403) still runs after validation.
 4. Unknown routes return the NOT_FOUND problem detail instead of Fastify's `{message,error,statusCode}` body.
-5. Malformed JSON returns a 400 BAD_REQUEST problem, and an unsupported content type returns 415. Both are 500 today.
+5. On endpoints that declare a payload, malformed JSON returns a 400 BAD_REQUEST problem and an unsupported content type returns 415 (both 500 today per the pre-migration error handler). `text/plain` was a 400 validation error before (Fastify has a built-in `text/plain` parser) and now returns 415 with a plain-text body (`Unsupported content-type: text/plain`). Endpoints that declare no payload (deletes, transaction post/void, category link/unlink and so on) now ignore the request body and `Content-Type` entirely, because HttpApi parses a body only when a payload is declared. In Fastify, an empty `application/json` body (`FST_ERR_CTP_EMPTY_JSON_BODY`), malformed JSON or an unsupported media type such as `application/xml` on those endpoints failed with a 500 through `globalErrorHandler`; they now succeed. A `text/plain` body to such an endpoint already succeeded.
 6. `/docs` is served by `HttpApiSwagger` and `/docs/json` by `OpenApi.fromApi`. UI configuration (`docExpansion`, `deepLinking`) may differ.
-7. Request logging moves from pino/pino-pretty to the Effect logger and `HttpMiddleware.logger`. The log line format changes. Errors with status ≥500 are still logged with their cause.
+7. Request logging moves from pino/pino-pretty to the Effect logger and `HttpMiddleware.logger`. The access line format changes. Per-request correlation is kept: every log line in a request carries `http.request_id` (the incoming `x-request-id` when it matches `^[A-Za-z0-9._:-]{1,128}$`, otherwise a minted uuid) and `http.remote_address` (when known); no response header is added. Errors with status ≥500 are still logged with their cause. Interrupted requests are logged truthfully: a client abort is logged with status 499 (no response is sent), and a server-side interrupt (drain cut) is a 503 problem logged at WARN. Shutdown logs "API shutdown started" before the drain and "API shutdown complete" after the services are released; the old "API shutdown failed" log is replaced by `runMain`'s failure reporting and exit code 1.
 8. Request bodies are no longer type-coerced. A body value of the wrong type (e.g. `{name:123}`, `description:null`, or `"false"` for a boolean) returns 400 BAD_REQUEST instead of being coerced. Query-string coercion and body defaults are unchanged.
+9. Graceful drain is capped at `NodeHttpServer`'s default 20 s `gracefulShutdownTimeout` (the pre-migration server had no cap). Writes already in a handler are awaited up to the cap (see US-6). A request whose headers are incomplete at SIGTERM is not answered (the request listener is removed first) and can hold `server.close()` until the client disconnects or the cap or headers timeout fires.
+10. Routing is case-insensitive, collapses duplicate slashes and ignores trailing slashes (Effect FindMyWay defaults; no `routerConfig` is passed). The only effect is that spellings the old server answered 404 are now served, including item paths with a trailing slash (`/api/organizations/<id>/`). This is recorded as an accepted `review-decision` in `apps/api/src/server.ts` (the `serveApp` composition).
+11. Query-string integers are decoded by Effect's string codec: values that Fastify/AJV coerced (hex such as `0x10`, whitespace-padded values, `Infinity`) now return 400, and `NaN`/`Infinity` are rejected by the Finite pagination schema. Query parameters are documented in OpenAPI as optional string patterns without min/max/default.
+12. Preserved behaviours worth recording (not changes): server timeouts keep the pre-migration values (`keepAliveTimeout` 72 s, no `requestTimeout`); the 1 MiB request body limit is kept (a declared oversized `Content-Length` gets a sanitised 500 problem, and chunked bodies over the limit have their connection closed); the process exits 0 on SIGTERM/SIGINT.
 
 ## User Stories
 - **US-1 (must) Single HTTP framework.** As a maintainer, I want every HTTP route served by Effect HttpApi on `@effect/platform-node`, so that the edge shares one runtime and error model with the services.
@@ -42,7 +46,7 @@ This is a behaviour-preserving migration with these accepted exceptions. Anythin
   - Given any of the 50 `/api` routes, when it is called with today's inputs, then the status, the `Location`/`Retry-After` headers and the response body match today, including:
     - per-route oddities (200 creates, 200 empty deletes, the settlement `Location` built from the raw param, statement path IDs ignored);
     - query integer coercion and body defaults;
-    - silent stripping of unknown body fields, except Asset, which rejects them with 400 "Invalid Asset creation/replacement request";
+    - silent stripping of unknown body fields, except Asset, which rejects them with 400 "Invalid Asset creation request" (create) or "Invalid Asset replacement request" (replace);
     - the string-amount and metadata 400 checks;
     - stripping of undeclared response fields.
   - The existing route-test assertions are ported to the new harness and pass unchanged, except where a listed change applies.
@@ -61,6 +65,7 @@ This is a behaviour-preserving migration with these accepted exceptions. Anythin
   - The existing OpenAPI snapshots and inline assertions are ported. Snapshots are regenerated only for structural differences, which a reviewer checks against this equivalence rule.
 - **US-6 (must) Graceful shutdown.** As an operator, I want SIGTERM/SIGINT to drain in-flight requests before the runtime and pools are disposed, and to add `connection: close` while draining.
   - The `ServerRoutes.test.ts` drain test is ported and passes.
+  - Given a state-changing request is in a handler, when the client disconnects or the drain cap is reached, then the write runs to completion. Every non-GET handler (31 across the nine groups) is registered with `{ uninterruptible: true }` via the shared `runToCompletion` constant in `lib/utils.ts`; reads stay interruptible. A route-registration test asserts that every non-GET route is uninterruptible and every GET is not.
 
 ## Constraints
 - `effect` and `@effect/platform-node` are pinned to exactly `4.0.0-rc.112`. The `effect/unstable/*` APIs may change between release candidates.
@@ -68,6 +73,7 @@ This is a behaviour-preserving migration with these accepted exceptions. Anythin
 - One cutover: no period where Fastify and Effect HTTP both serve traffic, and no bridging code.
 - No database schema change and no migration.
 - Services, repositories and entities keep their logic; only error base classes and schema type definitions change underneath them.
+- Writes run to completion, as under Fastify, where handlers ran via `runtime.runPromise(...)` with no abort signal. HttpApi handlers are interruptible by default, which would strand idempotency claims (Valkey, 15-minute TTL), skip the post-commit monitor-job publish and allow a duplicate after the TTL.
 
 ## Context
 
@@ -93,7 +99,7 @@ This is a behaviour-preserving migration with these accepted exceptions. Anythin
 - Statement routes ignore the `ledgerId`/`accountId` in the path; the create endpoint takes them from the body.
 - Several create endpoints return 200 with no `Location` (categories, statements, balance monitors), and several deletes and links return 200 with an empty body.
 - Balance-monitor routes pass raw strings to the service, which parses them.
-- Malformed JSON and unsupported content types fall through the error handler to 500 today (inferred from the handler's code, not tested).
+- On payload endpoints, malformed JSON and unsupported content types fall through the error handler to 500 today (inferred from the handler's code, not tested). On endpoints with no payload, Fastify's empty-JSON, malformed-JSON and unsupported-media-type errors also became 500s; `text/plain` is parsed by Fastify's built-in parser.
 
 ### Schema coupling
 - Outside route files, TypeBox is imported almost entirely as `import type` (`Static` types) in services, entities and repos.
@@ -151,17 +157,20 @@ This is a behaviour-preserving migration with these accepted exceptions. Anythin
 1. **Problem error base classes (`src/lib/errors.ts`).**
    - The eight base classes become Schema error classes: BadRequest 400, Unauthorized 401, Forbidden 403, NotFound 404, Conflict 409, TooManyRequests 429, InternalServer 500 and ServiceUnavailable 503. `InvalidIdError` stays a BadRequest subclass.
    - Encoded fields are `detail` and optional `retryable`. `retryAfterSeconds` and `cause` are kept on the instance and never encoded.
+   - The problem body has one producer, `HttpError.toProblemDetail()`, used for both declared and edge-rendered problems; `encodeProblem` delegates to it.
    - Encoding uses `HttpApiSchema.encodeToWithHeaders`:
      - the body is `{type,status,title,detail,instance,traceId,retryable?}`, annotated with `httpApiStatus`; `instance` and `traceId` (uuidv7) are minted at encode time, as `toProblemDetail` does today;
      - the headers are `{ "retry-after"?: string }`, derived from `retryAfterSeconds`.
    - The `(message, options)` constructor and the `type`, `statusCode` and `title` members are kept, so the ~50 domain subclasses and their call sites keep `extends NotFoundError` and so on. They change only if a Schema-class constraint forces it (spike risk 1).
    - All problems share one `HttpError` base, so the settlement service's `instanceof HttpError && statusCode < 500` branch keeps working.
-2. **API composition (`src/api.ts`).** `LedgerApi` is `HttpApi.make("ledger")` with all groups added, prefixed `/api`, with the `Authentication` middleware and OpenAPI annotations (title, description, version, servers, tags). It also owns the schema-error transform that maps `HttpApiSchemaError` of kind Params/Headers/Query/Payload to a `BadRequestError`.
+2. **API composition (`src/api.ts`).** `LedgerApi` is `HttpApi.make("ledger")` with all groups added, prefixed `/api`, with the `Authentication` middleware and OpenAPI annotations (title, description, version, servers, tags). It also owns the schema-error transform that maps `HttpApiSchemaError` of kind Params/Headers/Query/Payload to a `BadRequestError`. The transform is keyed by group and endpoint where the detail differs: `assets`/`create` gives "Invalid Asset creation request" and `assets`/`update` gives "Invalid Asset replacement request".
 3. **Group contracts (`src/domains/**/<X>Api.ts`).** One `HttpApiGroup` per domain (new files). Each declares:
    - endpoints whose identifiers are today's operationIds (`OpenApi.Identifier`), with summary and tags;
    - Effect Schema params, query, headers and payload;
    - success schemas with today's status, using `WithHeaders` for `Location`;
    - an `error` list mirroring today's per-route problem set.
+
+   Shared contract helpers live in `lib/ApiContract.ts` (`commonErrors`, `throttledErrors`, `operation`, `describedOperation`).
 
    Contracts are separate from handlers so that `api.ts` → groups → handlers has no import cycle.
 4. **Handlers (`src/domains/**/<X>Routes.ts`, rewritten).** Each is `HttpApiBuilder.group(LedgerApi, "<group>", h => h.handle(...))`. A handler:
@@ -170,7 +179,7 @@ This is a behaviour-preserving migration with these accepted exceptions. Anythin
    3. calls `parseId` where it does today;
    4. calls the service and then `toResponse()`.
 
-   The per-route oddities listed under "Parity hazards" stay where they live today.
+   The per-route oddities listed under "Parity hazards" stay where they live today. Every non-GET handler is registered with `runToCompletion` (`{ uninterruptible: true }`, from `lib/utils.ts`) so a client abort or the drain cap cannot interrupt a write; GET handlers stay interruptible.
 5. **Schemas (`src/domains/**/<X>Schema.ts` and shared `src/lib/*`).**
    - Converted from TypeBox to Effect Schema, keeping the exported names and `type X = typeof X.Type` aliases so type-only imports in services and entities don't change.
    - Behaviour mapping:
@@ -184,16 +193,19 @@ This is a behaviour-preserving migration with these accepted exceptions. Anythin
    - `Authentication` is an `HttpApiMiddleware.Service` with `security: { bearer }`, `provides: CurrentToken` and `error: UnauthorizedError`. It verifies the token with `fast-jwt` `createVerifier` and the config secret, builds the `OrgToken`, and fails any problem with 401 "Invalid token" (logged).
    - `requirePermissions(perms)` is an Effect that fails with `ForbiddenError` and today's message. Because it runs inside the handler, after request decoding, an authenticated invalid request still gets 400 before 403, as today.
    - `OrgToken`, `RolePermissions` and `signJWT` are reused.
-7. **Server layer (`src/server.ts`).** `makeServerLayer(config, overrides)` merges:
+7. **Server layer (`src/server.ts`).** `serveApp(server, services)` composes the server. Services are built before the port opens and released after the drain, and shutdown is logged. `makeServerLayer(config)` (no overrides parameter) remains for the benches. The layer merges:
    - `HttpApiBuilder.layer(LedgerApi, { openapiPath: "/docs/json" })`;
    - `HttpApiSwagger.layer(LedgerApi, { path: "/docs" })`;
    - `HttpRouter.add("GET", "/health", {})`;
    - the group handler layers, the `Authentication` layer and the existing `makeServerRuntimeLayer` services;
    - a global router middleware that maps a problem defect (e.g. the `BadRequestError` thrown by `parseAmount`) to its encoded problem, an unknown route to a NOT_FOUND problem, malformed JSON to a BAD_REQUEST problem and any other defect to a logged 500 problem.
-8. **Entrypoint (`src/index.ts`).** `NodeRuntime.runMain` launches `HttpRouter.serve(app)` over `NodeHttpServer.layer(createServer, { port: 3000, host: "::" })`.
+8. **Entrypoint (`src/index.ts`).** `NodeRuntime.runMain` launches the app over `NodeHttpServer.layer(createServer, { port: 3000, host: "::", ... })` with `keepAliveTimeout` 72000 and `requestTimeout` 0, together with `makeServerRuntimeLayer`.
    - SIGTERM/SIGINT interrupt the main fiber; the `NodeHttpServer` finalizer closes the server and drains in-flight requests, and the service layers are released afterwards.
    - `shutdown.ts` is deleted unless spike risk 3 shows that `connection: close` during drain needs a small middleware.
 9. **Runtime (`src/runtime.ts`).** `makeServerRuntimeLayer` is reused as the services layer. `ServerRuntime` is deleted if nothing besides the Fastify server uses it.
+
+### Lint boundaries
+The `.oxlintrc.json` boundary map classifies every api file and bans importing the test harness and the HTTP framework outside the transport layer.
 
 ### Where logic lives
 - **Business logic:** services and entities (unchanged).
@@ -201,9 +213,10 @@ This is a behaviour-preserving migration with these accepted exceptions. Anythin
 - **Untrusted input:** parsed only by endpoint schemas (params, query, headers, payload) and the JWT verifier. Entities still own `fromRequest` and `fromRow`.
 
 ### Test seams
-- **Route tests.** A `makeTestWebHandler(servicesLayer)` helper wraps `HttpRouter.toWebHandler(makeServerLayer(...))`. Tests send `new Request(...)` with real `signJWT` tokens against stubbed services (`Layer.succeed(Tag, stub)`). The `hasPermissions` spy assertions become behavioural tests: a role lacking the permission gets 403.
+- **Route tests.** `makeTestWebHandler(servicesLayer)` and `testServicesLayer`, in `src/lib/testing.ts` (not `server.ts`), wrap `HttpRouter.toWebHandler` over the server layer. Tests send `new Request(...)` with real `signJWT` tokens against stubbed services (`Layer.succeed(Tag, stub)`). The `hasPermissions` spy assertions become behavioural tests: a role lacking the permission gets 403.
 - **OpenAPI tests** assert on `OpenApi.fromApi(LedgerApi)` directly. The three snapshots are regenerated and reviewed against the equivalence rule.
-- **`ServerRoutes.test.ts`** is ported to the new seam: error mapping, 500 sanitisation, the listed-change cases (404 body, malformed JSON, 415) and the SIGTERM drain against a real socket.
+- **`ServerRoutes.test.ts`** is ported to the new seam: error mapping, 500 sanitisation, the listed-change cases (404 body, malformed JSON, 415) and the SIGTERM drain against a real socket. Error encoding is covered through `ServerRoutes.test.ts` and the Routes suites; there is no standalone `lib/errors.test.ts`, `lib/ListQuery.test.ts` or `LedgerAccountCategoryApi.test.ts`, and Category OpenAPI assertions live in `LedgerAccountCategoryRoutes.test.ts`.
+- **Route registration.** A test asserts every non-GET route is registered uninterruptible and every GET is not.
 - **Repository tests** are unchanged.
 - **Batch order (for the later plan):**
   1. Spike and shell: errors, auth, `api.ts`, server, entrypoint, and the Organizations group with its tests.
@@ -244,7 +257,14 @@ No schema changes and no migrations. `src/db/schema.ts` keeps its `AlertConditio
 - **Known limitations:**
   - `effect/unstable/*` APIs may change between release candidates, hence the exact pinning.
   - The 400 `detail` text changes.
-  - The OpenAPI document is equivalent, not byte-identical, and snapshots are regenerated and reviewed.
+  - The OpenAPI document is equivalent, not byte-identical, and snapshots are regenerated and reviewed. Known differences:
+    - it is generated as 3.1.0 (legacy 3.0.x);
+    - `additionalProperties: false` is emitted on object schemas, and request/response schemas are `$ref` components;
+    - a bearer security scheme replaces the `bearerAuth` apiKey scheme;
+    - error responses are described by class names and carry a `retry-after` header whose schema is an integer for 400/401 and a string pattern for other statuses (Effect generator behaviour);
+    - new tag descriptions for several groups;
+    - extra declared statuses: 404 on settlement create and on balance-monitor list (the services can fail with NotFound; Fastify rendered it anyway).
+  - The category-balances benchmark fails its own assertions identically on the Fastify baseline (f651edd: 160 non-2xx on category reads) and on the Effect server.
 
 ## Open Questions
 None block the design. The first implementation batch is a spike that settles three risks before the work fans out. If a result invalidates an approved section, that section comes back for approval.
