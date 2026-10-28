@@ -114,10 +114,9 @@ queue machinery or introduce repository wrappers solely to test it.
 
 ## Validation
 
-Start PostgreSQL before targeted integration tests when it is not already running.
+Docker must be running: API tests start their own PostgreSQL and Valkey containers.
 
 ```bash
-pnpm run docker:up
 pnpm --filter=@exchequerio/api test
 pnpm --filter=@exchequerio/api build
 pnpm --filter=@exchequerio/api types

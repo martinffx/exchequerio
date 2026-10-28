@@ -45,17 +45,14 @@ pnpm run dev:docs     # Docs only
 
 Tests run through the repository's Vitest scripts.
 
-**Prerequisites:** PostgreSQL and Valkey must be running for API tests.
+**Prerequisites:** Docker must be running; API tests start their own PostgreSQL and Valkey containers.
 
 ```bash
-# Run all tests across all apps (auto-starts PostgreSQL and Valkey, uses Vitest)
+# Run all tests across all apps (uses Vitest)
 pnpm run test
 
 # Test the API (uses Vitest)
-pnpm --filter=@exchequerio/api test    # Requires Docker (own PostgreSQL container) and Valkey
-
-# Start PostgreSQL and Valkey manually first (optional)
-pnpm run docker:up
+pnpm --filter=@exchequerio/api test    # Requires Docker (own PostgreSQL and Valkey containers)
 
 # Watch mode (from specific app directory)
 pnpm --filter=@exchequerio/api test:watch
@@ -155,7 +152,7 @@ these commands do not migrate or remove them.
 ```bash
 # Run complete CI pipeline
 pnpm run ci
-# Equivalent to: docker:up + build + format check + lint + types + benchmark collection + test
+# Equivalent to: build + format check + lint + types + benchmark collection + test
 ```
 
 | App | Description | Stack |
