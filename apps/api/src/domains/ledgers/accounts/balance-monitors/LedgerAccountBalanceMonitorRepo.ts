@@ -58,32 +58,38 @@ export class LedgerAccountBalanceMonitorRepoLive {
 			);
 	}
 	listMonitors(scope: MonitorScope, query: LedgerAccountBalanceMonitorListQuery) {
-		scope = toScopeRow(scope);
-		return this.requireAccount(scope).pipe(
-			Effect.flatMap(() =>
-				this.db
-					.select()
-					.from(monitors)
-					.where(monitorWhere(scope))
-					.orderBy(desc(monitors.created))
-					.limit(query.limit)
-					.offset(query.offset)
-			),
-			Effect.flatMap(rows => Effect.all(rows.map(row => LedgerAccountBalanceMonitor.fromRow(row)))),
-			Effect.mapError(mapError)
-		);
+		return Effect.suspend(() => {
+			const scopeRow = toScopeRow(scope);
+			return this.requireAccount(scopeRow).pipe(
+				Effect.flatMap(() =>
+					this.db
+						.select()
+						.from(monitors)
+						.where(monitorWhere(scopeRow))
+						.orderBy(desc(monitors.created))
+						.limit(query.limit)
+						.offset(query.offset)
+				),
+				Effect.flatMap(rows => Effect.all(rows.map(row => LedgerAccountBalanceMonitor.fromRow(row)))),
+				Effect.mapError(mapError)
+			);
+		}).pipe(Effect.withSpan("LedgerAccountBalanceMonitorRepo.listMonitors"));
 	}
 	getMonitor(scope: MonitorScope, id: LedgerAccountBalanceMonitorID) {
-		scope = toScopeRow(scope);
-		return this.requireAccount(scope).pipe(
-			Effect.flatMap(() => this.db.select().from(monitors).where(monitorWhere(scope, id)).limit(1)),
-			Effect.flatMap(rows =>
-				rows[0]
-					? LedgerAccountBalanceMonitor.fromRow(rows[0]).pipe(Effect.map(Option.some))
-					: Effect.succeed(Option.none<LedgerAccountBalanceMonitorRecord>())
-			),
-			Effect.mapError(mapError)
-		);
+		return Effect.suspend(() => {
+			const scopeRow = toScopeRow(scope);
+			return this.requireAccount(scopeRow).pipe(
+				Effect.flatMap(() =>
+					this.db.select().from(monitors).where(monitorWhere(scopeRow, id)).limit(1)
+				),
+				Effect.flatMap(rows =>
+					rows[0]
+						? LedgerAccountBalanceMonitor.fromRow(rows[0]).pipe(Effect.map(Option.some))
+						: Effect.succeed(Option.none<LedgerAccountBalanceMonitorRecord>())
+				),
+				Effect.mapError(mapError)
+			);
+		}).pipe(Effect.withSpan("LedgerAccountBalanceMonitorRepo.getMonitor"));
 	}
 	createMonitor(record: LedgerAccountBalanceMonitorRecord) {
 		return this.db
@@ -99,7 +105,10 @@ export class LedgerAccountBalanceMonitorRepoLive {
 					return yield* LedgerAccountBalanceMonitor.fromRow(row);
 				})
 			)
-			.pipe(Effect.mapError(mapError));
+			.pipe(
+				Effect.mapError(mapError),
+				Effect.withSpan("LedgerAccountBalanceMonitorRepo.createMonitor")
+			);
 	}
 	updateMonitor(
 		scope: MonitorScope,
@@ -107,40 +116,52 @@ export class LedgerAccountBalanceMonitorRepoLive {
 		changes: Partial<MonitorConfiguration>,
 		time: Date
 	) {
-		scope = toScopeRow(scope);
-		return this.db
-			.transaction(tx =>
-				Effect.gen(function* () {
-					const [account] = yield* tx.select().from(accounts).where(accountWhere(scope)).for("update");
-					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
-					const [current] = yield* tx.select().from(monitors).where(monitorWhere(scope, id));
-					if (!current) return Option.none<LedgerAccountBalanceMonitorRecord>();
-					const [row] = yield* tx
-						.update(monitors)
-						.set({ ...changes, lockVersion: current.lockVersion + 1, updated: time })
-						.where(monitorWhere(scope, id))
-						.returning();
-					// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
-					return Option.some(yield* LedgerAccountBalanceMonitor.fromRow(row));
-				})
-			)
-			.pipe(Effect.mapError(mapError));
+		return Effect.suspend(() => {
+			const scopeRow = toScopeRow(scope);
+			return this.db
+				.transaction(tx =>
+					Effect.gen(function* () {
+						const [account] = yield* tx
+							.select()
+							.from(accounts)
+							.where(accountWhere(scopeRow))
+							.for("update");
+						if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
+						const [current] = yield* tx.select().from(monitors).where(monitorWhere(scopeRow, id));
+						if (!current) return Option.none<LedgerAccountBalanceMonitorRecord>();
+						const [row] = yield* tx
+							.update(monitors)
+							.set({ ...changes, lockVersion: current.lockVersion + 1, updated: time })
+							.where(monitorWhere(scopeRow, id))
+							.returning();
+						// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
+						return Option.some(yield* LedgerAccountBalanceMonitor.fromRow(row));
+					})
+				)
+				.pipe(Effect.mapError(mapError));
+		}).pipe(Effect.withSpan("LedgerAccountBalanceMonitorRepo.updateMonitor"));
 	}
 	deleteMonitor(scope: MonitorScope, id: LedgerAccountBalanceMonitorID) {
-		scope = toScopeRow(scope);
-		return this.db
-			.transaction(tx =>
-				Effect.gen(function* () {
-					const [account] = yield* tx.select().from(accounts).where(accountWhere(scope)).for("update");
-					if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
-					const [current] = yield* tx.select().from(monitors).where(monitorWhere(scope, id));
-					if (!current) return Option.none<void>();
-					yield* tx.delete(monitors).where(monitorWhere(scope, id));
-					// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
-					return Option.some(undefined);
-				})
-			)
-			.pipe(Effect.mapError(mapError));
+		return Effect.suspend(() => {
+			const scopeRow = toScopeRow(scope);
+			return this.db
+				.transaction(tx =>
+					Effect.gen(function* () {
+						const [account] = yield* tx
+							.select()
+							.from(accounts)
+							.where(accountWhere(scopeRow))
+							.for("update");
+						if (!account) return yield* Effect.fail(new NotFoundError("Account not found"));
+						const [current] = yield* tx.select().from(monitors).where(monitorWhere(scopeRow, id));
+						if (!current) return Option.none<void>();
+						yield* tx.delete(monitors).where(monitorWhere(scopeRow, id));
+						// oxlint-disable-next-line unicorn/no-array-callback-reference -- Option.some constructs the optional result.
+						return Option.some(undefined);
+					})
+				)
+				.pipe(Effect.mapError(mapError));
+		}).pipe(Effect.withSpan("LedgerAccountBalanceMonitorRepo.deleteMonitor"));
 	}
 }
 export type LedgerAccountBalanceMonitorRepo = Pick<

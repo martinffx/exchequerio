@@ -116,7 +116,10 @@ class OrganizationRepoLive implements OrganizationRepo {
 			.pipe(
 				Effect.mapError(mapInfrastructureError),
 				Effect.flatMap(rows => Effect.all(rows.map(row => Organization.fromRow(row)))),
-				Effect.map(organizations => organizations.flatMap(organization => Option.toArray(organization)))
+				Effect.map(organizations =>
+					organizations.flatMap(organization => Option.toArray(organization))
+				),
+				Effect.withSpan("OrganizationRepo.listOrganizations")
 			);
 	}
 
@@ -136,7 +139,8 @@ class OrganizationRepoLive implements OrganizationRepo {
 			.limit(1)
 			.pipe(
 				Effect.mapError(mapInfrastructureError),
-				Effect.flatMap(rows => Organization.fromRow(rows[0]))
+				Effect.flatMap(rows => Organization.fromRow(rows[0])),
+				Effect.withSpan("OrganizationRepo.getOrganization")
 			);
 	}
 
@@ -162,7 +166,8 @@ class OrganizationRepoLive implements OrganizationRepo {
 							Effect.fail(new OrganizationPersistenceFailure(new Error("INSERT returned no row"))),
 						onSome: Effect.succeed,
 					})
-				)
+				),
+				Effect.withSpan("OrganizationRepo.createOrganization")
 			);
 	}
 
@@ -182,7 +187,8 @@ class OrganizationRepoLive implements OrganizationRepo {
 			.returning()
 			.pipe(
 				Effect.mapError(mapInfrastructureError),
-				Effect.flatMap(rows => Organization.fromRow(rows[0]))
+				Effect.flatMap(rows => Organization.fromRow(rows[0])),
+				Effect.withSpan("OrganizationRepo.updateOrganization")
 			);
 	}
 
@@ -201,7 +207,8 @@ class OrganizationRepoLive implements OrganizationRepo {
 			.returning()
 			.pipe(
 				Effect.mapError(mapDeleteError),
-				Effect.flatMap(rows => Organization.fromRow(rows[0]))
+				Effect.flatMap(rows => Organization.fromRow(rows[0])),
+				Effect.withSpan("OrganizationRepo.deleteOrganization")
 			);
 	}
 }

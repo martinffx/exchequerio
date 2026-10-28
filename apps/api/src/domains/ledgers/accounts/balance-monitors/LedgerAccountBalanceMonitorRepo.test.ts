@@ -252,6 +252,17 @@ describe("LedgerAccountBalanceMonitorRepoLive", () => {
 		);
 		expect(deleted.filter(value => Option.isSome(value))).toHaveLength(1);
 	});
+	it("re-runs the same Effect value without re-converting its scope", async () => {
+		const scope = {
+			organizationId: organizationId.toString(),
+			ledgerId: ledgerId.toString(),
+			accountId: accountIds[0].toString(),
+		};
+		const effect = repository.listMonitors(scope, { offset: 0, limit: 20 });
+		await runtime.runPromise(effect);
+		await expect(runtime.runPromise(effect)).resolves.toBeDefined();
+	});
+
 	it("preserves created-descending pagination", async () => {
 		const rows = [0, 1, 2].map(index => ({ ...make().row, created: new Date(999999999000 + index) }));
 		await runtime.runPromise(

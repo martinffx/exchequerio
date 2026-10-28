@@ -259,9 +259,15 @@ class TransactionServiceLive implements TransactionService {
 		ledgerId: LedgerID,
 		query: TransactionListQuery
 	): Effect.Effect<LedgerTransaction[], TransactionListError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(Effect.andThen(this.repository.listTransactions(organizationId, ledgerId, query)));
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(Effect.andThen(this.repository.listTransactions(organizationId, ledgerId, query)))
+		).pipe(
+			Effect.withSpan("TransactionService.listTransactions", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	/**
@@ -277,9 +283,19 @@ class TransactionServiceLive implements TransactionService {
 		ledgerId: LedgerID,
 		transactionId: LedgerTransactionID
 	): Effect.Effect<LedgerTransaction, TransactionGetError> {
-		return this.repository
-			.getTransaction(organizationId, ledgerId, transactionId)
-			.pipe(Effect.flatMap(requireTransaction));
+		return Effect.suspend(() =>
+			this.repository
+				.getTransaction(organizationId, ledgerId, transactionId)
+				.pipe(Effect.flatMap(requireTransaction))
+		).pipe(
+			Effect.withSpan("TransactionService.getTransaction", {
+				attributes: {
+					"organization.id": String(organizationId),
+					"ledger.id": String(ledgerId),
+					"transaction.id": String(transactionId),
+				},
+			})
+		);
 	}
 
 	/**
@@ -348,7 +364,11 @@ class TransactionServiceLive implements TransactionService {
 				result.transaction.id.toString()
 			);
 			return result.transaction;
-		});
+		}).pipe(
+			Effect.withSpan("TransactionService.createTransaction", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	/**
@@ -389,7 +409,7 @@ class TransactionServiceLive implements TransactionService {
 				result.transaction.id.toString()
 			);
 			return result.transaction;
-		});
+		}).pipe(Effect.withSpan("TransactionService.createTransactionEntity"));
 	}
 
 	/**
@@ -465,7 +485,15 @@ class TransactionServiceLive implements TransactionService {
 				result.transaction.id.toString()
 			);
 			return result.transaction;
-		});
+		}).pipe(
+			Effect.withSpan("TransactionService.updateTransaction", {
+				attributes: {
+					"organization.id": String(organizationId),
+					"ledger.id": String(ledgerId),
+					"transaction.id": String(transactionId),
+				},
+			})
+		);
 	}
 
 	/**
@@ -513,7 +541,15 @@ class TransactionServiceLive implements TransactionService {
 				result.transaction.id.toString()
 			);
 			return result.transaction;
-		});
+		}).pipe(
+			Effect.withSpan("TransactionService.postTransaction", {
+				attributes: {
+					"organization.id": String(organizationId),
+					"ledger.id": String(ledgerId),
+					"transaction.id": String(transactionId),
+				},
+			})
+		);
 	}
 
 	/**
@@ -561,7 +597,15 @@ class TransactionServiceLive implements TransactionService {
 				result.transaction.id.toString()
 			);
 			return result.transaction;
-		});
+		}).pipe(
+			Effect.withSpan("TransactionService.voidTransaction", {
+				attributes: {
+					"organization.id": String(organizationId),
+					"ledger.id": String(ledgerId),
+					"transaction.id": String(transactionId),
+				},
+			})
+		);
 	}
 
 	/**

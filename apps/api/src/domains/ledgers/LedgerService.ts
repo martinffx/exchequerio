@@ -47,7 +47,11 @@ class LedgerService {
 		organizationId: OrgID,
 		query: LedgerListQuery
 	): Effect.Effect<Ledger[], LedgerListError> {
-		return this.repository.listLedgers(organizationId, query);
+		return Effect.suspend(() => this.repository.listLedgers(organizationId, query)).pipe(
+			Effect.withSpan("LedgerService.listLedgers", {
+				attributes: { "organization.id": String(organizationId) },
+			})
+		);
 	}
 
 	/**
@@ -58,7 +62,13 @@ class LedgerService {
 	 * @returns An Effect containing the Ledger.
 	 */
 	getLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerGetError> {
-		return this.repository.getLedger(organizationId, ledgerId).pipe(Effect.flatMap(requireFound()));
+		return Effect.suspend(() =>
+			this.repository.getLedger(organizationId, ledgerId).pipe(Effect.flatMap(requireFound()))
+		).pipe(
+			Effect.withSpan("LedgerService.getLedger", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	/**
@@ -82,7 +92,10 @@ class LedgerService {
 				error instanceof LedgerRepositoryUnavailable
 					? new ServiceUnavailableError(error.message, { cause: error, retryable: false })
 					: error
-			)
+			),
+			Effect.withSpan("LedgerService.createLedger", {
+				attributes: { "organization.id": String(organizationId) },
+			})
 		);
 	}
 
@@ -99,9 +112,15 @@ class LedgerService {
 		ledgerId: LedgerID,
 		request: LedgerUpdateRequest
 	): Effect.Effect<Ledger, LedgerUpdateError> {
-		return this.repository
-			.updateLedger(Ledger.fromRequest(ledgerId, organizationId, request))
-			.pipe(Effect.flatMap(requireFound()));
+		return Effect.suspend(() =>
+			this.repository
+				.updateLedger(Ledger.fromRequest(ledgerId, organizationId, request))
+				.pipe(Effect.flatMap(requireFound()))
+		).pipe(
+			Effect.withSpan("LedgerService.updateLedger", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	/**
@@ -112,9 +131,13 @@ class LedgerService {
 	 * @returns An Effect containing the deleted Ledger.
 	 */
 	deleteLedger(organizationId: OrgID, ledgerId: LedgerID): Effect.Effect<Ledger, LedgerDeleteError> {
-		return this.repository
-			.deleteLedger(organizationId, ledgerId)
-			.pipe(Effect.flatMap(requireFound()));
+		return Effect.suspend(() =>
+			this.repository.deleteLedger(organizationId, ledgerId).pipe(Effect.flatMap(requireFound()))
+		).pipe(
+			Effect.withSpan("LedgerService.deleteLedger", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 }
 

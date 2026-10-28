@@ -144,7 +144,8 @@ class LedgerRepoLive implements LedgerRepo {
 			.pipe(
 				Effect.mapError(mapLedgerInfrastructureError),
 				Effect.flatMap(rows => Effect.all(rows.map(row => Ledger.fromRow(row)))),
-				Effect.map(ledgers => ledgers.flatMap(ledger => Option.toArray(ledger)))
+				Effect.map(ledgers => ledgers.flatMap(ledger => Option.toArray(ledger))),
+				Effect.withSpan("LedgerRepo.listLedgers")
 			);
 	}
 
@@ -171,7 +172,8 @@ class LedgerRepoLive implements LedgerRepo {
 			.limit(1)
 			.pipe(
 				Effect.mapError(mapLedgerInfrastructureError),
-				Effect.flatMap(rows => Ledger.fromRow(rows[0]))
+				Effect.flatMap(rows => Ledger.fromRow(rows[0])),
+				Effect.withSpan("LedgerRepo.getLedger")
 			);
 	}
 
@@ -189,7 +191,8 @@ class LedgerRepoLive implements LedgerRepo {
 			.pipe(
 				Effect.mapError(mapLedgerCreateError),
 				Effect.flatMap(rows => Ledger.fromRow(rows[0])),
-				Effect.flatMap(requireCreatedLedger)
+				Effect.flatMap(requireCreatedLedger),
+				Effect.withSpan("LedgerRepo.createLedger")
 			);
 	}
 
@@ -212,7 +215,8 @@ class LedgerRepoLive implements LedgerRepo {
 			.returning(publicColumns)
 			.pipe(
 				Effect.mapError(mapLedgerInfrastructureError),
-				Effect.flatMap(rows => Ledger.fromRow(rows[0]))
+				Effect.flatMap(rows => Ledger.fromRow(rows[0])),
+				Effect.withSpan("LedgerRepo.updateLedger")
 			);
 	}
 
@@ -238,7 +242,8 @@ class LedgerRepoLive implements LedgerRepo {
 			.returning(publicColumns)
 			.pipe(
 				Effect.mapError(mapLedgerDeleteError),
-				Effect.flatMap(rows => Ledger.fromRow(rows[0]))
+				Effect.flatMap(rows => Ledger.fromRow(rows[0])),
+				Effect.withSpan("LedgerRepo.deleteLedger")
 			);
 	}
 	/**
@@ -325,7 +330,7 @@ class LedgerRepoLive implements LedgerRepo {
 						);
 				})
 			)
-			.pipe(Effect.mapError(mapLedgerDeleteError));
+			.pipe(Effect.mapError(mapLedgerDeleteError), Effect.withSpan("LedgerRepo.deleteLedgerFixtures"));
 	}
 }
 

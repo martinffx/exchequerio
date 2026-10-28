@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Tracer } from "effect";
 import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
@@ -260,4 +260,36 @@ describe("OrganizationRepoLive", () => {
 			expect(postgresErrorCode(error)).toBe("22P02");
 		}
 	);
+	it.each([
+		"getOrganization",
+		"listOrganizations",
+		"createOrganization",
+		"deleteOrganization",
+	] as const)("records exactly one %s span", async method => {
+		const spans: Tracer.NativeSpan[] = [];
+		const tracer = Tracer.make({
+			span: options => {
+				const span = new Tracer.NativeSpan(options);
+				spans.push(span);
+				return span;
+			},
+		});
+		const id = newOrganizationId();
+		organizationIds.add(id);
+		const program: Effect.Effect<unknown, unknown> = (() => {
+			switch (method) {
+				case "getOrganization":
+					return repository.getOrganization(id);
+				case "listOrganizations":
+					return repository.listOrganizations({ offset: 0, limit: 1 });
+				case "createOrganization":
+					return repository.createOrganization(Organization.fromRequest(id, { name: "Span test" }));
+				case "deleteOrganization":
+					return repository.deleteOrganization(id);
+			}
+		})();
+		await runtime.runPromise(program.pipe(Effect.withTracer(tracer)));
+		const names = spans.map(({ name }) => name).filter(name => name.startsWith("OrganizationRepo."));
+		expect(names).toEqual([`OrganizationRepo.${method}`]);
+	});
 });

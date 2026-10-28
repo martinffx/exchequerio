@@ -53,7 +53,8 @@ export class AssetRepo {
 			.limit(query.limit)
 			.pipe(
 				Effect.mapError(mapError),
-				Effect.flatMap(rows => Effect.all(rows.map(row => Asset.fromRow(row))))
+				Effect.flatMap(rows => Effect.all(rows.map(row => Asset.fromRow(row)))),
+				Effect.withSpan("AssetRepo.listAssets")
 			);
 	}
 
@@ -70,7 +71,11 @@ export class AssetRepo {
 				)
 			)
 			.limit(1)
-			.pipe(Effect.mapError(mapError), Effect.flatMap(requireRow));
+			.pipe(
+				Effect.mapError(mapError),
+				Effect.flatMap(requireRow),
+				Effect.withSpan("AssetRepo.getAsset")
+			);
 	}
 
 	createAsset(asset: Asset) {
@@ -78,7 +83,11 @@ export class AssetRepo {
 			.insert(AssetsTable)
 			.values(asset.toRow())
 			.returning()
-			.pipe(Effect.mapError(mapWriteError), Effect.flatMap(requireRow));
+			.pipe(
+				Effect.mapError(mapWriteError),
+				Effect.flatMap(requireRow),
+				Effect.withSpan("AssetRepo.createAsset")
+			);
 	}
 
 	updateAsset(asset: Asset) {
@@ -93,7 +102,11 @@ export class AssetRepo {
 				)
 			)
 			.returning()
-			.pipe(Effect.mapError(mapWriteError), Effect.flatMap(requireRow));
+			.pipe(
+				Effect.mapError(mapWriteError),
+				Effect.flatMap(requireRow),
+				Effect.withSpan("AssetRepo.updateAsset")
+			);
 	}
 
 	deleteAsset(orgId: OrgID, id: AssetID) {
@@ -109,7 +122,8 @@ export class AssetRepo {
 						? new ConflictError("Asset is referenced by an Account", { cause })
 						: mapError(cause)
 				),
-				Effect.flatMap(requireRow)
+				Effect.flatMap(requireRow),
+				Effect.withSpan("AssetRepo.deleteAsset")
 			);
 	}
 }
