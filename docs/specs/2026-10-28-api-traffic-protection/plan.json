@@ -1,0 +1,245 @@
+{
+	"feature": "api-traffic-protection",
+	"spec": "docs/specs/2026-10-28-api-traffic-protection/design.md",
+	"goal": "Limit each Organization's request rate through Valkey and restore in-process load shedding, both as middleware on the Effect HttpApi server.",
+	"preserved_behavior": [
+		"For requests that are neither rate limited nor shed, status codes, bodies and the Location/retry-after headers are unchanged",
+		"Requests without a valid token still get 401 from Authentication and consume no rate-limit token",
+		"/health and /docs are never rate limited",
+		"The balance-monitor job store keeps its current Redis options, and the raw ioredis error stays as RedisError.cause (Effect's NOSCRIPT recovery depends on it)",
+		"Route tests and the test environment run without Valkey, and nothing is shed when environment is test or test-*"
+	],
+	"phases": [
+		{
+			"id": "P1",
+			"name": "Per-Organization rate limiting",
+			"tasks": [
+				{
+					"id": "T1",
+					"name": "Validate rate-limit config and share the Redis layer",
+					"depends_on": [],
+					"inputs": [
+						"design.md: Config section and US-6",
+						"apps/api/src/config.ts: Config reads env vars with no parsing",
+						"apps/api/src/lib/queues.ts: makeJobStore builds the Effect Redis.Redis layer inline with maxRetriesPerRequest 1 and 5 s timeouts"
+					],
+					"description": "Add rateLimitMax and rateLimitWindowSeconds to Config, read from RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_SECONDS. Parse them as positive integers, default to 600 and 60 only when unset, and throw a clear error at construction for anything else (empty, non-numeric, zero, negative, fractional). Extract the inline Redis.Redis layer in queues.ts into an exported makeRedisLayer(valkeyUrl, overrides?) whose overrides are merged over the current ioredis options, and have makeJobStore use it with no overrides so its behaviour and error causes are unchanged.",
+					"files": {
+						"reuse": [],
+						"create": ["apps/api/src/config.test.ts"],
+						"modify": ["apps/api/src/config.ts", "apps/api/src/lib/queues.ts"],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "makeRedisLayer",
+							"requirement": "The limiter store needs a Redis.Redis layer with different client options (no offline queue, short command timeout) than the job store",
+							"consumers": [
+								"makeJobStore in apps/api/src/lib/queues.ts",
+								"RateLimiter store layer in apps/api/src/runtime.ts (T3)"
+							]
+						}
+					],
+					"validation": {
+						"tests": [
+							"Config with neither variable set uses 600 and 60",
+							"Config throws for empty, abc, 0, -1 and 1.5 in either variable",
+							"Config accepts valid positive integers",
+							"Existing balance-monitor job tests still pass"
+						],
+						"acceptance": [
+							"makeJobStore passes the same ioredis options as before",
+							"pnpm run check passes"
+						]
+					}
+				},
+				{
+					"id": "T2",
+					"name": "RateLimit middleware module",
+					"depends_on": ["T1"],
+					"inputs": [
+						"design.md: Rate limiting section and US-1 to US-4",
+						"apps/api/src/auth.ts: Authentication provides CurrentToken (OrgToken with organizationId)",
+						"apps/api/src/lib/errors.ts: TooManyRequestsError and TooManyRequestsApiError encode the 429 body and retry-after header",
+						"effect/unstable/persistence RateLimiter: consume fails with RateLimiterError whose reason is RateLimitExceeded or RateLimitStoreError; layerStoreMemory"
+					],
+					"description": "Create RateLimit, an HttpApiMiddleware.Service that requires CurrentToken and declares TooManyRequestsApiError, and makeRateLimitLayer({ limit, window }) that builds its layer from RateLimiter. For each request consume one token keyed by the token's organizationId with the fixed-window algorithm and onExceeded fail. On success run the handler and set x-ratelimit-limit, x-ratelimit-remaining and x-ratelimit-reset (durations rounded up to whole seconds) on the response. Branch on error.reason._tag: RateLimitExceeded fails with TooManyRequestsError (retryable, retryAfterSeconds rounded up, at least 1); RateLimitStoreError runs the handler unchanged and logs only when fail-open starts and when it recovers. Do not wire it into the server in this task so the existing suites and typecheck stay green.",
+					"files": {
+						"reuse": ["apps/api/src/auth.ts", "apps/api/src/lib/errors.ts", "apps/api/src/lib/ApiContract.ts"],
+						"create": ["apps/api/src/lib/RateLimit.ts", "apps/api/src/lib/RateLimit.test.ts"],
+						"modify": [],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "RateLimit / makeRateLimitLayer",
+							"requirement": "Per-Organization limiting after authentication (US-1 to US-4)",
+							"consumers": ["LedgerApi middleware chain in apps/api/src/api.ts (T3)"]
+						}
+					],
+					"validation": {
+						"tests": [
+							"With limit 2 and a window of about 200 ms, the third request from one Organization gets 429 TOO_MANY_REQUESTS with retryable true and retry-after of at least 1",
+							"A second Organization still gets 200 while the first is limited",
+							"The first Organization succeeds again after waiting out its refill time",
+							"200 responses carry x-ratelimit-limit, x-ratelimit-remaining and x-ratelimit-reset",
+							"A store that always fails with RateLimitStoreError gives 200 without rate-limit headers and logs one warning per outage",
+							"A request without a token gets 401 and does not consume a token"
+						],
+						"acceptance": [
+							"The middleware branches on reason._tag, not on the outer error",
+							"Nothing in server.ts, api.ts or runtime.ts changes",
+							"pnpm run check passes"
+						]
+					}
+				},
+				{
+					"id": "T3",
+					"name": "Wire rate limiting into the server and runtime",
+					"depends_on": ["T2"],
+					"inputs": [
+						"design.md: Rate limiting wiring bullets and API Design section",
+						"apps/api/src/api.ts: middleware added first is innermost; SchemaErrorTransform is added last",
+						"apps/api/src/server.ts: appLayer provides makeAuthenticationLayer from ServerConfigTag; testServicesLayer builds the route-test services",
+						"apps/api/src/runtime.ts: ServerRuntimeServices and the infrastructure layer; ServerRuntimeLayer is declared with a fixed output type"
+					],
+					"description": "In api.ts add .middleware(RateLimit) before .middleware(Authentication) so the limiter runs after auth and before request decoding, and update the ordering comment. In server.ts provide makeRateLimitLayer from ServerConfigTag (limit rateLimitMax, window rateLimitWindowSeconds seconds) in appLayer, and add RateLimiter.layer over layerStoreMemory to testServicesLayer. In runtime.ts add RateLimiter.layer over layerStoreRedis with prefix exchequer:ratelimit: over makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 }) to the infrastructure layer and add RateLimiter to ServerRuntimeServices. Update the explicit OpenAPI status-set assertions that now include 429 (expected in the Organization, Ledger, Transaction and Account route tests; the Asset test and any snapshot only if they fail), changing nothing else in them.",
+					"files": {
+						"reuse": ["apps/api/src/lib/RateLimit.ts", "apps/api/src/lib/queues.ts"],
+						"create": [],
+						"modify": [
+							"apps/api/src/api.ts",
+							"apps/api/src/server.ts",
+							"apps/api/src/runtime.ts",
+							"apps/api/src/domains/organizations/OrganizationRoutes.test.ts",
+							"apps/api/src/domains/ledgers/LedgerRoutes.test.ts",
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/AccountRoutes.test.ts",
+							"apps/api/src/domains/assets/AssetRoutes.test.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"All route suites pass; every changed assertion differs from before only by the added 429",
+							"Existing 401-before-400 behaviour is unchanged",
+							"A request through the full LedgerApi that exceeds a low limit gets 429 (covered by T2 at module level, and by a route-level check using the memory store if no existing suite exercises it)"
+						],
+						"acceptance": [
+							"Typecheck passes with RateLimiter in ServerRuntimeServices",
+							"The throttled groups (settlements, balance monitors, statements, categories) have no OpenAPI changes",
+							"pnpm run check passes"
+						]
+					}
+				},
+				{
+					"id": "T4",
+					"name": "Prove Valkey wiring, document env vars and protect the benches",
+					"depends_on": ["T3"],
+					"inputs": [
+						"design.md: Data Model section and Test seams 4 and 5",
+						"apps/api/src/lib/IdempotencyService.test.ts: the existing pattern for tests that talk to real Valkey",
+						"apps/api/test/bench/transaction.bench.ts and category-balances.bench.ts: one Organization, 100 connections, 30 s, asserting only that some responses are 2xx"
+					],
+					"description": "Add an integration test that, against Valkey from docker:up, drives requests through the Redis-backed limiter, checks the exchequer:ratelimit:<org_id> key exists, and checks a request past the limit gets 429. Document RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_SECONDS in .env.example, set a very high RATE_LIMIT_MAX in .env.test, and make both benches assert that no response is non-2xx so a limiter that dominates the run fails the bench.",
+					"files": {
+						"reuse": ["apps/api/src/lib/IdempotencyService.test.ts"],
+						"create": ["apps/api/src/lib/RateLimit.valkey.test.ts"],
+						"modify": [
+							"apps/api/.env.example",
+							"apps/api/.env.test",
+							"apps/api/test/bench/transaction.bench.ts",
+							"apps/api/test/bench/category-balances.bench.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"The Valkey test passes against docker:up Valkey and cleans up its key",
+							"pnpm --filter=@exchequerio/api bench:check lists the benches without error"
+						],
+						"acceptance": [
+							"The new env vars appear in .env.example with their defaults",
+							"The benches fail if any response is non-2xx"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P2",
+			"name": "In-process load shedding",
+			"tasks": [
+				{
+					"id": "T5",
+					"name": "Pure pressure sampling",
+					"depends_on": [],
+					"inputs": [
+						"design.md: Load shedding section and US-5",
+						"Old @fastify/under-pressure thresholds: event-loop delay 1000 ms, heap 500 MB, RSS 1 GB; delay is the histogram mean minus the timer resolution, NaN means blocked"
+					],
+					"description": "Create LoadShedding.ts with the threshold constants and a pure sample(histogramMeanNs, resolutionMs, memoryUsage) that returns whether the process is overloaded: delay (mean minus resolution) above 1000 ms, NaN delay, heap used above 500 MB, or RSS above 1 GB. Do not include an event-loop-utilisation check.",
+					"files": {
+						"reuse": [],
+						"create": ["apps/api/src/lib/LoadShedding.ts", "apps/api/src/lib/LoadShedding.test.ts"],
+						"modify": [],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "sample",
+							"requirement": "Decide overload from event-loop delay, heap and RSS (US-5)",
+							"consumers": ["startSampler in apps/api/src/lib/LoadShedding.ts (T6)"]
+						}
+					],
+					"validation": {
+						"tests": [
+							"Table test at each threshold: just under is not overloaded, just over is overloaded, for delay, heap and RSS",
+							"A NaN histogram mean is overloaded",
+							"Resolution is subtracted from the mean before comparing"
+						],
+						"acceptance": ["sample is pure and has no I/O", "pnpm run check passes"]
+					}
+				},
+				{
+					"id": "T6",
+					"name": "Shed load at the edge",
+					"depends_on": ["T3", "T5"],
+					"inputs": [
+						"design.md: Load shedding wiring bullet and US-5",
+						"apps/api/src/server.ts: EdgeMiddleware is HttpRouter.middleware(Effect.succeed(...), { global: true }) with the chain logger(connectionClose(bodyLimit(edgeErrors(httpEffect)))); problemResponse renders an HttpError with retry-after",
+						"apps/api/src/lib/errors.ts: ServiceUnavailableError"
+					],
+					"description": "Add shedLoad(verdict)(httpEffect), which returns problemResponse(new ServiceUnavailableError('Service under pressure', { retryable: true, retryAfterSeconds: 50 })) without running the handler when the verdict says overloaded, and a scoped startSampler that enables monitorEventLoopDelay, forks a 1 s Schedule.spaced sampler writing the latest sample result to a Ref, and disables the histogram on scope close. Change EdgeMiddleware's construction effect to read ServerConfigTag: in test or test-* environments the verdict is always not overloaded, otherwise it comes from startSampler. Insert shedLoad inside edgeErrors so the chain is logger(connectionClose(bodyLimit(edgeErrors(shedLoad(verdict)(httpEffect))))). Do not add a per-request service lookup. Export or move problemResponse only if LoadShedding.ts needs it.",
+					"files": {
+						"reuse": ["apps/api/src/lib/errors.ts", "apps/api/src/server.ts"],
+						"create": [],
+						"modify": ["apps/api/src/lib/LoadShedding.ts", "apps/api/src/lib/LoadShedding.test.ts", "apps/api/src/server.ts"],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "shedLoad / startSampler",
+							"requirement": "Reject requests with 503 while the process is overloaded (US-5)",
+							"consumers": ["EdgeMiddleware in apps/api/src/server.ts"]
+						}
+					],
+					"validation": {
+						"tests": [
+							"shedLoad with an overloaded verdict returns 503 SERVICE_UNAVAILABLE with retryable true and retry-after 50, and the handler is not called",
+							"shedLoad with a not-overloaded verdict returns the handler's response unchanged",
+							"Existing route suites (environment test) are unchanged"
+						],
+						"acceptance": [
+							"serve and toWebHandler requirements do not gain a GlobalRequires entry",
+							"The sampler is not started when environment is test or test-*",
+							"pnpm run check passes"
+						]
+					}
+				}
+			]
+		}
+	]
+}
