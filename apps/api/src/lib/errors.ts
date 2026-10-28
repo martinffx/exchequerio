@@ -1,7 +1,5 @@
-import { type Static, Type } from "@sinclair/typebox";
 import { Schema } from "effect";
 import { HttpApiSchema } from "effect/unstable/httpapi";
-import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { v7 as uuid } from "uuid";
 
 type HttpErrorOptions = ErrorOptions & {
@@ -9,30 +7,15 @@ type HttpErrorOptions = ErrorOptions & {
 	readonly retryAfterSeconds?: number;
 };
 
-const ProblemDetailSchema = Type.Object({
-	type: Type.String(),
-	status: Type.Integer(),
-	title: Type.String(),
-	detail: Type.String(),
-	instance: Type.String(),
-	traceId: Type.String(),
-	retryable: Type.Optional(Type.Boolean()),
-});
-type ProblemDetail = Static<typeof ProblemDetailSchema>;
-
-const problemDetailSchema = <TypeName extends string, Status extends number>(
-	type: TypeName,
-	status: Status
-) =>
-	Type.Object({
-		type: Type.Literal(type),
-		status: Type.Literal(status),
-		title: Type.String(),
-		detail: Type.String(),
-		instance: Type.String(),
-		traceId: Type.String(),
-		retryable: Type.Optional(Type.Boolean()),
-	});
+type ProblemDetail = {
+	readonly type: string;
+	readonly status: number;
+	readonly title: string;
+	readonly detail: string;
+	readonly instance: string;
+	readonly traceId: string;
+	readonly retryable?: boolean | undefined;
+};
 
 /**
  * Shared base of every problem. `detail` and `retryable` are the only encoded fields;
@@ -88,8 +71,6 @@ class BadRequestError extends HttpError.extend<BadRequestError>("BadRequestError
 		initHttpError(this, message, options);
 	}
 }
-const BadRequestProblem = problemDetailSchema("BAD_REQUEST", 400);
-type BadRequestProblem = Static<typeof BadRequestProblem>;
 
 class UnauthorizedError extends HttpError.extend<UnauthorizedError>("UnauthorizedError")({}) {
 	readonly type = "UNAUTHORIZED";
@@ -100,8 +81,6 @@ class UnauthorizedError extends HttpError.extend<UnauthorizedError>("Unauthorize
 		initHttpError(this, message, options);
 	}
 }
-const UnauthorizedProblem = problemDetailSchema("UNAUTHORIZED", 401);
-type UnauthorizedProblem = Static<typeof UnauthorizedProblem>;
 
 class ForbiddenError extends HttpError.extend<ForbiddenError>("ForbiddenError")({}) {
 	readonly type = "FORBIDDEN";
@@ -112,8 +91,6 @@ class ForbiddenError extends HttpError.extend<ForbiddenError>("ForbiddenError")(
 		initHttpError(this, message, options);
 	}
 }
-const ForbiddenProblem = problemDetailSchema("FORBIDDEN", 403);
-type ForbiddenProblem = Static<typeof ForbiddenProblem>;
 
 class NotFoundError extends HttpError.extend<NotFoundError>("NotFoundError")({}) {
 	readonly type = "NOT_FOUND";
@@ -124,8 +101,6 @@ class NotFoundError extends HttpError.extend<NotFoundError>("NotFoundError")({})
 		initHttpError(this, message, options);
 	}
 }
-const NotFoundProblem = problemDetailSchema("NOT_FOUND", 404);
-type NotFoundProblem = Static<typeof NotFoundProblem>;
 
 class ConflictError extends HttpError.extend<ConflictError>("ConflictError")({}) {
 	readonly type = "CONFLICT";
@@ -136,8 +111,6 @@ class ConflictError extends HttpError.extend<ConflictError>("ConflictError")({})
 		initHttpError(this, message, options);
 	}
 }
-const ConflictProblem = problemDetailSchema("CONFLICT", 409);
-type ConflictProblem = Static<typeof ConflictProblem>;
 
 class TooManyRequestsError extends HttpError.extend<TooManyRequestsError>("TooManyRequestsError")(
 	{}
@@ -150,8 +123,6 @@ class TooManyRequestsError extends HttpError.extend<TooManyRequestsError>("TooMa
 		initHttpError(this, message, options);
 	}
 }
-const TooManyRequestsProblem = problemDetailSchema("TOO_MANY_REQUESTS", 429);
-type TooManyRequestsProblem = Static<typeof TooManyRequestsProblem>;
 
 class InternalServerError extends HttpError.extend<InternalServerError>("InternalServerError")({}) {
 	readonly type = "INTERNAL_SERVER_ERROR";
@@ -162,8 +133,6 @@ class InternalServerError extends HttpError.extend<InternalServerError>("Interna
 		initHttpError(this, message, options);
 	}
 }
-const InternalServerProblem = problemDetailSchema("INTERNAL_SERVER_ERROR", 500);
-type InternalServerProblem = Static<typeof InternalServerProblem>;
 
 class ServiceUnavailableError extends HttpError.extend<ServiceUnavailableError>(
 	"ServiceUnavailableError"
@@ -178,8 +147,6 @@ class ServiceUnavailableError extends HttpError.extend<ServiceUnavailableError>(
 		initHttpError(this, message, merged);
 	}
 }
-const ServiceUnavailableProblem = problemDetailSchema("SERVICE_UNAVAILABLE", 503);
-type ServiceUnavailableProblem = Static<typeof ServiceUnavailableProblem>;
 
 class InvalidId extends BadRequestError {
 	constructor(
@@ -298,54 +265,7 @@ const ServiceUnavailableApiError = encodeProblem(
 	(m, o) => new ServiceUnavailableError(m, o)
 );
 
-const sendHttpError = (error: HttpError, request: FastifyRequest, reply: FastifyReply): void => {
-	if (error.statusCode >= 500) {
-		request.server.log.error(error.cause ?? error, error.message);
-	}
-	if (error.retryAfterSeconds !== undefined) {
-		reply.header("Retry-After", error.retryAfterSeconds.toString());
-	}
-	reply.status(error.statusCode).send(error.toProblemDetail());
-};
-
-const globalErrorHandler = (
-	error: FastifyError,
-	request: FastifyRequest,
-	reply: FastifyReply
-): void => {
-	if (error.code === "FST_ERR_VALIDATION") {
-		sendHttpError(new BadRequestError(error.message), request, reply);
-		return;
-	}
-	if (error.code === "FST_UNDER_PRESSURE") {
-		sendHttpError(new ServiceUnavailableError(error.message, { cause: error }), request, reply);
-		return;
-	}
-	if (error instanceof HttpError) {
-		sendHttpError(error, request, reply);
-		return;
-	}
-	sendHttpError(new InternalServerError("Internal Server Error", { cause: error }), request, reply);
-};
-
-const BadRequestErrorResponse = BadRequestProblem;
-type BadRequestErrorResponse = BadRequestProblem;
-const UnauthorizedErrorResponse = UnauthorizedProblem;
-type UnauthorizedErrorResponse = UnauthorizedProblem;
-const ForbiddenErrorResponse = ForbiddenProblem;
-type ForbiddenErrorResponse = ForbiddenProblem;
-const NotFoundErrorResponse = NotFoundProblem;
-type NotFoundErrorResponse = NotFoundProblem;
-const ConflictErrorResponse = ConflictProblem;
-type ConflictErrorResponse = ConflictProblem;
-const TooManyRequestsErrorResponse = TooManyRequestsProblem;
-type TooManyRequestsErrorResponse = TooManyRequestsProblem;
-const InternalServerErrorResponse = InternalServerProblem;
-type InternalServerErrorResponse = InternalServerProblem;
-const ServiceUnavailableErrorResponse = ServiceUnavailableProblem;
-type ServiceUnavailableErrorResponse = ServiceUnavailableProblem;
-
-export type { HttpErrorOptions, ProblemDetail };
+export type { HttpErrorOptions };
 export {
 	BadRequestApiError,
 	ConflictApiError,
@@ -356,31 +276,13 @@ export {
 	TooManyRequestsApiError,
 	UnauthorizedApiError,
 	BadRequestError,
-	BadRequestErrorResponse,
-	BadRequestProblem,
 	ConflictError,
-	ConflictErrorResponse,
-	ConflictProblem,
 	ForbiddenError,
-	ForbiddenErrorResponse,
-	ForbiddenProblem,
-	globalErrorHandler,
 	HttpError,
 	InternalServerError,
-	InternalServerErrorResponse,
-	InternalServerProblem,
 	InvalidId,
 	NotFoundError,
-	NotFoundErrorResponse,
-	NotFoundProblem,
-	ProblemDetailSchema,
 	ServiceUnavailableError,
-	ServiceUnavailableErrorResponse,
-	ServiceUnavailableProblem,
 	TooManyRequestsError,
-	TooManyRequestsErrorResponse,
-	TooManyRequestsProblem,
 	UnauthorizedError,
-	UnauthorizedErrorResponse,
-	UnauthorizedProblem,
 };

@@ -749,7 +749,7 @@ describe("Category routes", () => {
 			const response = await build(implementation)(
 				request("GET", `${base}/not-an-id`, { token: tokenWith([]) })
 			);
-			// As under Fastify, the id pattern is validated before the permission preHandler.
+			// The id pattern is validated before the permission check.
 			expect(response.status).toBe(400);
 			expect(implementation.getLedgerAccountCategory).not.toHaveBeenCalled();
 		});

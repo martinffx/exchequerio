@@ -1,10 +1,8 @@
-import fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	BadRequestError,
 	ConflictError,
 	ForbiddenError,
-	globalErrorHandler,
 	InternalServerError,
 	NotFoundError,
 	ServiceUnavailableError,
@@ -22,130 +20,6 @@ import type { OrgID } from "@/lib/ids";
 import { OrganizationServiceTag, type OrganizationService } from "@/domains/organizations";
 import { Organization } from "@/domains/organizations/Organization";
 import { appLayer, makeTestWebHandler, type TestServiceLayers, testServicesLayer } from "@/server";
-
-const servers: FastifyInstance[] = [];
-
-const buildErrorServer = async (failure: Error = new NotFoundError("Organization not found")) => {
-	const server = fastify();
-	server.setErrorHandler(globalErrorHandler);
-	server.post(
-		"/validation",
-		{
-			schema: {
-				body: {
-					type: "object",
-					required: ["name"],
-					properties: { name: { type: "string" } },
-					additionalProperties: false,
-				},
-			},
-		},
-		async () => ({})
-	);
-	server.get("/typed", async () => {
-		throw failure;
-	});
-	server.get("/pressure", async () => {
-		throw Object.assign(new Error("Server under pressure"), { code: "FST_UNDER_PRESSURE" });
-	});
-	server.get("/unknown", async () => {
-		throw new Error("database credentials");
-	});
-	await server.ready();
-	servers.push(server);
-	return server;
-};
-
-afterEach(async () => {
-	for (const server of servers.splice(0)) await server.close();
-});
-
-describe("HttpError", () => {
-	it.each([
-		[new BadRequestError("bad request"), 400, "BAD_REQUEST", "Bad Request"],
-		[new UnauthorizedError("unauthorized"), 401, "UNAUTHORIZED", "Unauthorized"],
-		[new ForbiddenError("forbidden"), 403, "FORBIDDEN", "Forbidden"],
-		[new NotFoundError("not found"), 404, "NOT_FOUND", "Not Found"],
-		[new ConflictError("conflict"), 409, "CONFLICT", "Conflict"],
-		[new TooManyRequestsError("rate limited"), 429, "TOO_MANY_REQUESTS", "Too Many Requests"],
-		[
-			new InternalServerError("internal error"),
-			500,
-			"INTERNAL_SERVER_ERROR",
-			"Internal Server Error",
-		],
-		[new ServiceUnavailableError("unavailable"), 503, "SERVICE_UNAVAILABLE", "Service Unavailable"],
-	] as const)("maps %s", async (error, status, type, title) => {
-		const server = await buildErrorServer(error);
-		const response = await server.inject({ method: "GET", url: "/typed" });
-		expect(response.statusCode).toBe(status);
-		expect(response.json()).toMatchObject({ status, type, title, detail: error.message });
-	});
-
-	it("serializes retryability without exposing the cause", async () => {
-		const cause = new Error("database credentials");
-		const server = await buildErrorServer(
-			new ConflictError("Organization conflict", {
-				cause,
-				retryable: true,
-			})
-		);
-		const problem = (await server.inject({ method: "GET", url: "/typed" })).json<{
-			instance: string;
-			traceId: string;
-		}>();
-
-		expect(problem).toMatchObject({ retryable: true });
-		expect(problem.instance).toMatch(/^\/instance\/[0-9a-f-]{36}$/);
-		expect(problem.traceId).toMatch(/^[0-9a-f-]{36}$/);
-		expect(problem).not.toHaveProperty("cause");
-	});
-});
-
-describe("globalErrorHandler", () => {
-	it("maps Fastify validation errors", async () => {
-		const server = await buildErrorServer();
-		const response = await server.inject({ method: "POST", url: "/validation", payload: {} });
-
-		expect(response.statusCode).toBe(400);
-		expect(response.json()).toMatchObject({ type: "BAD_REQUEST", status: 400 });
-	});
-
-	it("maps typed errors", async () => {
-		const server = await buildErrorServer();
-		const response = await server.inject({ method: "GET", url: "/typed" });
-
-		expect(response.statusCode).toBe(404);
-		expect(response.json()).toMatchObject({ type: "NOT_FOUND", status: 404 });
-	});
-
-	it("maps under-pressure errors as retryable", async () => {
-		const server = await buildErrorServer();
-		const response = await server.inject({ method: "GET", url: "/pressure" });
-
-		expect(response.statusCode).toBe(503);
-		expect(response.json()).toMatchObject({
-			type: "SERVICE_UNAVAILABLE",
-			status: 503,
-			retryable: true,
-		});
-	});
-
-	it("logs and sanitizes unknown errors", async () => {
-		const server = await buildErrorServer();
-		const logError = vi.spyOn(server.log, "error");
-		const response = await server.inject({ method: "GET", url: "/unknown" });
-
-		expect(response.statusCode).toBe(500);
-		expect(response.json()).toMatchObject({
-			type: "INTERNAL_SERVER_ERROR",
-			status: 500,
-			detail: "Internal Server Error",
-		});
-		expect(response.body).not.toContain("database credentials");
-		expect(logError).toHaveBeenCalled();
-	});
-});
 
 const deferred = () => {
 	let resolve!: () => void;
@@ -283,7 +157,7 @@ describe("Request lifecycle", () => {
 				headers: { ...authorization(), "content-type": "application/json" },
 				body: JSON.stringify({ name: "x".repeat(1_048_576 + 1024) }),
 			});
-			// Legacy parity: Fastify's body limit surfaced as a sanitised 500 problem.
+			// An oversized body surfaces as a sanitised 500 problem, not 413, for parity with the pre-migration server.
 			expect(response.status).toBe(500);
 			expect(JSON.parse(response.body)).toMatchObject({
 				type: "INTERNAL_SERVER_ERROR",
@@ -442,6 +316,53 @@ describe("Effect HTTP edge", () => {
 				logs.some(entry => entry.level === "Error" && entry.text.includes("pool exhausted"))
 			).toBe(true);
 		});
+
+		it("never exposes the cause of a 5xx problem defect", async () => {
+			const service = stub({
+				getOrganization: () =>
+					Effect.die(
+						new ServiceUnavailableError("down", {
+							retryable: true,
+							retryAfterSeconds: 7,
+							cause: new Error("pool exhausted"),
+						})
+					),
+			});
+			const response = await build(service)(
+				call("GET", `/api/organizations/${organizationId.toString()}`)
+			);
+			const text = await response.text();
+			expect(text).not.toContain("pool exhausted");
+			expect(response.headers.get("retry-after")).toBe("7");
+			expect(JSON.parse(text)).toMatchObject({ retryable: true });
+		});
+
+		const uuidV7 = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}";
+		it.each([
+			[BadRequestError, 400, "BAD_REQUEST", "Bad Request"],
+			[UnauthorizedError, 401, "UNAUTHORIZED", "Unauthorized"],
+			[ForbiddenError, 403, "FORBIDDEN", "Forbidden"],
+			[NotFoundError, 404, "NOT_FOUND", "Not Found"],
+			[ConflictError, 409, "CONFLICT", "Conflict"],
+			[TooManyRequestsError, 429, "TOO_MANY_REQUESTS", "Too Many Requests"],
+			[InternalServerError, 500, "INTERNAL_SERVER_ERROR", "Internal Server Error"],
+			[ServiceUnavailableError, 503, "SERVICE_UNAVAILABLE", "Service Unavailable"],
+		] as const)(
+			"renders a %o defect as a complete problem body",
+			async (ErrorClass, status, type, title) => {
+				const service = stub({ getOrganization: () => Effect.die(new ErrorClass("x")) });
+				const response = await build(service)(
+					call("GET", `/api/organizations/${organizationId.toString()}`)
+				);
+				expect(response.status).toBe(status);
+				const body = (await response.json()) as Record<string, unknown>;
+				expect(body).toMatchObject({ type, status, title, detail: "x" });
+				expect(body.instance).toMatch(new RegExp(`^/instance/${uuidV7}$`));
+				expect(body.traceId).toMatch(new RegExp(`^${uuidV7}$`));
+				expect(body).not.toHaveProperty("cause");
+				expect(body).not.toHaveProperty("_tag");
+			}
+		);
 
 		it("renders IdempotencyPending as a 409 with Retry-After", async () => {
 			const service = stub({ deleteOrganization: () => Effect.fail(new IdempotencyPending()) });

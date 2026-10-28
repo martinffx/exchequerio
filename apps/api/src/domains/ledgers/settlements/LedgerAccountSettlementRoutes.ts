@@ -62,7 +62,7 @@ const SettlementRoutes = HttpApiBuilder.group(LedgerApi, "settlements", handlers
 					);
 					return HttpApiSchema.withHeaders({
 						body: settlement.toResponse(),
-						// Built from the raw path parameter, as the Fastify route did.
+						// Built from the raw path parameter.
 						headers: {
 							location: `/api/ledgers/${params.ledgerId}/settlements/${settlement.id.toString()}`,
 						},

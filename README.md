@@ -160,7 +160,7 @@ pnpm run ci
 
 | App | Description | Stack |
 |-----|-------------|-------|
-| `apps/api` | Ledger API | Fastify, Drizzle, PostgreSQL |
+| `apps/api` | Ledger API | Effect HttpApi, Drizzle, PostgreSQL |
 | `apps/web` | Dashboard | React Router v7, Tailwind |
 | `apps/docs` | Documentation | Docusaurus |
 

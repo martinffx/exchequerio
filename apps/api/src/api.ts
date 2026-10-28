@@ -42,7 +42,7 @@ const SchemaErrorTransformLayer = HttpApiMiddleware.layerSchemaErrorTransform(
 		requestKinds.has(schemaError.kind)
 			? Effect.fail(
 					new BadRequestError(
-						// Fastify reported one fixed detail for any invalid Asset write body.
+						// One fixed detail is reported for any invalid Asset write body.
 						(schemaError.kind === "Payload" ? payloadDetails[endpoint.identifier] : undefined) ??
 							schemaError.cause.message,
 						{ cause: schemaError }

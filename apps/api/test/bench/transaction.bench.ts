@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import autocannon from "autocannon";
 import { Pool } from "pg";
 import { sql } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
 import { retry } from "radash";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { TypeID } from "typeid-js";
@@ -13,7 +12,10 @@ import type { LedgerID, OrgID } from "@/lib/ids";
 import { newLedgerID, newLedgerAccountID } from "@/lib/ids";
 import { Ledger } from "@/domains/ledgers/Ledger";
 import { LedgerAccount } from "@/domains/ledgers/accounts/LedgerAccount";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { createServer } from "node:http";
+import { NodeHttpServer } from "@effect/platform-node";
+import { Effect, Exit, Layer, ManagedRuntime, References, Scope } from "effect";
+import { HttpRouter } from "effect/unstable/http";
 import { DatabaseTag, makeDatabaseLive } from "@/db";
 import {
 	type LedgerAccountRepo,
@@ -22,7 +24,7 @@ import {
 } from "@/domains/ledgers/accounts/LedgerAccountRepo";
 import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "@/domains/ledgers/LedgerRepo";
 import { AssetsTable, OrganizationsTable } from "@/db/schema";
-import { buildServer } from "@/server";
+import { makeServerLayer } from "@/server";
 import type { EffectDrizzleDatabase } from "@/db";
 
 interface BenchmarkScenario {
@@ -420,7 +422,7 @@ function printResults(results: BenchmarkResult[]): void {
 }
 
 describe("Transaction Creation Benchmarks", () => {
-	let server: FastifyInstance;
+	let serverScope: Scope.Closeable | undefined;
 	const fixtureRuntime = ManagedRuntime.make(
 		Layer.mergeAll(ledgerRepoLayer, ledgerAccountRepoLayer).pipe(
 			Layer.provideMerge(
@@ -468,16 +470,25 @@ describe("Transaction Creation Benchmarks", () => {
 
 		// Start server
 		console.log("Starting server...");
-		server = await buildServer();
-		await server.listen({ port: 3333, host: "0.0.0.0" });
+		serverScope = await Effect.runPromise(Scope.make());
+		await Effect.runPromise(
+			Layer.buildWithScope(
+				// The router logger is off; the app's global request logger is silenced below Warn so it does not skew the run.
+				HttpRouter.serve(makeServerLayer(new Config()), { disableLogger: true }).pipe(
+					Layer.provide(Layer.succeed(References.MinimumLogLevel, "Warn")),
+					Layer.provide(NodeHttpServer.layer(createServer, { port: 3333, host: "0.0.0.0" }))
+				),
+				serverScope
+			)
+		);
 		console.log("Server started on http://localhost:3333\n");
 	});
 
 	afterAll(async () => {
-		// Close server first - this will trigger onClose hooks and clean up its connection pool
-		if (server) {
+		// Close server first - closing the scope drains requests and releases its connection pool
+		if (serverScope) {
 			console.log("\nClosing server...");
-			await server.close();
+			await Effect.runPromise(Scope.close(serverScope, Exit.void));
 			console.log("Server closed");
 		}
 

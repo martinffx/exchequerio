@@ -30,7 +30,7 @@ const operation = (identifier: string, summary: string) =>
 	OpenApi.annotations({ identifier, summary });
 
 // Endpoint names equal operation ids: the schema-error transform in api.ts branches on them.
-// 409 on update is a service failure (duplicate code) that the Fastify routes already declared.
+// 409 on update is a service failure (duplicate code) that the routes have always declared.
 const AssetsApi = HttpApiGroup.make("assets")
 	.add(
 		HttpApiEndpoint.get("listAssets", "/assets/", {

@@ -22,7 +22,7 @@ import {
 } from "./LedgerAccountCategorySchema";
 
 // Collection paths keep their trailing slash, as today's OpenAPI document has it.
-// Every Category route declared 429 under Fastify. Permissions are enforced by the handlers:
+// Every Category route declares 429. Permissions are enforced by the handlers:
 // read for GETs, write for create/update/link/unlink, delete for DELETE /:categoryId.
 const commonErrors = [
 	BadRequestApiError,

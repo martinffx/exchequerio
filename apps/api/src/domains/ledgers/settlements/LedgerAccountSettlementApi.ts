@@ -24,7 +24,7 @@ import {
 } from "./LedgerAccountSettlementSchema";
 
 // Collection paths keep their trailing slash, as today's OpenAPI document has it.
-// Every Settlement route declared 429 under Fastify, so the whole group keeps it.
+// Every Settlement route declares 429, so the whole group keeps it.
 const commonErrors = [
 	BadRequestApiError,
 	UnauthorizedApiError,

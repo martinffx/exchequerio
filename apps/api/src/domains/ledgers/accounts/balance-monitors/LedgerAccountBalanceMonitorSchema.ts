@@ -31,7 +31,7 @@ const BalanceSnapshot = Schema.Struct({
 	availableBalance: AmountSchema,
 });
 
-// The `uri` format check Fastify's Ajv applied (ajv-formats 3.0.1, "full" mode), copied verbatim from
+// The `uri` format check previously applied by Ajv (ajv-formats 3.0.1, "full" mode), copied verbatim from
 // ajv-formats/src/formats.ts: `NOT_URI_FRAGMENT` and `URI`. `format` is annotated before `.check` so the
 // OpenAPI schema keeps it.
 const NOT_URI_FRAGMENT = /\/|:/;

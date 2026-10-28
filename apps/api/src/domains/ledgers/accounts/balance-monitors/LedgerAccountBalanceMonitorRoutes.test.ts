@@ -230,7 +230,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		expect(implementation.createLedgerAccountBalanceMonitor).not.toHaveBeenCalled();
 	});
 
-	// Expectations were checked against Fastify's validator: Ajv with ajv-formats 3.0.1 in "full" mode.
+	// Expectations were checked against the former validator: Ajv with ajv-formats 3.0.1 in "full" mode.
 	const rejectedUris = [
 		"https:",
 		"https://example.com/<x>",

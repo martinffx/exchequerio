@@ -1,6 +1,6 @@
 import { makeLedgerAccountBalanceMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { ledgerAccountBalanceMonitorPublisherLayer } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService";
-import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import { Context, Effect, Layer } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
 import { assetServiceLayer, assetRepoLayer, type AssetService } from "@/domains/assets";
@@ -91,22 +91,5 @@ const makeServerRuntimeLayer = (
 	).pipe(Layer.provideMerge(infrastructure));
 };
 
-class ServerRuntime<R, ER> {
-	private readonly runtime: ManagedRuntime.ManagedRuntime<R, ER>;
-	private disposal: Promise<void> | undefined;
-
-	constructor(layer: Layer.Layer<R, ER, never>) {
-		this.runtime = ManagedRuntime.make(layer);
-	}
-
-	runPromise<A, E>(effect: Effect.Effect<A, E, R>): Promise<A> {
-		return this.runtime.runPromise(effect);
-	}
-
-	dispose(): Promise<void> {
-		return (this.disposal ??= this.runtime.dispose());
-	}
-}
-
-export type { ServerRuntimeLayer, ServerRuntimeLayerOverrides, ServerRuntimeServices };
-export { makeServerRuntimeLayer, ServerConfigTag, ServerRuntime };
+export type { ServerRuntimeLayerOverrides };
+export { makeServerRuntimeLayer, ServerConfigTag };

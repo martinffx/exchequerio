@@ -1,9 +1,6 @@
-import fastifyAuth from "@fastify/auth";
-import fastifyJwt from "@fastify/jwt";
 import { Context, Effect, Layer, Redacted, Result } from "effect";
 import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi";
 import { createSigner, createVerifier, type SignerSync } from "fast-jwt";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Config } from "@/config";
 import { ForbiddenError, UnauthorizedApiError, UnauthorizedError } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
@@ -124,18 +121,6 @@ class OrgToken {
 	}
 }
 
-declare module "fastify" {
-	interface FastifyInstance {
-		verifyJWT: (request: FastifyRequest) => Promise<void>;
-		hasPermissions: (
-			permissions: Permission[]
-		) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-	}
-	interface FastifyRequest {
-		token: OrgToken;
-	}
-}
-
 let jwtSigner: typeof SignerSync;
 const signJWT = (token: Token): string => {
 	if (jwtSigner === undefined) {
@@ -143,29 +128,6 @@ const signJWT = (token: Token): string => {
 		jwtSigner = createSigner({ key: config.jwtSecret });
 	}
 	return jwtSigner(token);
-};
-
-const registerAuth = async (server: FastifyInstance): Promise<void> => {
-	await server.register(fastifyJwt, { secret: server.config.jwtSecret });
-	server.decorate("verifyJWT", async (request: FastifyRequest) => {
-		try {
-			const token = await request.jwtVerify<Token>();
-			request.token = new OrgToken(token);
-		} catch (error: unknown) {
-			request.log.error(error);
-			throw new UnauthorizedError("Invalid token");
-		}
-	});
-	server.decorate("hasPermissions", (requiredPermissions: Permission[]) => {
-		return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-			for (const permission of requiredPermissions) {
-				if (!request.token.permissions.has(permission)) {
-					throw new ForbiddenError(`One of: ${requiredPermissions.join(", ")}; permissions is required`);
-				}
-			}
-		};
-	});
-	await server.register(fastifyAuth);
 };
 
 /** The authenticated caller's token, provided to handlers by `Authentication`. */
@@ -219,11 +181,4 @@ const requirePermissions = (
 	);
 
 export type { Permission };
-export {
-	Authentication,
-	CurrentToken,
-	makeAuthenticationLayer,
-	registerAuth,
-	requirePermissions,
-	signJWT,
-};
+export { Authentication, CurrentToken, makeAuthenticationLayer, requirePermissions, signJWT };
