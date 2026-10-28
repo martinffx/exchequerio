@@ -5,26 +5,46 @@ import { Context, Effect, Layer } from "effect";
 
 import { DatabaseTag, type EffectDrizzleDatabase } from "@/db";
 import type { AssetSummary } from "@/lib/AssetSchema";
+import type {
+	BadRequestError,
+	ConflictError,
+	InternalServerError,
+	ServiceUnavailableError,
+} from "@/lib/errors";
 import { NotFoundError } from "@/lib/errors";
 import type { LedgerAccountStatementID, OrgID } from "@/lib/ids";
 import { AssetsTable, LedgerAccountsTable, LedgerAccountStatementsTable } from "@/db/schema";
 
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 
+/**
+ * Problems a Statement repository call may fail with; the HttpApi group declares each. Type-only:
+ * database failures still pass through unchanged and render as a sanitised 500.
+ */
+type StatementRepoError =
+	| BadRequestError
+	| ConflictError
+	| InternalServerError
+	| NotFoundError
+	| ServiceUnavailableError;
+
+/** Read failures; reads take no locks and never conflict. */
+type StatementReadError = Exclude<StatementRepoError, ConflictError>;
+
 interface LedgerAccountStatementRepo {
 	readonly getAccountAsset: (
 		orgId: OrgID,
 		accountId: string,
 		ledgerId: string
-	) => Effect.Effect<AssetSummary, unknown>;
+	) => Effect.Effect<AssetSummary, StatementReadError>;
 	readonly getStatement: (
 		id: LedgerAccountStatementID,
 		orgId: OrgID
-	) => Effect.Effect<LedgerAccountStatement, unknown>;
+	) => Effect.Effect<LedgerAccountStatement, StatementReadError>;
 	readonly createStatement: (
 		statement: LedgerAccountStatement,
 		orgId: OrgID
-	) => Effect.Effect<LedgerAccountStatement, unknown>;
+	) => Effect.Effect<LedgerAccountStatement, StatementRepoError>;
 }
 
 const LedgerAccountStatementRepoTag = Context.Service<LedgerAccountStatementRepo>(
@@ -38,7 +58,7 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		orgId: OrgID,
 		accountId: string,
 		ledgerId: string
-	): Effect.Effect<AssetSummary, unknown> {
+	): Effect.Effect<AssetSummary, StatementReadError> {
 		return this.db
 			.select({
 				assetId: AssetsTable.id,
@@ -67,13 +87,13 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 						? Effect.fail(new NotFoundError("Account not found"))
 						: Effect.succeed({ ...rows[0], assetId: TypeID.fromUUID("ast", rows[0].assetId).toString() })
 				)
-			);
+			) as Effect.Effect<AssetSummary, StatementReadError>;
 	}
 
 	getStatement(
 		id: LedgerAccountStatementID,
 		orgId: OrgID
-	): Effect.Effect<LedgerAccountStatement, unknown> {
+	): Effect.Effect<LedgerAccountStatement, StatementReadError> {
 		return this.db
 			.select()
 			.from(LedgerAccountStatementsTable)
@@ -90,18 +110,21 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 						TypeID.fromUUID("lgr", row.ledgerId).toString()
 					).pipe(Effect.map(asset => LedgerAccountStatement.fromRow(row, asset)));
 				})
-			);
+			) as Effect.Effect<LedgerAccountStatement, StatementReadError>;
 	}
 
 	createStatement(
 		statement: LedgerAccountStatement,
 		orgId: OrgID
-	): Effect.Effect<LedgerAccountStatement, unknown> {
+	): Effect.Effect<LedgerAccountStatement, StatementRepoError> {
 		return this.db
 			.insert(LedgerAccountStatementsTable)
 			.values(statement.toRow())
 			.returning()
-			.pipe(Effect.flatMap(() => this.getStatement(statement.id, orgId)));
+			.pipe(Effect.flatMap(() => this.getStatement(statement.id, orgId))) as Effect.Effect<
+			LedgerAccountStatement,
+			StatementRepoError
+		>;
 	}
 }
 
@@ -110,6 +133,7 @@ const ledgerAccountStatementRepoLayer = Layer.effect(
 	DatabaseTag.pipe(Effect.map(database => new LedgerAccountStatementRepoLive(database.effectDb)))
 );
 
+export type { StatementReadError, StatementRepoError };
 export {
 	type LedgerAccountStatementRepo,
 	LedgerAccountStatementRepoLive,

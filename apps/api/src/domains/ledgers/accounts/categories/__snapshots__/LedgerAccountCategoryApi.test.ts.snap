@@ -1,27 +1,27 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI operations 1`] = `
+exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI operations 1`] = `
 {
   "balances": {
     "description": "Current balances by Asset for all distinct descendant Accounts, using one snapshot and the Category's normal balance. Membership changes after the snapshot appear on the next read.",
     "operationId": "getLedgerAccountCategoryBalances",
     "parameters": [
       {
-        "description": "The ledger's ID",
         "in": "path",
         "name": "ledgerId",
         "required": true,
         "schema": {
+          "description": "The ledger's ID",
           "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "categoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -32,127 +32,17 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
         "content": {
           "application/json": {
             "schema": {
-              "properties": {
-                "assets": {
-                  "items": {
-                    "properties": {
-                      "assetCode": {
-                        "maxLength": 64,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9._:-]+$",
-                        "type": "string",
-                      },
-                      "assetId": {
-                        "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                        "type": "string",
-                      },
-                      "balances": {
-                        "items": {
-                          "properties": {
-                            "amount": {
-                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
-                              "maxLength": 20,
-                              "pattern": "^(0|-?[1-9][0-9]*)$",
-                              "type": "string",
-                            },
-                            "balanceType": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "pending",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "posted",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "availableBalance",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "credits": {
-                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
-                              "maxLength": 20,
-                              "pattern": "^(0|-?[1-9][0-9]*)$",
-                              "type": "string",
-                            },
-                            "debits": {
-                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
-                              "maxLength": 20,
-                              "pattern": "^(0|-?[1-9][0-9]*)$",
-                              "type": "string",
-                            },
-                          },
-                          "required": [
-                            "balanceType",
-                            "credits",
-                            "debits",
-                            "amount",
-                          ],
-                          "type": "object",
-                        },
-                        "type": "array",
-                      },
-                      "minorUnitExponent": {
-                        "maximum": 18,
-                        "minimum": 0,
-                        "type": "integer",
-                      },
-                    },
-                    "required": [
-                      "assetId",
-                      "assetCode",
-                      "minorUnitExponent",
-                      "balances",
-                    ],
-                    "type": "object",
-                  },
-                  "type": "array",
-                },
-                "categoryId": {
-                  "description": "Unique identifier for the ledger account category.",
-                  "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "normalBalance": {
-                  "anyOf": [
-                    {
-                      "enum": [
-                        "debit",
-                      ],
-                      "type": "string",
-                    },
-                    {
-                      "enum": [
-                        "credit",
-                      ],
-                      "type": "string",
-                    },
-                  ],
-                },
-              },
-              "required": [
-                "categoryId",
-                "normalBalance",
-                "assets",
-              ],
-              "type": "object",
+              "$ref": "#/components/schemas/LedgerAccountCategoryBalancesResponse",
             },
           },
         },
-        "description": "Default Response",
+        "description": "LedgerAccountCategoryBalancesResponse",
       },
       "400": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -194,12 +84,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -241,12 +140,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -288,12 +196,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -335,12 +253,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "409": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -382,12 +310,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ConflictError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -429,12 +367,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -476,12 +424,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -523,9 +481,23 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Get Ledger Account Category balances",
     "tags": [
       "Ledger Account Categories",
@@ -536,11 +508,11 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     "operationId": "createLedgerAccountCategory",
     "parameters": [
       {
-        "description": "The ledger's ID",
         "in": "path",
         "name": "ledgerId",
         "required": true,
         "schema": {
+          "description": "The ledger's ID",
           "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -550,44 +522,7 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
       "content": {
         "application/json": {
           "schema": {
-            "properties": {
-              "description": {
-                "description": "An optional free-form description for internal use.",
-                "type": "string",
-              },
-              "metadata": {
-                "additionalProperties": {
-                  "type": "string",
-                },
-                "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                "type": "object",
-              },
-              "name": {
-                "description": "The name of the ledger account category.",
-                "type": "string",
-              },
-              "normalBalance": {
-                "anyOf": [
-                  {
-                    "enum": [
-                      "debit",
-                    ],
-                    "type": "string",
-                  },
-                  {
-                    "enum": [
-                      "credit",
-                    ],
-                    "type": "string",
-                  },
-                ],
-              },
-            },
-            "required": [
-              "name",
-              "normalBalance",
-            ],
-            "type": "object",
+            "$ref": "#/components/schemas/LedgerAccountCategoryRequest",
           },
         },
       },
@@ -598,67 +533,7 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
-              "properties": {
-                "created": {
-                  "description": "Timestamp of when the ledger account category was created.",
-                  "type": "string",
-                },
-                "description": {
-                  "description": "An optional free-form description for internal use.",
-                  "type": "string",
-                },
-                "id": {
-                  "description": "Unique identifier for the ledger account category.",
-                  "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "ledgerId": {
-                  "description": "The ledger's ID",
-                  "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "metadata": {
-                  "additionalProperties": {
-                    "type": "string",
-                  },
-                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                  "type": "object",
-                },
-                "name": {
-                  "description": "The name of the ledger account category.",
-                  "type": "string",
-                },
-                "normalBalance": {
-                  "anyOf": [
-                    {
-                      "enum": [
-                        "debit",
-                      ],
-                      "type": "string",
-                    },
-                    {
-                      "enum": [
-                        "credit",
-                      ],
-                      "type": "string",
-                    },
-                  ],
-                },
-                "updated": {
-                  "description": "Timestamp of when the ledger account category was last updated.",
-                  "type": "string",
-                },
-              },
-              "required": [
-                "id",
-                "ledgerId",
-                "name",
-                "normalBalance",
-                "created",
-                "updated",
-              ],
-              "type": "object",
+              "$ref": "#/components/schemas/LedgerAccountCategoryResponse",
             },
           },
         },
@@ -668,6 +543,7 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -709,12 +585,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -756,12 +641,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -803,12 +697,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -850,12 +754,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "409": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -897,12 +811,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ConflictError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -944,12 +868,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -991,12 +925,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1038,9 +982,23 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Create Ledger Account Category",
     "tags": [
       "Ledger Account Categories",
@@ -1051,21 +1009,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     "operationId": "deleteLedgerAccountCategory",
     "parameters": [
       {
-        "description": "The ledger's ID",
         "in": "path",
         "name": "ledgerId",
         "required": true,
         "schema": {
+          "description": "The ledger's ID",
           "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "categoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -1073,17 +1031,13 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     ],
     "responses": {
       "200": {
-        "content": {
-          "application/json": {
-            "schema": {},
-          },
-        },
-        "description": "Default Response",
+        "description": "<No Content>",
       },
       "400": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1125,12 +1079,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1172,12 +1135,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1219,12 +1191,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1266,12 +1248,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "409": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1313,12 +1305,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ConflictError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1360,12 +1362,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1407,12 +1419,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1454,9 +1476,23 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Delete Ledger Account Category",
     "tags": [
       "Ledger Account Categories",
@@ -1467,21 +1503,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     "operationId": "getLedgerAccountCategory",
     "parameters": [
       {
-        "description": "The ledger's ID",
         "in": "path",
         "name": "ledgerId",
         "required": true,
         "schema": {
+          "description": "The ledger's ID",
           "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "categoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -1492,67 +1528,7 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
-              "properties": {
-                "created": {
-                  "description": "Timestamp of when the ledger account category was created.",
-                  "type": "string",
-                },
-                "description": {
-                  "description": "An optional free-form description for internal use.",
-                  "type": "string",
-                },
-                "id": {
-                  "description": "Unique identifier for the ledger account category.",
-                  "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "ledgerId": {
-                  "description": "The ledger's ID",
-                  "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "metadata": {
-                  "additionalProperties": {
-                    "type": "string",
-                  },
-                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                  "type": "object",
-                },
-                "name": {
-                  "description": "The name of the ledger account category.",
-                  "type": "string",
-                },
-                "normalBalance": {
-                  "anyOf": [
-                    {
-                      "enum": [
-                        "debit",
-                      ],
-                      "type": "string",
-                    },
-                    {
-                      "enum": [
-                        "credit",
-                      ],
-                      "type": "string",
-                    },
-                  ],
-                },
-                "updated": {
-                  "description": "Timestamp of when the ledger account category was last updated.",
-                  "type": "string",
-                },
-              },
-              "required": [
-                "id",
-                "ledgerId",
-                "name",
-                "normalBalance",
-                "created",
-                "updated",
-              ],
-              "type": "object",
+              "$ref": "#/components/schemas/LedgerAccountCategoryResponse",
             },
           },
         },
@@ -1562,6 +1538,7 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1603,12 +1580,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1650,12 +1636,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1697,12 +1692,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1744,12 +1749,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1791,12 +1806,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1838,12 +1863,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1885,9 +1920,23 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Get Ledger Account Category",
     "tags": [
       "Ledger Account Categories",
@@ -1898,31 +1947,31 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     "operationId": "linkLedgerAccountToCategory",
     "parameters": [
       {
-        "description": "The ledger's ID",
         "in": "path",
         "name": "ledgerId",
         "required": true,
         "schema": {
+          "description": "The ledger's ID",
           "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "categoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "The ledger account's ID",
         "in": "path",
         "name": "accountId",
         "required": true,
         "schema": {
+          "description": "The ledger account's ID",
           "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -1930,17 +1979,13 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     ],
     "responses": {
       "200": {
-        "content": {
-          "application/json": {
-            "schema": {},
-          },
-        },
-        "description": "Default Response",
+        "description": "<No Content>",
       },
       "400": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -1982,12 +2027,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2029,12 +2083,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2076,12 +2139,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2123,12 +2196,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "409": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2170,12 +2253,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ConflictError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2217,12 +2310,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2264,12 +2367,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2311,9 +2424,23 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Link Ledger Account to Category",
     "tags": [
       "Ledger Account Categories",
@@ -2324,31 +2451,31 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     "operationId": "linkLedgerAccountCategoryToCategory",
     "parameters": [
       {
-        "description": "The ledger's ID",
         "in": "path",
         "name": "ledgerId",
         "required": true,
         "schema": {
+          "description": "The ledger's ID",
           "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "categoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "parentCategoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -2356,17 +2483,13 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     ],
     "responses": {
       "200": {
-        "content": {
-          "application/json": {
-            "schema": {},
-          },
-        },
-        "description": "Default Response",
+        "description": "<No Content>",
       },
       "400": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2408,12 +2531,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2455,12 +2587,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2502,12 +2643,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2549,12 +2700,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "409": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2596,12 +2757,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ConflictError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2643,12 +2814,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2690,12 +2871,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2737,9 +2928,23 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Link Ledger Account Category to Category",
     "tags": [
       "Ledger Account Categories",
@@ -2750,30 +2955,30 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     "operationId": "listLedgerAccountCategories",
     "parameters": [
       {
-        "in": "query",
-        "name": "offset",
+        "in": "path",
+        "name": "ledgerId",
         "required": true,
         "schema": {
-          "default": 0,
-          "type": "number",
+          "description": "The ledger's ID",
+          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "type": "string",
+        },
+      },
+      {
+        "in": "query",
+        "name": "offset",
+        "required": false,
+        "schema": {
+          "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+          "type": "string",
         },
       },
       {
         "in": "query",
         "name": "limit",
-        "required": true,
+        "required": false,
         "schema": {
-          "default": 20,
-          "type": "number",
-        },
-      },
-      {
-        "description": "The ledger's ID",
-        "in": "path",
-        "name": "ledgerId",
-        "required": true,
-        "schema": {
-          "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+          "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
           "type": "string",
         },
       },
@@ -2784,79 +2989,19 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
           "application/json": {
             "schema": {
               "items": {
-                "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
-                "properties": {
-                  "created": {
-                    "description": "Timestamp of when the ledger account category was created.",
-                    "type": "string",
-                  },
-                  "description": {
-                    "description": "An optional free-form description for internal use.",
-                    "type": "string",
-                  },
-                  "id": {
-                    "description": "Unique identifier for the ledger account category.",
-                    "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                    "type": "string",
-                  },
-                  "ledgerId": {
-                    "description": "The ledger's ID",
-                    "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                    "type": "string",
-                  },
-                  "metadata": {
-                    "additionalProperties": {
-                      "type": "string",
-                    },
-                    "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                    "type": "object",
-                  },
-                  "name": {
-                    "description": "The name of the ledger account category.",
-                    "type": "string",
-                  },
-                  "normalBalance": {
-                    "anyOf": [
-                      {
-                        "enum": [
-                          "debit",
-                        ],
-                        "type": "string",
-                      },
-                      {
-                        "enum": [
-                          "credit",
-                        ],
-                        "type": "string",
-                      },
-                    ],
-                  },
-                  "updated": {
-                    "description": "Timestamp of when the ledger account category was last updated.",
-                    "type": "string",
-                  },
-                },
-                "required": [
-                  "id",
-                  "ledgerId",
-                  "name",
-                  "normalBalance",
-                  "created",
-                  "updated",
-                ],
-                "title": "LedgerAccountCategoryResponse",
-                "type": "object",
+                "$ref": "#/components/schemas/LedgerAccountCategoryResponse",
               },
               "type": "array",
             },
           },
         },
-        "description": "Default Response",
+        "description": "Success",
       },
       "400": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2898,12 +3043,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2945,12 +3099,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -2992,12 +3155,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3039,12 +3212,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3086,12 +3269,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3133,12 +3326,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3180,9 +3383,23 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "List Ledger Account Categories",
     "tags": [
       "Ledger Account Categories",
@@ -3193,31 +3410,31 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     "operationId": "unlinkLedgerAccountToCategory",
     "parameters": [
       {
-        "description": "The ledger's ID",
         "in": "path",
         "name": "ledgerId",
         "required": true,
         "schema": {
+          "description": "The ledger's ID",
           "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "categoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "The ledger account's ID",
         "in": "path",
         "name": "accountId",
         "required": true,
         "schema": {
+          "description": "The ledger account's ID",
           "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -3225,17 +3442,13 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     ],
     "responses": {
       "200": {
-        "content": {
-          "application/json": {
-            "schema": {},
-          },
-        },
-        "description": "Default Response",
+        "description": "<No Content>",
       },
       "400": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3277,12 +3490,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3324,12 +3546,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3371,12 +3602,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3418,12 +3659,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "409": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3465,12 +3716,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ConflictError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3512,12 +3773,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3559,12 +3830,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3606,9 +3887,23 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Unlink Ledger Account to Category",
     "tags": [
       "Ledger Account Categories",
@@ -3619,31 +3914,31 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     "operationId": "unlinkLedgerAccountCategoryToCategory",
     "parameters": [
       {
-        "description": "The ledger's ID",
         "in": "path",
         "name": "ledgerId",
         "required": true,
         "schema": {
+          "description": "The ledger's ID",
           "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "categoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "parentCategoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -3651,17 +3946,13 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     ],
     "responses": {
       "200": {
-        "content": {
-          "application/json": {
-            "schema": {},
-          },
-        },
-        "description": "Default Response",
+        "description": "<No Content>",
       },
       "400": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3703,12 +3994,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3750,12 +4050,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3797,12 +4106,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3844,12 +4163,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "409": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3891,12 +4220,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ConflictError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3938,12 +4277,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -3985,12 +4334,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -4032,9 +4391,23 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Unlink Ledger Account Category to Category",
     "tags": [
       "Ledger Account Categories",
@@ -4045,21 +4418,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
     "operationId": "updateLedgerAccountCategory",
     "parameters": [
       {
-        "description": "The ledger's ID",
         "in": "path",
         "name": "ledgerId",
         "required": true,
         "schema": {
+          "description": "The ledger's ID",
           "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
       },
       {
-        "description": "Unique identifier for the ledger account category.",
         "in": "path",
         "name": "categoryId",
         "required": true,
         "schema": {
+          "description": "Unique identifier for the ledger account category.",
           "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -4069,44 +4442,7 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
       "content": {
         "application/json": {
           "schema": {
-            "properties": {
-              "description": {
-                "description": "An optional free-form description for internal use.",
-                "type": "string",
-              },
-              "metadata": {
-                "additionalProperties": {
-                  "type": "string",
-                },
-                "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                "type": "object",
-              },
-              "name": {
-                "description": "The name of the ledger account category.",
-                "type": "string",
-              },
-              "normalBalance": {
-                "anyOf": [
-                  {
-                    "enum": [
-                      "debit",
-                    ],
-                    "type": "string",
-                  },
-                  {
-                    "enum": [
-                      "credit",
-                    ],
-                    "type": "string",
-                  },
-                ],
-              },
-            },
-            "required": [
-              "name",
-              "normalBalance",
-            ],
-            "type": "object",
+            "$ref": "#/components/schemas/LedgerAccountCategoryRequest",
           },
         },
       },
@@ -4117,67 +4453,7 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
-              "properties": {
-                "created": {
-                  "description": "Timestamp of when the ledger account category was created.",
-                  "type": "string",
-                },
-                "description": {
-                  "description": "An optional free-form description for internal use.",
-                  "type": "string",
-                },
-                "id": {
-                  "description": "Unique identifier for the ledger account category.",
-                  "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "ledgerId": {
-                  "description": "The ledger's ID",
-                  "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "metadata": {
-                  "additionalProperties": {
-                    "type": "string",
-                  },
-                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                  "type": "object",
-                },
-                "name": {
-                  "description": "The name of the ledger account category.",
-                  "type": "string",
-                },
-                "normalBalance": {
-                  "anyOf": [
-                    {
-                      "enum": [
-                        "debit",
-                      ],
-                      "type": "string",
-                    },
-                    {
-                      "enum": [
-                        "credit",
-                      ],
-                      "type": "string",
-                    },
-                  ],
-                },
-                "updated": {
-                  "description": "Timestamp of when the ledger account category was last updated.",
-                  "type": "string",
-                },
-              },
-              "required": [
-                "id",
-                "ledgerId",
-                "name",
-                "normalBalance",
-                "created",
-                "updated",
-              ],
-              "type": "object",
+              "$ref": "#/components/schemas/LedgerAccountCategoryResponse",
             },
           },
         },
@@ -4187,6 +4463,7 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -4228,12 +4505,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -4275,12 +4561,21 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -4322,12 +4617,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -4369,12 +4674,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "409": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -4416,12 +4731,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ConflictError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -4463,12 +4788,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -4510,12 +4845,22 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -4557,13 +4902,213 @@ exports[`LedgerAccountCategoryRoutes > documents all generated Category OpenAPI 
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Update Ledger Account Category",
     "tags": [
       "Ledger Account Categories",
     ],
+  },
+}
+`;
+
+exports[`LedgerAccountCategoryApi > locks the Category body schemas 1`] = `
+{
+  "LedgerAccountCategoryBalancesResponse": {
+    "additionalProperties": false,
+    "properties": {
+      "assets": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "assetCode": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string",
+            },
+            "assetId": {
+              "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+              "type": "string",
+            },
+            "balances": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "amount": {
+                    "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                    "maxLength": 20,
+                    "pattern": "^(0|-?[1-9][0-9]*)$",
+                    "type": "string",
+                  },
+                  "balanceType": {
+                    "enum": [
+                      "pending",
+                      "posted",
+                      "availableBalance",
+                    ],
+                    "type": "string",
+                  },
+                  "credits": {
+                    "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                    "maxLength": 20,
+                    "pattern": "^(0|-?[1-9][0-9]*)$",
+                    "type": "string",
+                  },
+                  "debits": {
+                    "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                    "maxLength": 20,
+                    "pattern": "^(0|-?[1-9][0-9]*)$",
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "balanceType",
+                  "credits",
+                  "debits",
+                  "amount",
+                ],
+                "type": "object",
+              },
+              "type": "array",
+            },
+            "minorUnitExponent": {
+              "maximum": 18,
+              "minimum": 0,
+              "type": "integer",
+            },
+          },
+          "required": [
+            "assetId",
+            "assetCode",
+            "minorUnitExponent",
+            "balances",
+          ],
+          "type": "object",
+        },
+        "type": "array",
+      },
+      "categoryId": {
+        "description": "Unique identifier for the ledger account category.",
+        "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "normalBalance": {
+        "enum": [
+          "debit",
+          "credit",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "categoryId",
+      "normalBalance",
+      "assets",
+    ],
+    "type": "object",
+  },
+  "LedgerAccountCategoryRequest": {
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "description": "An optional free-form description for internal use.",
+        "type": "string",
+      },
+      "metadata": {
+        "additionalProperties": {
+          "type": "string",
+        },
+        "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+        "type": "object",
+      },
+      "name": {
+        "description": "The name of the ledger account category.",
+        "type": "string",
+      },
+      "normalBalance": {
+        "enum": [
+          "debit",
+          "credit",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+      "normalBalance",
+    ],
+    "type": "object",
+  },
+  "LedgerAccountCategoryResponse": {
+    "additionalProperties": false,
+    "description": "A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+    "properties": {
+      "created": {
+        "description": "Timestamp of when the ledger account category was created.",
+        "type": "string",
+      },
+      "description": {
+        "description": "An optional free-form description for internal use.",
+        "type": "string",
+      },
+      "id": {
+        "description": "Unique identifier for the ledger account category.",
+        "pattern": "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "ledgerId": {
+        "description": "The ledger's ID",
+        "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "metadata": {
+        "additionalProperties": {
+          "type": "string",
+        },
+        "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+        "type": "object",
+      },
+      "name": {
+        "description": "The name of the ledger account category.",
+        "type": "string",
+      },
+      "normalBalance": {
+        "enum": [
+          "debit",
+          "credit",
+        ],
+        "type": "string",
+      },
+      "updated": {
+        "description": "Timestamp of when the ledger account category was last updated.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "id",
+      "ledgerId",
+      "name",
+      "normalBalance",
+      "created",
+      "updated",
+    ],
+    "type": "object",
   },
 }
 `;

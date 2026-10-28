@@ -9,6 +9,8 @@ import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import {
 	type LedgerAccountStatementRepo,
 	LedgerAccountStatementRepoTag,
+	type StatementReadError,
+	type StatementRepoError,
 } from "./LedgerAccountStatementRepo";
 import {
 	type LedgerAccountStatementService,
@@ -125,8 +127,8 @@ describe("LedgerAccountStatementService", () => {
 	it.each([new NotFoundError("Statement not found"), new Error("unexpected repository failure")])(
 		"preserves the repository failure %#",
 		async error => {
-			repository.getStatement.mockReturnValue(Effect.fail(error));
-			repository.createStatement.mockReturnValue(Effect.fail(error));
+			repository.getStatement.mockReturnValue(Effect.fail(error as StatementReadError));
+			repository.createStatement.mockReturnValue(Effect.fail(error as StatementRepoError));
 
 			expect(
 				await runtime.runPromise(

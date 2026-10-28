@@ -14,10 +14,6 @@ export {
 	LedgerAccountStatementRequest,
 	LedgerAccountStatementResponse,
 } from "./LedgerAccountStatementSchema";
-export type {
-	CreateLedgerAccountStatementRequest,
-	GetLedgerAccountStatementRequest,
-} from "./LedgerAccountStatementSchema";
 export type { LedgerAccountStatementService } from "./LedgerAccountStatementService";
 export { LedgerAccountStatementServiceTag } from "./LedgerAccountStatementService";
 export { ledgerAccountStatementLayer };

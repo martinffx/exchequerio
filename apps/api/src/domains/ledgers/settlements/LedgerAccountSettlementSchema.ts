@@ -1,149 +1,125 @@
+import { Effect, Schema } from "effect";
 import { AssetSummarySchema } from "@/lib/AssetSchema";
 import { PositiveAmountSchema } from "@/lib/amounts";
-import { type Static, Type } from "@sinclair/typebox";
+import { IdempotencyHeaders } from "@/lib/IdempotencySchema";
 import { ListQuery } from "@/lib/ListQuery";
-import { MetadataSchema } from "@/lib/schema";
+import { DateTimeString, MetadataSchema, OmittedWhenUndefined } from "@/lib/schema";
 import { LedgerIdSchema } from "../LedgerSchema";
 import { AccountIdSchema } from "../accounts/AccountSchema";
 
 /** Debit or credit direction used by Accounts and Entries. */
-const NormalBalance = Type.Union([Type.Literal("debit"), Type.Literal("credit")]);
+const NormalBalance = Schema.Literals(["debit", "credit"]);
 /** Persisted Settlement lifecycle states, including resumable processing. */
-const SettlementStatus = Type.Union([
-	Type.Literal("drafting"),
-	Type.Literal("processing"),
-	Type.Literal("pending"),
-	Type.Literal("posted"),
-	Type.Literal("voided"),
-]);
+const SettlementStatus = Schema.Literals(["drafting", "processing", "pending", "posted", "voided"]);
 /** Accounting statuses a Settlement transition may target. */
-const SettlementTargetStatus = Type.Union([
-	Type.Literal("pending"),
-	Type.Literal("posted"),
-	Type.Literal("voided"),
-]);
+const SettlementTargetStatus = Schema.Literals(["pending", "posted", "voided"]);
 /** Canonical Settlement TypeID wire format. */
-const LedgerAccountSettlementId = Type.String({ pattern: "^las_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
-/** Settlement identifier in an item route. */
-const LedgerAccountSettlementIdParams = Type.Object({ settlementId: LedgerAccountSettlementId });
+const LedgerAccountSettlementId = Schema.String.check(
+	Schema.isPattern(/^las_[0-7][0-9a-hjkmnp-tv-z]{25}$/)
+);
 /** Ledger scope in Settlement routes. */
-const LedgerAccountSettlementCollectionParameters = Type.Object({ ledgerId: LedgerIdSchema });
+const LedgerAccountSettlementCollectionParameters = Schema.Struct({ ledgerId: LedgerIdSchema });
+/** Ledger and Settlement identifiers in an item route. */
+const LedgerAccountSettlementIdParams = Schema.Struct({
+	ledgerId: LedgerIdSchema,
+	settlementId: LedgerAccountSettlementId,
+});
 /** Shared offset and limit validation for Settlement pages. */
 const LedgerAccountSettlementListQuery = ListQuery;
-/** ISO date-time accepted by the entity parser, excluding leap seconds. */
-const Timestamp = Type.String({ format: "date-time", pattern: "[Tt][0-9]{2}:[0-9]{2}:[0-5][0-9]" });
+/** Client action key required on every Settlement write. */
+const LedgerAccountSettlementWriteHeaders = IdempotencyHeaders;
 /** Creation payload; defaults to pending with automatic source selection. */
-const LedgerAccountSettlementRequest = Type.Object(
-	{
-		settledAccountId: AccountIdSchema,
-		contraAccountId: AccountIdSchema,
-		status: Type.Optional(
-			Type.Union([Type.Literal("drafting"), Type.Literal("pending"), Type.Literal("posted")], {
-				default: "pending",
-			})
-		),
-		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(MetadataSchema),
-		externalReference: Type.Optional(Type.String()),
-		effectiveAtUpperBound: Type.Optional(Timestamp),
-		allowEitherDirection: Type.Optional(Type.Boolean({ default: false })),
-	},
-	{ additionalProperties: false, $id: "LedgerAccountSettlementRequest" }
-);
+const LedgerAccountSettlementRequest = Schema.Struct({
+	settledAccountId: AccountIdSchema,
+	contraAccountId: AccountIdSchema,
+	status: Schema.Literals(["drafting", "pending", "posted"])
+		.annotate({ default: "pending" })
+		.pipe(Schema.withDecodingDefaultKey(Effect.succeed("pending" as const))),
+	description: Schema.optionalKey(Schema.String),
+	metadata: Schema.optionalKey(MetadataSchema),
+	externalReference: Schema.optionalKey(Schema.String),
+	effectiveAtUpperBound: Schema.optionalKey(DateTimeString),
+	allowEitherDirection: Schema.Boolean.annotate({ default: false }).pipe(
+		Schema.withDecodingDefaultKey(Effect.succeed(false))
+	),
+}).annotate({ identifier: "LedgerAccountSettlementRequest" });
 /** Editable Settlement fields and optional lifecycle target. */
-const LedgerAccountSettlementPatchRequest = Type.Object(
-	{
-		status: Type.Optional(SettlementTargetStatus),
-		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(MetadataSchema),
-	},
-	{ additionalProperties: false }
-);
+const LedgerAccountSettlementPatchRequest = Schema.Struct({
+	status: Schema.optionalKey(SettlementTargetStatus),
+	description: Schema.optionalKey(Schema.String),
+	metadata: Schema.optionalKey(MetadataSchema),
+});
+const responseTimestamp = Schema.String.annotate({ format: "date-time" });
 /** Settlement response with nullable accounting fields derived from its Transaction. */
-const LedgerAccountSettlementResponse = Type.Object(
-	{
-		id: LedgerAccountSettlementId,
-		ledgerId: LedgerIdSchema,
-		transactionId: Type.Union([
-			Type.String({ pattern: "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$" }),
-			Type.Null(),
-		]),
-		status: SettlementStatus,
-		settledAccountId: AccountIdSchema,
-		contraAccountId: AccountIdSchema,
-		amount: Type.Union([PositiveAmountSchema, Type.Null()]),
-		settlementEntryDirection: Type.Union([NormalBalance, Type.Null()]),
-		...AssetSummarySchema.properties,
-		allowEitherDirection: Type.Boolean(),
-		effectiveAtUpperBound: Type.Union([Timestamp, Type.Null()]),
-		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(MetadataSchema),
-		externalReference: Type.Optional(Type.String()),
-		created: Timestamp,
-		updated: Timestamp,
-	},
-	{ $id: "LedgerAccountSettlementResponse" }
-);
+const LedgerAccountSettlementResponse = Schema.Struct({
+	id: LedgerAccountSettlementId,
+	ledgerId: LedgerIdSchema,
+	transactionId: Schema.NullOr(
+		Schema.String.check(Schema.isPattern(/^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$/))
+	),
+	status: SettlementStatus,
+	settledAccountId: AccountIdSchema,
+	contraAccountId: AccountIdSchema,
+	amount: Schema.NullOr(PositiveAmountSchema),
+	settlementEntryDirection: Schema.NullOr(NormalBalance),
+	...AssetSummarySchema.fields,
+	allowEitherDirection: Schema.Boolean,
+	effectiveAtUpperBound: Schema.NullOr(responseTimestamp),
+	description: OmittedWhenUndefined(Schema.String),
+	metadata: OmittedWhenUndefined(MetadataSchema),
+	externalReference: OmittedWhenUndefined(Schema.String),
+	created: responseTimestamp,
+	updated: responseTimestamp,
+}).annotate({ identifier: "LedgerAccountSettlementResponse" });
+const LedgerAccountSettlementListResponse = Schema.Array(LedgerAccountSettlementResponse);
 /** One to 500 distinct source Entry IDs for a draft membership edit. */
-const LedgerAccountSettlementEntriesRequest = Type.Object(
-	{
-		entries: Type.Array(Type.String({ pattern: "^lte_[0-7][0-9a-hjkmnp-tv-z]{25}$" }), {
-			minItems: 1,
-			maxItems: 500,
-			uniqueItems: true,
-		}),
-	},
-	{ additionalProperties: false }
-);
+const LedgerAccountSettlementEntriesRequest = Schema.Struct({
+	entries: Schema.Array(
+		Schema.String.check(Schema.isPattern(/^lte_[0-7][0-9a-hjkmnp-tv-z]{25}$/))
+	).check(Schema.isMinLength(1), Schema.isMaxLength(500), Schema.isUnique()),
+});
 /** Posted source Entry representation with its Transaction effective time. */
-const LedgerAccountSettlementEntryResponse = Type.Object({
-	id: Type.String(),
-	transactionId: Type.String(),
-	effectiveAt: Timestamp,
+const LedgerAccountSettlementEntryResponse = Schema.Struct({
+	id: Schema.String,
+	transactionId: Schema.String,
+	effectiveAt: responseTimestamp,
 	accountId: AccountIdSchema,
 	direction: NormalBalance,
 	amount: PositiveAmountSchema,
-	...AssetSummarySchema.properties,
-	status: Type.Literal("posted"),
-	metadata: Type.Optional(MetadataSchema),
-	created: Timestamp,
+	...AssetSummarySchema.fields,
+	status: Schema.Literal("posted"),
+	metadata: OmittedWhenUndefined(MetadataSchema),
+	created: responseTimestamp,
 });
-/** TypeScript values validated by the LedgerAccountSettlementId schema. */
-type LedgerAccountSettlementId = Static<typeof LedgerAccountSettlementId>;
-/** TypeScript values validated by the LedgerAccountSettlementIdParams schema. */
-type LedgerAccountSettlementIdParams = Static<typeof LedgerAccountSettlementIdParams>;
-/** TypeScript values validated by the LedgerAccountSettlementCollectionParameters schema. */
-type LedgerAccountSettlementCollectionParameters = Static<
-	typeof LedgerAccountSettlementCollectionParameters
->;
-/** TypeScript values validated by the LedgerAccountSettlementListQuery schema. */
-type LedgerAccountSettlementListQuery = Static<typeof LedgerAccountSettlementListQuery>;
-/** TypeScript values validated by the LedgerAccountSettlementRequest schema. */
-type LedgerAccountSettlementRequest = Static<typeof LedgerAccountSettlementRequest>;
-/** TypeScript values validated by the LedgerAccountSettlementPatchRequest schema. */
-type LedgerAccountSettlementPatchRequest = Static<typeof LedgerAccountSettlementPatchRequest>;
-/** TypeScript values validated by the LedgerAccountSettlementResponse schema. */
-type LedgerAccountSettlementResponse = Static<typeof LedgerAccountSettlementResponse>;
-/** TypeScript values validated by the LedgerAccountSettlementEntriesRequest schema. */
-type LedgerAccountSettlementEntriesRequest = Static<typeof LedgerAccountSettlementEntriesRequest>;
-/** TypeScript values validated by the LedgerAccountSettlementEntryResponse schema. */
-type LedgerAccountSettlementEntryResponse = Static<typeof LedgerAccountSettlementEntryResponse>;
-/** TypeScript values validated by the NormalBalance schema. */
-type NormalBalance = Static<typeof NormalBalance>;
-/** TypeScript values validated by the SettlementStatus schema. */
-type SettlementStatus = Static<typeof SettlementStatus>;
-/** TypeScript values validated by the SettlementTargetStatus schema. */
-type SettlementTargetStatus = Static<typeof SettlementTargetStatus>;
+const LedgerAccountSettlementEntryListResponse = Schema.Array(LedgerAccountSettlementEntryResponse);
+
+type LedgerAccountSettlementId = typeof LedgerAccountSettlementId.Type;
+type LedgerAccountSettlementIdParams = typeof LedgerAccountSettlementIdParams.Type;
+type LedgerAccountSettlementCollectionParameters =
+	typeof LedgerAccountSettlementCollectionParameters.Type;
+type LedgerAccountSettlementListQuery = typeof LedgerAccountSettlementListQuery.Type;
+type LedgerAccountSettlementRequest = typeof LedgerAccountSettlementRequest.Type;
+type LedgerAccountSettlementPatchRequest = typeof LedgerAccountSettlementPatchRequest.Type;
+type LedgerAccountSettlementResponse = typeof LedgerAccountSettlementResponse.Type;
+type LedgerAccountSettlementEntriesRequest = typeof LedgerAccountSettlementEntriesRequest.Type;
+type LedgerAccountSettlementEntryResponse = typeof LedgerAccountSettlementEntryResponse.Type;
+type NormalBalance = typeof NormalBalance.Type;
+type SettlementStatus = typeof SettlementStatus.Type;
+type SettlementTargetStatus = typeof SettlementTargetStatus.Type;
+
 export {
 	LedgerAccountSettlementEntriesRequest,
 	LedgerAccountSettlementCollectionParameters,
+	LedgerAccountSettlementEntryListResponse,
 	LedgerAccountSettlementId,
 	LedgerAccountSettlementIdParams,
 	LedgerAccountSettlementListQuery,
+	LedgerAccountSettlementListResponse,
 	LedgerAccountSettlementRequest,
 	LedgerAccountSettlementPatchRequest,
 	LedgerAccountSettlementResponse,
 	LedgerAccountSettlementEntryResponse,
+	LedgerAccountSettlementWriteHeaders,
 	NormalBalance,
 	SettlementStatus,
 	SettlementTargetStatus,

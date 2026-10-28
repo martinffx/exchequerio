@@ -6,6 +6,8 @@ import type { LedgerAccountStatementID, OrgID } from "@/lib/ids";
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import {
 	type LedgerAccountStatementRepo,
+	type StatementReadError,
+	type StatementRepoError,
 	LedgerAccountStatementRepoTag,
 } from "./LedgerAccountStatementRepo";
 import type { LedgerAccountStatementRequest } from "./LedgerAccountStatementSchema";
@@ -16,7 +18,7 @@ class LedgerAccountStatementService {
 	getLedgerAccountStatement(
 		id: string,
 		orgId: OrgID
-	): Effect.Effect<LedgerAccountStatement, unknown> {
+	): Effect.Effect<LedgerAccountStatement, StatementReadError> {
 		return Effect.sync(() => TypeID.fromString<"lst">(id) as LedgerAccountStatementID).pipe(
 			Effect.flatMap(statementId => this.repository.getStatement(statementId, orgId))
 		);
@@ -25,7 +27,7 @@ class LedgerAccountStatementService {
 	createLedgerAccountStatement(
 		request: LedgerAccountStatementRequest,
 		orgId: OrgID
-	): Effect.Effect<LedgerAccountStatement, unknown> {
+	): Effect.Effect<LedgerAccountStatement, StatementRepoError> {
 		return this.repository
 			.getAccountAsset(orgId, request.accountId, request.ledgerId)
 			.pipe(

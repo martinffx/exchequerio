@@ -37,8 +37,28 @@ import { AssetRoutes } from "@/domains/assets/AssetRoutes";
 import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
 import { AccountRoutes } from "@/domains/ledgers/accounts/AccountRoutes";
 import { AccountServiceTag, type AccountService } from "@/domains/ledgers/accounts/AccountService";
+import { LedgerAccountCategoryRoutes } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes";
+import {
+	LedgerAccountCategoryServiceTag,
+	type LedgerAccountCategoryService,
+} from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryService";
+import { LedgerAccountStatementRoutes } from "@/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes";
+import {
+	LedgerAccountStatementServiceTag,
+	type LedgerAccountStatementService,
+} from "@/domains/ledgers/accounts/statements/LedgerAccountStatementService";
+import { LedgerAccountBalanceMonitorRoutes } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes";
+import {
+	LedgerAccountBalanceMonitorServiceTag,
+	type LedgerAccountBalanceMonitorService,
+} from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService";
 import { LedgerRoutes } from "@/domains/ledgers/LedgerRoutes";
 import { LedgerServiceTag, type LedgerService } from "@/domains/ledgers/LedgerService";
+import { SettlementRoutes } from "@/domains/ledgers/settlements/LedgerAccountSettlementRoutes";
+import {
+	LedgerAccountSettlementServiceTag,
+	type LedgerAccountSettlementService,
+} from "@/domains/ledgers/settlements/LedgerAccountSettlementService";
 import { TransactionRoutes } from "@/domains/ledgers/transactions/LedgerTransactionRoutes";
 import {
 	TransactionServiceTag,
@@ -47,34 +67,8 @@ import {
 import { OrganizationRoutes } from "@/domains/organizations/OrganizationRoutes";
 import { OrganizationServiceTag, type OrganizationService } from "@/domains/organizations";
 
-const LedgerRouterPlugin: FastifyPluginAsync = async server => {
-	// Legacy Fastify routes load lazily: unported groups cannot be imported alongside the Effect app (removed in T16).
-	const { LedgerAccountCategoryRoutes } =
-		await import("@/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes");
-	await server.register(LedgerAccountCategoryRoutes, {
-		prefix: "/:ledgerId/accounts/categories",
-	});
-	const { LedgerAccountSettlementRoutes } =
-		await import("@/domains/ledgers/settlements/LedgerAccountSettlementRoutes");
-	await server.register(LedgerAccountSettlementRoutes, {
-		prefix: "/:ledgerId/settlements",
-	});
-	const { LedgerAccountStatementRoutes } =
-		await import("@/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes");
-	await server.register(LedgerAccountStatementRoutes, {
-		prefix: "/:ledgerId/accounts/:accountId/statements",
-	});
-	const { LedgerAccountBalanceMonitorRoutes } =
-		await import("@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes");
-	await server.register(LedgerAccountBalanceMonitorRoutes, {
-		prefix: "/:ledgerId/accounts/:accountId/balance-monitors",
-	});
-};
-
 const RouterPlugin: FastifyPluginAsync = async server => {
 	server.addHook("preHandler", server.auth([server.verifyJWT]));
-
-	await server.register(LedgerRouterPlugin, { prefix: "/ledgers" });
 };
 
 type ServerOpts = {
@@ -201,7 +195,11 @@ const handlerLayers = Layer.mergeAll(
 	LedgerRoutes,
 	AssetRoutes,
 	AccountRoutes,
-	TransactionRoutes
+	TransactionRoutes,
+	SettlementRoutes,
+	LedgerAccountCategoryRoutes,
+	LedgerAccountStatementRoutes,
+	LedgerAccountBalanceMonitorRoutes
 );
 
 const problemResponse = (error: HttpError) =>
@@ -355,6 +353,10 @@ type TestStubs = {
 	readonly asset?: AssetService;
 	readonly account?: AccountService;
 	readonly transaction?: TransactionService;
+	readonly settlement?: LedgerAccountSettlementService;
+	readonly category?: LedgerAccountCategoryService;
+	readonly statement?: LedgerAccountStatementService;
+	readonly balanceMonitor?: LedgerAccountBalanceMonitorService;
 };
 
 /** A service whose every method dies, so a route test fails loudly if it reaches an unstubbed service. */
@@ -371,6 +373,10 @@ type TestServiceLayers = {
 	readonly asset?: Layer.Layer<AssetService> | undefined;
 	readonly account?: Layer.Layer<AccountService> | undefined;
 	readonly transaction?: Layer.Layer<TransactionService> | undefined;
+	readonly settlement?: Layer.Layer<LedgerAccountSettlementService> | undefined;
+	readonly category?: Layer.Layer<LedgerAccountCategoryService> | undefined;
+	readonly statement?: Layer.Layer<LedgerAccountStatementService> | undefined;
+	readonly balanceMonitor?: Layer.Layer<LedgerAccountBalanceMonitorService> | undefined;
 };
 
 /**
@@ -387,7 +393,27 @@ const testServicesLayer = (overrides: TestServiceLayers = {}) =>
 		overrides.account ??
 			Layer.succeed(AccountServiceTag, dieIfCalled<AccountService>("AccountService")),
 		overrides.transaction ??
-			Layer.succeed(TransactionServiceTag, dieIfCalled<TransactionService>("TransactionService"))
+			Layer.succeed(TransactionServiceTag, dieIfCalled<TransactionService>("TransactionService")),
+		overrides.settlement ??
+			Layer.succeed(
+				LedgerAccountSettlementServiceTag,
+				dieIfCalled<LedgerAccountSettlementService>("LedgerAccountSettlementService")
+			),
+		overrides.category ??
+			Layer.succeed(
+				LedgerAccountCategoryServiceTag,
+				dieIfCalled<LedgerAccountCategoryService>("LedgerAccountCategoryService")
+			),
+		overrides.statement ??
+			Layer.succeed(
+				LedgerAccountStatementServiceTag,
+				dieIfCalled<LedgerAccountStatementService>("LedgerAccountStatementService")
+			),
+		overrides.balanceMonitor ??
+			Layer.succeed(
+				LedgerAccountBalanceMonitorServiceTag,
+				dieIfCalled<LedgerAccountBalanceMonitorService>("LedgerAccountBalanceMonitorService")
+			)
 	);
 
 /** Serves the HTTP app over a web `Request`/`Response` handler with stubbed services and no sockets. */
@@ -409,6 +435,22 @@ const makeTestWebHandler = (
 			stubs.transaction === undefined
 				? undefined
 				: Layer.succeed(TransactionServiceTag, stubs.transaction),
+		settlement:
+			stubs.settlement === undefined
+				? undefined
+				: Layer.succeed(LedgerAccountSettlementServiceTag, stubs.settlement),
+		category:
+			stubs.category === undefined
+				? undefined
+				: Layer.succeed(LedgerAccountCategoryServiceTag, stubs.category),
+		statement:
+			stubs.statement === undefined
+				? undefined
+				: Layer.succeed(LedgerAccountStatementServiceTag, stubs.statement),
+		balanceMonitor:
+			stubs.balanceMonitor === undefined
+				? undefined
+				: Layer.succeed(LedgerAccountBalanceMonitorServiceTag, stubs.balanceMonitor),
 	});
 	return HttpRouter.toWebHandler(Layer.provideMerge(appLayer.pipe(Layer.provide(services)), extra), {
 		disableLogger: true,

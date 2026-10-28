@@ -1,8 +1,12 @@
 import { Effect } from "effect";
 import { HttpApi, HttpApiMiddleware, OpenApi, type HttpApiError } from "effect/unstable/httpapi";
 import { Authentication } from "@/auth";
+import { CategoriesApi } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryApi";
 import { AccountsApi } from "@/domains/ledgers/accounts/AccountApi";
+import { BalanceMonitorsApi } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorApi";
+import { StatementsApi } from "@/domains/ledgers/accounts/statements/LedgerAccountStatementApi";
 import { AssetsApi } from "@/domains/assets/AssetApi";
+import { SettlementsApi } from "@/domains/ledgers/settlements/LedgerAccountSettlementApi";
 import { TransactionsApi } from "@/domains/ledgers/transactions/LedgerTransactionApi";
 import { LedgersApi } from "@/domains/ledgers/LedgerApi";
 import { OrganizationApi } from "@/domains/organizations/OrganizationApi";
@@ -51,7 +55,17 @@ const SchemaErrorTransformLayer = HttpApiMiddleware.layerSchemaErrorTransform(
 // SchemaErrorTransform is added last so it wraps Authentication and every handler: auth runs first,
 // then request decoding.
 class LedgerApi extends HttpApi.make("ledger")
-	.add(OrganizationApi, AssetsApi, LedgersApi, AccountsApi, TransactionsApi)
+	.add(
+		OrganizationApi,
+		AssetsApi,
+		LedgersApi,
+		AccountsApi,
+		CategoriesApi,
+		TransactionsApi,
+		SettlementsApi,
+		StatementsApi,
+		BalanceMonitorsApi
+	)
 	.prefix("/api")
 	.middleware(Authentication)
 	.middleware(SchemaErrorTransform)

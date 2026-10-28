@@ -43,9 +43,20 @@ const scope = (organizationId: OrgID, ledgerId: LedgerID, id: LedgerAccountSettl
 		eq(Settlements.ledgerId, encodeUuid(ledgerId)),
 		eq(Settlements.id, encodeUuid(id))
 	);
+/** Concrete problems a Settlement repository call may fail with; the HttpApi group declares each. */
+type SettlementRepoError =
+	| BadRequestError
+	| ConflictError
+	| InternalServerError
+	| NotFoundError
+	| ServiceUnavailableError;
+/** Read failures; reads take no locks, so they cannot conflict. */
+type SettlementReadError = Exclude<SettlementRepoError, ConflictError>;
+/** Page failures; listing is scoped by the Ledger identifier alone and never reports a missing row. */
+type SettlementListError = Exclude<SettlementReadError, NotFoundError>;
 /** Preserves HTTP failures and translates PostgreSQL failures at the repository boundary. */
-const mapError = (cause: unknown): HttpError => {
-	if (cause instanceof HttpError) return cause;
+const mapError = (cause: unknown): SettlementRepoError => {
+	if (cause instanceof HttpError) return cause as SettlementRepoError;
 	const code = postgresErrorCode(cause);
 	if (code === "23503")
 		return new NotFoundError("Referenced Ledger or Account not found", { cause });
@@ -85,7 +96,7 @@ class LedgerAccountSettlementRepoLive {
 		ledgerId: LedgerID,
 		id: LedgerAccountSettlementID,
 		lock = false
-	): Effect.Effect<LedgerAccountSettlementEntity, HttpError> {
+	): Effect.Effect<LedgerAccountSettlementEntity, SettlementRepoError> {
 		return Effect.gen(function* () {
 			const query = db
 				.select()
@@ -128,8 +139,15 @@ class LedgerAccountSettlementRepoLive {
 	 * @param id - Settlement identifier.
 	 * @returns An Effect containing the Settlement, or a missing-row/persistence failure.
 	 */
-	getSettlement(organizationId: OrgID, ledgerId: LedgerID, id: LedgerAccountSettlementID) {
-		return this.read(this.db, organizationId, ledgerId, id);
+	getSettlement(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		id: LedgerAccountSettlementID
+	): Effect.Effect<LedgerAccountSettlementEntity, SettlementReadError> {
+		return this.read(this.db, organizationId, ledgerId, id) as Effect.Effect<
+			LedgerAccountSettlementEntity,
+			SettlementReadError
+		>;
 	}
 	/**
 	 * Lists scoped Settlements with accounting in descending creation and ID order.
@@ -140,7 +158,12 @@ class LedgerAccountSettlementRepoLive {
 	 * @param limit - Maximum rows to return.
 	 * @returns An Effect containing the decoded page, or a persistence failure.
 	 */
-	listSettlements(organizationId: OrgID, ledgerId: LedgerID, offset: number, limit: number) {
+	listSettlements(
+		organizationId: OrgID,
+		ledgerId: LedgerID,
+		offset: number,
+		limit: number
+	): Effect.Effect<LedgerAccountSettlementEntity[], SettlementListError> {
 		return this.db.query.LedgerAccountSettlementsTable.findMany({
 			where: { organizationId: encodeUuid(organizationId), ledgerId: encodeUuid(ledgerId) },
 			orderBy: { created: "desc", id: "desc" },
@@ -173,7 +196,7 @@ class LedgerAccountSettlementRepoLive {
 					})
 				)
 			),
-			Effect.mapError(mapError)
+			Effect.mapError(mapError as (cause: unknown) => SettlementListError)
 		);
 	}
 	/**
@@ -291,7 +314,7 @@ class LedgerAccountSettlementRepoLive {
 		settlement: LedgerAccountSettlementEntity,
 		target: SettlementTargetStatus,
 		now: DateTime
-	): Effect.Effect<LedgerAccountSettlementEntity, HttpError> {
+	): Effect.Effect<LedgerAccountSettlementEntity, SettlementRepoError> {
 		return Effect.gen({ self: this }, function* () {
 			if (settlement.status === target) return settlement;
 			if (settlement.status === "processing") {
@@ -566,7 +589,7 @@ class LedgerAccountSettlementRepoLive {
 		id: LedgerAccountSettlementID,
 		offset: number,
 		limit: number
-	): Effect.Effect<LedgerAccountSettlementEntryResponse[], HttpError> {
+	): Effect.Effect<LedgerAccountSettlementEntryResponse[], SettlementReadError> {
 		return Effect.gen({ self: this }, function* () {
 			const settlement = yield* this.getSettlement(org, ledger, id);
 			const rows = yield* this.sources(this.db, settlement).offset(offset).limit(limit);
@@ -588,7 +611,7 @@ class LedgerAccountSettlementRepoLive {
 					}))
 				)
 			);
-		}).pipe(Effect.mapError(mapError));
+		}).pipe(Effect.mapError(mapError as (cause: unknown) => SettlementReadError));
 	}
 }
 /** Public Settlement persistence operations, excluding connection-level helpers. */

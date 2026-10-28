@@ -1,101 +1,31 @@
-import { Effect, Result } from "effect";
-import type { FastifyPluginAsync } from "fastify";
-
-import {
-	BadRequestErrorResponse,
-	ConflictErrorResponse,
-	ForbiddenErrorResponse,
-	InternalServerErrorResponse,
-	NotFoundErrorResponse,
-	ServiceUnavailableErrorResponse,
-	TooManyRequestsErrorResponse,
-	UnauthorizedErrorResponse,
-} from "@/lib/errors";
-
-import {
-	type CreateLedgerAccountStatementRequest,
-	type GetLedgerAccountStatementRequest,
-	LedgerAccountStatementIdParameters,
-	LedgerAccountStatementRequest,
-	LedgerAccountStatementResponse,
-} from "./LedgerAccountStatementSchema";
+import { Effect } from "effect";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { LedgerApi } from "@/api";
+import { CurrentToken, requirePermissions } from "@/auth";
 import { LedgerAccountStatementServiceTag } from "./LedgerAccountStatementService";
 
-const TAGS = ["Ledger Account Statements"];
-
-const LedgerAccountStatementRoutes: FastifyPluginAsync = async server => {
-	server.get<{ Params: LedgerAccountStatementIdParameters }>(
-		"/:statementId",
-		{
-			schema: {
-				operationId: "getLedgerAccountStatement",
-				tags: TAGS,
-				summary: "Get Ledger Account Statement",
-				description: "Get Ledger Account Statement",
-				params: LedgerAccountStatementIdParameters,
-				response: {
-					200: LedgerAccountStatementResponse,
-					400: BadRequestErrorResponse,
-					401: UnauthorizedErrorResponse,
-					403: ForbiddenErrorResponse,
-					404: NotFoundErrorResponse,
-					429: TooManyRequestsErrorResponse,
-					500: InternalServerErrorResponse,
-					503: ServiceUnavailableErrorResponse,
-				},
-			},
-			preHandler: server.hasPermissions(["ledger:account:statement:read"]),
-		},
-		async (request: GetLedgerAccountStatementRequest) => {
-			const effect = LedgerAccountStatementServiceTag.use(service =>
-				service.getLedgerAccountStatement(request.params.statementId, request.token.orgId)
+/** Statement routes; the path ledgerId/accountId are ignored, the create body carries them. */
+const LedgerAccountStatementRoutes = HttpApiBuilder.group(LedgerApi, "statements", handlers =>
+	Effect.gen(function* () {
+		const service = yield* LedgerAccountStatementServiceTag;
+		return handlers
+			.handle("get", ({ params }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["ledger:account:statement:read"]);
+					const token = yield* CurrentToken;
+					const statement = yield* service.getLedgerAccountStatement(params.statementId, token.orgId);
+					return statement.toResponse();
+				})
+			)
+			.handle("create", ({ payload }) =>
+				Effect.gen(function* () {
+					yield* requirePermissions(["ledger:account:statement:write"]);
+					const token = yield* CurrentToken;
+					const statement = yield* service.createLedgerAccountStatement(payload, token.orgId);
+					return statement.toResponse();
+				})
 			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: statement => statement.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.post<{ Body: LedgerAccountStatementRequest }>(
-		"/",
-		{
-			schema: {
-				operationId: "createLedgerAccountStatement",
-				tags: TAGS,
-				summary: "Create Ledger Account Statement",
-				description: "Create Ledger Account Statement",
-				body: LedgerAccountStatementRequest,
-				response: {
-					200: LedgerAccountStatementResponse,
-					400: BadRequestErrorResponse,
-					401: UnauthorizedErrorResponse,
-					403: ForbiddenErrorResponse,
-					404: NotFoundErrorResponse,
-					409: ConflictErrorResponse,
-					429: TooManyRequestsErrorResponse,
-					500: InternalServerErrorResponse,
-					503: ServiceUnavailableErrorResponse,
-				},
-			},
-			preHandler: server.hasPermissions(["ledger:account:statement:write"]),
-		},
-		async (request: CreateLedgerAccountStatementRequest) => {
-			const effect = LedgerAccountStatementServiceTag.use(service =>
-				service.createLedgerAccountStatement(request.body, request.token.orgId)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: statement => statement.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-};
+	})
+);
 
 export { LedgerAccountStatementRoutes };

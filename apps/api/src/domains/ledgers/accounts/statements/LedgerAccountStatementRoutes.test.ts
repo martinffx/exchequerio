@@ -1,20 +1,14 @@
-import { Config } from "@/config";
-import fastifySwagger from "@fastify/swagger";
-import { Effect, Layer } from "effect";
-import fastify, { type FastifyInstance } from "fastify";
+import { Effect } from "effect";
+import { OpenApi } from "effect/unstable/httpapi";
 import { TypeID } from "typeid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { LedgerApi } from "@/api";
 import { signJWT } from "@/auth";
-import { ConflictError, globalErrorHandler, NotFoundError } from "@/lib/errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID, OrgID } from "@/lib/ids";
-import { ServerRuntime, ServerConfigTag, type ServerRuntimeLayer } from "@/runtime";
-import { buildServer } from "@/server";
-
+import { makeTestWebHandler } from "@/server";
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
-import { LedgerAccountStatementRoutes } from "./LedgerAccountStatementRoutes";
 import type { LedgerAccountStatementService } from "./LedgerAccountStatementService";
-import { LedgerAccountStatementServiceTag } from "./LedgerAccountStatementService";
 
 const ledgerId = TypeID.fromString<"lgr">("lgr_01h2x3y4z5a6b7c8d9e0f1g2h4") as LedgerID;
 const pathAccountId = TypeID.fromString<"lat">("lat_01h2x3y4z5a6b7c8d9e0f1g2h6") as LedgerAccountID;
@@ -47,155 +41,134 @@ const service = (): LedgerAccountStatementService =>
 		createLedgerAccountStatement: vi.fn(() => Effect.succeed(statement)),
 	} as unknown as LedgerAccountStatementService);
 
-const servers: FastifyInstance[] = [];
-
-const buildRouteServer = async (implementation: LedgerAccountStatementService) => {
-	const server = fastify();
-	const hasPermissions = vi.fn(() => async () => undefined);
-	server.setErrorHandler(globalErrorHandler);
-	server.addHook("onRequest", async request => {
-		request.token = { orgId } as typeof request.token;
-	});
-	const runtime = new ServerRuntime(Layer.succeed(LedgerAccountStatementServiceTag, implementation));
-	server.decorate("runtime", runtime as never);
-	server.decorate("hasPermissions", hasPermissions);
-	await server.register(fastifySwagger, {
-		openapi: { info: { title: "Statement route test", version: "1" } },
-	});
-	await server.register(LedgerAccountStatementRoutes, {
-		prefix: "/api/ledgers/:ledgerId/accounts/:accountId/statements",
-	});
-	await server.ready();
-	servers.push(server);
-	return { server, runtime, hasPermissions };
+const disposers: Array<() => Promise<void>> = [];
+const build = (implementation: LedgerAccountStatementService) => {
+	const { handler, dispose } = makeTestWebHandler({ statement: implementation });
+	disposers.push(dispose);
+	return handler;
 };
-
 afterEach(async () => {
-	for (const server of servers.splice(0)) await server.close();
+	for (const dispose of disposers.splice(0)) await dispose();
 });
 
-describe("LedgerAccountStatementRoutes", () => {
-	it("preserves the existing permission declarations", async () => {
-		const { hasPermissions } = await buildRouteServer(service());
-
-		expect(hasPermissions.mock.calls).toEqual([
-			[["ledger:account:statement:read"]],
-			[["ledger:account:statement:write"]],
-		]);
+const tokenWith = (scope: Parameters<typeof signJWT>[0]["scope"]) =>
+	signJWT({ sub: orgId.toString(), scope });
+const request = (
+	method: string,
+	path: string,
+	options: { token?: string; anonymous?: boolean; body?: unknown } = {}
+) => {
+	const token = options.anonymous === true ? undefined : (options.token ?? tokenWith(["org_admin"]));
+	return new Request(`http://localhost${path}`, {
+		method,
+		headers: {
+			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+			...(options.body === undefined ? {} : { "content-type": "application/json" }),
+		},
+		body: options.body === undefined ? undefined : JSON.stringify(options.body),
 	});
+};
 
-	it("gets by statement ID alone through one Effect runtime crossing", async () => {
+const base = `/api/ledgers/${ledgerId.toString()}/accounts/${pathAccountId.toString()}/statements`;
+const resource = `${base}/${statementId.toString()}`;
+const payload = {
+	ledgerId: ledgerId.toString(),
+	accountId: bodyAccountId.toString(),
+	description: "Test statement",
+	startDatetime: fixedDate.toISOString(),
+	endDatetime: "2025-02-01T00:00:00.000Z",
+};
+const routes: Array<[string, string, string, unknown]> = [
+	["GET", resource, "ledger:account:statement:read", undefined],
+	["POST", base, "ledger:account:statement:write", payload],
+];
+
+describe("Statement routes", () => {
+	it("gets by statement ID alone and ignores the enclosing path IDs", async () => {
 		const implementation = service();
-		const { server, runtime } = await buildRouteServer(implementation);
-		const runPromise = vi.spyOn(runtime, "runPromise");
-
-		const response = await server.inject({
-			method: "GET",
-			url: `/api/ledgers/${new TypeID("lgr").toString()}/accounts/${pathAccountId.toString()}/statements/${statementId.toString()}`,
-		});
-
-		expect(response.statusCode).toBe(200);
-		expect(response.json()).toEqual(statement.toResponse());
+		const unrelated = `/api/ledgers/${new TypeID("lgr").toString()}/accounts/not-an-id/statements/${statementId.toString()}`;
+		const response = await build(implementation)(request("GET", unrelated));
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual(statement.toResponse());
 		expect(implementation.getLedgerAccountStatement).toHaveBeenCalledWith(
 			statementId.toString(),
 			orgId
 		);
-		expect(runPromise).toHaveBeenCalledOnce();
 	});
 
-	it("creates from the body and ignores the enclosing path IDs", async () => {
+	it("creates from the body with 200, no Location, and ignores the path IDs", async () => {
 		const implementation = service();
-		const { server, runtime } = await buildRouteServer(implementation);
-		const runPromise = vi.spyOn(runtime, "runPromise");
-		const request = {
-			ledgerId: ledgerId.toString(),
-			accountId: bodyAccountId.toString(),
-			description: "Test statement",
-			startDatetime: fixedDate.toISOString(),
-			endDatetime: "2025-02-01T00:00:00.000Z",
-		};
+		const response = await build(implementation)(
+			request("POST", `/api/ledgers/${new TypeID("lgr").toString()}/accounts/other/statements`, {
+				body: payload,
+			})
+		);
+		expect(response.status).toBe(200);
+		expect(response.headers.get("location")).toBeNull();
+		expect(await response.json()).toEqual(statement.toResponse());
+		expect(implementation.createLedgerAccountStatement).toHaveBeenCalledWith(payload, orgId);
+	});
 
-		const response = await server.inject({
-			method: "POST",
-			url: `/api/ledgers/${new TypeID("lgr").toString()}/accounts/${pathAccountId.toString()}/statements`,
-			payload: request,
-		});
-
-		expect(response.statusCode).toBe(200);
-		expect(response.json()).toEqual(statement.toResponse());
-		expect(implementation.createLedgerAccountStatement).toHaveBeenCalledWith(request, orgId);
-		expect(runPromise).toHaveBeenCalledOnce();
+	it("accepts the collection path with a trailing slash", async () => {
+		const response = await build(service())(request("POST", `${base}/`, { body: payload }));
+		expect(response.status).toBe(200);
 	});
 
 	it("preserves metadata key-value pairs on the wire", async () => {
 		const implementation = service();
-		vi.mocked(implementation.getLedgerAccountStatement).mockReturnValue(
-			Effect.succeed(
-				new LedgerAccountStatement({
-					...statement,
-					metadata: { period: "monthly" },
-				})
-			)
+		vi
+			.mocked(implementation.getLedgerAccountStatement)
+			.mockReturnValue(
+				Effect.succeed(new LedgerAccountStatement({ ...statement, metadata: { period: "monthly" } }))
+			);
+		const response = await build(implementation)(request("GET", resource));
+		const json = (await response.json()) as { metadata?: Record<string, string> };
+		expect(json.metadata).toEqual({ period: "monthly" });
+	});
+
+	it("omits description and metadata when the statement has none", async () => {
+		const response = await build(service())(request("GET", resource));
+		const json = (await response.json()) as Record<string, unknown>;
+		expect(json).not.toHaveProperty("description");
+		expect(json).not.toHaveProperty("metadata");
+	});
+
+	it("requires authentication", async () => {
+		const implementation = service();
+		const response = await build(implementation)(request("GET", resource, { anonymous: true }));
+		expect(response.status).toBe(401);
+		expect(await response.json()).toMatchObject({ type: "UNAUTHORIZED", detail: "Invalid token" });
+		expect(implementation.getLedgerAccountStatement).not.toHaveBeenCalled();
+	});
+
+	it("rejects readonly writes", async () => {
+		const implementation = service();
+		const response = await build(implementation)(
+			request("POST", base, { token: tokenWith(["org_readonly"]), body: payload })
 		);
-		const { server } = await buildRouteServer(implementation);
-
-		const response = await server.inject({
-			method: "GET",
-			url: `/api/ledgers/${ledgerId.toString()}/accounts/${pathAccountId.toString()}/statements/${statementId.toString()}`,
-		});
-
-		expect(response.statusCode).toBe(200);
-		expect(response.json<{ metadata?: Record<string, string> }>().metadata).toEqual({
-			period: "monthly",
-		});
+		expect(response.status).toBe(403);
+		expect(implementation.createLedgerAccountStatement).not.toHaveBeenCalled();
 	});
 
-	it("registers the production GET route behind authentication", async () => {
-		const server = await buildServer({
-			runtimeLayer: Layer.merge(
-				Layer.succeed(ServerConfigTag, new Config()),
-				Layer.succeed(LedgerAccountStatementServiceTag, service())
-			) as ServerRuntimeLayer,
-		});
-		servers.push(server);
-
-		const response = await server.inject({
-			method: "GET",
-			url: `/api/ledgers/${ledgerId.toString()}/accounts/${pathAccountId.toString()}/statements/${statementId.toString()}`,
-		});
-
-		expect(response.statusCode).toBe(401);
+	it("rejects an invalid statement ID with a BAD_REQUEST problem", async () => {
+		const implementation = service();
+		const response = await build(implementation)(request("GET", `${base}/invalid`));
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ type: "BAD_REQUEST", status: 400 });
+		expect(implementation.getLedgerAccountStatement).not.toHaveBeenCalled();
 	});
 
-	it("registers the production POST route with write permission", async () => {
-		const server = await buildServer({
-			runtimeLayer: Layer.merge(
-				Layer.succeed(ServerConfigTag, new Config()),
-				Layer.succeed(LedgerAccountStatementServiceTag, service())
-			) as ServerRuntimeLayer,
-		});
-		servers.push(server);
-		const tokenReadOnly = signJWT({
-			sub: orgId.toString(),
-			scope: ["org_readonly"],
-		});
-
-		const response = await server.inject({
-			method: "POST",
-			headers: { Authorization: `Bearer ${tokenReadOnly}` },
-			url: `/api/ledgers/${ledgerId.toString()}/accounts/${pathAccountId.toString()}/statements`,
-			payload: {
-				ledgerId: ledgerId.toString(),
-				accountId: bodyAccountId.toString(),
-				startDatetime: fixedDate.toISOString(),
-				endDatetime: "2025-02-01T00:00:00.000Z",
-			},
-		});
-
-		expect(response.statusCode).toBe(403);
+	it("rejects an invalid body with a BAD_REQUEST problem", async () => {
+		const implementation = service();
+		const response = await build(implementation)(
+			request("POST", base, { body: { ...payload, accountId: "nope" } })
+		);
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ type: "BAD_REQUEST" });
+		expect(implementation.createLedgerAccountStatement).not.toHaveBeenCalled();
 	});
 
-	it("keeps validation and typed failure responses", async () => {
+	it("translates typed failures", async () => {
 		const implementation = service();
 		vi
 			.mocked(implementation.getLedgerAccountStatement)
@@ -203,95 +176,144 @@ describe("LedgerAccountStatementRoutes", () => {
 		vi
 			.mocked(implementation.createLedgerAccountStatement)
 			.mockReturnValue(Effect.fail(new ConflictError("Statement already exists")));
-		const { server } = await buildRouteServer(implementation);
-		const prefix = `/api/ledgers/${ledgerId.toString()}/accounts/${pathAccountId.toString()}/statements`;
-
-		const invalid = await server.inject({ method: "GET", url: `${prefix}/invalid` });
-		const missing = await server.inject({
-			method: "GET",
-			url: `${prefix}/${statementId.toString()}`,
+		const handler = build(implementation);
+		const missing = await handler(request("GET", resource));
+		const conflict = await handler(request("POST", base, { body: payload }));
+		expect(missing.status).toBe(404);
+		expect(await missing.json()).toMatchObject({ type: "NOT_FOUND", detail: "Statement not found" });
+		expect(conflict.status).toBe(409);
+		expect(await conflict.json()).toMatchObject({
+			type: "CONFLICT",
+			detail: "Statement already exists",
 		});
-		const conflict = await server.inject({
-			method: "POST",
-			url: prefix,
-			payload: {
-				ledgerId: ledgerId.toString(),
-				accountId: bodyAccountId.toString(),
-				startDatetime: fixedDate.toISOString(),
-				endDatetime: fixedDate.toISOString(),
-			},
-		});
-
-		expect(invalid.statusCode).toBe(400);
-		expect(missing.statusCode).toBe(404);
-		expect(conflict.statusCode).toBe(409);
 	});
 
 	it("sanitizes unexpected service failures", async () => {
 		const implementation = service();
 		vi
 			.mocked(implementation.getLedgerAccountStatement)
-			.mockReturnValue(Effect.fail(new Error("database details")));
-		const { server } = await buildRouteServer(implementation);
-
-		const response = await server.inject({
-			method: "GET",
-			url: `/api/ledgers/${ledgerId.toString()}/accounts/${pathAccountId.toString()}/statements/${statementId.toString()}`,
-		});
-
-		expect(response.statusCode).toBe(500);
-		expect(response.json()).toMatchObject({
+			.mockReturnValue(Effect.fail(new Error("database details")) as never);
+		const response = await build(implementation)(request("GET", resource));
+		expect(response.status).toBe(500);
+		expect(await response.json()).toMatchObject({
 			type: "INTERNAL_SERVER_ERROR",
 			status: 500,
 			detail: "Internal Server Error",
 		});
-		expect(response.body).not.toContain("database details");
 	});
 
-	it("preserves the existing OpenAPI operations and response sets", async () => {
-		const { server } = await buildRouteServer(service());
-		const specification = server.swagger();
-		const paths = specification.paths;
-		const path = paths?.["/api/ledgers/{ledgerId}/accounts/{accountId}/statements/{statementId}"];
-		const collection = paths?.["/api/ledgers/{ledgerId}/accounts/{accountId}/statements/"];
-
-		expect({
-			get: path?.get,
-			post: collection?.post,
-		}).toMatchSnapshot();
-
-		expect(path?.get).toMatchObject({
-			operationId: "getLedgerAccountStatement",
-			tags: ["Ledger Account Statements"],
-			summary: "Get Ledger Account Statement",
-			description: "Get Ledger Account Statement",
+	it("renders a bad statement ID defect as a sanitized 500", async () => {
+		// The service parses the ID inside Effect.sync, so a parse failure is a defect.
+		const implementation = service();
+		vi
+			.mocked(implementation.getLedgerAccountStatement)
+			.mockReturnValue(Effect.die(new Error("Invalid TypeID: secret detail")));
+		const response = await build(implementation)(request("GET", resource));
+		expect(response.status).toBe(500);
+		const text = await response.text();
+		expect(JSON.parse(text)).toMatchObject({
+			type: "INTERNAL_SERVER_ERROR",
+			detail: "Internal Server Error",
 		});
-		expect(Object.keys(path?.get?.responses ?? {})).toEqual([
-			"200",
-			"400",
-			"401",
-			"403",
-			"404",
-			"429",
-			"500",
-			"503",
-		]);
-		expect(collection?.post).toMatchObject({
-			operationId: "createLedgerAccountStatement",
-			tags: ["Ledger Account Statements"],
-			summary: "Create Ledger Account Statement",
-			description: "Create Ledger Account Statement",
+		expect(text).not.toContain("secret detail");
+	});
+
+	describe("authorization", () => {
+		it.each(routes)(
+			"returns 403 on %s %s for a token without scope",
+			async (method, path, permission, body) => {
+				const implementation = service();
+				const response = await build(implementation)(
+					request(method, path, { token: tokenWith([]), body })
+				);
+				expect(response.status).toBe(403);
+				expect(await response.json()).toMatchObject({
+					type: "FORBIDDEN",
+					detail: `One of: ${permission}; permissions is required`,
+				});
+				for (const method of Object.values(implementation)) expect(method).not.toHaveBeenCalled();
+			}
+		);
+	});
+
+	describe("OpenAPI", () => {
+		type Operation = { operationId: string; tags?: string[]; responses: Record<string, object> };
+		const spec = OpenApi.fromApi(LedgerApi);
+		const groupOperationIds = ["getLedgerAccountStatement", "createLedgerAccountStatement"];
+		const operations = Object.values(spec.paths)
+			.flatMap(path => Object.values(path ?? {}) as Operation[])
+			.filter(operation => groupOperationIds.includes(operation.operationId));
+		const byId = (id: string) => operations.find(operation => operation.operationId === id);
+
+		it("preserves the existing OpenAPI operations and response sets", () => {
+			const prefix = "/api/ledgers/{ledgerId}/accounts/{accountId}/statements";
+			expect({
+				get: spec.paths[`${prefix}/{statementId}`]?.get,
+				post: spec.paths[`${prefix}/`]?.post,
+				LedgerAccountStatementRequest: spec.components.schemas.LedgerAccountStatementRequest,
+				LedgerAccountStatementResponse: spec.components.schemas.LedgerAccountStatementResponse,
+			}).toMatchSnapshot();
+			expect(operations.map(operation => operation.operationId).sort()).toEqual(
+				[...groupOperationIds].sort()
+			);
+			expect(Object.keys(byId("getLedgerAccountStatement")?.responses ?? {})).toEqual([
+				"200",
+				"400",
+				"401",
+				"403",
+				"404",
+				"429",
+				"500",
+				"503",
+			]);
+			expect(Object.keys(byId("createLedgerAccountStatement")?.responses ?? {})).toEqual([
+				"200",
+				"400",
+				"401",
+				"403",
+				"404",
+				"409",
+				"429",
+				"500",
+				"503",
+			]);
 		});
-		expect(Object.keys(collection?.post?.responses ?? {})).toEqual([
-			"200",
-			"400",
-			"401",
-			"403",
-			"404",
-			"409",
-			"429",
-			"500",
-			"503",
-		]);
+
+		it("keeps the legacy component schemas for the request and response", () => {
+			const schemas = spec.components.schemas as unknown as Record<
+				string,
+				{
+					required: string[];
+					properties: Record<string, { type?: string; pattern?: string }>;
+					additionalProperties?: unknown;
+				}
+			>;
+			const response = schemas.LedgerAccountStatementResponse;
+			const request = schemas.LedgerAccountStatementRequest;
+			expect(response.required).toEqual([
+				"id",
+				"ledgerId",
+				"accountId",
+				"startDatetime",
+				"endDatetime",
+				"ledgerAccountVersion",
+				"normalBalance",
+				"assetId",
+				"assetCode",
+				"minorUnitExponent",
+				"created",
+				"updated",
+			]);
+			expect(response.properties.ledgerAccountVersion.type).toBe("number");
+			expect(response.properties.id.pattern).toBe("^lst_[0-7][0-9a-hjkmnp-tv-z]{25}$");
+			expect(request.required).toEqual(["ledgerId", "accountId", "startDatetime", "endDatetime"]);
+			expect(request.properties.startDatetime).not.toHaveProperty("format");
+		});
+
+		it("tags both operations and sets no Location header on create", () => {
+			for (const operation of operations)
+				expect(operation.tags).toEqual(["Ledger Account Statements"]);
+			expect(byId("createLedgerAccountStatement")?.responses["200"]).not.toHaveProperty("headers");
+		});
 	});
 });
