@@ -183,8 +183,8 @@ const problemBody = <TypeName extends string, Status extends number>(
 
 const encodeProblem = <
 	Self extends Schema.Top & { readonly Type: HttpError },
-	TypeName extends string,
-	Status extends number,
+	TypeName extends Self["Type"]["type"],
+	Status extends Self["Type"]["statusCode"],
 >(
 	schema: Self,
 	type: TypeName,

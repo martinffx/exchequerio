@@ -10,8 +10,9 @@ import { serveApp } from "@/server";
 const createHttpServer = () => createServer({ keepAliveTimeout: 72_000, requestTimeout: 0 });
 
 const main = serveApp(
-	// In-flight requests drain for at most NodeHttpServer's default 20 s gracefulShutdownTimeout
-	// (the pre-migration server had no cap).
+	// NodeHttpServer's default 20 s gracefulShutdownTimeout bounds reads: reads still in flight at the
+	// cap are interrupted. Writes run to completion (`runToCompletion`) and shutdown waits for them,
+	// bounded only by the orchestrator's kill timeout.
 	NodeHttpServer.layer(createHttpServer, { port: 3000, host: "::" }),
 	makeServerRuntimeLayer(new Config())
 );

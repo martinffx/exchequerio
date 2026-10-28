@@ -32,13 +32,11 @@ const build = (implementation: OrganizationService) => {
 	return buildHandler({ organization: implementation });
 };
 
-const superAdmin = () => signJWT({ sub: organizationId.toString(), scope: ["super_admin"] });
-const request = makeRequest(superAdmin);
-
 const base64url = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
 const tokenPayload = { sub: organizationId.toString(), scope: ["super_admin" as const] };
 const unsignedToken = `${base64url({ alg: "none", typ: "JWT" })}.${base64url(tokenPayload)}.`;
-const signedAlgNonePayload = signJWT(tokenPayload);
+const superAdmin = () => signJWT(tokenPayload);
+const request = makeRequest(superAdmin);
 const expiredToken = createSigner({ key: new Config().jwtSecret })({
 	...tokenPayload,
 	iat: Math.floor(Date.now() / 1000) - 7200,
@@ -153,10 +151,10 @@ describe("OrganizationRoutes", () => {
 			expect(implementation.getOrganization).not.toHaveBeenCalled();
 		});
 
-		it("accepts the alg:none payload when it is signed with the right key", async () => {
+		it("accepts the same payload when properly signed (control for the alg:none row)", async () => {
 			const handler = build(service());
 
-			const response = await handler(request("GET", orgPath, { token: signedAlgNonePayload }));
+			const response = await handler(request("GET", orgPath, { token: superAdmin() }));
 
 			expect(response.status).toBe(200);
 		});

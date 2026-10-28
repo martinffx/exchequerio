@@ -56,9 +56,12 @@ const dieIfCalled = (name: string): object =>
 	);
 
 /**
- * Wraps one service implementation in a Layer for its Tag. The only cast: the Tags are invariant in
- * their service type, so the table cannot be indexed generically; `TestStubs` and `dieIfCalled` keep
- * each implementation matched to its key's service.
+ * Wraps one service implementation in a Layer for its Tag. This is one of three places the file
+ * widens a Layer type (the others: the per-key override cast in `testServicesLayer` and the
+ * `overrides as TestServiceLayers` cast in `makeTestWebHandler`): the Tags are invariant in their
+ * service type, so the table cannot be indexed generically. The widenings are sound because every
+ * key of `serviceTags` is iterated, so the merged layer really provides all service ids; filtering
+ * keys later would turn a type error into a runtime "service not found".
  */
 const provideService = (key: ServiceKey, implementation: object) =>
 	Layer.succeed(
@@ -140,5 +143,5 @@ const useTestWebHandlers = () => {
 	};
 };
 
-export type { TestServiceLayers, TestStubs };
+export type { TestServiceLayers };
 export { makeRequest, makeTestWebHandler, testServicesLayer, tokenFor, useTestWebHandlers };
