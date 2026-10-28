@@ -1,9 +1,10 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
 import { type Database, type EffectDrizzleDatabase, DatabaseTag, makeDatabaseLive } from "@/db";
+import { LedgerRepoTag, ledgerRepoLayer, type LedgerRepo } from "../../LedgerRepo";
 import { BadRequestError, ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID, OrgID } from "@/lib/ids";
 import {
@@ -40,9 +41,14 @@ describe("LedgerAccountStatementRepoLive", () => {
 	const accountId = new TypeID("lat") as LedgerAccountID;
 	const databaseLayer = makeDatabaseLive(new Config().databaseUrl);
 	const runtime = ManagedRuntime.make(
-		Layer.merge(databaseLayer, ledgerAccountStatementRepoLayer.pipe(Layer.provide(databaseLayer)))
+		Layer.mergeAll(
+			databaseLayer,
+			ledgerAccountStatementRepoLayer.pipe(Layer.provide(databaseLayer)),
+			ledgerRepoLayer.pipe(Layer.provide(databaseLayer))
+		)
 	);
 	let repository: LedgerAccountStatementRepo;
+	let ledgers: LedgerRepo;
 	let db: Database["db"];
 	const assetId = new TypeID("ast");
 	const scope = [organizationId, ledgerId, accountId] as const;
@@ -90,6 +96,7 @@ describe("LedgerAccountStatementRepoLive", () => {
 	};
 	beforeAll(async () => {
 		repository = await runtime.runPromise(LedgerAccountStatementRepoTag);
+		ledgers = await runtime.runPromise(LedgerRepoTag);
 		db = (await runtime.runPromise(DatabaseTag)).db;
 		await db
 			.insert(OrganizationsTable)
@@ -253,6 +260,100 @@ describe("LedgerAccountStatementRepoLive", () => {
 			await db
 				.delete(LedgerAccountStatementsTable)
 				.where(eq(LedgerAccountStatementsTable.id, statement.id.toUUID()));
+		}
+	});
+	it("fails listing with a typed decoding failure when one stored row is corrupt", async () => {
+		const valid = await create();
+		const corrupt = await create();
+		await db
+			.update(LedgerAccountStatementsTable)
+			.set({ created: sql`'infinity'::timestamptz` })
+			.where(eq(LedgerAccountStatementsTable.id, corrupt.id.toUUID()));
+		try {
+			const error = await runtime.runPromise(Effect.flip(repository.listStatements(...scope, page)));
+			expect(error).toBeInstanceOf(StatementPersistenceDecodingFailure);
+		} finally {
+			await db
+				.delete(LedgerAccountStatementsTable)
+				.where(inArray(LedgerAccountStatementsTable.id, [valid.id.toUUID(), corrupt.id.toUUID()]));
+		}
+	});
+	it("fails reading Entries with a typed decoding failure when a stored Entry is corrupt", async () => {
+		await addEntry("2032-01-15T00:00:00.000Z", "posted", "debit", 5n);
+		const statement = await create({
+			startDatetime: "2032-01-01T00:00:00.000Z",
+			endDatetime: "2032-02-01T00:00:00.000Z",
+		});
+		await db
+			.update(LedgerAccountStatementsTable)
+			.set({
+				snapshot: sql`jsonb_set(${LedgerAccountStatementsTable.snapshot}, '{entries,0,id}', '123'::jsonb)`,
+			})
+			.where(eq(LedgerAccountStatementsTable.id, statement.id.toUUID()));
+		try {
+			const error = await runtime.runPromise(
+				Effect.flip(repository.getEntries(...scope, statement.id, page))
+			);
+			expect(error).toBeInstanceOf(StatementPersistenceDecodingFailure);
+		} finally {
+			await db
+				.delete(LedgerAccountStatementsTable)
+				.where(eq(LedgerAccountStatementsTable.id, statement.id.toUUID()));
+		}
+	});
+	it("lets Ledger fixture cleanup delete a Ledger that has a Statement", async () => {
+		const fixtureOrg = new TypeID("org") as OrgID;
+		const fixtureLedger = new TypeID("lgr") as LedgerID;
+		const fixtureAccount = new TypeID("lat") as LedgerAccountID;
+		const fixtureAsset = new TypeID("ast");
+		await db.insert(OrganizationsTable).values({ id: fixtureOrg.toUUID(), name: "Fixture cleanup" });
+		try {
+			await db.insert(AssetsTable).values({
+				id: fixtureAsset.toUUID(),
+				organizationId: fixtureOrg.toUUID(),
+				code: "EUR",
+				name: "Euro",
+				minorUnitExponent: 2,
+			});
+			await db.insert(LedgersTable).values({
+				id: fixtureLedger.toUUID(),
+				organizationId: fixtureOrg.toUUID(),
+				name: "Fixture cleanup ledger",
+			});
+			await db.insert(LedgerAccountsTable).values({
+				id: fixtureAccount.toUUID(),
+				organizationId: fixtureOrg.toUUID(),
+				ledgerId: fixtureLedger.toUUID(),
+				name: "Fixture cleanup account",
+				normalBalance: "debit",
+				assetId: fixtureAsset.toUUID(),
+			});
+			await runtime.runPromise(
+				repository.createStatement(
+					fixtureOrg,
+					fixtureLedger,
+					fixtureAccount,
+					new TypeID("lst") as LedgerAccountStatementID,
+					period,
+					parsed(period)
+				)
+			);
+			await runtime.runPromise(ledgers.deleteLedgerFixtures(fixtureOrg, fixtureLedger));
+			expect(
+				await db
+					.select({ id: LedgerAccountStatementsTable.id })
+					.from(LedgerAccountStatementsTable)
+					.where(eq(LedgerAccountStatementsTable.ledgerId, fixtureLedger.toUUID()))
+			).toHaveLength(0);
+			expect(
+				await db
+					.select({ id: LedgersTable.id })
+					.from(LedgersTable)
+					.where(eq(LedgersTable.id, fixtureLedger.toUUID()))
+			).toHaveLength(0);
+		} finally {
+			await db.delete(AssetsTable).where(eq(AssetsTable.id, fixtureAsset.toUUID()));
+			await db.delete(OrganizationsTable).where(eq(OrganizationsTable.id, fixtureOrg.toUUID()));
 		}
 	});
 	it("pages saved Entries in effective-time/ID order and lists summaries newest first", async () => {

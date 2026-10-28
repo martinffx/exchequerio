@@ -2,7 +2,6 @@ import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { isPostgresUnavailable } from "@/db";
 import { InternalServerError, ServiceUnavailableError } from "@/lib/errors";
-import type { StatementCreateError } from "./LedgerAccountStatementRepo";
 
 class StatementPersistenceDecodingFailure extends InternalServerError {
 	constructor(cause: Error) {
@@ -34,9 +33,9 @@ const mapStatementInfrastructureError = (
 		? new StatementRepositoryUnavailable(cause)
 		: new StatementPersistenceFailure(cause);
 
-const isStatementInfrastructureError = (
-	error: StatementCreateError
-): error is StatementInfrastructureError =>
+const isStatementInfrastructureError = <E>(
+	error: E
+): error is Extract<E, StatementInfrastructureError> =>
 	error instanceof StatementPersistenceDecodingFailure ||
 	error instanceof StatementPersistenceFailure ||
 	error instanceof StatementRepositoryUnavailable;

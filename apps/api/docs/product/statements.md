@@ -121,16 +121,18 @@ size before the application loads the Entry payload. Exceeding either limit retu
 no partial Statement. Earlier history is aggregated rather than copied; these limits do not bound
 historical aggregation work.
 
-Invalid timestamps, periods, request fields, pagination, or unsafe balance totals return `400`.
-Missing or incorrectly scoped resources return `404`. Annotation conflicts and idempotency claims
-still pending after a bounded wait return `409`; unavailable idempotency storage returns `503`.
+Invalid timestamps, periods, request fields, or pagination return `400`.
+Missing or incorrectly scoped resources return `404`. Annotation conflicts, int64 balance overflow, and idempotency claims
+still pending after a bounded wait return `409`. A rejected create, including overflow, releases its
+idempotency key, while infrastructure failures retain it; unavailable idempotency storage returns `503`.
 Authentication, permission, rate-limit, and unexpected failures use the API's existing problem
 responses.
 
 Generation captures the Account, Account version, balances, and Entries in one PostgreSQL
 repeatable-read transaction while posting continues. Application and repository interfaces enforce
 accounting immutability; direct SQL changes are not prevented by a database update trigger. There is
-no Statement delete endpoint.
+no Statement delete endpoint, and there is no cascade, so Statements block ordinary Ledger and
+Account deletion; repository-only cleanup removes them for fixtures.
 
 ## Migration
 

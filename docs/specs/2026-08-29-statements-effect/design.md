@@ -11,7 +11,7 @@ signature what can fail, and the slice differs from Organizations, the reference
 
 ## Scope
 
-**In scope:** typed error channels for the repo and service; Option for absence; entity decoding in
+**In scope:** typed error channels for the repo and service; entity decoding in
 `fromRow`; period and balance checks as Effects; idempotency-claim handling aligned with
 Transactions; tests updated at their existing boundaries.
 
@@ -26,8 +26,8 @@ Schema decoding of snapshot JSON.
     trio, never `unknown`.
   - Given the production Statement files, there is no `catch: x => x` and no `instanceof` mapping
     of an unknown cause.
-  - Given a missing Statement, the repo returns `Option.none` and the service fails with
-    `NotFoundError` (404).
+  - Given a missing Statement, the repo fails with `NotFoundError` and the service passes it
+    through (404); there is no `Option`.
 - US-2 (must): As an operator, I want an undecodable stored id or timestamp to fail as
   `StatementPersistenceDecodingFailure`, reaching the global handler as a 500, not a thrown defect.
   Rows and snapshot entries written by the repo itself decode to byte-identical responses.
@@ -55,18 +55,18 @@ Schema decoding of snapshot JSON.
 
 ## Research decisions
 
-| Concern                    | Existing solution                                          | Decision                                             | Current requirement                                                             |
-| -------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Error types                | Organization/Account error files                           | new (`StatementErrors.ts`, infrastructure trio only) | Replace `unknown` channels and `mapError`                                       |
-| Overflow and period errors | Shared `BadRequestError`, `ConflictError`                  | reuse                                                | Keep today's statuses                                                           |
-| Absence                    | Repos return `Option`; services `requireFound`             | modify                                               | Repo currently fails with `NotFoundError`                                       |
-| Row decoding               | Entity `fromRow` as an Effect with `parseUuid`/`parseDate` | modify                                               | Decoding is deferred into `toResponse`, `id`, entry conversion                  |
-| Throwing helpers           | `Effect.fail` in migrated entities                         | modify                                               | `validateStatementPeriod`, `calculateStatementBalances`, three identity `Effect.try` |
-| Pure transformations       | `api.md`: keep sync when total                             | reuse                                                | `toResponse` stays sync after decoding                                          |
-| Idempotency release        | Transactions retain only for the infrastructure union      | modify                                               | Align with main                                                                 |
-| SQL                        | `Effect.tryPromise` with mapped catch                      | reuse                                                | Repo already uses Effect-Drizzle                                                |
-| Tests                      | Repo, Service, Routes only                                 | reuse                                                | No entity suite                                                                 |
-| Contract doc               | `statements.md`                                            | reuse                                                | Link, do not restate                                                            |
+| Concern                    | Existing solution                                                                     | Decision                                             | Current requirement                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Error types                | Organization/Account error files                                                      | new (`StatementErrors.ts`, infrastructure trio only) | Replace `unknown` channels and `mapError`                                                            |
+| Overflow and period errors | Shared `BadRequestError`, `ConflictError`                                             | reuse                                                | Keep today's statuses                                                                                |
+| Absence                    | Repo fails with `NotFoundError`; no `Option`/`requireFound`                           | reuse                                                | Repo already fails with `NotFoundError`; service passes it through                                   |
+| Row decoding               | Entity `fromRow` as an Effect with `parseUuid`/`parseDate`                            | modify                                               | Decoding is deferred into `toResponse`, `id`, entry conversion                                       |
+| Throwing helpers           | `Effect.fail` in migrated entities                                                    | modify                                               | `validateStatementPeriod`, `calculateStatementBalances`, three identity `Effect.try`                 |
+| Pure transformations       | `api.md`: keep sync when total                                                        | reuse                                                | `toResponse` stays sync after decoding                                                               |
+| Idempotency release        | Transactions retain only for the infrastructure union                                 | modify                                               | Align with main                                                                                      |
+| SQL                        | `Effect.catchTag` on `EffectDrizzleQueryError` (plus `SqlError` in `createStatement`) | modify                                               | Repo uses Effect-Drizzle, not `Effect.tryPromise`; the transactional create also surfaces `SqlError` |
+| Tests                      | Repo, Service, Routes only                                                            | reuse                                                | No entity suite                                                                                      |
+| Contract doc               | `statements.md`                                                                       | reuse                                                | Link, do not restate                                                                                 |
 
 ## Architecture
 
@@ -78,10 +78,11 @@ Layout is unchanged plus one file; dependencies flow Routes → Service → Repo
   balance calculation return Effects failing with `BadRequestError` / `ConflictError`; `toResponse`
   is sync and total over decoded TypeIDs and `DateTime`s, serialized with `.toISO()`; a
   snapshot-entry decoder returns response-shaped entries.
-- Repo: precise error types; `getStatement` returns `Option`; SQL via `Effect.tryPromise` with
-  `catch: mapStatementInfrastructureError`; `getEntries` returns decoded entries; `mapError`, the
+- Repo: precise error types; `getStatement` fails with `NotFoundError` (no `Option`); SQL errors
+  mapped with `Effect.catchTag` on `EffectDrizzleQueryError` (and `SqlError` in the transactional
+  `createStatement`) via `mapStatementInfrastructureError`; `getEntries` returns decoded entries; `mapError`, the
   `unknown` channels and the identity `Effect.try` blocks are deleted.
-- Service: `requireFound`; create releases the claim unless the error is in the infrastructure
+- Service: no `requireFound`; `NotFoundError` passes through; create releases the claim unless the error is in the infrastructure
   union; the period check is yielded directly.
 - Routes: unchanged except entry conversion moves into the repo result.
 - Untrusted input: TypeBox and `parseId` at the route edge; `fromRow` and the entry decoder are the

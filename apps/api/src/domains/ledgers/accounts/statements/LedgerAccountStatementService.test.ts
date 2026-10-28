@@ -10,10 +10,18 @@ import {
 } from "@/lib/errors";
 import type { OrgID, LedgerID, LedgerAccountID, LedgerAccountStatementID } from "@/lib/ids";
 import type { IdempotencyService } from "@/lib/IdempotencyService";
-import { calculateStatementBalances, LedgerAccountStatement } from "./LedgerAccountStatement";
+import {
+	calculateStatementBalances,
+	LedgerAccountStatement,
+	type StatementRecord,
+} from "./LedgerAccountStatement";
 import type { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
 import { LedgerAccountStatementService } from "./LedgerAccountStatementService";
-import { StatementRepositoryUnavailable } from "./StatementErrors";
+import {
+	StatementPersistenceDecodingFailure,
+	StatementPersistenceFailure,
+	StatementRepositoryUnavailable,
+} from "./StatementErrors";
 
 const orgId = new TypeID("org") as OrgID;
 const ledgerId = new TypeID("lgr") as LedgerID;
@@ -32,30 +40,29 @@ const balances = Effect.runSync(
 		unpostedDebits: 0n,
 	})
 );
-const stored = Effect.runSync(
-	LedgerAccountStatement.fromRow({
-		id: encodeUuid(statementId),
-		organizationId: encodeUuid(orgId),
-		ledgerId: encodeUuid(ledgerId),
-		accountId: encodeUuid(accountId),
-		startDatetime: new Date(request.startDatetime),
-		endDatetime: new Date(request.endDatetime),
-		ledgerAccountVersion: 3,
-		snapshot: {
-			normalBalance: "debit",
-			assetId: encodeUuid(assetId),
-			assetCode: "EUR",
-			minorUnitExponent: 2,
-			startingBalances: balances,
-			endingBalances: balances,
-		},
-		description: "January",
-		metadata: {},
-		lockVersion: 1,
-		created: new Date(request.endDatetime),
-		updated: new Date(request.endDatetime),
-	})
-);
+const storedRow: StatementRecord = {
+	id: encodeUuid(statementId),
+	organizationId: encodeUuid(orgId),
+	ledgerId: encodeUuid(ledgerId),
+	accountId: encodeUuid(accountId),
+	startDatetime: new Date(request.startDatetime),
+	endDatetime: new Date(request.endDatetime),
+	ledgerAccountVersion: 3,
+	snapshot: {
+		normalBalance: "debit",
+		assetId: encodeUuid(assetId),
+		assetCode: "EUR",
+		minorUnitExponent: 2,
+		startingBalances: balances,
+		endingBalances: balances,
+	},
+	description: "January",
+	metadata: {},
+	lockVersion: 1,
+	created: new Date(request.endDatetime),
+	updated: new Date(request.endDatetime),
+};
+const stored = Effect.runSync(LedgerAccountStatement.fromRow(storedRow));
 const repository = vi.mocked<LedgerAccountStatementRepo>({
 	getStatement: vi.fn(() => Effect.succeed(stored)),
 	createStatement: vi.fn(() => Effect.succeed(stored)),
@@ -136,8 +143,11 @@ describe("Statement orchestration", () => {
 		expect(idempotency.release).toHaveBeenCalledWith(orgId, "statements.create", "rejected");
 		expect(idempotency.complete).not.toHaveBeenCalled();
 	});
-	it("retains a claim when the persistence outcome is uncertain", async () => {
-		const failure = new StatementRepositoryUnavailable(new Error("connection lost"));
+	it.each([
+		["decoding failure", new StatementPersistenceDecodingFailure(new Error("corrupt row"))],
+		["persistence failure", new StatementPersistenceFailure(new Error("query failed"))],
+		["repository unavailable", new StatementRepositoryUnavailable(new Error("connection lost"))],
+	])("retains a claim when the persistence outcome is uncertain: %s", async (_name, failure) => {
 		repository.createStatement.mockReturnValueOnce(Effect.fail(failure));
 		expect(
 			await Effect.runPromise(
@@ -147,6 +157,40 @@ describe("Statement orchestration", () => {
 			)
 		).toBe(failure);
 		expect(idempotency.release).not.toHaveBeenCalled();
+	});
+	it("returns the original error when releasing the claim fails", async () => {
+		const error = new BadRequestError("too large");
+		repository.createStatement.mockReturnValueOnce(Effect.fail(error));
+		idempotency.release.mockReturnValueOnce(
+			Effect.fail(new ServiceUnavailableError("claim store unavailable"))
+		);
+		expect(
+			await Effect.runPromise(
+				Effect.flip(
+					service.createLedgerAccountStatement(orgId, ledgerId, accountId, "release-fails", request)
+				)
+			)
+		).toBe(error);
+		expect(idempotency.release).toHaveBeenCalledWith(orgId, "statements.create", "release-fails");
+	});
+	it("replays the annotated Statement after the Statement was annotated", async () => {
+		const annotated = Effect.runSync(
+			LedgerAccountStatement.fromRow({
+				...storedRow,
+				metadata: { reviewed: "yes" },
+				lockVersion: 2,
+			})
+		);
+		repository.getStatement.mockReturnValueOnce(Effect.succeed(annotated));
+		idempotency.claim.mockReturnValueOnce(
+			Effect.succeed(Option.fromUndefinedOr(stored.id.toString()))
+		);
+		const replay = await Effect.runPromise(
+			service.createLedgerAccountStatement(orgId, ledgerId, accountId, "annotated", request)
+		);
+		expect(replay).toBe(annotated);
+		expect(replay.toResponse()).toMatchObject({ lockVersion: 2, metadata: { reviewed: "yes" } });
+		expect(repository.createStatement).not.toHaveBeenCalled();
 	});
 	it("retains the saved result when completing the claim fails", async () => {
 		const failure = new ServiceUnavailableError("claim store unavailable");

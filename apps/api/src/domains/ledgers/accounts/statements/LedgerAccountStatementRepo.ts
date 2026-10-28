@@ -310,7 +310,7 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 					// oxlint-disable-next-line unicorn/no-null -- SQL null clears omitted annotations.
 					metadata: request.metadata ?? null,
 					lockVersion: sql`${table.lockVersion} + 1`,
-					updated: new Date(),
+					updated: sql`now()`,
 				})
 				.where(
 					and(

@@ -7,6 +7,7 @@ import type { LedgerID, OrgID } from "@/lib/ids";
 import {
 	LedgersTable,
 	LedgerAccountsTable,
+	LedgerAccountStatementsTable,
 	LedgerAccountSettlementsTable,
 	LedgerAccountSettlementEntriesTable,
 	LedgerTransactionsTable,
@@ -304,6 +305,14 @@ class LedgerRepoLive implements LedgerRepo {
 							and(
 								eq(LedgerAccountSettlementsTable.organizationId, encodeUuid(organizationId)),
 								eq(LedgerAccountSettlementsTable.ledgerId, encodeUuid(ledgerId))
+							)
+						);
+					await tx
+						.delete(LedgerAccountStatementsTable)
+						.where(
+							and(
+								eq(LedgerAccountStatementsTable.organizationId, encodeUuid(organizationId)),
+								eq(LedgerAccountStatementsTable.ledgerId, encodeUuid(ledgerId))
 							)
 						);
 					await tx

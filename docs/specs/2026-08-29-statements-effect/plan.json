@@ -1,181 +1,172 @@
 {
-  "feature": "statements-effect",
-  "spec": "docs/specs/2026-08-29-statements-effect/design.md",
-  "goal": "Make the Ledger Account Statements slice fully Effect-native: stored data decoded once in the entity, typed error channels with no unknown or identity catches, and idempotency-claim handling aligned with Transactions.",
-  "preserved_behavior": [
-    "Routes, request and response bodies, and OpenAPI are unchanged",
-    "HTTP statuses stay 400 (bad period or oversize), 404, 409 (stale version or overflow), 503, 500",
-    "A corrupt claimed id on the replay path stays 400 (InvalidId extends BadRequestError)",
-    "SQL text, repeatable-read capture, 10,000-entry and 16 MiB limits, and lockVersion concurrency are unchanged",
-    "Responses are byte-identical for rows the repo wrote (UTC DateTime.toISO() equals Date.toISOString())",
-    "LedgerAccountStatement.integration.test.ts is unchanged and stays the regression net"
-  ],
-  "deviations": [
-    "design.md says the repo returns Option and the service uses requireFound. Decided with the user: the repo keeps failing with NotFoundError, so Option and requireFound are not introduced. design.md needs a one-line update in a separate brainstorm pass.",
-    "design.md names Effect.tryPromise for SQL error mapping. The repo uses Effect-Drizzle, so SQL errors are mapped with Effect.catchTag on EffectDrizzleQueryError (non-transaction methods) and on EffectDrizzleQueryError plus SqlError (createStatement)."
-  ],
-  "phases": [
-    {
-      "id": "P1",
-      "name": "Decode stored data once",
-      "tasks": [
-        {
-          "id": "T1",
-          "name": "Stored ids, timestamps and snapshot entries decode in the entity",
-          "depends_on": [],
-          "inputs": [
-            "design.md Architecture and US-2",
-            "apps/api/src/domains/organizations/Organization.ts fromRow (ends with mapError to the decoding failure) as the reference",
-            "apps/api/src/domains/organizations/OrganizationErrors.ts for the decoding failure shape",
-            "parseUuid and parseDate in apps/api/src/lib/utils.ts; parseUuid fails with InvalidId (a BadRequestError), so it must be mapped to the decoding failure"
-          ],
-          "description": "Create StatementErrors.ts with StatementPersistenceDecodingFailure (an InternalServerError) only. LedgerAccountStatement.fromRow returns an Effect that decodes the lst, lgr and lat uuid columns, startDatetime, endDatetime, created, updated and snapshot.assetId (ast), ending with mapError to the decoding failure. toResponse and id become synchronous over decoded TypeIDs and DateTimes serialized with toISO(). An entity-owned entry decoder replaces toEntryResponse and decodes the four uuids in a snapshot entry (lte, lat, ast, ltr); entry timestamps stay as SQL wrote them. Repo getEntries returns decoded entries and the route stops calling toEntryResponse. Update every fromRow caller: requireStatement (get and create), listStatements (map becomes Effect.forEach so one bad row fails the list), updateAnnotations, and the module-level fixtures in the Service and Routes tests. The service completes the idempotency claim with id.toString().",
-          "files": {
-            "reuse": [
-              "apps/api/src/lib/utils.ts",
-              "apps/api/src/domains/organizations/Organization.ts",
-              "apps/api/src/domains/organizations/OrganizationErrors.ts"
-            ],
-            "create": ["apps/api/src/domains/ledgers/accounts/statements/StatementErrors.ts"],
-            "modify": [
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatement.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.test.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.test.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.test.ts"
-            ],
-            "delete": []
-          },
-          "new_abstractions": [
-            {
-              "name": "StatementPersistenceDecodingFailure",
-              "requirement": "US-2: a corrupt stored id or timestamp is a typed 500 instead of a thrown defect or a 400 from InvalidId",
-              "consumers": ["LedgerAccountStatement.fromRow", "Statement entry decoder"]
-            }
-          ],
-          "validation": {
-            "tests": [
-              "repo: a stored 'infinity' timestamp fails with StatementPersistenceDecodingFailure instead of throwing at response time (precedent: OrganizationRepo.test.ts)",
-              "repo: getEntries returns entries with TypeID-form ids",
-              "routes: the entries endpoint returns the repo's decoded entries unchanged"
-            ],
-            "acceptance": [
-              "pnpm run check passes",
-              "LedgerAccountStatement.integration.test.ts passes unchanged",
-              "toResponse and id perform no TypeID.fromUUID call"
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "P2",
-      "name": "Typed failures",
-      "tasks": [
-        {
-          "id": "T2",
-          "name": "Repo and service declare their errors; no unknown channels or identity catches",
-          "depends_on": ["T1"],
-          "inputs": [
-            "design.md US-1 and US-3",
-            "apps/api/src/domains/organizations/OrganizationRepo.ts mapInfrastructureError as the reference",
-            "isPostgresUnavailable in apps/api/src/db (follows .cause, so it sees through drizzle wrappers)",
-            "docs/standards/api.md: do not repeat validation across layers",
-            "Settings.throwOnInvalid is true (apps/api/src/lib/luxon.ts): DateTime.fromISO throws on bad input",
-            "assertInt64 in apps/api/src/lib/amounts.ts throws ConflictError with retryable false; INT64_MIN and INT64_MAX are exported"
-          ],
-          "description": "Add StatementPersistenceFailure, StatementRepositoryUnavailable, the StatementInfrastructureError union and mapStatementInfrastructureError(cause: EffectDrizzleQueryError | SqlError) to StatementErrors.ts; isPostgresUnavailable maps to unavailable, everything else to the persistence failure. In the repo, map once per method on the outer pipe: the four non-transaction methods use Effect.catchTag(\"EffectDrizzleQueryError\", ...); createStatement uses Effect.catchTag([\"EffectDrizzleQueryError\", \"SqlError\"], ...). A handler for a tag absent from a method's error type does not compile, so do not share one table. Domain errors pass through typed (oversize BadRequestError, missing Account NotFoundError, overflow ConflictError). An INSERT that returns no row becomes StatementPersistenceFailure. The repo keeps NotFoundError for a missing Statement or Account and ConflictError for a stale lockVersion. validateStatementPeriod becomes an Effect: one Effect.try around both DateTime.fromISO calls with a named catch returning BadRequestError, then an ordering check failing with the same message; drop the dead isValid checks; still return Dates. calculateStatementBalances becomes an Effect that range-checks against INT64_MIN and INT64_MAX and fails with ConflictError with the same message and retryable false. The service validates the period once, before the claim, and passes the parsed period to the repo, which no longer validates. Delete the repo test 'rejects reversed periods without saving a statement' (covered by the service test) and update createStatement call sites in the repo tests. Each repo and service signature names its errors; service signatures also include InvalidId and the idempotency errors. Delete mapError, every unknown error channel and the three identity Effect.try blocks.",
-          "files": {
-            "reuse": [
-              "apps/api/src/lib/errors.ts",
-              "apps/api/src/lib/amounts.ts",
-              "apps/api/src/db/errors.ts",
-              "apps/api/src/domains/organizations/OrganizationRepo.ts"
-            ],
-            "create": [],
-            "modify": [
-              "apps/api/src/domains/ledgers/accounts/statements/StatementErrors.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatement.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.test.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.test.ts"
-            ],
-            "delete": []
-          },
-          "new_abstractions": [
-            {
-              "name": "StatementPersistenceFailure, StatementRepositoryUnavailable, StatementInfrastructureError union, mapStatementInfrastructureError",
-              "requirement": "Replace Effect<_, unknown> channels and distinguish infrastructure failures from domain rejections for the claim rule in T3",
-              "consumers": [
-                "LedgerAccountStatementRepo",
-                "LedgerAccountStatementService"
-              ]
-            }
-          ],
-          "validation": {
-            "tests": [
-              "repo: each create rejection keeps its class (oversize BadRequestError, missing Account NotFoundError, overflow ConflictError)",
-              "repo: missing Statement fails with NotFoundError; stale lockVersion fails with ConflictError",
-              "service: a bad period fails before the idempotency store is touched"
-            ],
-            "acceptance": [
-              "pnpm run check passes",
-              "rg --pcre2 \"catch: (\\w+) => \\1|Effect\\.Effect<[^>]*, unknown>|instanceof HttpError|: unknown\\)\" apps/api/src/domains/ledgers/accounts/statements --glob '!*.test.ts' returns nothing",
-              "LedgerAccountStatement.integration.test.ts passes unchanged"
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "P3",
-      "name": "Idempotency alignment",
-      "tasks": [
-        {
-          "id": "T3",
-          "name": "Create retains the claim only for infrastructure failures",
-          "depends_on": ["T2"],
-          "inputs": [
-            "design.md US-4",
-            "LedgerTransactionService.releaseFailedMutation in apps/api/src/domains/ledgers/transactions/LedgerTransactionService.ts (an instanceof trio over the infrastructure errors)"
-          ],
-          "description": "Add isStatementInfrastructureError to StatementErrors.ts: a type guard over the typed create error union (not unknown) using an instanceof trio over the three infrastructure classes, as releaseFailedMutation does. In createLedgerAccountStatement's tapError, retain the idempotency claim when the guard holds and release it otherwise, replacing the instanceof BadRequestError or NotFoundError check. An int64-overflow ConflictError now releases the claim, matching Transactions; this is the only intended behavior difference in the migration. Accepted consequence: if a row the repo just wrote fails to decode, the transaction rolls back and the claim stays pending until it expires, as with Transactions.",
-          "files": {
-            "reuse": [
-              "apps/api/src/domains/ledgers/accounts/statements/StatementErrors.ts",
-              "apps/api/src/domains/ledgers/transactions/LedgerTransactionService.ts"
-            ],
-            "create": [],
-            "modify": [
-              "apps/api/src/domains/ledgers/accounts/statements/StatementErrors.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
-              "apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.test.ts"
-            ],
-            "delete": []
-          },
-          "new_abstractions": [
-            {
-              "name": "isStatementInfrastructureError",
-              "requirement": "US-4: retain the claim only for infrastructure failures",
-              "consumers": ["LedgerAccountStatementService.createLedgerAccountStatement"]
-            }
-          ],
-          "validation": {
-            "tests": [
-              "service: StatementRepositoryUnavailable retains the claim (change the existing uncertain-outcome test from a plain ServiceUnavailableError)",
-              "service: BadRequestError, NotFoundError and the overflow ConflictError release the claim"
-            ],
-            "acceptance": [
-              "pnpm run check passes",
-              "pnpm --filter=@exchequerio/api test passes against PostgreSQL",
-              "git diff main --stat touches only the statements slice and its tests"
-            ]
-          }
-        }
-      ]
-    }
-  ]
+	"feature": "statements-effect",
+	"spec": "docs/specs/2026-08-29-statements-effect/design.md",
+	"goal": "Make the Ledger Account Statements slice fully Effect-native: stored data decoded once in the entity, typed error channels with no unknown or identity catches, and idempotency-claim handling aligned with Transactions.",
+	"preserved_behavior": [
+		"Routes, request and response bodies, and OpenAPI are unchanged",
+		"HTTP statuses stay 400 (bad period or oversize), 404, 409 (stale version or overflow), 503, 500",
+		"A corrupt claimed id on the replay path stays 400 (InvalidId extends BadRequestError)",
+		"SQL text, repeatable-read capture, 10,000-entry and 16 MiB limits, and lockVersion concurrency are unchanged",
+		"Responses are byte-identical for rows the repo wrote (UTC DateTime.toISO() equals Date.toISOString())"
+	],
+	"deviations": [
+		"LedgerAccountStatement.integration.test.ts was removed after review: docs/standards/api.md forbids full-stack journey suites; the replay-after-annotation assertion moved to a boundary test.",
+		"updateAnnotations now sets updated with the database clock (sql now()) to match created; this is a deliberate SQL change decided in review (f25)."
+	],
+	"phases": [
+		{
+			"id": "P1",
+			"name": "Decode stored data once",
+			"tasks": [
+				{
+					"id": "T1",
+					"name": "Stored ids, timestamps and snapshot entries decode in the entity",
+					"depends_on": [],
+					"inputs": [
+						"design.md Architecture and US-2",
+						"apps/api/src/domains/organizations/Organization.ts fromRow (ends with mapError to the decoding failure) as the reference",
+						"apps/api/src/domains/organizations/OrganizationErrors.ts for the decoding failure shape",
+						"parseUuid and parseDate in apps/api/src/lib/utils.ts; parseUuid fails with InvalidId (a BadRequestError), so it must be mapped to the decoding failure"
+					],
+					"description": "Create StatementErrors.ts with StatementPersistenceDecodingFailure (an InternalServerError) only. LedgerAccountStatement.fromRow returns an Effect that decodes the lst, lgr and lat uuid columns, startDatetime, endDatetime, created, updated and snapshot.assetId (ast), ending with mapError to the decoding failure. toResponse and id become synchronous over decoded TypeIDs and DateTimes serialized with toISO(). An entity-owned entry decoder replaces toEntryResponse and decodes the four uuids in a snapshot entry (lte, lat, ast, ltr); entry timestamps stay as SQL wrote them. Repo getEntries returns decoded entries and the route stops calling toEntryResponse. Update every fromRow caller: requireStatement (get and create), listStatements (map becomes Effect.forEach so one bad row fails the list), updateAnnotations, and the module-level fixtures in the Service and Routes tests. The service completes the idempotency claim with id.toString().",
+					"files": {
+						"reuse": [
+							"apps/api/src/lib/utils.ts",
+							"apps/api/src/domains/organizations/Organization.ts",
+							"apps/api/src/domains/organizations/OrganizationErrors.ts"
+						],
+						"create": ["apps/api/src/domains/ledgers/accounts/statements/StatementErrors.ts"],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatement.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.test.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.test.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.test.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "StatementPersistenceDecodingFailure",
+							"requirement": "US-2: a corrupt stored id or timestamp is a typed 500 instead of a thrown defect or a 400 from InvalidId",
+							"consumers": ["LedgerAccountStatement.fromRow", "Statement entry decoder"]
+						}
+					],
+					"validation": {
+						"tests": [
+							"repo: a stored 'infinity' timestamp fails with StatementPersistenceDecodingFailure instead of throwing at response time (precedent: OrganizationRepo.test.ts)",
+							"repo: getEntries returns entries with TypeID-form ids",
+							"routes: the entries endpoint returns the repo's decoded entries unchanged"
+						],
+						"acceptance": ["pnpm run check passes", "toResponse and id perform no TypeID.fromUUID call"]
+					}
+				}
+			]
+		},
+		{
+			"id": "P2",
+			"name": "Typed failures",
+			"tasks": [
+				{
+					"id": "T2",
+					"name": "Repo and service declare their errors; no unknown channels or identity catches",
+					"depends_on": ["T1"],
+					"inputs": [
+						"design.md US-1 and US-3",
+						"apps/api/src/domains/organizations/OrganizationRepo.ts mapInfrastructureError as the reference",
+						"isPostgresUnavailable in apps/api/src/db (follows .cause, so it sees through drizzle wrappers)",
+						"docs/standards/api.md: do not repeat validation across layers",
+						"Settings.throwOnInvalid is true (apps/api/src/lib/luxon.ts): DateTime.fromISO throws on bad input",
+						"assertInt64 in apps/api/src/lib/amounts.ts throws ConflictError with retryable false; INT64_MIN and INT64_MAX are exported"
+					],
+					"description": "Add StatementPersistenceFailure, StatementRepositoryUnavailable, the StatementInfrastructureError union and mapStatementInfrastructureError(cause: EffectDrizzleQueryError | SqlError) to StatementErrors.ts; isPostgresUnavailable maps to unavailable, everything else to the persistence failure. In the repo, map once per method on the outer pipe: the four non-transaction methods use Effect.catchTag(\"EffectDrizzleQueryError\", ...); createStatement uses Effect.catchTag([\"EffectDrizzleQueryError\", \"SqlError\"], ...). A handler for a tag absent from a method's error type does not compile, so do not share one table. Domain errors pass through typed (oversize BadRequestError, missing Account NotFoundError, overflow ConflictError). An INSERT that returns no row becomes StatementPersistenceFailure. The repo keeps NotFoundError for a missing Statement or Account and ConflictError for a stale lockVersion. validateStatementPeriod becomes an Effect: one Effect.try around both DateTime.fromISO calls with a named catch returning BadRequestError, then an ordering check failing with the same message; drop the dead isValid checks; still return Dates. calculateStatementBalances becomes an Effect that range-checks against INT64_MIN and INT64_MAX and fails with ConflictError with the same message and retryable false. The service validates the period once, before the claim, and passes the parsed period to the repo, which no longer validates. Delete the repo test 'rejects reversed periods without saving a statement' (covered by the service test) and update createStatement call sites in the repo tests. Each repo and service signature names its errors; service signatures also include InvalidId and the idempotency errors. Delete mapError, every unknown error channel and the three identity Effect.try blocks.",
+					"files": {
+						"reuse": [
+							"apps/api/src/lib/errors.ts",
+							"apps/api/src/lib/amounts.ts",
+							"apps/api/src/db/errors.ts",
+							"apps/api/src/domains/organizations/OrganizationRepo.ts"
+						],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/statements/StatementErrors.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatement.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.test.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.test.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "StatementPersistenceFailure, StatementRepositoryUnavailable, StatementInfrastructureError union, mapStatementInfrastructureError",
+							"requirement": "Replace Effect<_, unknown> channels and distinguish infrastructure failures from domain rejections for the claim rule in T3",
+							"consumers": ["LedgerAccountStatementRepo", "LedgerAccountStatementService"]
+						}
+					],
+					"validation": {
+						"tests": [
+							"repo: each create rejection keeps its class (oversize BadRequestError, missing Account NotFoundError, overflow ConflictError)",
+							"repo: missing Statement fails with NotFoundError; stale lockVersion fails with ConflictError",
+							"service: a bad period fails before the idempotency store is touched"
+						],
+						"acceptance": [
+							"pnpm run check passes",
+							"rg --pcre2 \"catch: (\\w+) => \\1|Effect\\.Effect<[^>]*, unknown>|instanceof HttpError|: unknown\\)\" apps/api/src/domains/ledgers/accounts/statements --glob '!*.test.ts' returns nothing"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P3",
+			"name": "Idempotency alignment",
+			"tasks": [
+				{
+					"id": "T3",
+					"name": "Create retains the claim only for infrastructure failures",
+					"depends_on": ["T2"],
+					"inputs": [
+						"design.md US-4",
+						"LedgerTransactionService.releaseFailedMutation in apps/api/src/domains/ledgers/transactions/LedgerTransactionService.ts (an instanceof trio over the infrastructure errors)"
+					],
+					"description": "Add isStatementInfrastructureError to StatementErrors.ts: a type guard over the typed create error union (not unknown) using an instanceof trio over the three infrastructure classes, as releaseFailedMutation does. In createLedgerAccountStatement's tapError, retain the idempotency claim when the guard holds and release it otherwise, replacing the instanceof BadRequestError or NotFoundError check. An int64-overflow ConflictError now releases the claim, matching Transactions; this is the only intended behavior difference in the migration. Accepted consequence: if a row the repo just wrote fails to decode, the transaction rolls back and the claim stays pending until it expires, as with Transactions.",
+					"files": {
+						"reuse": [
+							"apps/api/src/domains/ledgers/accounts/statements/StatementErrors.ts",
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionService.ts"
+						],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/statements/StatementErrors.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.test.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "isStatementInfrastructureError",
+							"requirement": "US-4: retain the claim only for infrastructure failures",
+							"consumers": ["LedgerAccountStatementService.createLedgerAccountStatement"]
+						}
+					],
+					"validation": {
+						"tests": [
+							"service: StatementRepositoryUnavailable retains the claim (change the existing uncertain-outcome test from a plain ServiceUnavailableError)",
+							"service: BadRequestError, NotFoundError and the overflow ConflictError release the claim"
+						],
+						"acceptance": [
+							"pnpm run check passes",
+							"pnpm --filter=@exchequerio/api test passes against PostgreSQL",
+							"git diff main --stat touches only the statements slice and its tests"
+						]
+					}
+				}
+			]
+		}
+	]
 }
