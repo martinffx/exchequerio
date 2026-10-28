@@ -25,10 +25,14 @@ const requestKinds: ReadonlySet<HttpApiError.HttpApiSchemaError["kind"]> = new S
 	"Payload",
 ]);
 
-// Keyed by endpoint name, which the transform receives as `context.endpoint.identifier`.
-const payloadDetails: Readonly<Record<string, string | undefined>> = {
-	createAsset: "Invalid Asset creation request",
-	updateAsset: "Invalid Asset replacement request",
+// Fixed Payload 400 details, keyed by group then endpoint name (`context.group.identifier`, `context.endpoint.identifier`).
+const payloadDetails: Readonly<
+	Record<string, Readonly<Record<string, string | undefined>> | undefined>
+> = {
+	assets: {
+		create: "Invalid Asset creation request",
+		update: "Invalid Asset replacement request",
+	},
 };
 
 /**
@@ -38,13 +42,14 @@ const payloadDetails: Readonly<Record<string, string | undefined>> = {
  */
 const SchemaErrorTransformLayer = HttpApiMiddleware.layerSchemaErrorTransform(
 	SchemaErrorTransform,
-	(schemaError, { endpoint }) =>
+	(schemaError, { endpoint, group }) =>
 		requestKinds.has(schemaError.kind)
 			? Effect.fail(
 					new BadRequestError(
 						// One fixed detail is reported for any invalid Asset write body.
-						(schemaError.kind === "Payload" ? payloadDetails[endpoint.identifier] : undefined) ??
-							schemaError.cause.message,
+						(schemaError.kind === "Payload"
+							? payloadDetails[group.identifier]?.[endpoint.identifier]
+							: undefined) ?? schemaError.cause.message,
 						{ cause: schemaError }
 					)
 				)

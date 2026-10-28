@@ -100,7 +100,7 @@ Test application behavior at exactly three boundaries:
 - **Services:** business rules and orchestration, with repositories and external dependencies
   stubbed. Exercise entities and shared helpers through the service operations that use them.
 - **Routes:** validation, authentication, permissions, serialization, HTTP errors, and request
-  lifecycle behavior, with services stubbed, driven through `makeTestWebHandler` from `@/server`.
+  lifecycle behavior, with services stubbed, driven through `makeTestWebHandler` from `@/lib/testing`.
 
 Use `*Repo.test.ts`, `*Service.test.ts`, and `*Routes.test.ts` suites. Fixtures may construct domain
 objects directly; assertions must exercise the owning boundary. Do not create standalone entity,

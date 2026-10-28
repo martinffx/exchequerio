@@ -1,6 +1,8 @@
 import { Effect } from "effect";
+import { OpenApi } from "effect/unstable/httpapi";
 import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
+import { LedgerApi } from "@/api";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import type { AccountService } from "@/domains/ledgers/accounts/AccountService";
 import { LedgerAccountCategoryEntity } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryEntity";
@@ -294,6 +296,14 @@ describe("Category routes", () => {
 		it("handles bad request error", async () => {
 			const implementation = service();
 			const response = await build(implementation)(request("GET", `${base}?offset=invalid`));
+			expect(response.status).toBe(400);
+			expect(await json(response)).toMatchObject({ type: "BAD_REQUEST", status: 400 });
+			expect(implementation.listLedgerAccountCategories).not.toHaveBeenCalled();
+		});
+
+		it.each(["offset=NaN", "limit=Infinity"])("rejects non-finite pagination %s", async query => {
+			const implementation = service();
+			const response = await build(implementation)(request("GET", `${base}?${query}`));
 			expect(response.status).toBe(400);
 			expect(await json(response)).toMatchObject({ type: "BAD_REQUEST", status: 400 });
 			expect(implementation.listLedgerAccountCategories).not.toHaveBeenCalled();
@@ -730,5 +740,78 @@ describe("Category routes", () => {
 			expect(response.status).toBe(400);
 			expect(implementation.getLedgerAccountCategory).not.toHaveBeenCalled();
 		});
+	});
+});
+
+type Operation = {
+	operationId: string;
+	tags?: string[];
+	responses: Record<string, { headers?: object }>;
+};
+
+describe("LedgerAccountCategoryApi", () => {
+	const spec = OpenApi.fromApi(LedgerApi);
+	const paths = spec.paths;
+	const prefix = "/api/ledgers/{ledgerId}/accounts/categories";
+	const collection = paths[`${prefix}/`];
+	const item = paths[`${prefix}/{categoryId}`];
+	const account = paths[`${prefix}/{categoryId}/accounts/{accountId}`];
+	const parent = paths[`${prefix}/{categoryId}/categories/{parentCategoryId}`];
+	const operations = {
+		balances: paths[`${prefix}/{categoryId}/balances`]?.get,
+		list: collection?.get,
+		create: collection?.post,
+		get: item?.get,
+		update: item?.put,
+		delete: item?.delete,
+		linkAccount: account?.patch,
+		unlinkAccount: account?.delete,
+		linkParent: parent?.patch,
+		unlinkParent: parent?.delete,
+	};
+
+	it("documents all generated Category OpenAPI operations", () => {
+		for (const operation of Object.values(operations)) expect(operation).toBeDefined();
+		expect(operations).toMatchSnapshot();
+	});
+
+	it("locks the Category body schemas", () => {
+		const { schemas } = spec.components;
+		expect({
+			LedgerAccountCategoryRequest: schemas.LedgerAccountCategoryRequest,
+			LedgerAccountCategoryResponse: schemas.LedgerAccountCategoryResponse,
+			LedgerAccountCategoryBalancesResponse: schemas.LedgerAccountCategoryBalancesResponse,
+		}).toMatchSnapshot();
+	});
+
+	it("declares 429 on every operation and 409 only where the legacy routes did", () => {
+		const conflictOperations = new Set([
+			"balances",
+			"create",
+			"update",
+			"delete",
+			"linkAccount",
+			"unlinkAccount",
+			"linkParent",
+			"unlinkParent",
+		]);
+		for (const [name, operation] of Object.entries(operations)) {
+			const statuses = Object.keys((operation as unknown as Operation).responses);
+			expect(statuses, name).toContain("429");
+			expect(statuses.includes("409"), name).toBe(conflictOperations.has(name));
+			expect(statuses, name).toContain("404");
+		}
+	});
+
+	it("answers creates with 200 and no Location header", () => {
+		const { responses } = operations.create as unknown as Operation;
+		expect(Object.keys(responses)).toContain("200");
+		expect(Object.keys(responses)).not.toContain("201");
+		expect(responses["200"].headers).toBeUndefined();
+	});
+
+	it("tags every operation with the Category group", () => {
+		for (const operation of Object.values(operations))
+			expect((operation as unknown as Operation).tags).toEqual(["Ledger Account Categories"]);
 	});
 });

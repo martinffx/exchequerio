@@ -76,6 +76,17 @@ describe("Asset HTTP contract", () => {
 		expect(implementation.updateAsset).not.toHaveBeenCalled();
 	});
 
+	it("does not apply Asset payload details to other groups", async () => {
+		const response = await build(service())(
+			request("POST", "/api/ledgers/", { body: { invalid: true } })
+		);
+		expect(response.status).toBe(400);
+		const problem = (await response.json()) as { type: string; detail: string };
+		expect(problem.type).toBe("BAD_REQUEST");
+		expect(problem.detail).not.toBe(createDetail);
+		expect(problem.detail).not.toBe(replaceDetail);
+	});
+
 	it("serializes domain fields without changing the HTTP representation", async () => {
 		const response = await build(service())(
 			request("POST", "/api/assets", {

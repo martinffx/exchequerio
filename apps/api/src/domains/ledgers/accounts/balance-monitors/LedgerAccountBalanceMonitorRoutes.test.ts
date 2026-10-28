@@ -5,7 +5,7 @@ import { TypeID } from "typeid-js";
 import { describe, expect, it, vi } from "vitest";
 
 import { LedgerApi } from "@/api";
-import { tokenFor, useTestWebHandlers } from "@/lib/testing";
+import { makeRequest, tokenFor, useTestWebHandlers } from "@/lib/testing";
 import { InternalServerError } from "@/lib/errors";
 import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/lib/ids";
 
@@ -78,26 +78,7 @@ const build = (implementation: ReturnType<typeof service>) => {
 	});
 };
 const tokenWith = tokenFor(organizationId);
-const call = (
-	handler: ReturnType<typeof build>,
-	method: string,
-	path: string,
-	options: { token?: string; anonymous?: boolean; body?: unknown; rawBody?: string } = {}
-) => {
-	const token = options.anonymous === true ? undefined : (options.token ?? tokenWith(["org_admin"]));
-	const body =
-		options.rawBody ?? (options.body === undefined ? undefined : JSON.stringify(options.body));
-	return handler(
-		new Request(`http://localhost${path}`, {
-			method,
-			headers: {
-				...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-				...(body === undefined ? {} : { "content-type": "application/json" }),
-			},
-			body,
-		})
-	);
-};
+const buildRequest = makeRequest(() => tokenWith(["org_admin"]));
 
 describe("LedgerAccountBalanceMonitorRoutes", () => {
 	it.each([
@@ -123,8 +104,8 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		implementation.listLedgerAccountBalanceMonitors.mockReturnValue(Effect.succeed([stored]));
 		const handler = build(implementation);
 		const [get, list] = await Promise.all([
-			call(handler, "GET", itemUrl),
-			call(handler, "GET", collectionUrl),
+			handler(buildRequest("GET", itemUrl)),
+			handler(buildRequest("GET", collectionUrl)),
 		]);
 
 		expect(get.status).toBe(200);
@@ -141,7 +122,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 	it("forwards authenticated scope on GET and redacts credentials", async () => {
 		const implementation = service();
-		const response = await call(build(implementation), "GET", itemUrl);
+		const response = await build(implementation)(buildRequest("GET", itemUrl));
 		expect(response.status).toBe(200);
 		expect(implementation.getLedgerAccountBalanceMonitor).toHaveBeenCalledWith(
 			scope,
@@ -161,10 +142,10 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		const implementation = service();
 		const handler = build(implementation);
 		const payload = { ...request, webhook: { url: request.webhook.url } };
-		const created = await call(handler, "POST", collectionUrl, { body: payload });
+		const created = await handler(buildRequest("POST", collectionUrl, { body: payload }));
 		expect(created.status).toBe(400);
 		expect(await created.json()).toMatchObject({ type: "BAD_REQUEST" });
-		const updated = await call(handler, "PUT", itemUrl, { body: payload });
+		const updated = await handler(buildRequest("PUT", itemUrl, { body: payload }));
 		expect(updated.status).toBe(200);
 	});
 
@@ -184,9 +165,11 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 			["POST", collectionUrl],
 			["PUT", itemUrl],
 		] as const) {
-			const response = await call(handler, method, path, {
-				body: { ...request, alertCondition },
-			});
+			const response = await handler(
+				buildRequest(method, path, {
+					body: { ...request, alertCondition },
+				})
+			);
 			expect(response.status).toBe(400);
 			expect(await response.json()).toMatchObject({ type: "BAD_REQUEST" });
 		}
@@ -196,18 +179,54 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 	it("rejects a numeric threshold without coercing it", async () => {
 		const implementation = service();
-		const response = await call(build(implementation), "POST", collectionUrl, {
-			body: {
-				...request,
-				alertCondition: {
-					mode: "all",
-					conditions: [{ balanceType: "posted", operator: "<", value: 100 }],
+		const response = await build(implementation)(
+			buildRequest("POST", collectionUrl, {
+				body: {
+					...request,
+					alertCondition: {
+						mode: "all",
+						conditions: [{ balanceType: "posted", operator: "<", value: 100 }],
+					},
 				},
-			},
-		});
+			})
+		);
 		expect(response.status).toBe(400);
 		expect(await response.json()).toMatchObject({ type: "BAD_REQUEST", status: 400 });
 		expect(implementation.createLedgerAccountBalanceMonitor).not.toHaveBeenCalled();
+	});
+
+	it.each(["007", "1".repeat(21)])("rejects the non-canonical threshold %s", async value => {
+		const implementation = service();
+		const response = await build(implementation)(
+			buildRequest("POST", collectionUrl, {
+				body: {
+					...request,
+					alertCondition: {
+						mode: "all",
+						conditions: [{ balanceType: "posted", operator: "<", value }],
+					},
+				},
+			})
+		);
+		expect(response.status).toBe(400);
+		expect(implementation.createLedgerAccountBalanceMonitor).not.toHaveBeenCalled();
+	});
+
+	it("accepts a negative canonical threshold", async () => {
+		const implementation = service();
+		const response = await build(implementation)(
+			buildRequest("POST", collectionUrl, {
+				body: {
+					...request,
+					alertCondition: {
+						mode: "all",
+						conditions: [{ balanceType: "posted", operator: "<", value: "-12" }],
+					},
+				},
+			})
+		);
+		expect(response.status).toBe(200);
+		expect(implementation.createLedgerAccountBalanceMonitor).toHaveBeenCalledTimes(1);
 	});
 
 	it.each([
@@ -215,9 +234,11 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		["a malformed signing secret", { ...request.webhook, signingSecret: "whsec_short" }],
 	])("rejects %s", async (_name, webhook) => {
 		const implementation = service();
-		const response = await call(build(implementation), "POST", collectionUrl, {
-			body: { ...request, webhook },
-		});
+		const response = await build(implementation)(
+			buildRequest("POST", collectionUrl, {
+				body: { ...request, webhook },
+			})
+		);
 		expect(response.status).toBe(400);
 		expect(implementation.createLedgerAccountBalanceMonitor).not.toHaveBeenCalled();
 	});
@@ -253,11 +274,10 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		"rejects the %s callback URL %s as legacy Ajv did",
 		async (method, url) => {
 			const implementation = service();
-			const response = await call(
-				build(implementation),
-				method,
-				method === "POST" ? collectionUrl : itemUrl,
-				{ body: { ...request, webhook: { ...request.webhook, url } } }
+			const response = await build(implementation)(
+				buildRequest(method, method === "POST" ? collectionUrl : itemUrl, {
+					body: { ...request, webhook: { ...request.webhook, url } },
+				})
 			);
 			expect(response.status).toBe(400);
 			expect(implementation.createLedgerAccountBalanceMonitor).not.toHaveBeenCalled();
@@ -269,11 +289,10 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		"accepts the %s callback URL %s as legacy Ajv did",
 		async (method, url) => {
 			const implementation = service();
-			const response = await call(
-				build(implementation),
-				method,
-				method === "POST" ? collectionUrl : itemUrl,
-				{ body: { ...request, webhook: { ...request.webhook, url } } }
+			const response = await build(implementation)(
+				buildRequest(method, method === "POST" ? collectionUrl : itemUrl, {
+					body: { ...request, webhook: { ...request.webhook, url } },
+				})
 			);
 			expect(response.status).toBe(200);
 			const called =
@@ -296,9 +315,11 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 			)
 		);
 		const metadata = { team: "treasury", purpose: "low balance" };
-		const response = await call(build(implementation), "POST", collectionUrl, {
-			body: { ...request, metadata },
-		});
+		const response = await build(implementation)(
+			buildRequest("POST", collectionUrl, {
+				body: { ...request, metadata },
+			})
+		);
 		expect(response.status).toBe(200);
 		expect(await response.json()).toMatchObject({ metadata });
 		expect(implementation.createLedgerAccountBalanceMonitor).toHaveBeenCalledWith(scope, {
@@ -312,7 +333,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		["no token", { anonymous: true }],
 	])("returns 401 for %s", async (_name, options) => {
 		const implementation = service();
-		const response = await call(build(implementation), "GET", collectionUrl, options);
+		const response = await build(implementation)(buildRequest("GET", collectionUrl, options));
 		expect(response.status).toBe(401);
 		expect(await response.json()).toMatchObject({ type: "UNAUTHORIZED" });
 		expect(implementation.listLedgerAccountBalanceMonitors).not.toHaveBeenCalled();
@@ -320,17 +341,19 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 	it("rejects readonly writes", async () => {
 		const implementation = service();
-		const response = await call(build(implementation), "POST", collectionUrl, {
-			token: tokenWith(["org_readonly"]),
-			body: request,
-		});
+		const response = await build(implementation)(
+			buildRequest("POST", collectionUrl, {
+				token: tokenWith(["org_readonly"]),
+				body: request,
+			})
+		);
 		expect(response.status).toBe(403);
 		expect(implementation.createLedgerAccountBalanceMonitor).not.toHaveBeenCalled();
 	});
 
 	it("lists through the Effect service with the existing defaults and response", async () => {
 		const implementation = service();
-		const response = await call(build(implementation), "GET", collectionUrl);
+		const response = await build(implementation)(buildRequest("GET", collectionUrl));
 
 		expect(response.status).toBe(200);
 		expect(await response.json()).toMatchSnapshot();
@@ -339,23 +362,26 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 	it("forwards explicit list pagination", async () => {
 		const implementation = service();
-		const response = await call(build(implementation), "GET", `${collectionUrl}?offset=10&limit=5`);
+		const response = await build(implementation)(
+			buildRequest("GET", `${collectionUrl}?offset=10&limit=5`)
+		);
 
 		expect(response.status).toBe(200);
 		expect(implementation.listLedgerAccountBalanceMonitors).toHaveBeenCalledWith(scope, 10, 5);
 	});
 
 	it("accepts the collection path with a trailing slash", async () => {
-		const response = await call(build(service()), "GET", `${collectionUrl}/`);
+		const response = await build(service())(buildRequest("GET", `${collectionUrl}/`));
 		expect(response.status).toBe(200);
 	});
 
 	it("rejects malformed parent path IDs", async () => {
 		const implementation = service();
-		const response = await call(
-			build(implementation),
-			"GET",
-			`/api/ledgers/not-a-ledger/accounts/not-an-account/balance-monitors/${monitorId.toString()}`
+		const response = await build(implementation)(
+			buildRequest(
+				"GET",
+				`/api/ledgers/not-a-ledger/accounts/not-an-account/balance-monitors/${monitorId.toString()}`
+			)
 		);
 		expect(response.status).toBe(400);
 		expect(await response.json()).toMatchObject({ type: "BAD_REQUEST" });
@@ -364,7 +390,9 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 	it("creates with the existing 200 response", async () => {
 		const implementation = service();
-		const response = await call(build(implementation), "POST", collectionUrl, { body: request });
+		const response = await build(implementation)(
+			buildRequest("POST", collectionUrl, { body: request })
+		);
 
 		expect(response.status).toBe(200);
 		expect(response.headers.get("location")).toBeNull();
@@ -374,7 +402,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 	it("updates with the existing response and service inputs", async () => {
 		const implementation = service();
-		const response = await call(build(implementation), "PUT", itemUrl, { body: request });
+		const response = await build(implementation)(buildRequest("PUT", itemUrl, { body: request }));
 
 		expect(response.status).toBe(200);
 		expect(await response.json()).toMatchSnapshot();
@@ -387,7 +415,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 	it("deletes with the existing empty 200 response", async () => {
 		const implementation = service();
-		const response = await call(build(implementation), "DELETE", itemUrl);
+		const response = await build(implementation)(buildRequest("DELETE", itemUrl));
 
 		expect(response.status).toBe(200);
 		expect(await response.text()).toBe("");
@@ -409,11 +437,12 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 			if (operation === "delete")
 				vi.mocked(implementation.deleteLedgerAccountBalanceMonitor).mockReturnValue(failure);
 
-			const response = await call(
-				build(implementation),
-				operation === "update" ? "PUT" : operation === "delete" ? "DELETE" : "GET",
-				itemUrl,
-				operation === "update" ? { body: request } : {}
+			const response = await build(implementation)(
+				buildRequest(
+					operation === "update" ? "PUT" : operation === "delete" ? "DELETE" : "GET",
+					itemUrl,
+					operation === "update" ? { body: request } : {}
+				)
 			);
 
 			expect(response.status).toBe(404);
@@ -429,7 +458,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 		vi
 			.mocked(implementation.listLedgerAccountBalanceMonitors)
 			.mockReturnValue(Effect.fail(new NotFoundError("Account not found")));
-		const response = await call(build(implementation), "GET", collectionUrl);
+		const response = await build(implementation)(buildRequest("GET", collectionUrl));
 		expect(response.status).toBe(404);
 		expect(await response.json()).toMatchObject({
 			type: "NOT_FOUND",
@@ -450,7 +479,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 			["PUT", itemUrl, request],
 			["DELETE", itemUrl, undefined],
 		] as const) {
-			const response = await call(handler, method, path, { body });
+			const response = await handler(buildRequest(method, path, { body }));
 			expect(response.status).toBe(409);
 			expect(await response.json()).toMatchObject({ type: "CONFLICT", detail: "Monitor changed" });
 		}
@@ -458,7 +487,9 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 
 	it("preserves pagination validation", async () => {
 		const implementation = service();
-		const invalid = await call(build(implementation), "GET", `${collectionUrl}?offset=invalid`);
+		const invalid = await build(implementation)(
+			buildRequest("GET", `${collectionUrl}?offset=invalid`)
+		);
 		expect(invalid.status).toBe(400);
 		expect(await invalid.json()).toMatchObject({ type: "BAD_REQUEST" });
 		expect(implementation.listLedgerAccountBalanceMonitors).not.toHaveBeenCalled();
@@ -470,7 +501,7 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 			.mocked(implementation.listLedgerAccountBalanceMonitors)
 			.mockReturnValue(Effect.fail(new InternalServerError("Internal Server Error")));
 
-		const response = await call(build(implementation), "GET", collectionUrl);
+		const response = await build(implementation)(buildRequest("GET", collectionUrl));
 
 		expect(response.status).toBe(500);
 		expect(await response.json()).toMatchObject({
@@ -491,10 +522,12 @@ describe("LedgerAccountBalanceMonitorRoutes", () => {
 			"returns 403 on %s %s for a token without scope",
 			async (method, path, permission, body) => {
 				const implementation = service();
-				const response = await call(build(implementation), method, path, {
-					token: tokenWith([]),
-					body,
-				});
+				const response = await build(implementation)(
+					buildRequest(method, path, {
+						token: tokenWith([]),
+						body,
+					})
+				);
 				expect(response.status).toBe(403);
 				expect(await response.json()).toMatchObject({
 					type: "FORBIDDEN",

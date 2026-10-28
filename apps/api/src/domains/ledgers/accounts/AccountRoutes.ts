@@ -2,8 +2,8 @@ import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
-import type { LedgerAccountID, LedgerID } from "@/lib/ids";
-import { parseId } from "@/lib/utils";
+import type { LedgerAccountID } from "@/lib/ids";
+import { parseId, parseLedgerId } from "@/lib/utils";
 import { AccountServiceTag } from "./AccountService";
 
 const AccountRoutes = HttpApiBuilder.group(LedgerApi, "accounts", handlers =>
@@ -14,7 +14,7 @@ const AccountRoutes = HttpApiBuilder.group(LedgerApi, "accounts", handlers =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["ledger:account:read"]);
 					const token = yield* CurrentToken;
-					const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", params.ledgerId);
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
 					const accounts = yield* service.listAccounts(token.orgId, ledgerId, query);
 					return accounts.map(account => account.toResponse());
 				})
@@ -23,7 +23,7 @@ const AccountRoutes = HttpApiBuilder.group(LedgerApi, "accounts", handlers =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["ledger:account:read"]);
 					const token = yield* CurrentToken;
-					const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", params.ledgerId);
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
 					const accountId = yield* parseId<"lat", LedgerAccountID>("lat", params.accountId);
 					const account = yield* service.getAccount(token.orgId, ledgerId, accountId);
 					return account.toResponse();
@@ -33,7 +33,7 @@ const AccountRoutes = HttpApiBuilder.group(LedgerApi, "accounts", handlers =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["ledger:account:write"]);
 					const token = yield* CurrentToken;
-					const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", params.ledgerId);
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
 					const account = yield* service.createAccount(token.orgId, ledgerId, payload);
 					return HttpApiSchema.withHeaders({
 						body: account.toResponse(),
@@ -47,7 +47,7 @@ const AccountRoutes = HttpApiBuilder.group(LedgerApi, "accounts", handlers =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["ledger:account:write"]);
 					const token = yield* CurrentToken;
-					const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", params.ledgerId);
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
 					const accountId = yield* parseId<"lat", LedgerAccountID>("lat", params.accountId);
 					const account = yield* service.updateAccount(token.orgId, ledgerId, accountId, payload);
 					return account.toResponse();
@@ -57,7 +57,7 @@ const AccountRoutes = HttpApiBuilder.group(LedgerApi, "accounts", handlers =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["ledger:account:delete"]);
 					const token = yield* CurrentToken;
-					const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", params.ledgerId);
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
 					const accountId = yield* parseId<"lat", LedgerAccountID>("lat", params.accountId);
 					yield* service.deleteAccount(token.orgId, ledgerId, accountId);
 				})

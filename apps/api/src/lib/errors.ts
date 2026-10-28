@@ -158,6 +158,10 @@ class InvalidId extends BadRequestError {
 	}
 }
 
+/** The only place the `retry-after` header rule lives: present exactly when `retryAfterSeconds` is set. */
+const retryAfterHeaders = (error: HttpError): { readonly "retry-after"?: number } =>
+	error.retryAfterSeconds === undefined ? {} : { "retry-after": error.retryAfterSeconds };
+
 /**
  * Effect schemas for the HttpApi path: each encodes its error class to today's problem
  * body plus an optional `retry-after` header. `instance` and `traceId` are minted at
@@ -199,19 +203,19 @@ const encodeProblem = <
 						retryable: body.retryable,
 						retryAfterSeconds: headers["retry-after"],
 					}),
-				encode: error => ({
-					body: {
-						type,
-						status,
-						title: error.title,
-						detail: error.message,
-						instance: `/instance/${uuid()}`,
-						traceId: uuid(),
-						...(error.retryable === undefined ? {} : { retryable: error.retryable }),
-					},
-					headers:
-						error.retryAfterSeconds === undefined ? {} : { "retry-after": error.retryAfterSeconds },
-				}),
+				encode: error => {
+					const { retryable, ...problem } = error.toProblemDetail();
+					return {
+						// `type` and `status` are the literals the schema declares; the class states the same values.
+						body: {
+							...problem,
+							type,
+							status,
+							...(retryable === undefined ? {} : { retryable }),
+						},
+						headers: retryAfterHeaders(error),
+					};
+				},
 			}
 		)
 	);
@@ -267,6 +271,7 @@ const ServiceUnavailableApiError = encodeProblem(
 
 export type { HttpErrorOptions };
 export {
+	retryAfterHeaders,
 	BadRequestApiError,
 	ConflictApiError,
 	ForbiddenApiError,

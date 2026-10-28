@@ -2,8 +2,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
-import type { LedgerID } from "@/lib/ids";
-import { parseId } from "@/lib/utils";
+import { parseLedgerId } from "@/lib/utils";
 import { LedgerServiceTag } from "./LedgerService";
 
 const LedgerRoutes = HttpApiBuilder.group(LedgerApi, "ledgers", handlers =>
@@ -25,7 +24,7 @@ const LedgerRoutes = HttpApiBuilder.group(LedgerApi, "ledgers", handlers =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["ledger:read"]);
 					const token = yield* CurrentToken;
-					const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", params.ledgerId);
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
 					const ledger = yield* service.getLedger(token.orgId, ledgerId);
 					return ledger.toResponse();
 				})
@@ -45,7 +44,7 @@ const LedgerRoutes = HttpApiBuilder.group(LedgerApi, "ledgers", handlers =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["ledger:write"]);
 					const token = yield* CurrentToken;
-					const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", params.ledgerId);
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
 					const ledger = yield* service.updateLedger(token.orgId, ledgerId, payload);
 					return ledger.toResponse();
 				})
@@ -54,7 +53,7 @@ const LedgerRoutes = HttpApiBuilder.group(LedgerApi, "ledgers", handlers =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["ledger:delete"]);
 					const token = yield* CurrentToken;
-					const ledgerId = yield* parseId<"lgr", LedgerID>("lgr", params.ledgerId);
+					const ledgerId = yield* parseLedgerId(params.ledgerId);
 					yield* service.deleteLedger(token.orgId, ledgerId);
 				})
 			);

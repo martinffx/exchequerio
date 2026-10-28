@@ -15,11 +15,11 @@ import { Cause, Context, Effect, Exit, Layer, Logger, Scope } from "effect";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { TypeID } from "typeid-js";
 import { signJWT } from "@/auth";
-import { IdempotencyPending } from "@/lib/IdempotencyService";
 import type { OrgID } from "@/lib/ids";
 import { OrganizationServiceTag, type OrganizationService } from "@/domains/organizations";
 import { Organization } from "@/domains/organizations/Organization";
-import { appLayer, makeTestWebHandler, type TestServiceLayers, testServicesLayer } from "@/server";
+import { makeTestWebHandler, type TestServiceLayers, testServicesLayer } from "@/lib/testing";
+import { appLayer } from "@/server";
 
 const deferred = () => {
 	let resolve!: () => void;
@@ -364,14 +364,47 @@ describe("Effect HTTP edge", () => {
 			}
 		);
 
-		it("renders IdempotencyPending as a 409 with Retry-After", async () => {
-			const service = stub({ deleteOrganization: () => Effect.fail(new IdempotencyPending()) });
+		it("mints a fresh instance and traceId for every problem", async () => {
+			const service = stub({ getOrganization: () => Effect.fail(new NotFoundError("gone")) });
+			const handler = build(service);
+			const path = `/api/organizations/${organizationId.toString()}`;
+			const first = (await (await handler(call("GET", path))).json()) as Record<string, unknown>;
+			const second = (await (await handler(call("GET", path))).json()) as Record<string, unknown>;
+			expect(first.instance).not.toBe(second.instance);
+			expect(first.traceId).not.toBe(second.traceId);
+		});
+
+		it("encodes a declared error with retryable and retry-after only when set", async () => {
+			const path = `/api/organizations/${organizationId.toString()}`;
+			const plain = await build(
+				stub({ deleteOrganization: () => Effect.fail(new ConflictError("busy")) })
+			)(call("DELETE", path));
+			expect(plain.status).toBe(409);
+			expect(plain.headers.has("retry-after")).toBe(false);
+			expect(await plain.json()).not.toHaveProperty("retryable");
+
+			const set = await build(
+				stub({
+					deleteOrganization: () =>
+						Effect.fail(new ConflictError("busy", { retryable: true, retryAfterSeconds: 3 })),
+				})
+			)(call("DELETE", path));
+			expect(set.status).toBe(409);
+			expect(set.headers.get("retry-after")).toBe("3");
+			const body = await set.json();
+			expect(body).toMatchObject({ retryable: true });
+			expect(body).not.toHaveProperty("retryAfterSeconds");
+		});
+
+		it("makes a declared ServiceUnavailable retryable by default", async () => {
+			const service = stub({
+				getOrganization: () => Effect.fail(new ServiceUnavailableError("down")),
+			});
 			const response = await build(service)(
-				call("DELETE", `/api/organizations/${organizationId.toString()}`)
+				call("GET", `/api/organizations/${organizationId.toString()}`)
 			);
-			expect(response.status).toBe(409);
-			expect(response.headers.get("retry-after")).toBe("1");
-			expect(await response.json()).toMatchObject({ type: "CONFLICT", retryable: true });
+			expect(response.status).toBe(503);
+			expect(await response.json()).toMatchObject({ type: "SERVICE_UNAVAILABLE", retryable: true });
 		});
 
 		it("logs a request without credentials before returning 401", async () => {
@@ -408,6 +441,7 @@ describe("Effect HTTP edge", () => {
 				call("GET", `/api/organizations/${organizationId.toString()}`)
 			);
 			expect(response.status).toBe(503);
+			expect(await response.text()).not.toContain("pool exhausted");
 			expect(logs.some(entry => entry.text.includes("pool exhausted"))).toBe(true);
 		});
 

@@ -1,5 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import { operation, throttledConflictErrors, throttledNotFoundErrors } from "@/lib/ApiContract";
+import { describedOperation, operation, throttledErrors } from "@/lib/ApiContract";
+import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
 import { PaginationQuery } from "@/lib/schema";
 import { Schema } from "effect";
 import {
@@ -23,7 +24,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.get("balances", `${prefix}/:categoryId/balances`, {
 			params: LedgerAccountCategoryIdParams,
 			success: LedgerAccountCategoryBalancesResponse,
-			error: throttledConflictErrors,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
 		}).annotateMerge(
 			operation(
 				"getLedgerAccountCategoryBalances",
@@ -35,65 +36,43 @@ const CategoriesApi = HttpApiGroup.make("categories")
 			params: LedgerIdParameters,
 			query: PaginationQuery,
 			success: Schema.Array(LedgerAccountCategoryResponse),
-			error: throttledNotFoundErrors,
+			error: [NotFoundApiError, ...throttledErrors],
 		}).annotateMerge(
-			operation(
-				"listLedgerAccountCategories",
-				"List Ledger Account Categories",
-				"List Ledger Account Categories"
-			)
+			describedOperation("listLedgerAccountCategories", "List Ledger Account Categories")
 		),
 		HttpApiEndpoint.get("get", `${prefix}/:categoryId`, {
 			params: LedgerAccountCategoryIdParams,
 			success: LedgerAccountCategoryResponse,
-			error: throttledNotFoundErrors,
-		}).annotateMerge(
-			operation(
-				"getLedgerAccountCategory",
-				"Get Ledger Account Category",
-				"Get Ledger Account Category"
-			)
-		),
+			error: [NotFoundApiError, ...throttledErrors],
+		}).annotateMerge(describedOperation("getLedgerAccountCategory", "Get Ledger Account Category")),
 		// Legacy create answers 200 without a Location header.
 		HttpApiEndpoint.post("create", `${prefix}/`, {
 			params: LedgerIdParameters,
 			payload: LedgerAccountCategoryRequest,
 			success: LedgerAccountCategoryResponse,
-			error: throttledConflictErrors,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
 		}).annotateMerge(
-			operation(
-				"createLedgerAccountCategory",
-				"Create Ledger Account Category",
-				"Create Ledger Account Category"
-			)
+			describedOperation("createLedgerAccountCategory", "Create Ledger Account Category")
 		),
 		HttpApiEndpoint.put("update", `${prefix}/:categoryId`, {
 			params: LedgerAccountCategoryIdParams,
 			payload: LedgerAccountCategoryRequest,
 			success: LedgerAccountCategoryResponse,
-			error: throttledConflictErrors,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
 		}).annotateMerge(
-			operation(
-				"updateLedgerAccountCategory",
-				"Update Ledger Account Category",
-				"Update Ledger Account Category"
-			)
+			describedOperation("updateLedgerAccountCategory", "Update Ledger Account Category")
 		),
 		HttpApiEndpoint.delete("delete", `${prefix}/:categoryId`, {
 			params: LedgerAccountCategoryIdParams,
 			success: HttpApiSchema.Empty(200),
-			error: throttledConflictErrors,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
 		}).annotateMerge(
-			operation(
-				"deleteLedgerAccountCategory",
-				"Delete Ledger Account Category",
-				"Delete Ledger Account Category"
-			)
+			describedOperation("deleteLedgerAccountCategory", "Delete Ledger Account Category")
 		),
 		HttpApiEndpoint.patch("linkAccount", `${prefix}/:categoryId/accounts/:accountId`, {
 			params: LinkAccountToCategoryParams,
 			success: HttpApiSchema.Empty(200),
-			error: throttledConflictErrors,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
 		}).annotateMerge(
 			operation(
 				"linkLedgerAccountToCategory",
@@ -104,7 +83,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.delete("unlinkAccount", `${prefix}/:categoryId/accounts/:accountId`, {
 			params: LinkAccountToCategoryParams,
 			success: HttpApiSchema.Empty(200),
-			error: throttledConflictErrors,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
 		}).annotateMerge(
 			operation(
 				"unlinkLedgerAccountToCategory",
@@ -115,7 +94,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.patch("linkCategory", `${prefix}/:categoryId/categories/:parentCategoryId`, {
 			params: LinkCategoryToCategoryParams,
 			success: HttpApiSchema.Empty(200),
-			error: throttledConflictErrors,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
 		}).annotateMerge(
 			operation(
 				"linkLedgerAccountCategoryToCategory",
@@ -126,7 +105,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.delete("unlinkCategory", `${prefix}/:categoryId/categories/:parentCategoryId`, {
 			params: LinkCategoryToCategoryParams,
 			success: HttpApiSchema.Empty(200),
-			error: throttledConflictErrors,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
 		}).annotateMerge(
 			operation(
 				"unlinkLedgerAccountCategoryToCategory",

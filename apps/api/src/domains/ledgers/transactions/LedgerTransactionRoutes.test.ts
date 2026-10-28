@@ -453,6 +453,35 @@ describe("TransactionRoutes", () => {
 		expect(await response.json()).toMatchObject({ type: "CONFLICT", retryable: true });
 	});
 
+	it.each(["", "a".repeat(256)])(
+		"rejects an idempotency key of length %# before the service",
+		async value => {
+			const implementation = service();
+			const response = await build(implementation)(
+				request("POST", collectionPath, { body: createBody, headers: key(value) })
+			);
+
+			expect(response.status).toBe(400);
+			expect(implementation.createTransaction).not.toHaveBeenCalled();
+		}
+	);
+
+	it("accepts a 255-character idempotency key", async () => {
+		const implementation = service();
+		const value = "a".repeat(255);
+		const response = await build(implementation)(
+			request("POST", collectionPath, { body: createBody, headers: key(value) })
+		);
+
+		expect(response.status).toBe(201);
+		expect(implementation.createTransaction).toHaveBeenCalledWith(
+			organizationId,
+			ledgerId,
+			value,
+			createBody
+		);
+	});
+
 	it("rejects numeric amounts and ambiguous asset selectors before the service", async () => {
 		const implementation = service();
 		const handler = build(implementation);
@@ -472,23 +501,34 @@ describe("TransactionRoutes", () => {
 		expect(implementation.createTransaction).not.toHaveBeenCalled();
 	});
 
-	it.each(["01", "-0", "+1", "1.0", "1e3", " 1", "1 ", "", "-9223372036854775809", "0", "-1", 100])(
-		"rejects invalid Entry amount %s before the service",
-		async amount => {
-			const implementation = service();
-			const response = await build(implementation)(
-				request("POST", collectionPath, {
-					headers: key("invalid-amount"),
-					body: {
-						...createBody,
-						ledgerEntries: createBody.ledgerEntries.map(entry => ({ ...entry, amount })),
-					},
-				})
-			);
-			expect(response.status).toBe(400);
-			expect(implementation.createTransaction).not.toHaveBeenCalled();
-		}
-	);
+	it.each([
+		"01",
+		"-0",
+		"+1",
+		"1.0",
+		"1e3",
+		" 1",
+		"1 ",
+		"",
+		"-9223372036854775809",
+		"0",
+		"-1",
+		100,
+		"1".repeat(20),
+	])("rejects invalid Entry amount %s before the service", async amount => {
+		const implementation = service();
+		const response = await build(implementation)(
+			request("POST", collectionPath, {
+				headers: key("invalid-amount"),
+				body: {
+					...createBody,
+					ledgerEntries: createBody.ledgerEntries.map(entry => ({ ...entry, amount })),
+				},
+			})
+		);
+		expect(response.status).toBe(400);
+		expect(implementation.createTransaction).not.toHaveBeenCalled();
+	});
 
 	it("serializes exact Entry amounts and effective time through HTTP", async () => {
 		const entity = Effect.runSync(

@@ -10,7 +10,7 @@ const AssetRoutes = HttpApiBuilder.group(LedgerApi, "assets", handlers =>
 	Effect.gen(function* () {
 		const service = yield* AssetServiceTag;
 		return handlers
-			.handle("listAssets", ({ query }) =>
+			.handle("list", ({ query }) =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["asset:read"]);
 					const token = yield* CurrentToken;
@@ -18,7 +18,7 @@ const AssetRoutes = HttpApiBuilder.group(LedgerApi, "assets", handlers =>
 					return assets.map(asset => asset.toResponse());
 				})
 			)
-			.handle("getAsset", ({ params }) =>
+			.handle("get", ({ params }) =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["asset:read"]);
 					const token = yield* CurrentToken;
@@ -27,7 +27,7 @@ const AssetRoutes = HttpApiBuilder.group(LedgerApi, "assets", handlers =>
 					return asset.toResponse();
 				})
 			)
-			.handle("createAsset", ({ payload }) =>
+			.handle("create", ({ payload }) =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["asset:write"]);
 					const token = yield* CurrentToken;
@@ -38,7 +38,7 @@ const AssetRoutes = HttpApiBuilder.group(LedgerApi, "assets", handlers =>
 					});
 				})
 			)
-			.handle("updateAsset", ({ params, payload }) =>
+			.handle("update", ({ params, payload }) =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["asset:write"]);
 					const token = yield* CurrentToken;
@@ -47,7 +47,7 @@ const AssetRoutes = HttpApiBuilder.group(LedgerApi, "assets", handlers =>
 					return asset.toResponse();
 				})
 			)
-			.handle("deleteAsset", ({ params }) =>
+			.handle("delete", ({ params }) =>
 				Effect.gen(function* () {
 					yield* requirePermissions(["asset:delete"]);
 					const token = yield* CurrentToken;
