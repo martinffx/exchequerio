@@ -2,7 +2,7 @@ import { type LedgerAccountBalanceMonitorJobPayload } from "@/domains/ledgers/ac
 import { Client, Pool, type PoolClient } from "pg";
 import { TypeID } from "typeid-js";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { Effect, Layer, ManagedRuntime, Metric, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Metric, Option, Tracer } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Config } from "@/config";
@@ -656,6 +656,44 @@ describe("LedgerTransactionRepoLive", () => {
 		);
 		expect(error).toBeInstanceOf(TransactionLifecycleConflict);
 	});
+
+	it.each(["getTransaction", "postTransaction"] as const)(
+		"records exactly one %s span",
+		async method => {
+			const { organizationId, ledgerId } = await createLedger();
+			const debit = await createAccount(organizationId, ledgerId, "debit");
+			const credit = await createAccount(organizationId, ledgerId, "credit");
+			const pending = await runtime.runPromise(
+				persist(
+					repository,
+					organizationId,
+					ledgerId,
+					newLedgerTransactionID(),
+					request("pending", [
+						{ accountId: debit, direction: "debit", amount: "5" },
+						{ accountId: credit, direction: "credit", amount: "5" },
+					])
+				)
+			);
+			const spans: Tracer.NativeSpan[] = [];
+			const tracer = Tracer.make({
+				span: options => {
+					const span = new Tracer.NativeSpan(options);
+					spans.push(span);
+					return span;
+				},
+			});
+			const program: Effect.Effect<unknown, unknown> =
+				method === "getTransaction"
+					? repository.getTransaction(organizationId, ledgerId, pending.id)
+					: repository.postTransaction(organizationId, ledgerId, pending.id, DateTime.utc());
+			await runtime.runPromise(program.pipe(Effect.withTracer(tracer)));
+			const names = spans
+				.map(({ name }) => name)
+				.filter(name => name === `LedgerTransactionRepo.${method}`);
+			expect(names).toEqual([`LedgerTransactionRepo.${method}`]);
+		}
+	);
 
 	describe("posted transaction counter", () => {
 		const counts = async () => ({

@@ -285,7 +285,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			.offset(query.offset)
 			.pipe(
 				Effect.flatMap(rows => Effect.all(rows.map(row => LedgerTransaction.fromRow(row)))),
-				Effect.mapError(mapTransactionInfrastructureError)
+				Effect.mapError(mapTransactionInfrastructureError),
+				Effect.withSpan("LedgerTransactionRepo.listTransactions")
 			);
 	}
 
@@ -319,7 +320,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			},
 		}).pipe(
 			Effect.flatMap(rows => LedgerTransaction.fromRows(rows)),
-			Effect.mapError(mapTransactionInfrastructureError)
+			Effect.mapError(mapTransactionInfrastructureError),
+			Effect.withSpan("LedgerTransactionRepo.getTransaction")
 		);
 	}
 
@@ -332,16 +334,18 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	createTransaction(
 		transaction: LedgerTransaction
 	): Effect.Effect<AccountingMutation, LedgerTransactionCreateRepositoryError> {
-		if (transaction.settlementId !== undefined)
-			return Effect.fail(new TransactionSettlementConflict());
-		return this.db
-			.transaction(tx => this.insertAccounting(tx, transaction))
-			.pipe(
-				Effect.tap(() =>
-					transaction.status === "posted" ? recordLedgerTransactionPosted("create") : Effect.void
-				),
-				Effect.mapError(mapTransactionCreateError)
-			);
+		return Effect.suspend(() => {
+			if (transaction.settlementId !== undefined)
+				return Effect.fail(new TransactionSettlementConflict());
+			return this.db
+				.transaction(tx => this.insertAccounting(tx, transaction))
+				.pipe(
+					Effect.tap(() =>
+						transaction.status === "posted" ? recordLedgerTransactionPosted("create") : Effect.void
+					),
+					Effect.mapError(mapTransactionCreateError)
+				);
+		}).pipe(Effect.withSpan("LedgerTransactionRepo.createTransaction"));
 	}
 
 	/**
@@ -392,7 +396,8 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		settlementId: LedgerAccountSettlementID
 	) {
 		return this.readSettlementAccounting(this.db, organizationId, ledgerId, settlementId).pipe(
-			Effect.mapError(mapTransactionInfrastructureError)
+			Effect.mapError(mapTransactionInfrastructureError),
+			Effect.withSpan("LedgerTransactionRepo.getSettlementTransaction")
 		);
 	}
 
@@ -467,47 +472,49 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 	createSettlementTransaction(
 		transaction: LedgerTransaction
 	): Effect.Effect<AccountingMutation, LedgerTransactionUpdateRepositoryError> {
-		const settlementId = transaction.settlementId;
-		if (settlementId === undefined) return Effect.fail(new TransactionSettlementConflict());
-		return this.db
-			.transaction(tx =>
-				Effect.gen({ self: this }, function* () {
-					const settlement = yield* this.lockSettlement(
-						tx,
-						transaction.organizationId,
-						transaction.ledgerId,
-						settlementId
-					);
-					const existing = yield* this.readSettlementAccounting(
-						tx,
-						transaction.organizationId,
-						transaction.ledgerId,
-						settlementId
-					);
-					if (Option.isSome(existing))
-						return { transaction: existing.value, monitorJobs: [], inserted: false };
-					if (
-						settlement.status !== "processing" ||
-						settlement.targetStatus !== transaction.status ||
-						transaction.status === "voided"
-					) {
-						return yield* Effect.fail(
-							new TransactionLifecycleConflict(settlement.status, transaction.status)
+		return Effect.suspend(() => {
+			const settlementId = transaction.settlementId;
+			if (settlementId === undefined) return Effect.fail(new TransactionSettlementConflict());
+			return this.db
+				.transaction(tx =>
+					Effect.gen({ self: this }, function* () {
+						const settlement = yield* this.lockSettlement(
+							tx,
+							transaction.organizationId,
+							transaction.ledgerId,
+							settlementId
 						);
-					}
-					const mutation = yield* this.insertAccounting(tx, transaction);
-					return { ...mutation, inserted: true };
-				})
-			)
-			.pipe(
-				Effect.tap(({ inserted }) =>
-					inserted && transaction.status === "posted"
-						? recordLedgerTransactionPosted("settlement")
-						: Effect.void
-				),
-				Effect.map(({ transaction: created, monitorJobs }) => ({ transaction: created, monitorJobs })),
-				Effect.mapError(mapTransactionMutationError)
-			);
+						const existing = yield* this.readSettlementAccounting(
+							tx,
+							transaction.organizationId,
+							transaction.ledgerId,
+							settlementId
+						);
+						if (Option.isSome(existing))
+							return { transaction: existing.value, monitorJobs: [], inserted: false };
+						if (
+							settlement.status !== "processing" ||
+							settlement.targetStatus !== transaction.status ||
+							transaction.status === "voided"
+						) {
+							return yield* Effect.fail(
+								new TransactionLifecycleConflict(settlement.status, transaction.status)
+							);
+						}
+						const mutation = yield* this.insertAccounting(tx, transaction);
+						return { ...mutation, inserted: true };
+					})
+				)
+				.pipe(
+					Effect.tap(({ inserted }) =>
+						inserted && transaction.status === "posted"
+							? recordLedgerTransactionPosted("settlement")
+							: Effect.void
+					),
+					Effect.map(({ transaction: created, monitorJobs }) => ({ transaction: created, monitorJobs })),
+					Effect.mapError(mapTransactionMutationError)
+				);
+		}).pipe(Effect.withSpan("LedgerTransactionRepo.createSettlementTransaction"));
 	}
 
 	/**
@@ -528,7 +535,13 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		settlementId: LedgerAccountSettlementID,
 		now: DateTime
 	) {
-		return this.transitionSettlementAccounting(organizationId, ledgerId, settlementId, "posted", now);
+		return this.transitionSettlementAccounting(
+			organizationId,
+			ledgerId,
+			settlementId,
+			"posted",
+			now
+		).pipe(Effect.withSpan("LedgerTransactionRepo.postSettlementTransaction"));
 	}
 
 	/**
@@ -549,7 +562,13 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 		settlementId: LedgerAccountSettlementID,
 		now: DateTime
 	) {
-		return this.transitionSettlementAccounting(organizationId, ledgerId, settlementId, "voided", now);
+		return this.transitionSettlementAccounting(
+			organizationId,
+			ledgerId,
+			settlementId,
+			"voided",
+			now
+		).pipe(Effect.withSpan("LedgerTransactionRepo.voidSettlementTransaction"));
 	}
 
 	/**
@@ -671,7 +690,10 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 
 			return { transaction, monitorJobs };
-		}).pipe(Effect.mapError(mapTransactionMutationError));
+		}).pipe(
+			Effect.mapError(mapTransactionMutationError),
+			Effect.withSpan("LedgerTransactionRepo.updateTransaction")
+		);
 	}
 
 	/**
@@ -724,7 +746,10 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 
 			yield* recordLedgerTransactionPosted("post");
 			return { transaction, monitorJobs };
-		}).pipe(Effect.mapError(mapTransactionMutationError));
+		}).pipe(
+			Effect.mapError(mapTransactionMutationError),
+			Effect.withSpan("LedgerTransactionRepo.postTransaction")
+		);
 	}
 
 	/**
@@ -776,7 +801,10 @@ class LedgerTransactionRepoLive implements LedgerTransactionRepo {
 			);
 
 			return { transaction, monitorJobs };
-		}).pipe(Effect.mapError(mapTransactionMutationError));
+		}).pipe(
+			Effect.mapError(mapTransactionMutationError),
+			Effect.withSpan("LedgerTransactionRepo.voidTransaction")
+		);
 	}
 
 	/**
