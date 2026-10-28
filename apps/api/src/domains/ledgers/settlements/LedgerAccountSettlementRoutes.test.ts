@@ -2,11 +2,10 @@ import { Effect } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LedgerApi } from "@/api";
-import { signJWT } from "@/auth";
+import { makeRequest, tokenFor, useTestWebHandlers } from "@/lib/testing";
 import { ConflictError, NotFoundError } from "@/lib/errors";
-import { makeTestWebHandler } from "@/server";
 import type { LedgerAccountID, LedgerAccountSettlementID, LedgerID, OrgID } from "@/lib/ids";
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
 import type { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
@@ -50,39 +49,12 @@ const service = (): LedgerAccountSettlementService =>
 		listLedgerAccountSettlementEntries: vi.fn(() => Effect.succeed([])),
 	} as unknown as LedgerAccountSettlementService);
 
-const disposers: Array<() => Promise<void>> = [];
+const buildHandler = useTestWebHandlers();
 const build = (implementation: LedgerAccountSettlementService) => {
-	const { handler, dispose } = makeTestWebHandler({ settlement: implementation });
-	disposers.push(dispose);
-	return handler;
+	return buildHandler({ settlement: implementation });
 };
-afterEach(async () => {
-	for (const dispose of disposers.splice(0)) await dispose();
-});
-
-const tokenWith = (scope: Parameters<typeof signJWT>[0]["scope"]) =>
-	signJWT({ sub: orgId.toString(), scope });
-const request = (
-	method: string,
-	path: string,
-	options: {
-		token?: string;
-		anonymous?: boolean;
-		body?: unknown;
-		headers?: Record<string, string>;
-	} = {}
-) => {
-	const token = options.anonymous === true ? undefined : (options.token ?? tokenWith(["org_admin"]));
-	return new Request(`http://localhost${path}`, {
-		method,
-		headers: {
-			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-			...(options.body === undefined ? {} : { "content-type": "application/json" }),
-			...options.headers,
-		},
-		body: options.body === undefined ? undefined : JSON.stringify(options.body),
-	});
-};
+const tokenWith = tokenFor(orgId);
+const request = makeRequest(() => tokenWith(["org_admin"]));
 const key = (value = crypto.randomUUID()) => ({ "idempotency-key": value });
 const entryId = () => new TypeID("lte").toString();
 

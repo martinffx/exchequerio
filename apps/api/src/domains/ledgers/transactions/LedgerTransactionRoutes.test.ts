@@ -2,14 +2,13 @@ import { Effect } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { Settings } from "luxon";
 import { TypeID } from "typeid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { LedgerApi } from "@/api";
-import { signJWT } from "@/auth";
+import { makeRequest, tokenFor, useTestWebHandlers } from "@/lib/testing";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import type { LedgerAccountID, LedgerID, LedgerTransactionID, OrgID } from "@/lib/ids";
 import { IdempotencyPending, IdempotencyUnavailable } from "@/lib/IdempotencyService";
-import { makeTestWebHandler } from "@/server";
 
 import { LedgerTransaction } from "./LedgerTransaction";
 import {
@@ -83,42 +82,14 @@ const service = (): TransactionService =>
 		voidTransaction: vi.fn(() => Effect.succeed(transaction)),
 	} as unknown as TransactionService);
 
-const disposers: Array<() => Promise<void>> = [];
+const buildHandler = useTestWebHandlers();
 
 const build = (implementation: TransactionService) => {
-	const { handler, dispose } = makeTestWebHandler({ transaction: implementation });
-	disposers.push(dispose);
-	return handler;
+	return buildHandler({ transaction: implementation });
 };
 
-const tokenWith = (scope: Parameters<typeof signJWT>[0]["scope"]) =>
-	signJWT({ sub: organizationId.toString(), scope });
-const request = (
-	method: string,
-	path: string,
-	options: {
-		token?: string;
-		anonymous?: boolean;
-		body?: unknown;
-		headers?: Record<string, string>;
-	} = {}
-) => {
-	const token =
-		options.anonymous === true ? undefined : (options.token ?? tokenWith(["super_admin"]));
-	return new Request(`http://localhost${path}`, {
-		method,
-		headers: {
-			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-			...(options.body === undefined ? {} : { "content-type": "application/json" }),
-			...options.headers,
-		},
-		body: options.body === undefined ? undefined : JSON.stringify(options.body),
-	});
-};
-
-afterEach(async () => {
-	for (const dispose of disposers.splice(0)) await dispose();
-});
+const tokenWith = tokenFor(organizationId);
+const request = makeRequest(() => tokenWith(["super_admin"]));
 
 const collectionPath = `/api/ledgers/${ledgerId.toString()}/transactions`;
 const itemPath = `${collectionPath}/${transactionId.toString()}`;

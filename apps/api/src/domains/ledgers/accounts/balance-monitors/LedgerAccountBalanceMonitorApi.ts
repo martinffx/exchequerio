@@ -1,15 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import {
-	BadRequestApiError,
-	ConflictApiError,
-	ForbiddenApiError,
-	InternalServerApiError,
-	NotFoundApiError,
-	ServiceUnavailableApiError,
-	TooManyRequestsApiError,
-	UnauthorizedApiError,
-} from "@/lib/errors";
+import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
+import { describedOperation, throttledErrors } from "@/lib/ApiContract";
 import { AccountItemParameters } from "../AccountSchema";
 import {
 	LedgerAccountBalanceMonitorIdParameters,
@@ -21,19 +13,8 @@ import {
 
 // Every route declares 429. Permissions are enforced by the handlers: balance_monitor:read for the
 // GETs, :write for create and update, :delete for delete.
-const baseErrors = [
-	BadRequestApiError,
-	UnauthorizedApiError,
-	ForbiddenApiError,
-	TooManyRequestsApiError,
-	InternalServerApiError,
-	ServiceUnavailableApiError,
-] as const;
-const itemErrors = [NotFoundApiError, ...baseErrors] as const;
-const writeErrors = [NotFoundApiError, ConflictApiError, ...baseErrors] as const;
-
-const operation = (identifier: string, summary: string) =>
-	OpenApi.annotations({ identifier, summary, description: summary });
+const itemErrors = [NotFoundApiError, ...throttledErrors] as const;
+const writeErrors = [NotFoundApiError, ConflictApiError, ...throttledErrors] as const;
 
 const prefix = "/ledgers/:ledgerId/accounts/:accountId/balance-monitors";
 
@@ -45,14 +26,14 @@ const BalanceMonitorsApi = HttpApiGroup.make("balanceMonitors")
 			success: Schema.Array(LedgerAccountBalanceMonitorResponse),
 			error: itemErrors,
 		}).annotateMerge(
-			operation("listLedgerAccountBalanceMonitors", "List Ledger Account Balance Monitors")
+			describedOperation("listLedgerAccountBalanceMonitors", "List Ledger Account Balance Monitors")
 		),
 		HttpApiEndpoint.get("get", `${prefix}/:balanceMonitorId`, {
 			params: LedgerAccountBalanceMonitorIdParameters,
 			success: LedgerAccountBalanceMonitorResponse,
 			error: itemErrors,
 		}).annotateMerge(
-			operation("getLedgerAccountBalanceMonitor", "Get Ledger Account Balance Monitor")
+			describedOperation("getLedgerAccountBalanceMonitor", "Get Ledger Account Balance Monitor")
 		),
 		HttpApiEndpoint.post("create", `${prefix}/`, {
 			params: AccountItemParameters,
@@ -60,7 +41,7 @@ const BalanceMonitorsApi = HttpApiGroup.make("balanceMonitors")
 			success: LedgerAccountBalanceMonitorResponse,
 			error: writeErrors,
 		}).annotateMerge(
-			operation("createLedgerAccountBalanceMonitor", "Create Ledger Account Balance Monitor")
+			describedOperation("createLedgerAccountBalanceMonitor", "Create Ledger Account Balance Monitor")
 		),
 		HttpApiEndpoint.put("update", `${prefix}/:balanceMonitorId`, {
 			params: LedgerAccountBalanceMonitorIdParameters,
@@ -68,14 +49,14 @@ const BalanceMonitorsApi = HttpApiGroup.make("balanceMonitors")
 			success: LedgerAccountBalanceMonitorResponse,
 			error: writeErrors,
 		}).annotateMerge(
-			operation("updateLedgerAccountBalanceMonitor", "Update Ledger Account Balance Monitor")
+			describedOperation("updateLedgerAccountBalanceMonitor", "Update Ledger Account Balance Monitor")
 		),
 		HttpApiEndpoint.delete("delete", `${prefix}/:balanceMonitorId`, {
 			params: LedgerAccountBalanceMonitorIdParameters,
 			success: HttpApiSchema.Empty(200),
 			error: writeErrors,
 		}).annotateMerge(
-			operation("deleteLedgerAccountBalanceMonitor", "Delete Ledger Account Balance Monitor")
+			describedOperation("deleteLedgerAccountBalanceMonitor", "Delete Ledger Account Balance Monitor")
 		)
 	)
 	.annotateMerge(OpenApi.annotations({ title: "Ledger Account Balance Monitors" }));

@@ -1,14 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import {
-	BadRequestApiError,
-	ConflictApiError,
-	ForbiddenApiError,
-	InternalServerApiError,
-	NotFoundApiError,
-	ServiceUnavailableApiError,
-	UnauthorizedApiError,
-} from "@/lib/errors";
+import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
+import { commonErrors, operation } from "@/lib/ApiContract";
 import {
 	AssetCreateRequest,
 	AssetIdParameters,
@@ -18,16 +11,6 @@ import {
 } from "./AssetSchema";
 
 // Collection paths keep their trailing slash, as today's OpenAPI document has it.
-const commonErrors = [
-	BadRequestApiError,
-	UnauthorizedApiError,
-	ForbiddenApiError,
-	InternalServerApiError,
-	ServiceUnavailableApiError,
-] as const;
-
-const operation = (identifier: string, summary: string) =>
-	OpenApi.annotations({ identifier, summary });
 
 // Endpoint names equal operation ids: the schema-error transform in api.ts branches on them.
 // 409 on update is a service failure (duplicate code) that the routes have always declared.

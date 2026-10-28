@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { TypeID } from "typeid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { signJWT } from "@/auth";
+import { describe, expect, it, vi } from "vitest";
 import { LedgerNotFound } from "@/domains/ledgers/LedgerErrors";
 import type { AccountService } from "@/domains/ledgers/accounts/AccountService";
 import { LedgerAccountCategoryEntity } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryEntity";
@@ -12,8 +11,8 @@ import {
 } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryErrors";
 import type { LedgerAccountCategoryService } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryService";
 import { ConflictError, NotFoundError } from "@/lib/errors";
+import { makeRequest, tokenFor, useTestWebHandlers } from "@/lib/testing";
 import type { LedgerAccountCategoryID, LedgerAccountID, LedgerID, OrgID } from "@/lib/ids";
-import { makeTestWebHandler } from "@/server";
 import { createLedgerAccountCategoryFixture } from "./fixtures";
 import type { LedgerAccountCategoryResponse } from "./LedgerAccountCategorySchema";
 
@@ -46,37 +45,15 @@ const service = (): LedgerAccountCategoryService =>
 		unlinkLedgerAccountCategoryToCategory: vi.fn(() => Effect.void),
 	} as unknown as LedgerAccountCategoryService);
 
-const disposers: Array<() => Promise<void>> = [];
+const buildHandler = useTestWebHandlers();
 const build = (
 	implementation: LedgerAccountCategoryService,
 	extra: { account?: AccountService } = {}
 ) => {
-	const { handler, dispose } = makeTestWebHandler({ category: implementation, ...extra });
-	disposers.push(dispose);
-	return handler;
+	return buildHandler({ category: implementation, ...extra });
 };
-afterEach(async () => {
-	for (const dispose of disposers.splice(0)) await dispose();
-});
-
-const tokenWith = (scope: Parameters<typeof signJWT>[0]["scope"]) =>
-	signJWT({ sub: orgId.toString(), scope });
-const request = (
-	method: string,
-	path: string,
-	options: { token?: string; anonymous?: boolean; body?: unknown } = {}
-) => {
-	const token =
-		options.anonymous === true ? undefined : (options.token ?? tokenWith(["super_admin"]));
-	return new Request(`http://localhost${path}`, {
-		method,
-		headers: {
-			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-			...(options.body === undefined ? {} : { "content-type": "application/json" }),
-		},
-		body: options.body === undefined ? undefined : JSON.stringify(options.body),
-	});
-};
+const tokenWith = tokenFor(orgId);
+const request = makeRequest(() => tokenWith(["super_admin"]));
 const json = async <T = unknown>(response: Response) => (await response.json()) as T;
 
 const routes: Array<[string, string, string, unknown]> = [

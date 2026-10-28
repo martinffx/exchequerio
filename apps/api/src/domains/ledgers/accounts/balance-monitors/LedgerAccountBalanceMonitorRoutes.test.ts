@@ -2,13 +2,12 @@ import { Effect } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { LedgerApi } from "@/api";
-import { signJWT } from "@/auth";
+import { tokenFor, useTestWebHandlers } from "@/lib/testing";
 import { InternalServerError } from "@/lib/errors";
 import type { LedgerAccountBalanceMonitorID, LedgerAccountID, OrgID } from "@/lib/ids";
-import { makeTestWebHandler } from "@/server";
 
 import { LedgerAccountBalanceMonitor } from "./LedgerAccountBalanceMonitor";
 import type { LedgerAccountBalanceMonitorResponse } from "./LedgerAccountBalanceMonitorSchema";
@@ -71,21 +70,14 @@ const service = () =>
 		>(() => Effect.void),
 	}) satisfies Pick<LedgerAccountBalanceMonitorService, keyof LedgerAccountBalanceMonitorService>;
 
-const disposers: Array<() => Promise<void>> = [];
+const buildHandler = useTestWebHandlers();
 const build = (implementation: ReturnType<typeof service>) => {
 	// The complete public double omits only the class's private repository field.
-	const { handler, dispose } = makeTestWebHandler({
+	return buildHandler({
 		balanceMonitor: implementation as unknown as LedgerAccountBalanceMonitorService,
 	});
-	disposers.push(dispose);
-	return handler;
 };
-afterEach(async () => {
-	for (const dispose of disposers.splice(0)) await dispose();
-});
-
-const tokenWith = (scope: Parameters<typeof signJWT>[0]["scope"]) =>
-	signJWT({ sub: organizationId.toString(), scope });
+const tokenWith = tokenFor(organizationId);
 const call = (
 	handler: ReturnType<typeof build>,
 	method: string,

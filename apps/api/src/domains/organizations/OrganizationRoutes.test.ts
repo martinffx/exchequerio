@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { TypeID } from "typeid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LedgerApi } from "@/api";
+import { makeRequest, useTestWebHandlers } from "@/lib/testing";
 import { signJWT } from "@/auth";
 import type { OrgID } from "@/lib/ids";
-import { makeTestWebHandler } from "@/server";
 import { Organization } from "./Organization";
 import { OrganizationNotFound } from "./OrganizationErrors";
 import type { OrganizationService } from "./OrganizationService";
@@ -24,34 +24,14 @@ const service = (): OrganizationService =>
 		deleteOrganization: vi.fn(() => Effect.succeed(organization)),
 	} as unknown as OrganizationService);
 
-const disposers: Array<() => Promise<void>> = [];
+const buildHandler = useTestWebHandlers();
 
 const build = (implementation: OrganizationService) => {
-	const { handler, dispose } = makeTestWebHandler({ organization: implementation });
-	disposers.push(dispose);
-	return handler;
+	return buildHandler({ organization: implementation });
 };
 
 const superAdmin = () => signJWT({ sub: organizationId.toString(), scope: ["super_admin"] });
-const request = (
-	method: string,
-	path: string,
-	options: { token?: string; anonymous?: boolean; body?: unknown } = {}
-) => {
-	const token = options.anonymous === true ? undefined : (options.token ?? superAdmin());
-	return new Request(`http://localhost${path}`, {
-		method,
-		headers: {
-			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-			...(options.body === undefined ? {} : { "content-type": "application/json" }),
-		},
-		body: options.body === undefined ? undefined : JSON.stringify(options.body),
-	});
-};
-
-afterEach(async () => {
-	for (const dispose of disposers.splice(0)) await dispose();
-});
+const request = makeRequest(superAdmin);
 
 const orgPath = `/api/organizations/${organizationId.toString()}`;
 const routes: Array<[string, string, string, unknown]> = [

@@ -1,9 +1,9 @@
 import { Option, Schema, SchemaGetter } from "effect";
-import { defaultedQueryInt } from "./ListQuery";
+import { defaultedQueryNumber } from "./ListQuery";
 
 const PaginationQuery = Schema.Struct({
-	offset: defaultedQueryInt(Schema.Finite, 0),
-	limit: defaultedQueryInt(Schema.Finite, 20),
+	offset: defaultedQueryNumber(Schema.Finite, 0),
+	limit: defaultedQueryNumber(Schema.Finite, 20),
 });
 type PaginationQuery = typeof PaginationQuery.Type;
 

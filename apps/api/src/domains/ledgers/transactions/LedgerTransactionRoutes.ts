@@ -2,11 +2,10 @@ import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
-import type { LedgerID, LedgerTransactionID } from "@/lib/ids";
-import { parseId } from "@/lib/utils";
+import type { LedgerTransactionID } from "@/lib/ids";
+import { parseId, parseLedgerId } from "@/lib/utils";
 import { TransactionServiceTag } from "./LedgerTransactionService";
 
-const parseLedgerId = (ledgerId: string) => parseId<"lgr", LedgerID>("lgr", ledgerId);
 const parseTransactionId = (transactionId: string) =>
 	parseId<"ltr", LedgerTransactionID>("ltr", transactionId);
 

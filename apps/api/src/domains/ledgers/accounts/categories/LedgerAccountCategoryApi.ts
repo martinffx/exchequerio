@@ -1,14 +1,5 @@
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import {
-	BadRequestApiError,
-	ConflictApiError,
-	ForbiddenApiError,
-	InternalServerApiError,
-	NotFoundApiError,
-	ServiceUnavailableApiError,
-	TooManyRequestsApiError,
-	UnauthorizedApiError,
-} from "@/lib/errors";
+import { operation, throttledConflictErrors, throttledNotFoundErrors } from "@/lib/ApiContract";
 import { PaginationQuery } from "@/lib/schema";
 import { Schema } from "effect";
 import {
@@ -24,28 +15,6 @@ import {
 // Collection paths keep their trailing slash, as today's OpenAPI document has it.
 // Every Category route declares 429. Permissions are enforced by the handlers:
 // read for GETs, write for create/update/link/unlink, delete for DELETE /:categoryId.
-const commonErrors = [
-	BadRequestApiError,
-	UnauthorizedApiError,
-	ForbiddenApiError,
-	NotFoundApiError,
-	TooManyRequestsApiError,
-	InternalServerApiError,
-	ServiceUnavailableApiError,
-] as const;
-const conflictErrors = [
-	BadRequestApiError,
-	UnauthorizedApiError,
-	ForbiddenApiError,
-	NotFoundApiError,
-	ConflictApiError,
-	TooManyRequestsApiError,
-	InternalServerApiError,
-	ServiceUnavailableApiError,
-] as const;
-
-const operation = (identifier: string, summary: string, description: string) =>
-	OpenApi.annotations({ identifier, summary, description });
 
 const prefix = "/ledgers/:ledgerId/accounts/categories";
 
@@ -54,7 +23,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.get("balances", `${prefix}/:categoryId/balances`, {
 			params: LedgerAccountCategoryIdParams,
 			success: LedgerAccountCategoryBalancesResponse,
-			error: conflictErrors,
+			error: throttledConflictErrors,
 		}).annotateMerge(
 			operation(
 				"getLedgerAccountCategoryBalances",
@@ -66,7 +35,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 			params: LedgerIdParameters,
 			query: PaginationQuery,
 			success: Schema.Array(LedgerAccountCategoryResponse),
-			error: commonErrors,
+			error: throttledNotFoundErrors,
 		}).annotateMerge(
 			operation(
 				"listLedgerAccountCategories",
@@ -77,7 +46,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.get("get", `${prefix}/:categoryId`, {
 			params: LedgerAccountCategoryIdParams,
 			success: LedgerAccountCategoryResponse,
-			error: commonErrors,
+			error: throttledNotFoundErrors,
 		}).annotateMerge(
 			operation(
 				"getLedgerAccountCategory",
@@ -90,7 +59,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 			params: LedgerIdParameters,
 			payload: LedgerAccountCategoryRequest,
 			success: LedgerAccountCategoryResponse,
-			error: conflictErrors,
+			error: throttledConflictErrors,
 		}).annotateMerge(
 			operation(
 				"createLedgerAccountCategory",
@@ -102,7 +71,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 			params: LedgerAccountCategoryIdParams,
 			payload: LedgerAccountCategoryRequest,
 			success: LedgerAccountCategoryResponse,
-			error: conflictErrors,
+			error: throttledConflictErrors,
 		}).annotateMerge(
 			operation(
 				"updateLedgerAccountCategory",
@@ -113,7 +82,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.delete("delete", `${prefix}/:categoryId`, {
 			params: LedgerAccountCategoryIdParams,
 			success: HttpApiSchema.Empty(200),
-			error: conflictErrors,
+			error: throttledConflictErrors,
 		}).annotateMerge(
 			operation(
 				"deleteLedgerAccountCategory",
@@ -124,7 +93,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.patch("linkAccount", `${prefix}/:categoryId/accounts/:accountId`, {
 			params: LinkAccountToCategoryParams,
 			success: HttpApiSchema.Empty(200),
-			error: conflictErrors,
+			error: throttledConflictErrors,
 		}).annotateMerge(
 			operation(
 				"linkLedgerAccountToCategory",
@@ -135,7 +104,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.delete("unlinkAccount", `${prefix}/:categoryId/accounts/:accountId`, {
 			params: LinkAccountToCategoryParams,
 			success: HttpApiSchema.Empty(200),
-			error: conflictErrors,
+			error: throttledConflictErrors,
 		}).annotateMerge(
 			operation(
 				"unlinkLedgerAccountToCategory",
@@ -146,7 +115,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.patch("linkCategory", `${prefix}/:categoryId/categories/:parentCategoryId`, {
 			params: LinkCategoryToCategoryParams,
 			success: HttpApiSchema.Empty(200),
-			error: conflictErrors,
+			error: throttledConflictErrors,
 		}).annotateMerge(
 			operation(
 				"linkLedgerAccountCategoryToCategory",
@@ -157,7 +126,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 		HttpApiEndpoint.delete("unlinkCategory", `${prefix}/:categoryId/categories/:parentCategoryId`, {
 			params: LinkCategoryToCategoryParams,
 			success: HttpApiSchema.Empty(200),
-			error: conflictErrors,
+			error: throttledConflictErrors,
 		}).annotateMerge(
 			operation(
 				"unlinkLedgerAccountCategoryToCategory",

@@ -14,11 +14,7 @@ import { LedgerApi, SchemaErrorTransformLayer } from "@/api";
 import { makeAuthenticationLayer } from "@/auth";
 import { Config } from "@/config";
 import { BadRequestError, HttpError, InternalServerError, NotFoundError } from "@/lib/errors";
-import {
-	makeServerRuntimeLayer,
-	type ServerRuntimeLayerOverrides,
-	ServerConfigTag,
-} from "@/runtime";
+import { makeServerRuntimeLayer, ServerConfigTag } from "@/runtime";
 import { AssetRoutes } from "@/domains/assets/AssetRoutes";
 import { AssetServiceTag, type AssetService } from "@/domains/assets/AssetService";
 import { AccountRoutes } from "@/domains/ledgers/accounts/AccountRoutes";
@@ -209,8 +205,8 @@ const appLayer = Layer.mergeAll(
 	Layer.provide(HttpServer.layerServices)
 );
 
-const makeServerLayer = (config: Config, overrides: ServerRuntimeLayerOverrides = {}) =>
-	appLayer.pipe(Layer.provide(makeServerRuntimeLayer(config, overrides)));
+const makeServerLayer = (config: Config) =>
+	appLayer.pipe(Layer.provide(makeServerRuntimeLayer(config)));
 
 type TestStubs = {
 	readonly organization?: OrganizationService;

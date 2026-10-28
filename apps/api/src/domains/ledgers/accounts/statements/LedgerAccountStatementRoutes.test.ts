@@ -1,12 +1,11 @@
 import { Effect } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { TypeID } from "typeid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LedgerApi } from "@/api";
-import { signJWT } from "@/auth";
+import { makeRequest, tokenFor, useTestWebHandlers } from "@/lib/testing";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import type { LedgerAccountID, LedgerAccountStatementID, LedgerID, OrgID } from "@/lib/ids";
-import { makeTestWebHandler } from "@/server";
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import type { LedgerAccountStatementService } from "./LedgerAccountStatementService";
 
@@ -41,33 +40,12 @@ const service = (): LedgerAccountStatementService =>
 		createLedgerAccountStatement: vi.fn(() => Effect.succeed(statement)),
 	} as unknown as LedgerAccountStatementService);
 
-const disposers: Array<() => Promise<void>> = [];
+const buildHandler = useTestWebHandlers();
 const build = (implementation: LedgerAccountStatementService) => {
-	const { handler, dispose } = makeTestWebHandler({ statement: implementation });
-	disposers.push(dispose);
-	return handler;
+	return buildHandler({ statement: implementation });
 };
-afterEach(async () => {
-	for (const dispose of disposers.splice(0)) await dispose();
-});
-
-const tokenWith = (scope: Parameters<typeof signJWT>[0]["scope"]) =>
-	signJWT({ sub: orgId.toString(), scope });
-const request = (
-	method: string,
-	path: string,
-	options: { token?: string; anonymous?: boolean; body?: unknown } = {}
-) => {
-	const token = options.anonymous === true ? undefined : (options.token ?? tokenWith(["org_admin"]));
-	return new Request(`http://localhost${path}`, {
-		method,
-		headers: {
-			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-			...(options.body === undefined ? {} : { "content-type": "application/json" }),
-		},
-		body: options.body === undefined ? undefined : JSON.stringify(options.body),
-	});
-};
+const tokenWith = tokenFor(orgId);
+const request = makeRequest(() => tokenWith(["org_admin"]));
 
 const base = `/api/ledgers/${ledgerId.toString()}/accounts/${pathAccountId.toString()}/statements`;
 const resource = `${base}/${statementId.toString()}`;

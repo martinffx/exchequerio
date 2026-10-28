@@ -2,12 +2,11 @@ import { Effect } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LedgerApi } from "@/api";
-import { signJWT } from "@/auth";
+import { makeRequest, tokenFor, useTestWebHandlers } from "@/lib/testing";
 import { ServiceUnavailableError } from "@/lib/errors";
 import type { LedgerID, OrgID } from "@/lib/ids";
-import { makeTestWebHandler } from "@/server";
 import { Ledger } from "./Ledger";
 import { LedgerHasDependents, LedgerNotFound } from "./LedgerErrors";
 import type { LedgerService } from "./LedgerService";
@@ -33,36 +32,15 @@ const service = (): LedgerService =>
 		deleteLedger: vi.fn(() => Effect.void),
 	} as unknown as LedgerService);
 
-const disposers: Array<() => Promise<void>> = [];
+const buildHandler = useTestWebHandlers();
 
 const build = (implementation: LedgerService) => {
-	const { handler, dispose } = makeTestWebHandler({ ledger: implementation });
-	disposers.push(dispose);
-	return handler;
+	return buildHandler({ ledger: implementation });
 };
 
-const tokenWith = (scope: Parameters<typeof signJWT>[0]["scope"]) =>
-	signJWT({ sub: organizationId.toString(), scope });
+const tokenWith = tokenFor(organizationId);
 const allPermissions = () => tokenWith(["super_admin"]);
-const request = (
-	method: string,
-	path: string,
-	options: { token?: string; anonymous?: boolean; body?: unknown } = {}
-) => {
-	const token = options.anonymous === true ? undefined : (options.token ?? allPermissions());
-	return new Request(`http://localhost${path}`, {
-		method,
-		headers: {
-			...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-			...(options.body === undefined ? {} : { "content-type": "application/json" }),
-		},
-		body: options.body === undefined ? undefined : JSON.stringify(options.body),
-	});
-};
-
-afterEach(async () => {
-	for (const dispose of disposers.splice(0)) await dispose();
-});
+const request = makeRequest(allPermissions);
 
 const ledgerPath = `/api/ledgers/${ledgerId.toString()}`;
 const routes: Array<[string, string, string, unknown]> = [

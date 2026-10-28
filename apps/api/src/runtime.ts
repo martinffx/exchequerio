@@ -45,24 +45,14 @@ type ServerRuntimeServices =
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
-interface ServerRuntimeLayerOverrides {
-	readonly database?: Layer.Layer<Database, never, never>;
-	readonly idempotency?: Layer.Layer<IdempotencyService, never, never>;
-}
-
-const makeServerRuntimeLayer = (
-	config: Config,
-	overrides: ServerRuntimeLayerOverrides = {}
-): ServerRuntimeLayer => {
+const makeServerRuntimeLayer = (config: Config): ServerRuntimeLayer => {
 	const valkey = makeValkeyLive(config.valkeyUrl);
-	const idempotency =
-		overrides.idempotency ??
-		Layer.unwrap(ValkeyTag.pipe(Effect.map(valkey => makeIdempotencyService(valkey.client)))).pipe(
-			Layer.provide(valkey)
-		);
+	const idempotency = Layer.unwrap(
+		ValkeyTag.pipe(Effect.map(valkey => makeIdempotencyService(valkey.client)))
+	).pipe(Layer.provide(valkey));
 	const infrastructure = Layer.mergeAll(
 		Layer.succeed(ServerConfigTag, config),
-		overrides.database ?? makeDatabaseLive(config.databaseUrl),
+		makeDatabaseLive(config.databaseUrl),
 		valkey,
 		idempotency,
 		ledgerAccountBalanceMonitorPublisherLayer.pipe(
@@ -91,5 +81,4 @@ const makeServerRuntimeLayer = (
 	).pipe(Layer.provideMerge(infrastructure));
 };
 
-export type { ServerRuntimeLayerOverrides };
 export { makeServerRuntimeLayer, ServerConfigTag };

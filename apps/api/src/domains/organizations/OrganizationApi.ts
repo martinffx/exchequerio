@@ -1,14 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import {
-	BadRequestApiError,
-	ConflictApiError,
-	ForbiddenApiError,
-	InternalServerApiError,
-	NotFoundApiError,
-	ServiceUnavailableApiError,
-	UnauthorizedApiError,
-} from "@/lib/errors";
+import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
+import { commonErrors, operation } from "@/lib/ApiContract";
 import {
 	OrganizationCreateRequest,
 	OrganizationIdParameters,
@@ -19,16 +12,6 @@ import {
 
 // Collection paths keep their trailing slash, as today's OpenAPI document has it.
 // Authentication adds the 401 at the API level; it is declared per route here to match the contract.
-const commonErrors = [
-	BadRequestApiError,
-	UnauthorizedApiError,
-	ForbiddenApiError,
-	InternalServerApiError,
-	ServiceUnavailableApiError,
-] as const;
-
-const operation = (identifier: string, summary: string) =>
-	OpenApi.annotations({ identifier, summary });
 
 const OrganizationApi = HttpApiGroup.make("organizations")
 	.add(

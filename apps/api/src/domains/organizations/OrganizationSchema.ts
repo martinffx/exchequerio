@@ -1,12 +1,12 @@
 import { Schema } from "effect";
-import { defaultedQueryInt } from "@/lib/ListQuery";
+import { defaultedQueryNumber } from "@/lib/ListQuery";
 import { OmittedWhenUndefined } from "@/lib/schema";
 
 const OrganizationIdSchema = Schema.String.check(Schema.isPattern(/^org_[0-9a-z]{26}$/));
 const OrganizationIdParameters = Schema.Struct({ orgId: OrganizationIdSchema });
 const OrganizationListQuery = Schema.Struct({
-	offset: defaultedQueryInt(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), 0),
-	limit: defaultedQueryInt(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })), 20),
+	offset: defaultedQueryNumber(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), 0),
+	limit: defaultedQueryNumber(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })), 20),
 });
 const OrganizationCreateRequest = Schema.Struct({
 	name: Schema.String,

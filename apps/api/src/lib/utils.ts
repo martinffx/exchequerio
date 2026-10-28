@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { InvalidId } from "./errors";
+import type { LedgerID } from "./ids";
 import type { Metadata } from "./schema";
 
 const parseId = <Prefix extends string, Return extends TypeID<Prefix>>(
@@ -16,6 +17,8 @@ const parseId = <Prefix extends string, Return extends TypeID<Prefix>>(
 		},
 		catch: cause => new InvalidId(prefix, value, { cause }),
 	});
+
+const parseLedgerId = (ledgerId: string) => parseId<"lgr", LedgerID>("lgr", ledgerId);
 
 // Canonical TypeIDs can contain any 128 bits; toUUID() additionally rejects non-RFC UUIDs.
 const encodeUuid = (id: TypeID<string>): string =>
@@ -61,4 +64,4 @@ const encodeMetadata = (metadata: Metadata | undefined): string | undefined =>
 	metadata === undefined ? undefined : JSON.stringify(metadata);
 
 export type { Metadata } from "./schema";
-export { encodeUuid, encodeMetadata, parseId, parseUuid, parseDate, parseMetadata };
+export { encodeUuid, encodeMetadata, parseId, parseLedgerId, parseUuid, parseDate, parseMetadata };
