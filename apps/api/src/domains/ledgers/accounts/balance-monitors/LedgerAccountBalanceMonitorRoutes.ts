@@ -3,6 +3,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
 import { LedgerAccountBalanceMonitorServiceTag } from "./LedgerAccountBalanceMonitorService";
+import { runToCompletion } from "@/lib/utils";
 
 const scopeOf = (params: { ledgerId: string; accountId: string }) =>
 	Effect.gen(function* () {
@@ -43,35 +44,44 @@ const LedgerAccountBalanceMonitorRoutes = HttpApiBuilder.group(
 						return monitor.toResponse();
 					})
 				)
-				.handle("create", ({ params, payload }) =>
-					Effect.gen(function* () {
-						yield* requirePermissions(["ledger:account:balance_monitor:write"]);
-						const monitor = yield* service.createLedgerAccountBalanceMonitor(
-							yield* scopeOf(params),
-							payload
-						);
-						return monitor.toResponse();
-					})
+				.handle(
+					"create",
+					({ params, payload }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:write"]);
+							const monitor = yield* service.createLedgerAccountBalanceMonitor(
+								yield* scopeOf(params),
+								payload
+							);
+							return monitor.toResponse();
+						}),
+					runToCompletion
 				)
-				.handle("update", ({ params, payload }) =>
-					Effect.gen(function* () {
-						yield* requirePermissions(["ledger:account:balance_monitor:write"]);
-						const monitor = yield* service.updateLedgerAccountBalanceMonitor(
-							yield* scopeOf(params),
-							params.balanceMonitorId,
-							payload
-						);
-						return monitor.toResponse();
-					})
+				.handle(
+					"update",
+					({ params, payload }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:write"]);
+							const monitor = yield* service.updateLedgerAccountBalanceMonitor(
+								yield* scopeOf(params),
+								params.balanceMonitorId,
+								payload
+							);
+							return monitor.toResponse();
+						}),
+					runToCompletion
 				)
-				.handle("delete", ({ params }) =>
-					Effect.gen(function* () {
-						yield* requirePermissions(["ledger:account:balance_monitor:delete"]);
-						yield* service.deleteLedgerAccountBalanceMonitor(
-							yield* scopeOf(params),
-							params.balanceMonitorId
-						);
-					})
+				.handle(
+					"delete",
+					({ params }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:delete"]);
+							yield* service.deleteLedgerAccountBalanceMonitor(
+								yield* scopeOf(params),
+								params.balanceMonitorId
+							);
+						}),
+					runToCompletion
 				);
 		})
 );

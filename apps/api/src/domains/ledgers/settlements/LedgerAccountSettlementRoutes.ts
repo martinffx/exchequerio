@@ -3,7 +3,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
 import type { LedgerAccountSettlementID } from "@/lib/ids";
-import { parseId, parseLedgerId } from "@/lib/utils";
+import { parseId, parseLedgerId, runToCompletion } from "@/lib/utils";
 import { LedgerAccountSettlementServiceTag } from "./LedgerAccountSettlementService";
 
 const parseSettlementId = (settlementId: string) =>
@@ -48,73 +48,85 @@ const SettlementRoutes = HttpApiBuilder.group(LedgerApi, "settlements", handlers
 					return settlement.toResponse();
 				})
 			)
-			.handle("create", ({ params, headers, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:settlement:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const settlement = yield* service.createLedgerAccountSettlement(
-						token.orgId,
-						ledgerId,
-						headers["idempotency-key"],
-						payload
-					);
-					return HttpApiSchema.withHeaders({
-						body: settlement.toResponse(),
-						// Built from the raw path parameter.
-						headers: {
-							location: `/api/ledgers/${params.ledgerId}/settlements/${settlement.id.toString()}`,
-						},
-					});
-				})
+			.handle(
+				"create",
+				({ params, headers, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:settlement:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const settlement = yield* service.createLedgerAccountSettlement(
+							token.orgId,
+							ledgerId,
+							headers["idempotency-key"],
+							payload
+						);
+						return HttpApiSchema.withHeaders({
+							body: settlement.toResponse(),
+							// Built from the raw path parameter.
+							headers: {
+								location: `/api/ledgers/${params.ledgerId}/settlements/${settlement.id.toString()}`,
+							},
+						});
+					}),
+				runToCompletion
 			)
-			.handle("patch", ({ params, headers, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:settlement:write"]);
-					if (payload.status === "voided")
-						yield* requirePermissions(["ledger:account:settlement:delete"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const settlementId = yield* parseSettlementId(params.settlementId);
-					const settlement = yield* service.patchLedgerAccountSettlement(
-						token.orgId,
-						ledgerId,
-						settlementId,
-						headers["idempotency-key"],
-						payload
-					);
-					return settlement.toResponse();
-				})
+			.handle(
+				"patch",
+				({ params, headers, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:settlement:write"]);
+						if (payload.status === "voided")
+							yield* requirePermissions(["ledger:account:settlement:delete"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const settlementId = yield* parseSettlementId(params.settlementId);
+						const settlement = yield* service.patchLedgerAccountSettlement(
+							token.orgId,
+							ledgerId,
+							settlementId,
+							headers["idempotency-key"],
+							payload
+						);
+						return settlement.toResponse();
+					}),
+				runToCompletion
 			)
-			.handle("addEntries", ({ params, headers, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:settlement:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const settlementId = yield* parseSettlementId(params.settlementId);
-					yield* service.addLedgerAccountSettlementEntries(
-						token.orgId,
-						ledgerId,
-						settlementId,
-						headers["idempotency-key"],
-						[...payload.entries]
-					);
-				})
+			.handle(
+				"addEntries",
+				({ params, headers, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:settlement:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const settlementId = yield* parseSettlementId(params.settlementId);
+						yield* service.addLedgerAccountSettlementEntries(
+							token.orgId,
+							ledgerId,
+							settlementId,
+							headers["idempotency-key"],
+							[...payload.entries]
+						);
+					}),
+				runToCompletion
 			)
-			.handle("removeEntries", ({ params, headers, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:settlement:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const settlementId = yield* parseSettlementId(params.settlementId);
-					yield* service.removeLedgerAccountSettlementEntries(
-						token.orgId,
-						ledgerId,
-						settlementId,
-						headers["idempotency-key"],
-						[...payload.entries]
-					);
-				})
+			.handle(
+				"removeEntries",
+				({ params, headers, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:settlement:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const settlementId = yield* parseSettlementId(params.settlementId);
+						yield* service.removeLedgerAccountSettlementEntries(
+							token.orgId,
+							ledgerId,
+							settlementId,
+							headers["idempotency-key"],
+							[...payload.entries]
+						);
+					}),
+				runToCompletion
 			)
 			.handle("listEntries", ({ params, query }) =>
 				Effect.gen(function* () {

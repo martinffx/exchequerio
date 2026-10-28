@@ -3,7 +3,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
 import type { LedgerAccountCategoryID, LedgerAccountID } from "@/lib/ids";
-import { parseId, parseLedgerId } from "@/lib/utils";
+import { parseId, parseLedgerId, runToCompletion } from "@/lib/utils";
 import { LedgerAccountCategoryServiceTag } from "./LedgerAccountCategoryService";
 
 const parseCategoryId = (categoryId: string) =>
@@ -53,88 +53,109 @@ const LedgerAccountCategoryRoutes = HttpApiBuilder.group(LedgerApi, "categories"
 					return category.toResponse();
 				})
 			)
-			.handle("create", ({ params, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const category = yield* service.createLedgerAccountCategory(token.orgId, ledgerId, payload);
-					return category.toResponse();
-				})
+			.handle(
+				"create",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const category = yield* service.createLedgerAccountCategory(token.orgId, ledgerId, payload);
+						return category.toResponse();
+					}),
+				runToCompletion
 			)
-			.handle("update", ({ params, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const categoryId = yield* parseCategoryId(params.categoryId);
-					const category = yield* service.updateLedgerAccountCategory(
-						token.orgId,
-						ledgerId,
-						categoryId,
-						payload
-					);
-					return category.toResponse();
-				})
+			.handle(
+				"update",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const categoryId = yield* parseCategoryId(params.categoryId);
+						const category = yield* service.updateLedgerAccountCategory(
+							token.orgId,
+							ledgerId,
+							categoryId,
+							payload
+						);
+						return category.toResponse();
+					}),
+				runToCompletion
 			)
-			.handle("delete", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:delete"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const categoryId = yield* parseCategoryId(params.categoryId);
-					yield* service.deleteLedgerAccountCategory(token.orgId, ledgerId, categoryId);
-				})
+			.handle(
+				"delete",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:delete"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const categoryId = yield* parseCategoryId(params.categoryId);
+						yield* service.deleteLedgerAccountCategory(token.orgId, ledgerId, categoryId);
+					}),
+				runToCompletion
 			)
-			.handle("linkAccount", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const categoryId = yield* parseCategoryId(params.categoryId);
-					const accountId = yield* parseAccountId(params.accountId);
-					yield* service.linkLedgerAccountToCategory(token.orgId, ledgerId, categoryId, accountId);
-				})
+			.handle(
+				"linkAccount",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const categoryId = yield* parseCategoryId(params.categoryId);
+						const accountId = yield* parseAccountId(params.accountId);
+						yield* service.linkLedgerAccountToCategory(token.orgId, ledgerId, categoryId, accountId);
+					}),
+				runToCompletion
 			)
-			.handle("unlinkAccount", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const categoryId = yield* parseCategoryId(params.categoryId);
-					const accountId = yield* parseAccountId(params.accountId);
-					yield* service.unlinkLedgerAccountToCategory(token.orgId, ledgerId, categoryId, accountId);
-				})
+			.handle(
+				"unlinkAccount",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const categoryId = yield* parseCategoryId(params.categoryId);
+						const accountId = yield* parseAccountId(params.accountId);
+						yield* service.unlinkLedgerAccountToCategory(token.orgId, ledgerId, categoryId, accountId);
+					}),
+				runToCompletion
 			)
-			.handle("linkCategory", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const categoryId = yield* parseCategoryId(params.categoryId);
-					const parentCategoryId = yield* parseCategoryId(params.parentCategoryId);
-					yield* service.linkLedgerAccountCategoryToCategory(
-						token.orgId,
-						ledgerId,
-						categoryId,
-						parentCategoryId
-					);
-				})
+			.handle(
+				"linkCategory",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const categoryId = yield* parseCategoryId(params.categoryId);
+						const parentCategoryId = yield* parseCategoryId(params.parentCategoryId);
+						yield* service.linkLedgerAccountCategoryToCategory(
+							token.orgId,
+							ledgerId,
+							categoryId,
+							parentCategoryId
+						);
+					}),
+				runToCompletion
 			)
-			.handle("unlinkCategory", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const categoryId = yield* parseCategoryId(params.categoryId);
-					const parentCategoryId = yield* parseCategoryId(params.parentCategoryId);
-					yield* service.unlinkLedgerAccountCategoryToCategory(
-						token.orgId,
-						ledgerId,
-						categoryId,
-						parentCategoryId
-					);
-				})
+			.handle(
+				"unlinkCategory",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const categoryId = yield* parseCategoryId(params.categoryId);
+						const parentCategoryId = yield* parseCategoryId(params.parentCategoryId);
+						yield* service.unlinkLedgerAccountCategoryToCategory(
+							token.orgId,
+							ledgerId,
+							categoryId,
+							parentCategoryId
+						);
+					}),
+				runToCompletion
 			);
 	})
 );

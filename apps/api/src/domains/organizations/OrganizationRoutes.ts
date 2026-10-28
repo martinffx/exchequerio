@@ -3,7 +3,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { requirePermissions } from "@/auth";
 import type { OrgID } from "@/lib/ids";
-import { parseId } from "@/lib/utils";
+import { parseId, runToCompletion } from "@/lib/utils";
 import { OrganizationServiceTag } from "./OrganizationService";
 
 // Organization routes are unscoped: the token's Organization is never used.
@@ -29,30 +29,39 @@ const OrganizationRoutes = HttpApiBuilder.group(LedgerApi, "organizations", hand
 					return organization.toResponse();
 				})
 			)
-			.handle("create", ({ payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["organization:write"]);
-					const organization = yield* service.createOrganization(payload);
-					return HttpApiSchema.withHeaders({
-						body: organization.toResponse(),
-						headers: { location: `/api/organizations/${organization.id.toString()}` },
-					});
-				})
+			.handle(
+				"create",
+				({ payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["organization:write"]);
+						const organization = yield* service.createOrganization(payload);
+						return HttpApiSchema.withHeaders({
+							body: organization.toResponse(),
+							headers: { location: `/api/organizations/${organization.id.toString()}` },
+						});
+					}),
+				runToCompletion
 			)
-			.handle("update", ({ params, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["organization:write"]);
-					const orgId = yield* parseId<"org", OrgID>("org", params.orgId);
-					const organization = yield* service.updateOrganization(orgId, payload);
-					return organization.toResponse();
-				})
+			.handle(
+				"update",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["organization:write"]);
+						const orgId = yield* parseId<"org", OrgID>("org", params.orgId);
+						const organization = yield* service.updateOrganization(orgId, payload);
+						return organization.toResponse();
+					}),
+				runToCompletion
 			)
-			.handle("delete", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["organization:delete"]);
-					const orgId = yield* parseId<"org", OrgID>("org", params.orgId);
-					yield* service.deleteOrganization(orgId);
-				})
+			.handle(
+				"delete",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["organization:delete"]);
+						const orgId = yield* parseId<"org", OrgID>("org", params.orgId);
+						yield* service.deleteOrganization(orgId);
+					}),
+				runToCompletion
 			);
 	})
 );

@@ -3,7 +3,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
 import type { AssetID } from "@/lib/ids";
-import { parseId } from "@/lib/utils";
+import { parseId, runToCompletion } from "@/lib/utils";
 import { AssetServiceTag } from "./AssetService";
 
 const AssetRoutes = HttpApiBuilder.group(LedgerApi, "assets", handlers =>
@@ -27,33 +27,42 @@ const AssetRoutes = HttpApiBuilder.group(LedgerApi, "assets", handlers =>
 					return asset.toResponse();
 				})
 			)
-			.handle("create", ({ payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["asset:write"]);
-					const token = yield* CurrentToken;
-					const asset = yield* service.createAsset(token.orgId, payload);
-					return HttpApiSchema.withHeaders({
-						body: asset.toResponse(),
-						headers: { location: `/api/assets/${asset.id.toString()}` },
-					});
-				})
+			.handle(
+				"create",
+				({ payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["asset:write"]);
+						const token = yield* CurrentToken;
+						const asset = yield* service.createAsset(token.orgId, payload);
+						return HttpApiSchema.withHeaders({
+							body: asset.toResponse(),
+							headers: { location: `/api/assets/${asset.id.toString()}` },
+						});
+					}),
+				runToCompletion
 			)
-			.handle("update", ({ params, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["asset:write"]);
-					const token = yield* CurrentToken;
-					const assetId = yield* parseId<"ast", AssetID>("ast", params.assetId);
-					const asset = yield* service.updateAsset(token.orgId, assetId, payload);
-					return asset.toResponse();
-				})
+			.handle(
+				"update",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["asset:write"]);
+						const token = yield* CurrentToken;
+						const assetId = yield* parseId<"ast", AssetID>("ast", params.assetId);
+						const asset = yield* service.updateAsset(token.orgId, assetId, payload);
+						return asset.toResponse();
+					}),
+				runToCompletion
 			)
-			.handle("delete", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["asset:delete"]);
-					const token = yield* CurrentToken;
-					const assetId = yield* parseId<"ast", AssetID>("ast", params.assetId);
-					yield* service.deleteAsset(token.orgId, assetId);
-				})
+			.handle(
+				"delete",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["asset:delete"]);
+						const token = yield* CurrentToken;
+						const assetId = yield* parseId<"ast", AssetID>("ast", params.assetId);
+						yield* service.deleteAsset(token.orgId, assetId);
+					}),
+				runToCompletion
 			);
 	})
 );

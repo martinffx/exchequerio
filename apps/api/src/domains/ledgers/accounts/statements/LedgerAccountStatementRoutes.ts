@@ -3,6 +3,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
 import { LedgerAccountStatementServiceTag } from "./LedgerAccountStatementService";
+import { runToCompletion } from "@/lib/utils";
 
 /** Statement routes; the path ledgerId/accountId are ignored, the create body carries them. */
 const LedgerAccountStatementRoutes = HttpApiBuilder.group(LedgerApi, "statements", handlers =>
@@ -17,13 +18,16 @@ const LedgerAccountStatementRoutes = HttpApiBuilder.group(LedgerApi, "statements
 					return statement.toResponse();
 				})
 			)
-			.handle("create", ({ payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:statement:write"]);
-					const token = yield* CurrentToken;
-					const statement = yield* service.createLedgerAccountStatement(payload, token.orgId);
-					return statement.toResponse();
-				})
+			.handle(
+				"create",
+				({ payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:statement:write"]);
+						const token = yield* CurrentToken;
+						const statement = yield* service.createLedgerAccountStatement(payload, token.orgId);
+						return statement.toResponse();
+					}),
+				runToCompletion
 			);
 	})
 );

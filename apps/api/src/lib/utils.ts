@@ -63,5 +63,21 @@ const parseMetadata = (value: string | null): Effect.Effect<Metadata | undefined
 const encodeMetadata = (metadata: Metadata | undefined): string | undefined =>
 	metadata === undefined ? undefined : JSON.stringify(metadata);
 
+/**
+ * Route option for every state-changing endpoint: writes run to completion after a client
+ * disconnect or drain cut, as under the pre-migration server, because services release or complete
+ * idempotency claims and publish monitor jobs after commit. Reads stay interruptible.
+ */
+const runToCompletion = { uninterruptible: true } as const;
+
 export type { Metadata } from "./schema";
-export { encodeUuid, encodeMetadata, parseId, parseLedgerId, parseUuid, parseDate, parseMetadata };
+export {
+	runToCompletion,
+	encodeUuid,
+	encodeMetadata,
+	parseId,
+	parseLedgerId,
+	parseUuid,
+	parseDate,
+	parseMetadata,
+};

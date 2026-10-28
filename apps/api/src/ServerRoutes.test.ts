@@ -29,6 +29,11 @@ const deferred = () => {
 	return { promise, resolve };
 };
 
+/** Polls (up to ~1 s) until the condition holds. */
+const until = async (condition: () => boolean) => {
+	for (let i = 0; i < 200 && !condition(); i++) await new Promise(r => setTimeout(r, 5));
+};
+
 /** Serves the HTTP app on a real socket (port 0) with the given services; closing `scope` drains it. */
 const listen = async (overrides: TestServiceLayers = {}) => {
 	const scope = Effect.runSync(Scope.make());
@@ -475,6 +480,106 @@ describe("Effect HTTP edge", () => {
 			const response = await build()(call("GET", "/api/nope"));
 			expect(response.status).toBe(404);
 			expect(await response.json()).toMatchObject({ type: "NOT_FOUND", status: 404 });
+		});
+	});
+
+	describe("client disconnect", () => {
+		it("lets a write run to completion after the client aborts", async () => {
+			const gate = deferred();
+			let started = false;
+			let completed = false;
+			const createOrganization = vi.fn(() =>
+				Effect.gen(function* () {
+					started = true;
+					yield* Effect.promise(() => gate.promise);
+					completed = true; // models the post-commit publish and idempotency complete
+					return organization;
+				})
+			);
+			const controller = new AbortController();
+			const pending = build(stub({ createOrganization }))(
+				new Request("http://localhost/api/organizations", {
+					method: "POST",
+					headers: { authorization: `Bearer ${token()}`, "content-type": "application/json" },
+					body: JSON.stringify({ name: "Example" }),
+					signal: controller.signal,
+				})
+			).catch(() => undefined);
+			await until(() => started);
+			expect(started).toBe(true);
+			controller.abort();
+			await new Promise(r => setTimeout(r, 50));
+			gate.resolve();
+			await until(() => completed);
+			await pending;
+			expect(completed).toBe(true);
+		});
+
+		it("still interrupts a read when the client aborts", async () => {
+			let started = false;
+			let interrupted = false;
+			const getOrganization = vi.fn(() =>
+				Effect.promise(() => {
+					started = true;
+					return new Promise<never>(() => undefined);
+				}).pipe(Effect.onInterrupt(() => Effect.sync(() => void (interrupted = true))))
+			);
+			const controller = new AbortController();
+			const pending = build(stub({ getOrganization }))(
+				new Request(`http://localhost/api/organizations/${organizationId.toString()}`, {
+					headers: { authorization: `Bearer ${token()}` },
+					signal: controller.signal,
+				})
+			).catch(() => undefined);
+			await until(() => started);
+			expect(started).toBe(true);
+			controller.abort();
+			await until(() => interrupted);
+			await pending;
+			expect(interrupted).toBe(true);
+		});
+	});
+
+	describe("route registration", () => {
+		it("registers every write uninterruptible and every read interruptible", async () => {
+			type Added = { method: string; path: string; uninterruptible: boolean };
+			const added: Added[] = [];
+			const spyRouter = Layer.effect(
+				HttpRouter.HttpRouter,
+				Effect.map(
+					HttpRouter.make,
+					(router): HttpRouter.HttpRouter => ({
+						...router,
+						addAll: routes => {
+							for (const route of routes) {
+								added.push({
+									method: String(route.method),
+									path: String(route.path),
+									uninterruptible: route.uninterruptible,
+								});
+							}
+							return router.addAll(routes);
+						},
+					})
+				)
+			);
+			const scope = Effect.runSync(Scope.make());
+			await Effect.runPromise(
+				Layer.buildWithScope(
+					appLayer.pipe(Layer.provide(testServicesLayer()), Layer.provide(spyRouter)),
+					scope
+				)
+			);
+			await Effect.runPromise(Scope.close(scope, Exit.void));
+
+			const api = added.filter(route => route.path.startsWith("/api"));
+			expect(api.length).toBeGreaterThan(40);
+			for (const route of api) {
+				expect(
+					[route.method, route.path, route.uninterruptible],
+					`${route.method} ${route.path}`
+				).toEqual([route.method, route.path, route.method !== "GET"]);
+			}
 		});
 	});
 

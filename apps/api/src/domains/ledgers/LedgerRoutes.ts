@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
-import { parseLedgerId } from "@/lib/utils";
+import { parseLedgerId, runToCompletion } from "@/lib/utils";
 import { LedgerServiceTag } from "./LedgerService";
 
 const LedgerRoutes = HttpApiBuilder.group(LedgerApi, "ledgers", handlers =>
@@ -29,33 +29,42 @@ const LedgerRoutes = HttpApiBuilder.group(LedgerApi, "ledgers", handlers =>
 					return ledger.toResponse();
 				})
 			)
-			.handle("create", ({ payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:write"]);
-					const token = yield* CurrentToken;
-					const ledger = yield* service.createLedger(token.orgId, payload);
-					return HttpApiSchema.withHeaders({
-						body: ledger.toResponse(),
-						headers: { location: `/api/ledgers/${ledger.id.toString()}` },
-					});
-				})
+			.handle(
+				"create",
+				({ payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:write"]);
+						const token = yield* CurrentToken;
+						const ledger = yield* service.createLedger(token.orgId, payload);
+						return HttpApiSchema.withHeaders({
+							body: ledger.toResponse(),
+							headers: { location: `/api/ledgers/${ledger.id.toString()}` },
+						});
+					}),
+				runToCompletion
 			)
-			.handle("update", ({ params, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const ledger = yield* service.updateLedger(token.orgId, ledgerId, payload);
-					return ledger.toResponse();
-				})
+			.handle(
+				"update",
+				({ params, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const ledger = yield* service.updateLedger(token.orgId, ledgerId, payload);
+						return ledger.toResponse();
+					}),
+				runToCompletion
 			)
-			.handle("delete", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:delete"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					yield* service.deleteLedger(token.orgId, ledgerId);
-				})
+			.handle(
+				"delete",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:delete"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						yield* service.deleteLedger(token.orgId, ledgerId);
+					}),
+				runToCompletion
 			);
 	})
 );

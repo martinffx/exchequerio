@@ -3,7 +3,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi";
 import { LedgerApi } from "@/api";
 import { CurrentToken, requirePermissions } from "@/auth";
 import type { LedgerTransactionID } from "@/lib/ids";
-import { parseId, parseLedgerId } from "@/lib/utils";
+import { parseId, parseLedgerId, runToCompletion } from "@/lib/utils";
 import { TransactionServiceTag } from "./LedgerTransactionService";
 
 const parseTransactionId = (transactionId: string) =>
@@ -32,69 +32,81 @@ const TransactionRoutes = HttpApiBuilder.group(LedgerApi, "transactions", handle
 					return transaction.toResponse();
 				})
 			)
-			.handle("create", ({ params, headers, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:transaction:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const transaction = yield* service.createTransaction(
-						token.orgId,
-						ledgerId,
-						headers["idempotency-key"],
-						payload
-					);
-					return HttpApiSchema.withHeaders({
-						body: transaction.toResponse(),
-						headers: {
-							location: `/api/ledgers/${transaction.ledgerId.toString()}/transactions/${transaction.id.toString()}`,
-						},
-					});
-				})
+			.handle(
+				"create",
+				({ params, headers, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:transaction:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const transaction = yield* service.createTransaction(
+							token.orgId,
+							ledgerId,
+							headers["idempotency-key"],
+							payload
+						);
+						return HttpApiSchema.withHeaders({
+							body: transaction.toResponse(),
+							headers: {
+								location: `/api/ledgers/${transaction.ledgerId.toString()}/transactions/${transaction.id.toString()}`,
+							},
+						});
+					}),
+				runToCompletion
 			)
-			.handle("update", ({ params, headers, payload }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:transaction:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const transactionId = yield* parseTransactionId(params.transactionId);
-					const transaction = yield* service.updateTransaction(
-						token.orgId,
-						ledgerId,
-						transactionId,
-						headers["idempotency-key"],
-						payload
-					);
-					return transaction.toResponse();
-				})
+			.handle(
+				"update",
+				({ params, headers, payload }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:transaction:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const transactionId = yield* parseTransactionId(params.transactionId);
+						const transaction = yield* service.updateTransaction(
+							token.orgId,
+							ledgerId,
+							transactionId,
+							headers["idempotency-key"],
+							payload
+						);
+						return transaction.toResponse();
+					}),
+				runToCompletion
 			)
-			.handle("post", ({ params, headers }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:transaction:write"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const transactionId = yield* parseTransactionId(params.transactionId);
-					const transaction = yield* service.postTransaction(
-						token.orgId,
-						ledgerId,
-						transactionId,
-						headers["idempotency-key"]
-					);
-					return transaction.toResponse();
-				})
+			.handle(
+				"post",
+				({ params, headers }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:transaction:write"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const transactionId = yield* parseTransactionId(params.transactionId);
+						const transaction = yield* service.postTransaction(
+							token.orgId,
+							ledgerId,
+							transactionId,
+							headers["idempotency-key"]
+						);
+						return transaction.toResponse();
+					}),
+				runToCompletion
 			)
-			.handle("void", ({ params, headers }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:transaction:delete"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const transactionId = yield* parseTransactionId(params.transactionId);
-					yield* service.voidTransaction(
-						token.orgId,
-						ledgerId,
-						transactionId,
-						headers["idempotency-key"]
-					);
-				})
+			.handle(
+				"void",
+				({ params, headers }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:transaction:delete"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const transactionId = yield* parseTransactionId(params.transactionId);
+						yield* service.voidTransaction(
+							token.orgId,
+							ledgerId,
+							transactionId,
+							headers["idempotency-key"]
+						);
+					}),
+				runToCompletion
 			);
 	})
 );
