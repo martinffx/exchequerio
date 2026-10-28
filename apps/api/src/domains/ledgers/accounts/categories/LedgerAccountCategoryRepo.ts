@@ -183,7 +183,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 								catch: cause =>
 									cause instanceof ConflictError ? cause : new CategoryPersistenceDecodingFailure(cause),
 							})
-			)
+			),
+			Effect.withSpan("LedgerAccountCategoryRepo.getLedgerAccountCategoryBalances")
 		);
 	}
 
@@ -207,7 +208,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 			.offset(offset)
 			.pipe(
 				Effect.flatMap(rows => Effect.all(rows.map(row => decodeCategory(row)))),
-				Effect.mapError(mapCategoryInfrastructureError)
+				Effect.mapError(mapCategoryInfrastructureError),
+				Effect.withSpan("LedgerAccountCategoryRepo.listLedgerAccountCategories")
 			);
 	}
 
@@ -229,7 +231,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 			.limit(1)
 			.pipe(
 				Effect.mapError(mapCategoryInfrastructureError),
-				Effect.flatMap(rows => requireCategory(rows, categoryId))
+				Effect.flatMap(rows => requireCategory(rows, categoryId)),
+				Effect.withSpan("LedgerAccountCategoryRepo.getLedgerAccountCategory")
 			);
 	}
 
@@ -267,7 +270,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 						),
 						Effect.flatMap(requireUpsertedCategory)
 					)
-			)
+			),
+			Effect.withSpan("LedgerAccountCategoryRepo.upsertLedgerAccountCategory")
 		);
 	}
 
@@ -292,7 +296,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 					rows.length === 0
 						? Effect.fail(new CategoryNotFound(`Category not found: ${categoryId.toString()}`))
 						: Effect.void
-				)
+				),
+				Effect.withSpan("LedgerAccountCategoryRepo.deleteLedgerAccountCategory")
 			);
 	}
 
@@ -326,7 +331,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 						})
 					)
 			),
-			Effect.asVoid
+			Effect.asVoid,
+			Effect.withSpan("LedgerAccountCategoryRepo.linkAccountToCategory")
 		);
 	}
 
@@ -359,7 +365,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 							)
 						)
 					: Effect.void
-			)
+			),
+			Effect.withSpan("LedgerAccountCategoryRepo.unlinkAccountFromCategory")
 		);
 	}
 
@@ -455,7 +462,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 						});
 					return mapCategoryInfrastructureError(cause);
 				}),
-				Effect.asVoid
+				Effect.asVoid,
+				Effect.withSpan("LedgerAccountCategoryRepo.linkCategoryToParent")
 			);
 	}
 
@@ -488,7 +496,8 @@ class LedgerAccountCategoryRepoLive implements LedgerAccountCategoryRepo {
 							)
 						)
 					: Effect.void
-			)
+			),
+			Effect.withSpan("LedgerAccountCategoryRepo.unlinkCategoryFromParent")
 		);
 	}
 }

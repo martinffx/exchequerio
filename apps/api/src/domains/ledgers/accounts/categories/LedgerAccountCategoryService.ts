@@ -45,13 +45,19 @@ class LedgerAccountCategoryService {
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID
 	): Effect.Effect<CategoryBalances, LedgerGetError | CategoryBalancesRepositoryError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(
-				Effect.flatMap(() =>
-					this.repository.getLedgerAccountCategoryBalances(organizationId, ledgerId, categoryId)
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(
+					Effect.flatMap(() =>
+						this.repository.getLedgerAccountCategoryBalances(organizationId, ledgerId, categoryId)
+					)
 				)
-			);
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.getLedgerAccountCategoryBalances", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	listLedgerAccountCategories(
@@ -60,13 +66,19 @@ class LedgerAccountCategoryService {
 		offset: number,
 		limit: number
 	): Effect.Effect<LedgerAccountCategoryEntity[], CategoryListError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(
-				Effect.flatMap(() =>
-					this.repository.listLedgerAccountCategories(organizationId, ledgerId, offset, limit)
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(
+					Effect.flatMap(() =>
+						this.repository.listLedgerAccountCategories(organizationId, ledgerId, offset, limit)
+					)
 				)
-			);
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.listLedgerAccountCategories", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	getLedgerAccountCategory(
@@ -74,13 +86,19 @@ class LedgerAccountCategoryService {
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID
 	): Effect.Effect<LedgerAccountCategoryEntity, CategoryGetError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(
-				Effect.flatMap(() =>
-					this.repository.getLedgerAccountCategory(organizationId, ledgerId, categoryId)
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(
+					Effect.flatMap(() =>
+						this.repository.getLedgerAccountCategory(organizationId, ledgerId, categoryId)
+					)
 				)
-			);
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.getLedgerAccountCategory", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	createLedgerAccountCategory(
@@ -88,11 +106,17 @@ class LedgerAccountCategoryService {
 		ledgerId: LedgerID,
 		request: LedgerAccountCategoryRequest
 	): Effect.Effect<LedgerAccountCategoryEntity, CategoryCreateError> {
-		return this.ledgerService.getLedger(organizationId, ledgerId).pipe(
-			Effect.andThen(
-				Effect.sync(() => LedgerAccountCategoryEntity.fromRequest(request, organizationId, ledgerId))
-			),
-			Effect.flatMap(entity => this.repository.upsertLedgerAccountCategory(entity))
+		return Effect.suspend(() =>
+			this.ledgerService.getLedger(organizationId, ledgerId).pipe(
+				Effect.andThen(
+					Effect.sync(() => LedgerAccountCategoryEntity.fromRequest(request, organizationId, ledgerId))
+				),
+				Effect.flatMap(entity => this.repository.upsertLedgerAccountCategory(entity))
+			)
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.createLedgerAccountCategory", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
 		);
 	}
 
@@ -102,21 +126,27 @@ class LedgerAccountCategoryService {
 		categoryId: LedgerAccountCategoryID,
 		request: LedgerAccountCategoryRequest
 	): Effect.Effect<LedgerAccountCategoryEntity, CategoryUpdateError> {
-		return this.ledgerService.getLedger(organizationId, ledgerId).pipe(
-			Effect.flatMap(() =>
-				this.repository.getLedgerAccountCategory(organizationId, ledgerId, categoryId)
-			),
-			Effect.andThen(
-				Effect.sync(() =>
-					LedgerAccountCategoryEntity.fromRequest(
-						request,
-						organizationId,
-						ledgerId,
-						categoryId.toString()
+		return Effect.suspend(() =>
+			this.ledgerService.getLedger(organizationId, ledgerId).pipe(
+				Effect.flatMap(() =>
+					this.repository.getLedgerAccountCategory(organizationId, ledgerId, categoryId)
+				),
+				Effect.andThen(
+					Effect.sync(() =>
+						LedgerAccountCategoryEntity.fromRequest(
+							request,
+							organizationId,
+							ledgerId,
+							categoryId.toString()
+						)
 					)
-				)
-			),
-			Effect.flatMap(entity => this.repository.upsertLedgerAccountCategory(entity))
+				),
+				Effect.flatMap(entity => this.repository.upsertLedgerAccountCategory(entity))
+			)
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.updateLedgerAccountCategory", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
 		);
 	}
 
@@ -125,13 +155,19 @@ class LedgerAccountCategoryService {
 		ledgerId: LedgerID,
 		categoryId: LedgerAccountCategoryID
 	): Effect.Effect<void, CategoryDeleteError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(
-				Effect.flatMap(() =>
-					this.repository.deleteLedgerAccountCategory(organizationId, ledgerId, categoryId)
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(
+					Effect.flatMap(() =>
+						this.repository.deleteLedgerAccountCategory(organizationId, ledgerId, categoryId)
+					)
 				)
-			);
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.deleteLedgerAccountCategory", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	linkLedgerAccountToCategory(
@@ -140,13 +176,19 @@ class LedgerAccountCategoryService {
 		categoryId: LedgerAccountCategoryID,
 		accountId: LedgerAccountID
 	): Effect.Effect<void, CategoryLinkAccountError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(
-				Effect.flatMap(() =>
-					this.repository.linkAccountToCategory(organizationId, ledgerId, categoryId, accountId)
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(
+					Effect.flatMap(() =>
+						this.repository.linkAccountToCategory(organizationId, ledgerId, categoryId, accountId)
+					)
 				)
-			);
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.linkLedgerAccountToCategory", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	unlinkLedgerAccountToCategory(
@@ -155,13 +197,19 @@ class LedgerAccountCategoryService {
 		categoryId: LedgerAccountCategoryID,
 		accountId: LedgerAccountID
 	): Effect.Effect<void, CategoryUnlinkAccountError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(
-				Effect.flatMap(() =>
-					this.repository.unlinkAccountFromCategory(organizationId, ledgerId, categoryId, accountId)
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(
+					Effect.flatMap(() =>
+						this.repository.unlinkAccountFromCategory(organizationId, ledgerId, categoryId, accountId)
+					)
 				)
-			);
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.unlinkLedgerAccountToCategory", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	linkLedgerAccountCategoryToCategory(
@@ -170,13 +218,19 @@ class LedgerAccountCategoryService {
 		categoryId: LedgerAccountCategoryID,
 		parentCategoryId: LedgerAccountCategoryID
 	): Effect.Effect<void, CategoryLinkParentError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(
-				Effect.flatMap(() =>
-					this.repository.linkCategoryToParent(organizationId, ledgerId, categoryId, parentCategoryId)
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(
+					Effect.flatMap(() =>
+						this.repository.linkCategoryToParent(organizationId, ledgerId, categoryId, parentCategoryId)
+					)
 				)
-			);
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.linkLedgerAccountCategoryToCategory", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	unlinkLedgerAccountCategoryToCategory(
@@ -185,18 +239,24 @@ class LedgerAccountCategoryService {
 		categoryId: LedgerAccountCategoryID,
 		parentCategoryId: LedgerAccountCategoryID
 	): Effect.Effect<void, CategoryUnlinkParentError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(
-				Effect.flatMap(() =>
-					this.repository.unlinkCategoryFromParent(
-						organizationId,
-						ledgerId,
-						categoryId,
-						parentCategoryId
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(
+					Effect.flatMap(() =>
+						this.repository.unlinkCategoryFromParent(
+							organizationId,
+							ledgerId,
+							categoryId,
+							parentCategoryId
+						)
 					)
 				)
-			);
+		).pipe(
+			Effect.withSpan("LedgerAccountCategoryService.unlinkLedgerAccountCategoryToCategory", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 }
 

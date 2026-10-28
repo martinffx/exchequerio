@@ -85,8 +85,17 @@ export class LedgerAccountBalanceMonitorService {
 		});
 	}
 	listLedgerAccountBalanceMonitors(scope: MonitorScope, offset: number, limit: number) {
-		return parseScope(scope).pipe(
-			Effect.flatMap(() => this.repository.listMonitors(scope, { offset, limit }))
+		return Effect.suspend(() =>
+			parseScope(scope).pipe(
+				Effect.flatMap(() => this.repository.listMonitors(scope, { offset, limit }))
+			)
+		).pipe(
+			Effect.withSpan("LedgerAccountBalanceMonitorService.listLedgerAccountBalanceMonitors", {
+				attributes: {
+					"organization.id": String(scope.organizationId),
+					"ledger.id": String(scope.ledgerId),
+				},
+			})
 		);
 	}
 	getLedgerAccountBalanceMonitor(scope: MonitorScope, id: string) {
@@ -96,7 +105,14 @@ export class LedgerAccountBalanceMonitorService {
 			return yield* this.repository
 				.getMonitor(scope, monitorId)
 				.pipe(Effect.flatMap(requireFound(monitorId)));
-		});
+		}).pipe(
+			Effect.withSpan("LedgerAccountBalanceMonitorService.getLedgerAccountBalanceMonitor", {
+				attributes: {
+					"organization.id": String(scope.organizationId),
+					"ledger.id": String(scope.ledgerId),
+				},
+			})
+		);
 	}
 	createLedgerAccountBalanceMonitor(
 		scope: MonitorScope,
@@ -114,7 +130,14 @@ export class LedgerAccountBalanceMonitorService {
 				webhook.webhookSigningSecret!
 			);
 			return yield* this.repository.createMonitor(record);
-		});
+		}).pipe(
+			Effect.withSpan("LedgerAccountBalanceMonitorService.createLedgerAccountBalanceMonitor", {
+				attributes: {
+					"organization.id": String(scope.organizationId),
+					"ledger.id": String(scope.ledgerId),
+				},
+			})
+		);
 	}
 	updateLedgerAccountBalanceMonitor(
 		scope: MonitorScope,
@@ -139,7 +162,14 @@ export class LedgerAccountBalanceMonitorService {
 					time.toJSDate()
 				)
 				.pipe(Effect.flatMap(requireFound(monitorId)));
-		});
+		}).pipe(
+			Effect.withSpan("LedgerAccountBalanceMonitorService.updateLedgerAccountBalanceMonitor", {
+				attributes: {
+					"organization.id": String(scope.organizationId),
+					"ledger.id": String(scope.ledgerId),
+				},
+			})
+		);
 	}
 	deleteLedgerAccountBalanceMonitor(scope: MonitorScope, id: string) {
 		return Effect.gen({ self: this }, function* () {
@@ -148,7 +178,14 @@ export class LedgerAccountBalanceMonitorService {
 			return yield* this.repository
 				.deleteMonitor(scope, monitorId)
 				.pipe(Effect.flatMap(requireFound(monitorId)));
-		});
+		}).pipe(
+			Effect.withSpan("LedgerAccountBalanceMonitorService.deleteLedgerAccountBalanceMonitor", {
+				attributes: {
+					"organization.id": String(scope.organizationId),
+					"ledger.id": String(scope.ledgerId),
+				},
+			})
+		);
 	}
 }
 export const LedgerAccountBalanceMonitorServiceTag =

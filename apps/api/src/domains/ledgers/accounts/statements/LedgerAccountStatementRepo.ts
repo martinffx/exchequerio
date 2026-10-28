@@ -42,36 +42,38 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		accountId: string,
 		ledgerId: string
 	): Effect.Effect<AssetSummary, StatementError> {
-		return this.db
-			.select({
-				assetId: AssetsTable.id,
-				assetCode: AssetsTable.code,
-				minorUnitExponent: AssetsTable.minorUnitExponent,
-			})
-			.from(LedgerAccountsTable)
-			.innerJoin(
-				AssetsTable,
-				and(
-					eq(AssetsTable.id, LedgerAccountsTable.assetId),
-					eq(AssetsTable.organizationId, LedgerAccountsTable.organizationId)
+		return Effect.suspend(() =>
+			this.db
+				.select({
+					assetId: AssetsTable.id,
+					assetCode: AssetsTable.code,
+					minorUnitExponent: AssetsTable.minorUnitExponent,
+				})
+				.from(LedgerAccountsTable)
+				.innerJoin(
+					AssetsTable,
+					and(
+						eq(AssetsTable.id, LedgerAccountsTable.assetId),
+						eq(AssetsTable.organizationId, LedgerAccountsTable.organizationId)
+					)
 				)
-			)
-			.where(
-				and(
-					eq(LedgerAccountsTable.id, encodeUuid(TypeID.fromString(accountId))),
-					eq(LedgerAccountsTable.ledgerId, encodeUuid(TypeID.fromString(ledgerId))),
-					eq(LedgerAccountsTable.organizationId, encodeUuid(orgId))
+				.where(
+					and(
+						eq(LedgerAccountsTable.id, encodeUuid(TypeID.fromString(accountId))),
+						eq(LedgerAccountsTable.ledgerId, encodeUuid(TypeID.fromString(ledgerId))),
+						eq(LedgerAccountsTable.organizationId, encodeUuid(orgId))
+					)
 				)
-			)
-			.limit(1)
-			.pipe(
-				Effect.orDie,
-				Effect.flatMap(rows =>
-					rows[0] === undefined
-						? Effect.fail(new NotFoundError("Account not found"))
-						: Effect.succeed({ ...rows[0], assetId: TypeID.fromUUID("ast", rows[0].assetId).toString() })
+				.limit(1)
+				.pipe(
+					Effect.orDie,
+					Effect.flatMap(rows =>
+						rows[0] === undefined
+							? Effect.fail(new NotFoundError("Account not found"))
+							: Effect.succeed({ ...rows[0], assetId: TypeID.fromUUID("ast", rows[0].assetId).toString() })
+					)
 				)
-			);
+		).pipe(Effect.withSpan("LedgerAccountStatementRepo.getAccountAsset"));
 	}
 
 	getStatement(
@@ -94,7 +96,8 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 						TypeID.fromUUID("lat", row.accountId).toString(),
 						TypeID.fromUUID("lgr", row.ledgerId).toString()
 					).pipe(Effect.map(asset => LedgerAccountStatement.fromRow(row, asset)));
-				})
+				}),
+				Effect.withSpan("LedgerAccountStatementRepo.getStatement")
 			);
 	}
 
@@ -108,7 +111,8 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 			.returning()
 			.pipe(
 				Effect.orDie,
-				Effect.flatMap(() => this.getStatement(statement.id, orgId))
+				Effect.flatMap(() => this.getStatement(statement.id, orgId)),
+				Effect.withSpan("LedgerAccountStatementRepo.createStatement")
 			);
 	}
 }

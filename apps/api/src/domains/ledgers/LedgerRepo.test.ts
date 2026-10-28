@@ -1,6 +1,6 @@
 import { TypeID } from "typeid-js";
 import { eq, sql } from "drizzle-orm";
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Tracer } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
@@ -367,5 +367,24 @@ describe("LedgerRepoLive", () => {
 		} finally {
 			await runtime.runPromise(db.delete(LedgersTable).where(eq(LedgersTable.id, id.toUUID())));
 		}
+	});
+
+	it.each(["getLedger", "listLedgers"] as const)("records exactly one %s span", async method => {
+		const organizationId = await createOrganization();
+		const spans: Tracer.NativeSpan[] = [];
+		const tracer = Tracer.make({
+			span: options => {
+				const span = new Tracer.NativeSpan(options);
+				spans.push(span);
+				return span;
+			},
+		});
+		const program: Effect.Effect<unknown, unknown> =
+			method === "getLedger"
+				? repository.getLedger(organizationId, newLedgerID())
+				: repository.listLedgers(organizationId, { offset: 0, limit: 10 });
+		await runtime.runPromise(program.pipe(Effect.withTracer(tracer)));
+		const names = spans.map(({ name }) => name).filter(name => name.startsWith("LedgerRepo."));
+		expect(names).toEqual([`LedgerRepo.${method}`]);
 	});
 });
