@@ -1,5 +1,14 @@
 import "@/lib/luxon";
-import { Cause, Effect, FileSystem, ErrorReporter, Layer, Result, type Types } from "effect";
+import {
+	Cause,
+	Effect,
+	FileSystem,
+	ErrorReporter,
+	Layer,
+	Option,
+	Result,
+	type Types,
+} from "effect";
 import {
 	HttpIncomingMessage,
 	HttpMiddleware,
@@ -10,6 +19,7 @@ import {
 	HttpServerResponse,
 } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiError, HttpApiSwagger } from "effect/unstable/httpapi";
+import { v7 as uuid } from "uuid";
 import { LedgerApi, SchemaErrorTransformLayer } from "@/api";
 import { makeAuthenticationLayer } from "@/auth";
 import { Config } from "@/config";
@@ -19,6 +29,7 @@ import {
 	InternalServerError,
 	NotFoundError,
 	retryAfterHeaders,
+	ServiceUnavailableError,
 } from "@/lib/errors";
 import { makeServerRuntimeLayer, ServerConfigTag } from "@/runtime";
 import { AssetRoutes } from "@/domains/assets/AssetRoutes";
@@ -68,6 +79,19 @@ const edgeErrors = <R>(
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, Types.unhandled, R> =>
 	// The middleware contract wants `unhandled` left in the error channel; widening `never` to it is sound.
 	Effect.catchCause(httpEffect, cause => {
+		// Global middleware is uninterruptible, so an interrupt can still be answered. The logger takes its
+		// status from the response sent, so name the truth: a client abort is 499 (the client is gone, so
+		// nothing is delivered), any other interrupt (a drain-cap cut) is a 503 problem.
+		if (Cause.hasInterruptsOnly(cause)) {
+			const clientAbort = cause.reasons.some(
+				reason => reason._tag === "Interrupt" && reason.annotations.has(HttpServerError.ClientAbort.key)
+			);
+			return clientAbort
+				? Effect.succeed(HttpServerResponse.empty({ status: 499 }))
+				: Effect.logWarning("request interrupted during shutdown").pipe(
+						Effect.as(problemResponse(new ServiceUnavailableError("Service Unavailable")))
+					);
+		}
 		if (Cause.hasInterrupts(cause)) return Effect.interrupt;
 		const failure = Cause.findError(cause);
 		if (Result.isSuccess(failure) && HttpServerError.isHttpServerError(failure.success)) {
@@ -154,14 +178,32 @@ const bodyLimit = <E, R>(httpEffect: Effect.Effect<HttpServerResponse.HttpServer
 			: httpEffect
 	);
 
+const requestIdPattern = /^[A-Za-z0-9._:-]{1,128}$/;
+
 /**
- * The one global middleware, with an explicit order: the logger wraps `connectionClose`, which wraps
- * `bodyLimit` and `edgeErrors`, so the logged status is the one sent and every response, rendered errors included,
- * is marked while draining.
+ * Annotates every log line of a request with its id and client address, the access line, auth failures
+ * and error-reporter lines included. A supplied `x-request-id` is kept only if it is short and made of
+ * safe characters (a log-injection guard); otherwise a fresh uuid is minted. Never echoed in a response.
+ */
+const correlate = <E, R>(httpEffect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
+	Effect.flatMap(Effect.service(HttpServerRequest.HttpServerRequest), request => {
+		const supplied = request.headers["x-request-id"];
+		const address = request.remoteAddress;
+		return Effect.annotateLogs(httpEffect, {
+			"http.request_id": supplied !== undefined && requestIdPattern.test(supplied) ? supplied : uuid(),
+			...(Option.isSome(address) ? { "http.remote_address": address.value } : {}),
+		});
+	});
+
+/**
+ * The one global middleware, with an explicit order: `correlate` annotates everything, the logger wraps
+ * `connectionClose`, which wraps `bodyLimit` and `edgeErrors`, so the logged status is that of the
+ * response edgeErrors renders (including 499 for a client abort and 503 for a server-side interrupt) and
+ * every response, rendered errors included, is marked while draining.
  */
 const EdgeMiddleware = HttpRouter.middleware(
 	Effect.succeed(httpEffect =>
-		HttpMiddleware.logger(connectionClose(bodyLimit(edgeErrors(httpEffect))))
+		correlate(HttpMiddleware.logger(connectionClose(bodyLimit(edgeErrors(httpEffect)))))
 	),
 	{ global: true }
 );

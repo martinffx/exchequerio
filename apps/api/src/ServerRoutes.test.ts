@@ -11,7 +11,7 @@ import {
 } from "@/lib/errors";
 import { Agent, createServer, type IncomingHttpHeaders, request } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Cause, Context, Effect, Exit, Layer, Logger, Scope } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope } from "effect";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { TypeID } from "typeid-js";
 import { signJWT } from "@/auth";
@@ -179,12 +179,13 @@ describe("Request lifecycle", () => {
 describe("Effect HTTP edge", () => {
 	const organizationId = TypeID.fromString<"org">("org_01h2x3y4z5a6b7c8d9e0f1g2h3") as OrgID;
 	const organization = Organization.fromRequest(organizationId, { name: "Example" });
-	const logs: Array<{ level: string; text: string }> = [];
+	const logs: Array<{ level: string; text: string; annotations: Record<string, unknown> }> = [];
 	const disposers: Array<() => Promise<void>> = [];
 
 	const capture = Logger.layer([
-		Logger.make(({ logLevel, message, cause }) => {
+		Logger.make(({ logLevel, message, cause, fiber }) => {
 			logs.push({
+				annotations: fiber.getRef(References.CurrentLogAnnotations),
 				level: logLevel,
 				text: `${JSON.stringify(message)} ${cause.reasons.length === 0 ? "" : Cause.pretty(cause)}`,
 			});
@@ -620,6 +621,104 @@ describe("Effect HTTP edge", () => {
 					scheme.scheme?.toLowerCase(),
 				])
 			).toContainEqual(["http", "bearer"]);
+		});
+	});
+
+	describe("request logging", () => {
+		const path = `/api/organizations/${organizationId.toString()}`;
+		const uuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+		const accessLine = () => logs.find(entry => "http.status" in entry.annotations);
+
+		describe("interrupted requests", () => {
+			it("logs a client abort as 499, not 500", async () => {
+				const gate = deferred();
+				const started = deferred();
+				const service = stub({
+					getOrganization: () =>
+						Effect.promise(() => {
+							started.resolve();
+							return gate.promise;
+						}).pipe(Effect.as(organization)),
+				});
+				const controller = new AbortController();
+				const pending = build(service)(
+					new Request(`http://localhost${path}`, {
+						headers: { authorization: `Bearer ${token()}` },
+						signal: controller.signal,
+					})
+				);
+				await started.promise;
+				controller.abort();
+				await pending;
+				gate.resolve();
+				expect(accessLine()?.annotations["http.status"]).toBe(499);
+			});
+
+			it("renders a server-side interrupt as a 503 problem logged at warning", async () => {
+				const service = stub({ getOrganization: () => Effect.interrupt });
+				const response = await build(service)(call("GET", path));
+				expect(response.status).toBe(503);
+				expect(await response.json()).toMatchObject({ type: "SERVICE_UNAVAILABLE", status: 503 });
+				expect(
+					logs.some(
+						entry => entry.level === "Warn" && entry.text.includes("request interrupted during shutdown")
+					)
+				).toBe(true);
+				expect(logs.some(entry => entry.text.includes("Unhandled request failure"))).toBe(false);
+				expect(logs.some(entry => entry.level === "Error")).toBe(false);
+			});
+		});
+
+		describe("request correlation", () => {
+			const withId = (id?: string) =>
+				new Request(`http://localhost${path}`, {
+					headers: {
+						authorization: `Bearer ${token()}`,
+						...(id === undefined ? {} : { "x-request-id": id }),
+					},
+				});
+
+			it("annotates the access line with a minted uuid when no id is supplied", async () => {
+				await build()(withId());
+				const annotations = accessLine()?.annotations;
+				expect(annotations?.["http.request_id"]).toMatch(uuidV7);
+				// The in-memory web handler has no socket, so no remote address is provided.
+				expect(annotations).not.toHaveProperty("http.remote_address");
+			});
+
+			it("keeps a valid supplied x-request-id", async () => {
+				await build()(withId("abc-123_DEF.4:5"));
+				expect(accessLine()?.annotations["http.request_id"]).toBe("abc-123_DEF.4:5");
+			});
+
+			it.each([["has spaces"], ["tab\tseparated"], ["x".repeat(200)], [""]])(
+				"replaces an unsafe x-request-id (%j) with a fresh uuid",
+				async id => {
+					await build()(withId(id));
+					expect(accessLine()?.annotations["http.request_id"]).toMatch(uuidV7);
+				}
+			);
+
+			it("correlates an auth failure with its access line", async () => {
+				await build()(
+					new Request("http://localhost/api/organizations", { headers: { "x-request-id": "req-auth" } })
+				);
+				const failure = logs.find(entry => entry.text.includes("Missing bearer credential"));
+				expect(failure?.annotations["http.request_id"]).toBe("req-auth");
+				expect(accessLine()?.annotations["http.request_id"]).toBe("req-auth");
+			});
+
+			it("correlates a declared 5xx cause line with its access line", async () => {
+				const service = stub({
+					getOrganization: () => Effect.fail(new ServiceUnavailableError("down")),
+				});
+				const response = await build(service)(withId("req-5xx"));
+				expect(response.status).toBe(503);
+				await until(() => logs.some(entry => entry.level === "Error"));
+				const cause = logs.find(entry => entry.level === "Error");
+				expect(cause?.annotations["http.request_id"]).toBe("req-5xx");
+				expect(accessLine()?.annotations["http.request_id"]).toBe("req-5xx");
+			});
 		});
 	});
 });
