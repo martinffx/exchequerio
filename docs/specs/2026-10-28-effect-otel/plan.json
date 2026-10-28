@@ -25,7 +25,7 @@
 						"effect-mq forks worker loops at layer-build time (node_modules effect-mq Worker.js ~l.570, 779)",
 						"Run pnpm install in the worktree first; it has no node_modules"
 					],
-					"description": "Create makeTelemetryLayer({ serviceName, environment }) composed as Otlp.layerFromConfig({ resource: { serviceName, attributes: { 'deployment.environment.name' } } }) piped through Layer.provideMerge(consoleLoggerLayer), Layer.provide(OtlpSerialization.layerProtobuf), Layer.provide(FetchHttpClient.layer). provideMerge keeps the console logger alongside the OTLP logger whether export is enabled or not. The console logger in production is JSON built with Logger.map(Logger.formatStructured, ...) adding traceId and spanId from fiber.currentSpan (consoleJson omits them); outside production it is Logger.consolePretty. Service names are exchequer-api and exchequer-worker. In index.ts apply the layer with Layer.provide under main. In worker.ts apply it with Layer.provide underneath the merged store+worker layer, NOT as a sibling in Layer.mergeAll, so effect-mq's forked loops inherit the tracer and logger. Never wrap the server layer or the launch in a span: HttpApiBuilder merges the build-time context over the request context and every error would report that one span's trace. Document OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_TRACES_EXPORTER=otlp, OTEL_METRICS_EXPORTER=otlp, OTEL_LOGS_EXPORTER=otlp and OTEL_EXPORTER_OTLP_HEADERS as commented-out entries in apps/api/.env.example and in docker-compose.yml for the api and worker services. No new dependencies and nothing added to the Config class.",
+					"description": "Create makeTelemetryLayer({ serviceName, environment }) composed as Otlp.layerFromConfig({ resource: { serviceName, attributes: { 'deployment.environment.name' } } }) piped through Layer.provideMerge(consoleLoggerLayer), Layer.provide(OtlpSerialization.layerProtobuf), Layer.provide(FetchHttpClient.layer). provideMerge keeps the console logger alongside the OTLP logger whether export is enabled or not. The console logger in production is JSON built with Logger.map(Logger.formatStructured, ...) adding traceId and spanId from fiber.currentSpan (consoleJson omits them); outside production it is Logger.consolePretty. Service names are exchequer-api and exchequer-worker. In index.ts apply the layer with Layer.provide to the serveApp(...) result (main) so it is outermost. In worker.ts apply it with Layer.provide underneath the merged store+worker layer, NOT as a sibling in Layer.mergeAll, so effect-mq's forked loops inherit the tracer and logger. Never wrap the server layer or the launch in a span: HttpApiBuilder merges the build-time context over the request context and every error would report that one span's trace. Document OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_TRACES_EXPORTER=otlp, OTEL_METRICS_EXPORTER=otlp, OTEL_LOGS_EXPORTER=otlp and OTEL_EXPORTER_OTLP_HEADERS as commented-out entries in apps/api/.env.example and in docker-compose.yml for the api and worker services. No new dependencies and nothing added to the Config class.",
 					"files": {
 						"reuse": [
 							"apps/api/node_modules/effect/src/unstable/observability/Otlp.ts",
@@ -47,7 +47,10 @@
 						{
 							"name": "makeTelemetryLayer",
 							"requirement": "US-1 export via OTEL_* with no-op when unset; US-5 trace-correlated structured logs",
-							"consumers": ["apps/api/src/index.ts", "apps/api/src/worker.ts"]
+							"consumers": [
+								"apps/api/src/index.ts",
+								"apps/api/src/worker.ts"
+							]
 						}
 					],
 					"validation": {
@@ -70,19 +73,20 @@
 					"depends_on": [],
 					"inputs": [
 						"design.md Architecture items 3 and 6, US-3",
-						"apps/api/src/lib/errors.ts toProblemDetail (traceId at l.43) and encodeProblem (traceId at l.209)",
+						"apps/api/src/lib/errors.ts: toProblemDetail is now the single traceId site (l.43); encodeProblem delegates to it",
 						"apps/api/src/server.ts edgeErrors and problemResponse run inside the HttpMiddleware.tracer span (HttpEffect.toHandled)",
-						"apps/api/src/auth.ts makeAuthenticationLayer provides CurrentToken (OrgToken.orgId)",
-						"errors.test.ts uses Schema.encodeUnknownSync, which runs in a fresh fiber with no span"
+						"apps/api/src/auth.ts makeAuthenticationLayer provides CurrentToken (OrgToken.orgId)"
 					],
-					"description": "Add currentTraceId() returning Fiber.getCurrent()?.currentSpan?.traceId ?? uuid() and use it for traceId in toProblemDetail and in the encode branch of encodeProblem. The uuid fallback covers code running outside any span, including the sync-encode unit tests. In makeAuthenticationLayer call Effect.annotateCurrentSpan('organization.id', token.orgId) before providing CurrentToken. Replace the uuidv7 assertion at ServerRoutes.test.ts:361; errors.test.ts:71 and 75-81 keep passing because sync encode falls back to uuid.",
+					"description": "Add currentTraceId() returning Fiber.getCurrent()?.currentSpan?.traceId ?? uuid() and use it for traceId in toProblemDetail, the single site now that encodeProblem delegates to it. The uuid fallback covers code running outside any span. In makeAuthenticationLayer call Effect.annotateCurrentSpan(\"organization.id\", token.orgId) before providing CurrentToken. Replace the uuidv7 traceId assertion(s) in ServerRoutes.test.ts (locate with grep traceId). errors.test.ts no longer exists upstream.",
 					"files": {
-						"reuse": ["apps/api/src/lib/testing.ts", "apps/api/src/server.ts"],
+						"reuse": [
+							"apps/api/src/lib/testing.ts",
+							"apps/api/src/server.ts"
+						],
 						"create": [],
 						"modify": [
 							"apps/api/src/lib/errors.ts",
 							"apps/api/src/auth.ts",
-							"apps/api/src/lib/errors.test.ts",
 							"apps/api/src/ServerRoutes.test.ts"
 						],
 						"delete": []
@@ -91,18 +95,20 @@
 						{
 							"name": "currentTraceId",
 							"requirement": "US-3 error traceId equals the request trace id",
-							"consumers": ["toProblemDetail", "encodeProblem"]
+							"consumers": [
+								"toProblemDetail",
+								"encodeProblem"
+							]
 						}
 					],
 					"validation": {
 						"tests": [
 							"web-handler request with traceparent 00-<32hex>-<16hex>-01 to an unknown route returns a 404 problem whose traceId equals the incoming trace id (covers edgeErrors)",
 							"web-handler request with the same traceparent that hits a stubbed service failing with NotFoundError returns a declared-error body whose traceId equals the incoming trace id",
-							"errors.test.ts: Schema.encodeUnknownEffect inside Effect.withSpan yields that span's traceId; outside a span yields a uuid"
+							"effect-level check in ServerRoutes.test.ts or a new src/lib/errors.trace.test.ts: toProblemDetail() run via Effect inside Effect.withSpan yields that span traceId; outside any span yields a uuid"
 						],
 						"acceptance": [
-							"ServerRoutes.test.ts:361 no longer asserts uuidv7 and asserts the 32-hex trace id",
-							"Existing errors.test.ts uuid assertions still pass unchanged",
+							"ServerRoutes.test.ts no longer asserts uuidv7 for traceId and asserts the 32-hex trace id",
 							"pnpm --filter=@exchequerio/api test passes for the touched suites"
 						]
 					}
@@ -124,8 +130,12 @@
 					],
 					"description": "Create lib/metrics.ts exporting two Metric.counters: idempotency_claims (attribute outcome) and ledger_transactions_posted (attribute path). Never use organization or ledger ids as metric attributes. In IdempotencyServiceRedis.claim record outcome new (SET succeeded), replay (stored id returned), pending (IdempotencyPending failure) or unavailable (IdempotencyUnavailable failure). Wrap each of the four ioredis calls in a valkey.<COMMAND> client span (kind client) with db.system.name=valkey and db.operation.name set to the command; never record keys. Keep the span helper local to IdempotencyService unless T5 needs the same helper, in which case extract it then.",
 					"files": {
-						"reuse": ["apps/api/src/lib/IdempotencyService.ts"],
-						"create": ["apps/api/src/lib/metrics.ts"],
+						"reuse": [
+							"apps/api/src/lib/IdempotencyService.ts"
+						],
+						"create": [
+							"apps/api/src/lib/metrics.ts"
+						],
 						"modify": [
 							"apps/api/src/lib/IdempotencyService.ts",
 							"apps/api/src/lib/IdempotencyService.test.ts"
@@ -159,7 +169,9 @@
 				{
 					"id": "T4",
 					"name": "Count real transaction posts",
-					"depends_on": ["T3"],
+					"depends_on": [
+						"T3"
+					],
 					"inputs": [
 						"design.md Architecture item 7 and Context gotchas",
 						"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts createTransaction (l.331-337, early Effect.fail at l.333), postTransaction (no-op return l.675, db.transaction l.693), postSettlementTransaction (l.509) -> transitionSettlementAccounting (l.553, no-op at l.572), createSettlementTransaction insert (l.491, existing-accounting return l.481)",
@@ -168,7 +180,9 @@
 					],
 					"description": "Increment ledger_transactions_posted after db.transaction(...) succeeds, never inside the callback. path=create when createTransaction inserts with status posted; path=post when postTransaction performs a real transition (not the l.675 no-op); path=settlement when transitionSettlementAccounting really transitions (return a transitioned flag out of the callback; monitorJobs.length is not a valid flag because it is 0 when there are no monitors) and when createSettlementTransaction inserts a posted transaction (not the existing-accounting return at l.481). No change to returned values or error types beyond carrying the flag internally.",
 					"files": {
-						"reuse": ["apps/api/src/lib/metrics.ts"],
+						"reuse": [
+							"apps/api/src/lib/metrics.ts"
+						],
 						"create": [],
 						"modify": [
 							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRepo.ts",
@@ -208,8 +222,12 @@
 					],
 					"description": "Wrap sendWebhook in a webhook.deliver client span with attributes http.request.method and http.response.status_code only; no URL, no headers, and do not add a traceparent or b3 header to the outgoing request. In queues.ts, wrap the send command in a valkey.<COMMAND> client span only when a parent span exists (Fiber.getCurrent()?.currentSpan defined), so spans appear as children of the API's enqueue span and the worker's run span while effect-mq's parentless poll loops stay untraced. Reuse the span helper from T3 if it was extracted, otherwise keep a small local helper.",
 					"files": {
-						"reuse": ["apps/api/src/lib/IdempotencyService.ts"],
-						"create": ["apps/api/src/lib/queues.test.ts"],
+						"reuse": [
+							"apps/api/src/lib/IdempotencyService.ts"
+						],
+						"create": [
+							"apps/api/src/lib/queues.test.ts"
+						],
 						"modify": [
 							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService.ts",
 							"apps/api/src/lib/queues.ts"
@@ -264,7 +282,9 @@
 				{
 					"id": "T7",
 					"name": "Span public service methods: accounts, categories, statements, balance monitors",
-					"depends_on": ["T5"],
+					"depends_on": [
+						"T5"
+					],
 					"inputs": [
 						"Pattern and attribute policy from T6",
 						"LedgerAccountBalanceMonitorService.ts is also edited by T5 (sendWebhook); apply this task after T5 to avoid conflicts",
@@ -388,7 +408,9 @@
 				{
 					"id": "T11",
 					"name": "Span public repository methods: transactions and settlements",
-					"depends_on": ["T4"],
+					"depends_on": [
+						"T4"
+					],
 					"inputs": [
 						"Pattern from T9",
 						"LedgerTransactionRepo.ts is also edited by T4 (counter placement); apply after T4 to avoid conflicts",
