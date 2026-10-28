@@ -109,18 +109,21 @@ Approach: native Effect OTLP export with explicit `withSpan` calls (approach A).
 1. **`src/telemetry.ts`: `makeTelemetryLayer({ serviceName, environment })`.**
    - Combines `Otlp.layerFromConfig`, `OtlpSerialization.layerProtobuf` and `FetchHttpClient.layer`.
    - Resource: fixed `serviceName` (`exchequer-api`, `exchequer-worker`) and a `deployment.environment.name` attribute.
-   - Replaces the console logger with `Logger.consoleJson` when the environment is production and `Logger.consolePretty` otherwise (the OTLP logger still merges in).
+   - Replaces the console logger. In production it writes one JSON line built from `Logger.formatStructured` plus `traceId` and `spanId` from the active span, serialized with `Formatter.formatJson` (plain `JSON.stringify` throws on the bigint ledger amounts and on circular errors, and a throwing logger fails the logging effect). Otherwise it uses `Logger.consolePretty`. The OTLP logger still merges in. `Logger.layer` replaces Effect's default `tracerLogger`, so log lines are not attached to spans as span events; the OTLP logs carry the trace ids instead.
    - Provided outermost in `index.ts` (around `HttpRouter.serve(...)`) and in `worker.ts`, so it flushes last on shutdown.
 2. **`src/lib/metrics.ts`.** Two `Metric.counter`s: `transactionsPosted` with attribute `path`, and `idempotencyClaims` with attribute `outcome`.
 3. **Spans.**
    - Public service and repository methods get `.pipe(Effect.withSpan("<Interface>.<method>", { attributes }))`.
    - Service spans carry `organization.id` and `ledger.id` taken from the method arguments. Repo spans carry the name only.
    - `Authentication` annotates the current HTTP server span with `organization.id` via `Effect.annotateCurrentSpan`.
-4. **Valkey.** `valkey.<COMMAND>` client spans with `db.system.name=valkey` and `db.operation.name`, and never the key. Applied at the four call sites in `IdempotencyService` and in the `lib/queues.ts` adapter.
+4. **Valkey.** `valkey.<COMMAND>` client spans with `db.system.name=valkey` and `db.operation.name`, and never the key. Applied at the four call sites in `IdempotencyService`. The `lib/queues.ts` adapter creates the same span only when a parent span exists (`withValkeySpan`), because effect-mq's poll, renew and stalled loops run without a parent and would otherwise create several root spans per poll interval; with a parent the spans appear under the API's enqueue span and the worker's run span.
 5. **Webhook.** A `webhook.deliver` client span around `sendWebhook`, with method and response status only. No URL, no `traceparent`.
 6. **Error `traceId`.** A helper `currentTraceId()` returns `Fiber.getCurrent()?.currentSpan?.traceId ?? uuid()`. It replaces `uuid()` for `traceId` in `encodeProblem` and `toProblemDetail` (which `edgeErrors` uses). The built-in tracer creates spans even when export is off, so the fallback only covers code running outside any span.
 7. **`transactionsPosted`.** Incremented in `LedgerTransactionRepo` after the database transaction commits, only on real transitions: create-as-posted (`path=create`), a post that is not a no-op (`path=post`), and a settlement post (`path=settlement`).
 8. **`idempotencyClaims`.** Recorded in `IdempotencyServiceRedis.claim`, the single place that decides new, replay, pending or unavailable.
+
+- **Lint boundaries:** `.oxlintrc.json` gains `telemetry` and `lib-metrics` elements and the rules that let the entrypoints, `idempotency-capability` and `transaction-repo` import them.
+- **Worker logger:** `worker.ts` provides telemetry with `Layer.provide`, so effect-mq's loops inherit the tracer and logger, but the worker's own startup log line (written outside that layer) still uses the default logger.
 
 Seams and test surfaces:
 
