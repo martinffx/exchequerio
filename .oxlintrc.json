@@ -1210,7 +1210,7 @@
 						"from": [
 							"*"
 						],
-						"message": "HTTP transport framework imports are restricted to *-api, *-routes, api-composition, auth, server, entrypoint, lib-contract, test-support, tests and bench elements",
+						"message": "HTTP transport framework imports are restricted to *-api, *-routes, api-composition, auth, server, entrypoint, telemetry, lib-contract, test-support, tests and bench elements",
 						"disallow": [
 							[
 								"effect",
@@ -1253,6 +1253,7 @@
 							"auth",
 							"server",
 							"entrypoint",
+							"telemetry",
 							"lib-contract"
 						],
 						"allow": [
