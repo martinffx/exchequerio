@@ -1,7 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
-import { commonErrors, operation } from "@/lib/ApiContract";
+import { commonErrors, ConflictApiError, NotFoundApiError, operation } from "@/lib/ApiContract";
 import {
 	AccountCollectionParameters,
 	AccountCreateRequest,
@@ -10,8 +9,6 @@ import {
 	AccountResponse,
 	AccountUpdateRequest,
 } from "./AccountSchema";
-
-// Collection paths keep their trailing slash, as today's OpenAPI document has it.
 
 const AccountsApi = HttpApiGroup.make("accounts")
 	.add(

@@ -18,6 +18,7 @@ import {
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import {
 	type LedgerAccountStatementRepo,
+	LedgerAccountStatementRepoLive,
 	LedgerAccountStatementRepoTag,
 	ledgerAccountStatementRepoLayer,
 } from "./LedgerAccountStatementRepo";
@@ -207,5 +208,24 @@ describe("LedgerAccountStatementRepoLive", () => {
 		const exit = await runtime.runPromiseExit(repository.createStatement(invalid, organizationId));
 
 		expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
+	});
+
+	it("turns read failures into defects", async () => {
+		// A query builder whose every call chains on until `limit`, which fails like a lost connection.
+		const chain: unknown = new Proxy(function () {}, {
+			get: (_target, property) =>
+				property === "limit" ? () => Effect.fail(new Error("db down")) : chain,
+			apply: () => chain,
+		});
+		const failing = new LedgerAccountStatementRepoLive(chain as EffectDrizzleDatabase);
+
+		const reads: ReadonlyArray<Effect.Effect<unknown, unknown>> = [
+			failing.getStatement(new TypeID("lst") as LedgerAccountStatementID, organizationId),
+			failing.getAccountAsset(organizationId, accountId.toString(), ledgerId.toString()),
+		];
+		for (const read of reads) {
+			const exit = await Effect.runPromiseExit(read);
+			expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
+		}
 	});
 });

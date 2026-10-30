@@ -23,26 +23,32 @@ const LedgerAccountBalanceMonitorRoutes = HttpApiBuilder.group(
 		Effect.gen(function* () {
 			const service = yield* LedgerAccountBalanceMonitorServiceTag;
 			return handlers
-				.handle("list", ({ params, query }) =>
-					Effect.gen(function* () {
-						yield* requirePermissions(["ledger:account:balance_monitor:read"]);
-						const monitors = yield* service.listLedgerAccountBalanceMonitors(
-							yield* scopeOf(params),
-							query.offset,
-							query.limit
-						);
-						return monitors.map(monitor => monitor.toResponse());
-					})
+				.handle(
+					"list",
+					({ params, query }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:read"]);
+							const monitors = yield* service.listLedgerAccountBalanceMonitors(
+								yield* scopeOf(params),
+								query.offset,
+								query.limit
+							);
+							return monitors.map(monitor => monitor.toResponse());
+						}),
+					runToCompletion
 				)
-				.handle("get", ({ params }) =>
-					Effect.gen(function* () {
-						yield* requirePermissions(["ledger:account:balance_monitor:read"]);
-						const monitor = yield* service.getLedgerAccountBalanceMonitor(
-							yield* scopeOf(params),
-							params.balanceMonitorId
-						);
-						return monitor.toResponse();
-					})
+				.handle(
+					"get",
+					({ params }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:read"]);
+							const monitor = yield* service.getLedgerAccountBalanceMonitor(
+								yield* scopeOf(params),
+								params.balanceMonitorId
+							);
+							return monitor.toResponse();
+						}),
+					runToCompletion
 				)
 				.handle(
 					"create",

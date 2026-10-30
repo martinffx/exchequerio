@@ -16,37 +16,43 @@ const parseSettlementId = (settlementId: string) =>
  * Routes own transport validation and permissions. Mutation keys pass to the service;
  * void requests require both write and delete permissions.
  */
-const SettlementRoutes = HttpApiBuilder.group(LedgerApi, "settlements", handlers =>
+const LedgerAccountSettlementRoutes = HttpApiBuilder.group(LedgerApi, "settlements", handlers =>
 	Effect.gen(function* () {
 		const service = yield* LedgerAccountSettlementServiceTag;
 		return handlers
-			.handle("list", ({ params, query }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:settlement:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const settlements = yield* service.listLedgerAccountSettlements(
-						token.orgId,
-						ledgerId,
-						query.offset,
-						query.limit
-					);
-					return settlements.map(settlement => settlement.toResponse());
-				})
+			.handle(
+				"list",
+				({ params, query }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:settlement:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const settlements = yield* service.listLedgerAccountSettlements(
+							token.orgId,
+							ledgerId,
+							query.offset,
+							query.limit
+						);
+						return settlements.map(settlement => settlement.toResponse());
+					}),
+				runToCompletion
 			)
-			.handle("get", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:settlement:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const settlementId = yield* parseSettlementId(params.settlementId);
-					const settlement = yield* service.getLedgerAccountSettlement(
-						token.orgId,
-						ledgerId,
-						settlementId
-					);
-					return settlement.toResponse();
-				})
+			.handle(
+				"get",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:settlement:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const settlementId = yield* parseSettlementId(params.settlementId);
+						const settlement = yield* service.getLedgerAccountSettlement(
+							token.orgId,
+							ledgerId,
+							settlementId
+						);
+						return settlement.toResponse();
+					}),
+				runToCompletion
 			)
 			.handle(
 				"create",
@@ -128,22 +134,25 @@ const SettlementRoutes = HttpApiBuilder.group(LedgerApi, "settlements", handlers
 					}),
 				runToCompletion
 			)
-			.handle("listEntries", ({ params, query }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:settlement:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const settlementId = yield* parseSettlementId(params.settlementId);
-					return yield* service.listLedgerAccountSettlementEntries(
-						token.orgId,
-						ledgerId,
-						settlementId,
-						query.offset,
-						query.limit
-					);
-				})
+			.handle(
+				"listEntries",
+				({ params, query }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:settlement:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const settlementId = yield* parseSettlementId(params.settlementId);
+						return yield* service.listLedgerAccountSettlementEntries(
+							token.orgId,
+							ledgerId,
+							settlementId,
+							query.offset,
+							query.limit
+						);
+					}),
+				runToCompletion
 			);
 	})
 );
 
-export { SettlementRoutes };
+export { LedgerAccountSettlementRoutes };

@@ -9,18 +9,18 @@ import {
 	TooManyRequestsError,
 	UnauthorizedError,
 } from "@/lib/errors";
-import { Agent, createServer, type IncomingHttpHeaders, request } from "node:http";
+import { Agent, type IncomingHttpHeaders, request } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Cause, Effect, Exit, Layer, Logger, References, Scope } from "effect";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { TypeID } from "typeid-js";
 import { signJWT } from "@/auth";
 import type { OrgID } from "@/lib/ids";
-import { OrganizationServiceTag, type OrganizationService } from "@/domains/organizations";
+import type { OrganizationService } from "@/domains/organizations";
 import { Organization } from "@/domains/organizations/Organization";
 import {
 	makeRequest,
-	type TestServiceLayers,
+	type TestStubs,
 	testServicesLayer,
 	tokenFor,
 	useTestWebHandlers,
@@ -41,12 +41,14 @@ const until = async (condition: () => boolean) => {
 };
 
 /**
- * Serves the HTTP app on a real socket (port 0) through the production `serveApp` composition;
- * closing `scope` drains it, releases the services, then logs shutdown completion.
+ * Serves the HTTP app on a real socket (port 0) through the production `createHttpServer` and
+ * `serveApp` composition; closing `scope` drains it, releases the services (and `servicesExtra`),
+ * then logs shutdown completion.
  */
 const listen = async (
-	overrides: TestServiceLayers = {},
-	extra: Layer.Layer<never> = Layer.empty
+	stubs: TestStubs = {},
+	extra: Layer.Layer<never> = Layer.empty,
+	servicesExtra: Layer.Layer<never> = Layer.empty
 ) => {
 	const scope = Effect.runSync(Scope.make());
 	let port = 0;
@@ -54,10 +56,10 @@ const listen = async (
 		Effect.gen(function* () {
 			port = ((yield* HttpServer.HttpServer).address as { port: number }).port;
 		})
-	).pipe(Layer.provideMerge(NodeHttpServer.layer(createServer, { port: 0, host: "127.0.0.1" })));
+	).pipe(Layer.provideMerge(NodeHttpServer.layer(createHttpServer, { port: 0, host: "127.0.0.1" })));
 	await Effect.runPromise(
 		Layer.buildWithScope(
-			serveApp(server, testServicesLayer(overrides)).pipe(Layer.provide(extra)),
+			serveApp(server, testServicesLayer(stubs, servicesExtra)).pipe(Layer.provide(extra)),
 			scope
 		)
 	);
@@ -70,7 +72,14 @@ const listen = async (
 
 const sendRequest = (
 	port: number,
-	options: { method?: string; path: string; headers?: Record<string, string>; body?: string }
+	options: {
+		method?: string;
+		path: string;
+		headers?: Record<string, string>;
+		body?: string;
+		/** Written as separate chunks, so no `content-length` is sent (set `transfer-encoding: chunked`). */
+		chunks?: ReadonlyArray<string>;
+	}
 ) =>
 	new Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>((resolve, reject) => {
 		const agent = new Agent({ keepAlive: true });
@@ -97,6 +106,7 @@ const sendRequest = (
 			agent.destroy();
 			reject(error);
 		});
+		for (const chunk of options.chunks ?? []) req.write(chunk);
 		req.end(options.body);
 	});
 
@@ -169,16 +179,9 @@ describe("Request lifecycle", () => {
 					}),
 			} as unknown as OrganizationService;
 			const { port, close } = await listen(
-				{
-					organization: Layer.effect(
-						OrganizationServiceTag,
-						Effect.gen(function* () {
-							yield* Effect.addFinalizer(() => Effect.sync(released));
-							return service;
-						})
-					),
-				},
-				eventLogger
+				{ organization: service },
+				eventLogger,
+				Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(released)))
 			);
 			try {
 				const received = sendRequest(port, {
@@ -213,9 +216,7 @@ describe("Request lifecycle", () => {
 	it("rejects a request body over 1 MiB with a problem response", async () => {
 		const createOrganization = vi.fn(() => Effect.die(new Error("must not be reached")));
 		const { port, close } = await listen({
-			organization: Layer.succeed(OrganizationServiceTag, {
-				createOrganization,
-			} as unknown as OrganizationService),
+			organization: { createOrganization } as unknown as OrganizationService,
 		});
 		try {
 			const response = await sendRequest(port, {
@@ -233,6 +234,33 @@ describe("Request lifecycle", () => {
 				status: 500,
 				detail: "Internal Server Error",
 			});
+			expect(createOrganization).not.toHaveBeenCalled();
+		} finally {
+			await close();
+		}
+	});
+
+	it("never reaches the handler with a chunked body over 1 MiB", async () => {
+		const createOrganization = vi.fn(() => Effect.die(new Error("must not be reached")));
+		const { port, close } = await listen({
+			organization: { createOrganization } as unknown as OrganizationService,
+		});
+		try {
+			// No content-length is sent, so only the MaxBodySize layer bounds the read.
+			const outcome = await sendRequest(port, {
+				method: "POST",
+				path: "/api/organizations",
+				headers: {
+					...authorization(),
+					"content-type": "application/json",
+					"transfer-encoding": "chunked",
+				},
+				chunks: ['{"name":"', "x".repeat(600_000), "x".repeat(600_000), '"}'],
+			}).then(
+				response => response.status,
+				() => "connection closed" as const
+			);
+			expect(outcome).toBe("connection closed");
 			expect(createOrganization).not.toHaveBeenCalled();
 		} finally {
 			await close();
@@ -575,13 +603,17 @@ describe("Effect HTTP edge", () => {
 			expect(completed).toBe(true);
 		});
 
-		it("still interrupts a read when the client aborts", async () => {
+		it("lets a read run to completion after the client aborts", async () => {
+			const gate = deferred();
 			let started = false;
 			let interrupted = false;
+			let completed = false;
 			const getOrganization = vi.fn(() =>
-				Effect.promise(() => {
+				Effect.gen(function* () {
 					started = true;
-					return new Promise<never>(() => undefined);
+					yield* Effect.promise(() => gate.promise);
+					completed = true; // an interrupted read would leave its query to a late pg_cancel_backend
+					return organization;
 				}).pipe(Effect.onInterrupt(() => Effect.sync(() => void (interrupted = true))))
 			);
 			const controller = new AbortController();
@@ -594,14 +626,16 @@ describe("Effect HTTP edge", () => {
 			await until(() => started);
 			expect(started).toBe(true);
 			controller.abort();
-			await until(() => interrupted);
+			await new Promise(r => setTimeout(r, 50));
+			gate.resolve();
+			await until(() => completed);
 			await pending;
-			expect(interrupted).toBe(true);
+			expect({ completed, interrupted }).toEqual({ completed: true, interrupted: false });
 		});
 	});
 
 	describe("route registration", () => {
-		it("registers every write uninterruptible and every read interruptible", async () => {
+		it("registers every route uninterruptible", async () => {
 			type Added = { method: string; path: string; uninterruptible: boolean };
 			const added: Added[] = [];
 			const spyRouter = Layer.effect(
@@ -638,7 +672,7 @@ describe("Effect HTTP edge", () => {
 				expect(
 					[route.method, route.path, route.uninterruptible],
 					`${route.method} ${route.path}`
-				).toEqual([route.method, route.path, route.method !== "GET"]);
+				).toEqual([route.method, route.path, true]);
 			}
 		});
 	});
@@ -698,8 +732,8 @@ describe("Effect HTTP edge", () => {
 		const uuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 		const accessLine = () => logs.find(entry => "http.status" in entry.annotations);
 
-		describe("interrupted requests", () => {
-			it("logs a client abort as 499, not 500", async () => {
+		describe("aborted requests", () => {
+			it("logs the status an aborted request produced, not a 499 or a 500", async () => {
 				const gate = deferred();
 				const started = deferred();
 				const service = stub({
@@ -715,25 +749,14 @@ describe("Effect HTTP edge", () => {
 						headers: { authorization: `Bearer ${token()}` },
 						signal: controller.signal,
 					})
-				);
+				).catch(() => undefined);
 				await started.promise;
 				controller.abort();
-				await pending;
+				await new Promise(r => setTimeout(r, 50));
 				gate.resolve();
-				expect(accessLine()?.annotations["http.status"]).toBe(499);
-			});
-
-			it("renders a server-side interrupt as a 503 problem logged at warning", async () => {
-				const service = stub({ getOrganization: () => Effect.interrupt });
-				const response = await build(service)(call("GET", path));
-				expect(response.status).toBe(503);
-				expect(await response.json()).toMatchObject({ type: "SERVICE_UNAVAILABLE", status: 503 });
-				expect(
-					logs.some(
-						entry => entry.level === "Warn" && entry.text.includes("request interrupted during shutdown")
-					)
-				).toBe(true);
-				expect(logs.some(entry => entry.text.includes("Unhandled request failure"))).toBe(false);
+				await until(() => accessLine() !== undefined);
+				await pending;
+				expect(accessLine()?.annotations["http.status"]).toBe(200);
 				expect(logs.some(entry => entry.level === "Error")).toBe(false);
 			});
 		});
@@ -770,38 +793,37 @@ describe("Effect HTTP edge", () => {
 				expect(annotations?.["http.request_id"]).toMatch(uuidV7);
 			});
 
-			it("keeps a valid supplied x-request-id", async () => {
-				await build()(withId("abc-123_DEF.4:5"));
-				expect(accessLine()?.annotations["http.request_id"]).toBe("abc-123_DEF.4:5");
-			});
-
-			it.each([["has spaces"], ["tab\tseparated"], ["x".repeat(200)], [""]])(
-				"replaces an unsafe x-request-id (%j) with a fresh uuid",
+			it.each([["abc-123_DEF.4:5"], ["has spaces"], ["x".repeat(200)], [""]])(
+				"never uses a client-supplied x-request-id (%j) as the correlation key",
 				async id => {
 					await build()(withId(id));
-					expect(accessLine()?.annotations["http.request_id"]).toMatch(uuidV7);
+					const requestId = accessLine()?.annotations["http.request_id"];
+					expect(requestId).toMatch(uuidV7);
+					expect(requestId).not.toBe(id);
 				}
 			);
 
 			it("correlates an auth failure with its access line", async () => {
-				await build()(
-					new Request("http://localhost/api/organizations", { headers: { "x-request-id": "req-auth" } })
-				);
+				await build()(new Request("http://localhost/api/organizations"));
 				const failure = logs.find(entry => entry.text.includes("Missing bearer credential"));
-				expect(failure?.annotations["http.request_id"]).toBe("req-auth");
-				expect(accessLine()?.annotations["http.request_id"]).toBe("req-auth");
+				expect(failure?.annotations["http.request_id"]).toMatch(uuidV7);
+				expect(accessLine()?.annotations["http.request_id"]).toBe(
+					failure?.annotations["http.request_id"]
+				);
 			});
 
 			it("correlates a declared 5xx cause line with its access line", async () => {
 				const service = stub({
 					getOrganization: () => Effect.fail(new ServiceUnavailableError("down")),
 				});
-				const response = await build(service)(withId("req-5xx"));
+				const response = await build(service)(withId());
 				expect(response.status).toBe(503);
 				await until(() => logs.some(entry => entry.level === "Error"));
 				const cause = logs.find(entry => entry.level === "Error");
-				expect(cause?.annotations["http.request_id"]).toBe("req-5xx");
-				expect(accessLine()?.annotations["http.request_id"]).toBe("req-5xx");
+				expect(cause?.annotations["http.request_id"]).toMatch(uuidV7);
+				expect(accessLine()?.annotations["http.request_id"]).toBe(
+					cause?.annotations["http.request_id"]
+				);
 			});
 		});
 	});

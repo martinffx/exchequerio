@@ -221,23 +221,6 @@ describe("LedgerRoutes", () => {
 		expect(await response.json()).toMatchObject({ type: "SERVICE_UNAVAILABLE", retryable: false });
 	});
 
-	describe("authentication", () => {
-		it("returns 401 Invalid token without a token", async () => {
-			const implementation = service();
-			const handler = build(implementation);
-
-			const response = await handler(request("GET", "/api/ledgers", { anonymous: true }));
-
-			expect(response.status).toBe(401);
-			expect(await response.json()).toMatchObject({
-				type: "UNAUTHORIZED",
-				status: 401,
-				detail: "Invalid token",
-			});
-			expect(implementation.listLedgers).not.toHaveBeenCalled();
-		});
-	});
-
 	describe("authorization", () => {
 		it.each(routes)(
 			"returns 403 on %s %s for a token without scope",

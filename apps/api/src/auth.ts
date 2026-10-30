@@ -2,7 +2,8 @@ import { Context, Effect, Layer, Redacted, Result } from "effect";
 import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi";
 import { createSigner, createVerifier, type SignerSync } from "fast-jwt";
 import { Config } from "@/config";
-import { ForbiddenError, UnauthorizedApiError, UnauthorizedError } from "@/lib/errors";
+import { UnauthorizedApiError } from "@/lib/ApiContract";
+import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
 import { parseId } from "@/lib/utils";
 import type { OrgID } from "@/lib/ids";
 

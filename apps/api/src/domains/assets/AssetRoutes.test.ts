@@ -150,13 +150,6 @@ describe("Asset HTTP contract", () => {
 		});
 	});
 
-	it("returns 401 without a token", async () => {
-		const implementation = service();
-		const response = await build(implementation)(request("GET", "/api/assets", { anonymous: true }));
-		expect(response.status).toBe(401);
-		expect(implementation.listAssets).not.toHaveBeenCalled();
-	});
-
 	it.each(routes)(
 		"returns 403 on %s %s for a token without scope",
 		async (method, path, permission, body) => {

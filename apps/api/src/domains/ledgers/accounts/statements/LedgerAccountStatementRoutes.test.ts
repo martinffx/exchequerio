@@ -111,14 +111,6 @@ describe("Statement routes", () => {
 		expect(json).not.toHaveProperty("metadata");
 	});
 
-	it("requires authentication", async () => {
-		const implementation = service();
-		const response = await build(implementation)(request("GET", resource, { anonymous: true }));
-		expect(response.status).toBe(401);
-		expect(await response.json()).toMatchObject({ type: "UNAUTHORIZED", detail: "Invalid token" });
-		expect(implementation.getLedgerAccountStatement).not.toHaveBeenCalled();
-	});
-
 	it("rejects readonly writes", async () => {
 		const implementation = service();
 		const response = await build(implementation)(

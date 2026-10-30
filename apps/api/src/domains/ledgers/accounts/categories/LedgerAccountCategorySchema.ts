@@ -78,7 +78,7 @@ const LedgerAccountCategoryRequest = Schema.Struct({
 		Schema.String.annotate({ description: "An optional free-form description for internal use." })
 	),
 	normalBalance: NormalBalance,
-	// Non-string metadata values are rejected here, which replaces the legacy validateMetadata hook.
+	// Non-string metadata values are rejected here.
 	metadata: Schema.optionalKey(MetadataSchema),
 }).annotate({ identifier: "LedgerAccountCategoryRequest" });
 type LedgerAccountCategoryRequest = typeof LedgerAccountCategoryRequest.Type;

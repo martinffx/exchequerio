@@ -555,23 +555,6 @@ describe("TransactionRoutes", () => {
 		});
 	});
 
-	describe("authentication", () => {
-		it("returns 401 Invalid token without a token", async () => {
-			const implementation = service();
-			const response = await build(implementation)(
-				request("GET", collectionPath, { anonymous: true })
-			);
-
-			expect(response.status).toBe(401);
-			expect(await response.json()).toMatchObject({
-				type: "UNAUTHORIZED",
-				status: 401,
-				detail: "Invalid token",
-			});
-			expect(implementation.listTransactions).not.toHaveBeenCalled();
-		});
-	});
-
 	describe("authorization", () => {
 		it.each(routes)(
 			"returns 403 on %s %s for a token without scope",

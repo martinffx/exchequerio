@@ -35,7 +35,7 @@ const isCalendarDate = (value: string): boolean => {
 };
 
 /**
- * RFC 3339 `date-time` matching the ajv-formats check of the legacy API: a timezone is required,
+ * RFC 3339 `date-time` matching the ajv-formats `date-time` check: a timezone is required,
  * a space separator and leap seconds are not accepted. `format` is annotated before `.check` so the
  * OpenAPI schema keeps it.
  */

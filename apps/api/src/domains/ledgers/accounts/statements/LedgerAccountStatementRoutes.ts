@@ -10,13 +10,16 @@ const LedgerAccountStatementRoutes = HttpApiBuilder.group(LedgerApi, "statements
 	Effect.gen(function* () {
 		const service = yield* LedgerAccountStatementServiceTag;
 		return handlers
-			.handle("get", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:statement:read"]);
-					const token = yield* CurrentToken;
-					const statement = yield* service.getLedgerAccountStatement(params.statementId, token.orgId);
-					return statement.toResponse();
-				})
+			.handle(
+				"get",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:statement:read"]);
+						const token = yield* CurrentToken;
+						const statement = yield* service.getLedgerAccountStatement(params.statementId, token.orgId);
+						return statement.toResponse();
+					}),
+				runToCompletion
 			)
 			.handle(
 				"create",

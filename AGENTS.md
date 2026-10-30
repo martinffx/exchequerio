@@ -38,7 +38,6 @@ Read only the documents relevant to the work:
 Use these project-owned skills when their descriptions match the task:
 
 - [typescript-api-design](./.agents/skills/typescript-api-design/SKILL.md) — REST resources, endpoints, errors, pagination, and versioning.
-- [typescript-fastify](./.agents/skills/typescript-fastify/SKILL.md) — Fastify routes, plugins, TypeBox validation, and OpenAPI wiring.
 - [typescript-drizzle-orm](./.agents/skills/typescript-drizzle-orm/SKILL.md) — database schemas, queries, relations, and migrations.
 - [typescript-functional-patterns](./.agents/skills/typescript-functional-patterns/SKILL.md) — state machines, discriminated unions, branded types, and typed domain models.
 - [typescript-effect-ts](./.agents/skills/typescript-effect-ts/SKILL.md) — Effect programs, typed errors, Layers, and resource management when Effect is actually in scope.

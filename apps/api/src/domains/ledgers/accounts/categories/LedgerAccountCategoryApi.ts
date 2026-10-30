@@ -1,6 +1,11 @@
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import { describedOperation, operation, throttledErrors } from "@/lib/ApiContract";
-import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
+import {
+	ConflictApiError,
+	describedOperation,
+	NotFoundApiError,
+	operation,
+	throttledErrors,
+} from "@/lib/ApiContract";
 import { PaginationQuery } from "@/lib/schema";
 import { Schema } from "effect";
 import {
@@ -13,7 +18,6 @@ import {
 	LinkCategoryToCategoryParams,
 } from "./LedgerAccountCategorySchema";
 
-// Collection paths keep their trailing slash, as today's OpenAPI document has it.
 // Every Category route declares 429. Permissions are enforced by the handlers:
 // read for GETs, write for create/update/link/unlink, delete for DELETE /:categoryId.
 
@@ -45,7 +49,7 @@ const CategoriesApi = HttpApiGroup.make("categories")
 			success: LedgerAccountCategoryResponse,
 			error: [NotFoundApiError, ...throttledErrors],
 		}).annotateMerge(describedOperation("getLedgerAccountCategory", "Get Ledger Account Category")),
-		// Legacy create answers 200 without a Location header.
+		// Create answers 200 without a Location header (published contract).
 		HttpApiEndpoint.post("create", `${prefix}/`, {
 			params: LedgerIdParameters,
 			payload: LedgerAccountCategoryRequest,

@@ -1,7 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
-import { commonErrors, operation } from "@/lib/ApiContract";
+import { commonErrors, ConflictApiError, NotFoundApiError, operation } from "@/lib/ApiContract";
 import {
 	TransactionCollectionParameters,
 	TransactionCreateHeaders,
@@ -12,8 +11,6 @@ import {
 	TransactionResponse,
 	TransactionUpdateRequest,
 } from "./LedgerTransactionSchema";
-
-// Collection paths keep their trailing slash, as today's OpenAPI document has it.
 
 const TransactionsApi = HttpApiGroup.make("transactions")
 	.add(

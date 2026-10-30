@@ -19,8 +19,11 @@ Each domain declares its HTTP contract as one `<X>Api.ts` `HttpApiGroup`, implem
 `<X>Routes.ts` with `HttpApiBuilder.group`, and defines Effect Schema request and response schemas
 in `<X>Schema.ts` with `type X = typeof X.Type` aliases. The `Authentication` middleware
 authenticates requests, and handlers call `requirePermissions`. Problem errors are Schema error
-classes in `lib/errors.ts`. OpenAPI is generated from the API definition at `/docs/json`, with the
-UI at `/docs`.
+classes in `lib/errors.ts`, encoded for HttpApi in `lib/ApiContract.ts`. Register every handler with
+`runToCompletion` from `@/lib/utils`: a client abort or the drain cap never interrupts it, because
+services release idempotency claims and publish after commit, and an interrupted read would cancel
+its query through the shared pool. OpenAPI is generated from the API definition at `/docs/json`,
+with the UI at `/docs`.
 
 Keep response schemas and response types in the slice's `*Schema.ts` file. Put the transformation on
 the entity as `toResponse()` or a specifically named response method when a resource has more than
@@ -100,7 +103,7 @@ Test application behavior at exactly three boundaries:
 - **Services:** business rules and orchestration, with repositories and external dependencies
   stubbed. Exercise entities and shared helpers through the service operations that use them.
 - **Routes:** validation, authentication, permissions, serialization, HTTP errors, and request
-  lifecycle behavior, with services stubbed, driven through `makeTestWebHandler` from `@/lib/testing`.
+  lifecycle behavior, with services stubbed, driven through `useTestWebHandlers` from `@/lib/testing`.
 
 Use `*Repo.test.ts`, `*Service.test.ts`, and `*Routes.test.ts` suites. Fixtures may construct domain
 objects directly; assertions must exercise the owning boundary. Do not create standalone entity,

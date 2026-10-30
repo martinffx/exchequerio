@@ -5,9 +5,9 @@ import { makeServerRuntimeLayer } from "@/runtime";
 import { createHttpServer, serveApp } from "@/server";
 
 const main = serveApp(
-	// NodeHttpServer's default 20 s gracefulShutdownTimeout bounds reads: reads still in flight at the
-	// cap are interrupted. Writes run to completion (`runToCompletion`) and shutdown waits for them,
-	// bounded only by the orchestrator's kill timeout.
+	// Every handler runs to completion (`runToCompletion`) and shutdown waits for it, bounded only by
+	// the orchestrator's kill timeout; NodeHttpServer's 20 s gracefulShutdownTimeout only caps the
+	// wait on `server.close()`.
 	NodeHttpServer.layer(createHttpServer, { port: 3000, host: "::" }),
 	makeServerRuntimeLayer(new Config())
 );

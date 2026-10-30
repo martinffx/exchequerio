@@ -1099,12 +1099,13 @@
 							"transaction-api",
 							"ledger-api",
 							"organization-api",
+							"lib-contract",
 							"lib-errors"
 						]
 					},
 					{
 						"from": ["auth"],
-						"allow": ["config", "lib-errors", "lib-util", "shared-ids"]
+						"allow": ["config", "lib-contract", "lib-errors", "lib-util", "shared-ids"]
 					},
 					{
 						"from": ["runtime"],
@@ -1188,68 +1189,54 @@
 				"rules": [
 					{
 						"from": [
-							"asset-composition",
-							"asset-domain",
-							"asset-transport",
-							"asset-repo",
-							"asset-service",
-							"category-composition",
-							"category-domain",
-							"category-repo",
-							"category-service",
-							"category-transport",
-							"category-fixtures",
-							"ledger-composition",
-							"ledger-service",
-							"ledger-repo",
-							"ledger-domain",
-							"ledger-transport",
-							"account-composition",
-							"account-service",
-							"account-repo",
-							"account-domain",
-							"account-transport",
-							"statement-composition",
-							"statement-service",
-							"statement-repo",
-							"statement-domain",
-							"statement-transport",
-							"monitor-composition",
-							"monitor-service",
-							"monitor-repo",
-							"monitor-domain",
-							"monitor-transport",
-							"monitor-capability",
-							"monitor-fixtures",
-							"settlement-composition",
-							"settlement-service",
-							"settlement-repo",
-							"settlement-domain",
-							"settlement-transport",
-							"transaction-composition",
-							"transaction-service",
-							"transaction-repo",
-							"transaction-capability",
-							"idempotency-capability",
-							"transaction-domain",
-							"transaction-transport",
-							"organization-composition",
-							"organization-service",
-							"organization-repo",
-							"organization-domain",
-							"organization-capability",
-							"organization-transport",
-							"persistence-schema",
-							"database",
-							"runtime",
-							"config",
-							"shared-ids",
-							"lib-schema",
-							"lib-util",
-							"lib-queues"
+							"*"
 						],
-						"message": "HTTP transport framework imports are restricted to *-api, *-routes, api-composition, auth, server, entrypoint, lib-errors, lib-contract and test-support elements",
+						"message": "HTTP transport framework imports are restricted to *-api, *-routes, api-composition, auth, server, entrypoint, lib-contract, test-support, tests and bench elements",
 						"disallow": [
+							[
+								"effect",
+								{
+									"path": [
+										"/unstable/http",
+										"/unstable/http/**",
+										"/unstable/httpapi",
+										"/unstable/httpapi/**"
+									]
+								}
+							],
+							"@effect/platform-node"
+						]
+					},
+					{
+						"from": [
+							"tests",
+							"bench",
+							"test-support",
+							"asset-api",
+							"asset-routes",
+							"category-routes",
+							"category-api",
+							"ledger-routes",
+							"ledger-api",
+							"account-routes",
+							"account-api",
+							"statement-routes",
+							"statement-api",
+							"monitor-routes",
+							"monitor-api",
+							"settlement-routes",
+							"settlement-api",
+							"transaction-routes",
+							"transaction-api",
+							"organization-routes",
+							"organization-api",
+							"api-composition",
+							"auth",
+							"server",
+							"entrypoint",
+							"lib-contract"
+						],
+						"allow": [
 							[
 								"effect",
 								{

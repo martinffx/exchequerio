@@ -1,6 +1,10 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { describedOperation, throttledErrors } from "@/lib/ApiContract";
-import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
+import {
+	ConflictApiError,
+	describedOperation,
+	NotFoundApiError,
+	throttledErrors,
+} from "@/lib/ApiContract";
 import {
 	LedgerAccountStatementCollectionParameters,
 	LedgerAccountStatementIdParameters,
@@ -21,7 +25,7 @@ const StatementsApi = HttpApiGroup.make("statements")
 			success: LedgerAccountStatementResponse,
 			error: [NotFoundApiError, ...throttledErrors],
 		}).annotateMerge(describedOperation("getLedgerAccountStatement", "Get Ledger Account Statement")),
-		// Legacy create answers 200 without a Location header and reads ledgerId/accountId from the body.
+		// Create answers 200 without a Location header and reads ledgerId/accountId from the body (published contract).
 		HttpApiEndpoint.post("create", `${prefix}/`, {
 			params: LedgerAccountStatementCollectionParameters,
 			payload: LedgerAccountStatementRequest,

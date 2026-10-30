@@ -1,7 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
-import { commonErrors, operation } from "@/lib/ApiContract";
+import { commonErrors, ConflictApiError, NotFoundApiError, operation } from "@/lib/ApiContract";
 import {
 	AssetCreateRequest,
 	AssetIdParameters,
@@ -9,8 +8,6 @@ import {
 	AssetResponse,
 	AssetUpdateRequest,
 } from "./AssetSchema";
-
-// Collection paths keep their trailing slash, as today's OpenAPI document has it.
 
 // 409 on update is a service failure (duplicate code) that the routes have always declared.
 const AssetsApi = HttpApiGroup.make("assets")

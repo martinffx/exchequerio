@@ -4,7 +4,7 @@ import { ListQuery } from "@/lib/ListQuery";
 import { MetadataSchema, OmittedWhenUndefined } from "@/lib/schema";
 
 const AssetNameSchema = Schema.String.check(Schema.isMinLength(1), Schema.isPattern(/[^ ]/));
-// Unknown fields are rejected rather than stripped (was `additionalProperties: false`).
+// Unknown fields are rejected rather than stripped.
 const strict = { parseOptions: { onExcessProperty: "error" } } as const;
 const mutableFields = {
 	code: AssetCodeSchema,

@@ -30,7 +30,7 @@ import { type OrganizationService, OrganizationServiceTag } from "@/domains/orga
 import { ServerConfigTag } from "@/runtime";
 import { appLayer } from "@/server";
 
-/** Plain service stubs, type-checked against the real service interfaces. */
+/** Partial service stubs by service; a test casts what it supplies (`as unknown as XService`). */
 type TestStubs = {
 	readonly organization?: OrganizationService;
 	readonly ledger?: LedgerService;
@@ -43,19 +43,6 @@ type TestStubs = {
 	readonly balanceMonitor?: LedgerAccountBalanceMonitorService;
 };
 
-/** Per-service layer overrides; any service left out is filled by a die-if-called stub. */
-type TestServiceLayers = {
-	readonly organization?: Layer.Layer<OrganizationService> | undefined;
-	readonly ledger?: Layer.Layer<LedgerService> | undefined;
-	readonly asset?: Layer.Layer<AssetService> | undefined;
-	readonly account?: Layer.Layer<AccountService> | undefined;
-	readonly transaction?: Layer.Layer<TransactionService> | undefined;
-	readonly settlement?: Layer.Layer<LedgerAccountSettlementService> | undefined;
-	readonly category?: Layer.Layer<LedgerAccountCategoryService> | undefined;
-	readonly statement?: Layer.Layer<LedgerAccountStatementService> | undefined;
-	readonly balanceMonitor?: Layer.Layer<LedgerAccountBalanceMonitorService> | undefined;
-};
-
 /** A service whose every method dies, so a route test fails loudly if it reaches an unstubbed service. */
 const dieIfCalled = <S>(name: string): S =>
 	new Proxy(
@@ -66,30 +53,27 @@ const dieIfCalled = <S>(name: string): S =>
 		}
 	) as S;
 
-/** The override when given, otherwise a die-if-called stub for the service. */
-const serviceLayer = <S>(tag: Context.Service<S, S>, override?: Layer.Layer<S>) =>
-	override ?? Layer.succeed(tag, dieIfCalled<S>(tag.key));
-
-/** Wraps a plain stub in a Layer for its Tag; a missing stub stays missing. */
-const stubLayer = <S>(tag: Context.Service<S, S>, stub?: S) =>
-	stub === undefined ? undefined : Layer.succeed(tag, stub);
+/** The stub when given, otherwise a die-if-called stub for the service. */
+const serviceLayer = <S>(tag: Context.Service<S, S>, stub?: S) =>
+	Layer.succeed(tag, stub ?? dieIfCalled<S>(tag.key));
 
 /**
- * Every service the HTTP app needs, plus the server `Config`. Each service defaults to a
- * die-if-called stub unless `overrides` supplies a Layer.
+ * Every service the HTTP app needs, plus the server `Config`. A service left out of `stubs` dies if
+ * called. `extra` is built with the services, so its finalizers run when they are released.
  */
-const testServicesLayer = (overrides: TestServiceLayers = {}) =>
+const testServicesLayer = (stubs: TestStubs = {}, extra: Layer.Layer<never> = Layer.empty) =>
 	Layer.mergeAll(
 		Layer.succeed(ServerConfigTag, new Config()),
-		serviceLayer(OrganizationServiceTag, overrides.organization),
-		serviceLayer(LedgerServiceTag, overrides.ledger),
-		serviceLayer(AssetServiceTag, overrides.asset),
-		serviceLayer(AccountServiceTag, overrides.account),
-		serviceLayer(TransactionServiceTag, overrides.transaction),
-		serviceLayer(LedgerAccountSettlementServiceTag, overrides.settlement),
-		serviceLayer(LedgerAccountCategoryServiceTag, overrides.category),
-		serviceLayer(LedgerAccountStatementServiceTag, overrides.statement),
-		serviceLayer(LedgerAccountBalanceMonitorServiceTag, overrides.balanceMonitor)
+		serviceLayer(OrganizationServiceTag, stubs.organization),
+		serviceLayer(LedgerServiceTag, stubs.ledger),
+		serviceLayer(AssetServiceTag, stubs.asset),
+		serviceLayer(AccountServiceTag, stubs.account),
+		serviceLayer(TransactionServiceTag, stubs.transaction),
+		serviceLayer(LedgerAccountSettlementServiceTag, stubs.settlement),
+		serviceLayer(LedgerAccountCategoryServiceTag, stubs.category),
+		serviceLayer(LedgerAccountStatementServiceTag, stubs.statement),
+		serviceLayer(LedgerAccountBalanceMonitorServiceTag, stubs.balanceMonitor),
+		extra
 	);
 
 /** Serves the HTTP app over a web `Request`/`Response` handler with stubbed services and no sockets. */
@@ -97,22 +81,11 @@ const makeTestWebHandler = (
 	stubs: TestStubs = {},
 	/** Extra context for the request fibers, e.g. a capturing `Logger.layer`. */
 	extra: Layer.Layer<never> = Layer.empty
-) => {
-	const services = testServicesLayer({
-		organization: stubLayer(OrganizationServiceTag, stubs.organization),
-		ledger: stubLayer(LedgerServiceTag, stubs.ledger),
-		asset: stubLayer(AssetServiceTag, stubs.asset),
-		account: stubLayer(AccountServiceTag, stubs.account),
-		transaction: stubLayer(TransactionServiceTag, stubs.transaction),
-		settlement: stubLayer(LedgerAccountSettlementServiceTag, stubs.settlement),
-		category: stubLayer(LedgerAccountCategoryServiceTag, stubs.category),
-		statement: stubLayer(LedgerAccountStatementServiceTag, stubs.statement),
-		balanceMonitor: stubLayer(LedgerAccountBalanceMonitorServiceTag, stubs.balanceMonitor),
-	});
-	return HttpRouter.toWebHandler(Layer.provideMerge(appLayer.pipe(Layer.provide(services)), extra), {
-		disableLogger: true,
-	});
-};
+) =>
+	HttpRouter.toWebHandler(
+		Layer.provideMerge(appLayer.pipe(Layer.provide(testServicesLayer(stubs))), extra),
+		{ disableLogger: true }
+	);
 
 /** Builds scoped bearer tokens for one organization. */
 const tokenFor =
@@ -159,5 +132,5 @@ const useTestWebHandlers = () => {
 	};
 };
 
-export type { TestServiceLayers };
+export type { TestStubs };
 export { makeRequest, makeTestWebHandler, testServicesLayer, tokenFor, useTestWebHandlers };

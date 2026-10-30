@@ -1,7 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
-import { commonErrors, operation } from "@/lib/ApiContract";
+import { commonErrors, ConflictApiError, NotFoundApiError, operation } from "@/lib/ApiContract";
 import {
 	OrganizationCreateRequest,
 	OrganizationIdParameters,
@@ -9,9 +8,6 @@ import {
 	OrganizationResponse,
 	OrganizationUpdateRequest,
 } from "./OrganizationSchema";
-
-// Collection paths keep their trailing slash, as today's OpenAPI document has it.
-// Authentication adds the 401 at the API level; it is declared per route here to match the contract.
 
 const OrganizationApi = HttpApiGroup.make("organizations")
 	.add(

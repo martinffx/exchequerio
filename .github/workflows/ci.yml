@@ -42,7 +42,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run CI
-        run: pnpm run ci:gh
+        run: pnpm run ci
         env:
           NODE_ENV: test
 

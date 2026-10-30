@@ -29,7 +29,6 @@ import {
 	InternalServerError,
 	NotFoundError,
 	retryAfterHeaders,
-	ServiceUnavailableError,
 } from "@/lib/errors";
 import { ServerConfigTag } from "@/runtime";
 import { AssetRoutes } from "@/domains/assets/AssetRoutes";
@@ -38,7 +37,7 @@ import { LedgerAccountCategoryRoutes } from "@/domains/ledgers/accounts/categori
 import { LedgerAccountStatementRoutes } from "@/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes";
 import { LedgerAccountBalanceMonitorRoutes } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes";
 import { LedgerRoutes } from "@/domains/ledgers/LedgerRoutes";
-import { SettlementRoutes } from "@/domains/ledgers/settlements/LedgerAccountSettlementRoutes";
+import { LedgerAccountSettlementRoutes } from "@/domains/ledgers/settlements/LedgerAccountSettlementRoutes";
 import { TransactionRoutes } from "@/domains/ledgers/transactions/LedgerTransactionRoutes";
 import { OrganizationRoutes } from "@/domains/organizations/OrganizationRoutes";
 
@@ -58,7 +57,7 @@ const handlerLayers = Layer.mergeAll(
 	AssetRoutes,
 	AccountRoutes,
 	TransactionRoutes,
-	SettlementRoutes,
+	LedgerAccountSettlementRoutes,
 	LedgerAccountCategoryRoutes,
 	LedgerAccountStatementRoutes,
 	LedgerAccountBalanceMonitorRoutes
@@ -88,19 +87,7 @@ const edgeErrors = <R>(
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, Types.unhandled, R> =>
 	// The middleware contract wants `unhandled` left in the error channel; widening `never` to it is sound.
 	Effect.catchCause(httpEffect, cause => {
-		// Global middleware is uninterruptible, so an interrupt can still be answered. The logger takes its
-		// status from the response sent, so name the truth: a client abort is 499 (the client is gone, so
-		// nothing is delivered), any other interrupt (a drain-cap cut) is a 503 problem.
-		if (Cause.hasInterruptsOnly(cause)) {
-			const clientAbort = cause.reasons.some(
-				reason => reason._tag === "Interrupt" && reason.annotations.has(HttpServerError.ClientAbort.key)
-			);
-			return clientAbort
-				? Effect.succeed(HttpServerResponse.empty({ status: 499 }))
-				: Effect.logWarning("request interrupted during shutdown").pipe(
-						Effect.as(problemResponse(new ServiceUnavailableError("Service Unavailable")))
-					);
-		}
+		// Every `/api` handler runs to completion, so a client abort or drain cut never interrupts one.
 		if (Cause.hasInterrupts(cause)) return Effect.interrupt;
 		const failure = Cause.findError(cause);
 		if (Result.isSuccess(failure) && HttpServerError.isHttpServerError(failure.success)) {
@@ -180,7 +167,6 @@ const maxBodyBytes = 1_048_576;
  * bounds bodies without a declared length (chunked), which end the connection instead. The response
  * carries `connection: close` so Node does not keep the socket alive to read the rest of the body.
  */
-// review-decision: a body sent without Content-Type on a payload endpoint is decoded as JSON (HttpApi's default) where the old server refused it with a 500 before any handler — accepted as listed change 5; auth is bearer-only, so there is no cookie or CSRF path. Reconsider if cookie or other ambient authentication is added.
 const bodyLimit = <E, R>(httpEffect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
 	Effect.flatMap(Effect.service(HttpServerRequest.HttpServerRequest), request =>
 		Number(request.headers["content-length"]) > maxBodyBytes
@@ -196,19 +182,16 @@ const bodyLimit = <E, R>(httpEffect: Effect.Effect<HttpServerResponse.HttpServer
 			: httpEffect
 	);
 
-const requestIdPattern = /^[A-Za-z0-9._:-]{1,128}$/;
-
 /**
- * Annotates every log line of a request with its id and client address, the access line, auth failures
- * and error-reporter lines included. A supplied `x-request-id` is kept only if it is short and made of
- * safe characters (a log-injection guard); otherwise a fresh uuid is minted. Never echoed in a response.
+ * Annotates every log line of a request with a freshly minted id and the client address, the access
+ * line, auth failures and error-reporter lines included. A client-supplied `x-request-id` is never
+ * trusted as the correlation key. The id is never echoed in a response.
  */
 const correlate = <E, R>(httpEffect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
 	Effect.flatMap(Effect.service(HttpServerRequest.HttpServerRequest), request => {
-		const supplied = request.headers["x-request-id"];
 		const address = request.remoteAddress;
 		return Effect.annotateLogs(httpEffect, {
-			"http.request_id": supplied !== undefined && requestIdPattern.test(supplied) ? supplied : uuid(),
+			"http.request_id": uuid(),
 			...(Option.isSome(address) ? { "http.remote_address": address.value } : {}),
 		});
 	});
@@ -216,8 +199,7 @@ const correlate = <E, R>(httpEffect: Effect.Effect<HttpServerResponse.HttpServer
 /**
  * The one global middleware, with an explicit order: `correlate` annotates everything, the logger wraps
  * `connectionClose`, which wraps `bodyLimit` and `edgeErrors`, so the logged status is that of the
- * response edgeErrors renders (including 499 for a client abort and 503 for a server-side interrupt) and
- * every response, rendered errors included, is marked while draining.
+ * response edgeErrors renders and every response, rendered errors included, is marked while draining.
  */
 const EdgeMiddleware = HttpRouter.middleware(
 	Effect.succeed(httpEffect =>

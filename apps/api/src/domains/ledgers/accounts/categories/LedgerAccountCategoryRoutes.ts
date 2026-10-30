@@ -15,43 +15,52 @@ const LedgerAccountCategoryRoutes = HttpApiBuilder.group(LedgerApi, "categories"
 	Effect.gen(function* () {
 		const service = yield* LedgerAccountCategoryServiceTag;
 		return handlers
-			.handle("balances", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const categoryId = yield* parseCategoryId(params.categoryId);
-					const balances = yield* service.getLedgerAccountCategoryBalances(
-						token.orgId,
-						ledgerId,
-						categoryId
-					);
-					return balances.toResponse();
-				})
+			.handle(
+				"balances",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const categoryId = yield* parseCategoryId(params.categoryId);
+						const balances = yield* service.getLedgerAccountCategoryBalances(
+							token.orgId,
+							ledgerId,
+							categoryId
+						);
+						return balances.toResponse();
+					}),
+				runToCompletion
 			)
-			.handle("list", ({ params, query }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const categories = yield* service.listLedgerAccountCategories(
-						token.orgId,
-						ledgerId,
-						query.offset,
-						query.limit
-					);
-					return categories.map(category => category.toResponse());
-				})
+			.handle(
+				"list",
+				({ params, query }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const categories = yield* service.listLedgerAccountCategories(
+							token.orgId,
+							ledgerId,
+							query.offset,
+							query.limit
+						);
+						return categories.map(category => category.toResponse());
+					}),
+				runToCompletion
 			)
-			.handle("get", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:category:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const categoryId = yield* parseCategoryId(params.categoryId);
-					const category = yield* service.getLedgerAccountCategory(token.orgId, ledgerId, categoryId);
-					return category.toResponse();
-				})
+			.handle(
+				"get",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:category:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const categoryId = yield* parseCategoryId(params.categoryId);
+						const category = yield* service.getLedgerAccountCategory(token.orgId, ledgerId, categoryId);
+						return category.toResponse();
+					}),
+				runToCompletion
 			)
 			.handle(
 				"create",

@@ -9,25 +9,31 @@ const LedgerRoutes = HttpApiBuilder.group(LedgerApi, "ledgers", handlers =>
 	Effect.gen(function* () {
 		const service = yield* LedgerServiceTag;
 		return handlers
-			.handle("list", ({ query }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:read"]);
-					const token = yield* CurrentToken;
-					const ledgers = yield* service.listLedgers(token.orgId, {
-						offset: query.offset,
-						limit: query.limit,
-					});
-					return ledgers.map(ledger => ledger.toResponse());
-				})
+			.handle(
+				"list",
+				({ query }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:read"]);
+						const token = yield* CurrentToken;
+						const ledgers = yield* service.listLedgers(token.orgId, {
+							offset: query.offset,
+							limit: query.limit,
+						});
+						return ledgers.map(ledger => ledger.toResponse());
+					}),
+				runToCompletion
 			)
-			.handle("get", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const ledger = yield* service.getLedger(token.orgId, ledgerId);
-					return ledger.toResponse();
-				})
+			.handle(
+				"get",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const ledger = yield* service.getLedger(token.orgId, ledgerId);
+						return ledger.toResponse();
+					}),
+				runToCompletion
 			)
 			.handle(
 				"create",

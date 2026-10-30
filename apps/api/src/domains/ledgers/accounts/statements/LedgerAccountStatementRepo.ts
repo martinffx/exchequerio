@@ -65,12 +65,13 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 			)
 			.limit(1)
 			.pipe(
+				Effect.orDie,
 				Effect.flatMap(rows =>
 					rows[0] === undefined
 						? Effect.fail(new NotFoundError("Account not found"))
 						: Effect.succeed({ ...rows[0], assetId: TypeID.fromUUID("ast", rows[0].assetId).toString() })
 				)
-			) as Effect.Effect<AssetSummary, StatementError>;
+			);
 	}
 
 	getStatement(
@@ -83,6 +84,7 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 			.where(eq(LedgerAccountStatementsTable.id, encodeUuid(id)))
 			.limit(1)
 			.pipe(
+				Effect.orDie,
 				Effect.flatMap(rows => {
 					const row = rows[0];
 					if (row === undefined)
@@ -93,7 +95,7 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 						TypeID.fromUUID("lgr", row.ledgerId).toString()
 					).pipe(Effect.map(asset => LedgerAccountStatement.fromRow(row, asset)));
 				})
-			) as Effect.Effect<LedgerAccountStatement, StatementError>;
+			);
 	}
 
 	createStatement(

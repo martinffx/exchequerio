@@ -10,22 +10,28 @@ const AssetRoutes = HttpApiBuilder.group(LedgerApi, "assets", handlers =>
 	Effect.gen(function* () {
 		const service = yield* AssetServiceTag;
 		return handlers
-			.handle("list", ({ query }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["asset:read"]);
-					const token = yield* CurrentToken;
-					const assets = yield* service.listAssets(token.orgId, query);
-					return assets.map(asset => asset.toResponse());
-				})
+			.handle(
+				"list",
+				({ query }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["asset:read"]);
+						const token = yield* CurrentToken;
+						const assets = yield* service.listAssets(token.orgId, query);
+						return assets.map(asset => asset.toResponse());
+					}),
+				runToCompletion
 			)
-			.handle("get", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["asset:read"]);
-					const token = yield* CurrentToken;
-					const assetId = yield* parseId<"ast", AssetID>("ast", params.assetId);
-					const asset = yield* service.getAsset(token.orgId, assetId);
-					return asset.toResponse();
-				})
+			.handle(
+				"get",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["asset:read"]);
+						const token = yield* CurrentToken;
+						const assetId = yield* parseId<"ast", AssetID>("ast", params.assetId);
+						const asset = yield* service.getAsset(token.orgId, assetId);
+						return asset.toResponse();
+					}),
+				runToCompletion
 			)
 			.handle(
 				"create",

@@ -11,23 +11,29 @@ const OrganizationRoutes = HttpApiBuilder.group(LedgerApi, "organizations", hand
 	Effect.gen(function* () {
 		const service = yield* OrganizationServiceTag;
 		return handlers
-			.handle("list", ({ query }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["organization:read"]);
-					const organizations = yield* service.listOrganizations({
-						offset: query.offset,
-						limit: query.limit,
-					});
-					return organizations.map(organization => organization.toResponse());
-				})
+			.handle(
+				"list",
+				({ query }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["organization:read"]);
+						const organizations = yield* service.listOrganizations({
+							offset: query.offset,
+							limit: query.limit,
+						});
+						return organizations.map(organization => organization.toResponse());
+					}),
+				runToCompletion
 			)
-			.handle("get", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["organization:read"]);
-					const orgId = yield* parseId<"org", OrgID>("org", params.orgId);
-					const organization = yield* service.getOrganization(orgId);
-					return organization.toResponse();
-				})
+			.handle(
+				"get",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["organization:read"]);
+						const orgId = yield* parseId<"org", OrgID>("org", params.orgId);
+						const organization = yield* service.getOrganization(orgId);
+						return organization.toResponse();
+					}),
+				runToCompletion
 			)
 			.handle(
 				"create",

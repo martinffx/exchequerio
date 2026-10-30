@@ -13,24 +13,30 @@ const TransactionRoutes = HttpApiBuilder.group(LedgerApi, "transactions", handle
 	Effect.gen(function* () {
 		const service = yield* TransactionServiceTag;
 		return handlers
-			.handle("list", ({ params, query }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:transaction:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const transactions = yield* service.listTransactions(token.orgId, ledgerId, query);
-					return transactions.map(transaction => transaction.toListItemResponse());
-				})
+			.handle(
+				"list",
+				({ params, query }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:transaction:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const transactions = yield* service.listTransactions(token.orgId, ledgerId, query);
+						return transactions.map(transaction => transaction.toListItemResponse());
+					}),
+				runToCompletion
 			)
-			.handle("get", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:transaction:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const transactionId = yield* parseTransactionId(params.transactionId);
-					const transaction = yield* service.getTransaction(token.orgId, ledgerId, transactionId);
-					return transaction.toResponse();
-				})
+			.handle(
+				"get",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:transaction:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const transactionId = yield* parseTransactionId(params.transactionId);
+						const transaction = yield* service.getTransaction(token.orgId, ledgerId, transactionId);
+						return transaction.toResponse();
+					}),
+				runToCompletion
 			)
 			.handle(
 				"create",

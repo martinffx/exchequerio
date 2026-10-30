@@ -1,7 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import { ConflictApiError, NotFoundApiError } from "@/lib/errors";
-import { operation, throttledErrors } from "@/lib/ApiContract";
+import { ConflictApiError, NotFoundApiError, operation, throttledErrors } from "@/lib/ApiContract";
 import {
 	LedgerAccountSettlementCollectionParameters,
 	LedgerAccountSettlementEntriesRequest,
@@ -15,7 +14,6 @@ import {
 	LedgerAccountSettlementWriteHeaders,
 } from "./LedgerAccountSettlementSchema";
 
-// Collection paths keep their trailing slash, as today's OpenAPI document has it.
 // Every Settlement route declares 429, so the whole group keeps it.
 
 const SettlementsApi = HttpApiGroup.make("settlements")
@@ -51,7 +49,7 @@ const SettlementsApi = HttpApiGroup.make("settlements")
 				LedgerAccountSettlementResponse.pipe(HttpApiSchema.status(201)),
 				{ location: Schema.String }
 			),
-			// Legacy did not declare 404, but the service fails with it when the settled Account is missing.
+			// The service fails with 404 when the settled Account is missing.
 			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
 		}).annotateMerge(
 			operation(

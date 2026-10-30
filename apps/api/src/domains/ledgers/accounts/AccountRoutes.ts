@@ -10,24 +10,30 @@ const AccountRoutes = HttpApiBuilder.group(LedgerApi, "accounts", handlers =>
 	Effect.gen(function* () {
 		const service = yield* AccountServiceTag;
 		return handlers
-			.handle("list", ({ params, query }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const accounts = yield* service.listAccounts(token.orgId, ledgerId, query);
-					return accounts.map(account => account.toResponse());
-				})
+			.handle(
+				"list",
+				({ params, query }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const accounts = yield* service.listAccounts(token.orgId, ledgerId, query);
+						return accounts.map(account => account.toResponse());
+					}),
+				runToCompletion
 			)
-			.handle("get", ({ params }) =>
-				Effect.gen(function* () {
-					yield* requirePermissions(["ledger:account:read"]);
-					const token = yield* CurrentToken;
-					const ledgerId = yield* parseLedgerId(params.ledgerId);
-					const accountId = yield* parseId<"lat", LedgerAccountID>("lat", params.accountId);
-					const account = yield* service.getAccount(token.orgId, ledgerId, accountId);
-					return account.toResponse();
-				})
+			.handle(
+				"get",
+				({ params }) =>
+					Effect.gen(function* () {
+						yield* requirePermissions(["ledger:account:read"]);
+						const token = yield* CurrentToken;
+						const ledgerId = yield* parseLedgerId(params.ledgerId);
+						const accountId = yield* parseId<"lat", LedgerAccountID>("lat", params.accountId);
+						const account = yield* service.getAccount(token.orgId, ledgerId, accountId);
+						return account.toResponse();
+					}),
+				runToCompletion
 			)
 			.handle(
 				"create",

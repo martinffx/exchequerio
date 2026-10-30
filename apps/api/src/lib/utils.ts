@@ -64,11 +64,12 @@ const encodeMetadata = (metadata: Metadata | undefined): string | undefined =>
 	metadata === undefined ? undefined : JSON.stringify(metadata);
 
 /**
- * Route option for every state-changing endpoint: writes run to completion after a client
- * disconnect or drain cut, as under the pre-migration server, because services release or complete
- * idempotency claims and publish monitor jobs after commit. Reads stay interruptible.
+ * Route option for every endpoint: handlers run to completion after a client disconnect or drain
+ * cut, as under the pre-migration server. Writes need it because services release or complete
+ * idempotency claims and publish monitor jobs after commit. Reads need it because interrupting one
+ * makes @effect/sql-pg cancel its query through the shared pool, and a late cancel can kill an
+ * unrelated statement on a reused connection.
  */
-// review-decision: reads stay interruptible on client abort — @effect/sql-pg then cancels the in-flight query with pg_cancel_backend on a second pool connection; a stale-cancel race (the freed connection reused before the cancel lands, failing an unrelated statement with 57014) was found by code reading only and never reproduced. Reconsider if 57014 errors appear in logs, the pool saturates under load, or the race is reproduced.
 const runToCompletion = { uninterruptible: true } as const;
 
 export type { Metadata } from "./schema";
