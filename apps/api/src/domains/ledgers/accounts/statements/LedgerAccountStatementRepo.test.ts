@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect";
 import { TypeID } from "typeid-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -18,6 +18,7 @@ import {
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 import {
 	type LedgerAccountStatementRepo,
+	LedgerAccountStatementRepoLive,
 	LedgerAccountStatementRepoTag,
 	ledgerAccountStatementRepoLayer,
 } from "./LedgerAccountStatementRepo";
@@ -190,26 +191,41 @@ describe("LedgerAccountStatementRepoLive", () => {
 		expect((error as Error).message).toMatch(/^Statement not found: lst_/);
 	});
 
-	it("keeps duplicate-key failures on the generic Effect error channel", async () => {
+	it("turns duplicate-key failures into defects", async () => {
 		const input = statement();
 		await runtime.runPromise(repository.createStatement(input, organizationId));
-		const error = await runtime.runPromise(
-			Effect.flip(repository.createStatement(input, organizationId))
-		);
+		const exit = await runtime.runPromiseExit(repository.createStatement(input, organizationId));
 
-		expect(error).not.toBeInstanceOf(NotFoundError);
+		expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
 	});
 
-	it("keeps foreign-key failures on the generic Effect error channel", async () => {
+	it("turns foreign-key failures into defects", async () => {
 		const input = statement();
 		const invalid = new LedgerAccountStatement({
 			...input,
 			ledgerId: new TypeID("lgr") as LedgerID,
 		});
-		const error = await runtime.runPromise(
-			Effect.flip(repository.createStatement(invalid, organizationId))
-		);
+		const exit = await runtime.runPromiseExit(repository.createStatement(invalid, organizationId));
 
-		expect(error).not.toBeInstanceOf(NotFoundError);
+		expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
+	});
+
+	it("turns read failures into defects", async () => {
+		// A query builder whose every call chains on until `limit`, which fails like a lost connection.
+		const chain: unknown = new Proxy(function () {}, {
+			get: (_target, property) =>
+				property === "limit" ? () => Effect.fail(new Error("db down")) : chain,
+			apply: () => chain,
+		});
+		const failing = new LedgerAccountStatementRepoLive(chain as EffectDrizzleDatabase);
+
+		const reads: ReadonlyArray<Effect.Effect<unknown, unknown>> = [
+			failing.getStatement(new TypeID("lst") as LedgerAccountStatementID, organizationId),
+			failing.getAccountAsset(organizationId, accountId.toString(), ledgerId.toString()),
+		];
+		for (const read of reads) {
+			const exit = await Effect.runPromiseExit(read);
+			expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
+		}
 	});
 });

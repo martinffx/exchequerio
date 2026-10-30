@@ -11,20 +11,23 @@ import { AssetsTable, LedgerAccountsTable, LedgerAccountStatementsTable } from "
 
 import { LedgerAccountStatement } from "./LedgerAccountStatement";
 
+/** Statement calls fail only with a missing Account or Statement; database failures are defects. */
+type StatementError = NotFoundError;
+
 interface LedgerAccountStatementRepo {
 	readonly getAccountAsset: (
 		orgId: OrgID,
 		accountId: string,
 		ledgerId: string
-	) => Effect.Effect<AssetSummary, unknown>;
+	) => Effect.Effect<AssetSummary, StatementError>;
 	readonly getStatement: (
 		id: LedgerAccountStatementID,
 		orgId: OrgID
-	) => Effect.Effect<LedgerAccountStatement, unknown>;
+	) => Effect.Effect<LedgerAccountStatement, StatementError>;
 	readonly createStatement: (
 		statement: LedgerAccountStatement,
 		orgId: OrgID
-	) => Effect.Effect<LedgerAccountStatement, unknown>;
+	) => Effect.Effect<LedgerAccountStatement, StatementError>;
 }
 
 const LedgerAccountStatementRepoTag = Context.Service<LedgerAccountStatementRepo>(
@@ -38,7 +41,7 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		orgId: OrgID,
 		accountId: string,
 		ledgerId: string
-	): Effect.Effect<AssetSummary, unknown> {
+	): Effect.Effect<AssetSummary, StatementError> {
 		return this.db
 			.select({
 				assetId: AssetsTable.id,
@@ -62,6 +65,7 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 			)
 			.limit(1)
 			.pipe(
+				Effect.orDie,
 				Effect.flatMap(rows =>
 					rows[0] === undefined
 						? Effect.fail(new NotFoundError("Account not found"))
@@ -73,13 +77,14 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 	getStatement(
 		id: LedgerAccountStatementID,
 		orgId: OrgID
-	): Effect.Effect<LedgerAccountStatement, unknown> {
+	): Effect.Effect<LedgerAccountStatement, StatementError> {
 		return this.db
 			.select()
 			.from(LedgerAccountStatementsTable)
 			.where(eq(LedgerAccountStatementsTable.id, encodeUuid(id)))
 			.limit(1)
 			.pipe(
+				Effect.orDie,
 				Effect.flatMap(rows => {
 					const row = rows[0];
 					if (row === undefined)
@@ -96,12 +101,15 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 	createStatement(
 		statement: LedgerAccountStatement,
 		orgId: OrgID
-	): Effect.Effect<LedgerAccountStatement, unknown> {
+	): Effect.Effect<LedgerAccountStatement, StatementError> {
 		return this.db
 			.insert(LedgerAccountStatementsTable)
 			.values(statement.toRow())
 			.returning()
-			.pipe(Effect.flatMap(() => this.getStatement(statement.id, orgId)));
+			.pipe(
+				Effect.orDie,
+				Effect.flatMap(() => this.getStatement(statement.id, orgId))
+			);
 	}
 }
 
@@ -110,6 +118,7 @@ const ledgerAccountStatementRepoLayer = Layer.effect(
 	DatabaseTag.pipe(Effect.map(database => new LedgerAccountStatementRepoLive(database.effectDb)))
 );
 
+export type { StatementError };
 export {
 	type LedgerAccountStatementRepo,
 	LedgerAccountStatementRepoLive,

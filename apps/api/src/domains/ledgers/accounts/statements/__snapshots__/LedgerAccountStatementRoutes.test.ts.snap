@@ -1,17 +1,140 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operations and response sets 1`] = `
+exports[`Statement routes > OpenAPI > preserves the existing OpenAPI operations and response sets 1`] = `
 {
+  "LedgerAccountStatementRequest": {
+    "additionalProperties": false,
+    "properties": {
+      "accountId": {
+        "description": "The ledger account's ID",
+        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "description": {
+        "description": "An optional free-form description for internal use.",
+        "type": "string",
+      },
+      "endDatetime": {
+        "description": "The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
+        "type": "string",
+      },
+      "ledgerId": {
+        "description": "The ledger's ID",
+        "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "startDatetime": {
+        "description": "The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "ledgerId",
+      "accountId",
+      "startDatetime",
+      "endDatetime",
+    ],
+    "type": "object",
+  },
+  "LedgerAccountStatementResponse": {
+    "additionalProperties": false,
+    "description": "A ledger account statement is an object that provides the starting and ending balances for a specific time period. Once created, it can be used to retrieve the ledger entries and ledger transaction versions that correspond to that time period and lock version of the ledger account.",
+    "properties": {
+      "accountId": {
+        "description": "The ledger account's ID",
+        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "assetCode": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9._:-]+$",
+        "type": "string",
+      },
+      "assetId": {
+        "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "created": {
+        "description": "Timestamp of when the ledger account category was created.",
+        "type": "string",
+      },
+      "description": {
+        "description": "An optional free-form description for internal use.",
+        "type": "string",
+      },
+      "endDatetime": {
+        "description": "The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
+        "type": "string",
+      },
+      "id": {
+        "description": "The ledger account statement ID",
+        "pattern": "^lst_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "ledgerAccountVersion": {
+        "description": "Version of the ledger account at the time of statement generation.",
+        "type": "number",
+      },
+      "ledgerId": {
+        "description": "The ledger's ID",
+        "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "metadata": {
+        "additionalProperties": {
+          "type": "string",
+        },
+        "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+        "type": "object",
+      },
+      "minorUnitExponent": {
+        "maximum": 18,
+        "minimum": 0,
+        "type": "integer",
+      },
+      "normalBalance": {
+        "enum": [
+          "debit",
+          "credit",
+        ],
+        "type": "string",
+      },
+      "startDatetime": {
+        "description": "The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
+        "type": "string",
+      },
+      "updated": {
+        "description": "Timestamp of when the ledger account category was last updated.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "id",
+      "ledgerId",
+      "accountId",
+      "startDatetime",
+      "endDatetime",
+      "ledgerAccountVersion",
+      "normalBalance",
+      "assetId",
+      "assetCode",
+      "minorUnitExponent",
+      "created",
+      "updated",
+    ],
+    "type": "object",
+  },
   "get": {
     "description": "Get Ledger Account Statement",
     "operationId": "getLedgerAccountStatement",
     "parameters": [
       {
-        "description": "The ledger account statement ID",
         "in": "path",
         "name": "statementId",
         "required": true,
         "schema": {
+          "description": "The ledger account statement ID",
           "pattern": "^lst_[0-7][0-9a-hjkmnp-tv-z]{25}$",
           "type": "string",
         },
@@ -22,101 +145,7 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account statement is an object that provides the starting and ending balances for a specific time period. Once created, it can be used to retrieve the ledger entries and ledger transaction versions that correspond to that time period and lock version of the ledger account.",
-              "properties": {
-                "accountId": {
-                  "description": "The ledger account's ID",
-                  "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "assetCode": {
-                  "maxLength": 64,
-                  "minLength": 1,
-                  "pattern": "^[A-Za-z0-9._:-]+$",
-                  "type": "string",
-                },
-                "assetId": {
-                  "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "created": {
-                  "description": "Timestamp of when the ledger account category was created.",
-                  "type": "string",
-                },
-                "description": {
-                  "description": "An optional free-form description for internal use.",
-                  "type": "string",
-                },
-                "endDatetime": {
-                  "description": "The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
-                  "type": "string",
-                },
-                "id": {
-                  "description": "The ledger account statement ID",
-                  "pattern": "^lst_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "ledgerAccountVersion": {
-                  "description": "Version of the ledger account at the time of statement generation.",
-                  "type": "number",
-                },
-                "ledgerId": {
-                  "description": "The ledger's ID",
-                  "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "metadata": {
-                  "additionalProperties": {
-                    "type": "string",
-                  },
-                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                  "type": "object",
-                },
-                "minorUnitExponent": {
-                  "maximum": 18,
-                  "minimum": 0,
-                  "type": "integer",
-                },
-                "normalBalance": {
-                  "anyOf": [
-                    {
-                      "enum": [
-                        "debit",
-                      ],
-                      "type": "string",
-                    },
-                    {
-                      "enum": [
-                        "credit",
-                      ],
-                      "type": "string",
-                    },
-                  ],
-                },
-                "startDatetime": {
-                  "description": "The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
-                  "type": "string",
-                },
-                "updated": {
-                  "description": "Timestamp of when the ledger account category was last updated.",
-                  "type": "string",
-                },
-              },
-              "required": [
-                "id",
-                "ledgerId",
-                "accountId",
-                "startDatetime",
-                "endDatetime",
-                "ledgerAccountVersion",
-                "normalBalance",
-                "assetId",
-                "assetCode",
-                "minorUnitExponent",
-                "created",
-                "updated",
-              ],
-              "type": "object",
+              "$ref": "#/components/schemas/LedgerAccountStatementResponse",
             },
           },
         },
@@ -126,6 +155,7 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -167,12 +197,21 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -214,12 +253,21 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -261,12 +309,22 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -308,12 +366,22 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -355,12 +423,22 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -402,12 +480,22 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -449,9 +537,23 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Get Ledger Account Statement",
     "tags": [
       "Ledger Account Statements",
@@ -482,37 +584,7 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
       "content": {
         "application/json": {
           "schema": {
-            "properties": {
-              "accountId": {
-                "description": "The ledger account's ID",
-                "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                "type": "string",
-              },
-              "description": {
-                "description": "An optional free-form description for internal use.",
-                "type": "string",
-              },
-              "endDatetime": {
-                "description": "The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
-                "type": "string",
-              },
-              "ledgerId": {
-                "description": "The ledger's ID",
-                "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                "type": "string",
-              },
-              "startDatetime": {
-                "description": "The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
-                "type": "string",
-              },
-            },
-            "required": [
-              "ledgerId",
-              "accountId",
-              "startDatetime",
-              "endDatetime",
-            ],
-            "type": "object",
+            "$ref": "#/components/schemas/LedgerAccountStatementRequest",
           },
         },
       },
@@ -523,101 +595,7 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
         "content": {
           "application/json": {
             "schema": {
-              "description": "A ledger account statement is an object that provides the starting and ending balances for a specific time period. Once created, it can be used to retrieve the ledger entries and ledger transaction versions that correspond to that time period and lock version of the ledger account.",
-              "properties": {
-                "accountId": {
-                  "description": "The ledger account's ID",
-                  "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "assetCode": {
-                  "maxLength": 64,
-                  "minLength": 1,
-                  "pattern": "^[A-Za-z0-9._:-]+$",
-                  "type": "string",
-                },
-                "assetId": {
-                  "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "created": {
-                  "description": "Timestamp of when the ledger account category was created.",
-                  "type": "string",
-                },
-                "description": {
-                  "description": "An optional free-form description for internal use.",
-                  "type": "string",
-                },
-                "endDatetime": {
-                  "description": "The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
-                  "type": "string",
-                },
-                "id": {
-                  "description": "The ledger account statement ID",
-                  "pattern": "^lst_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "ledgerAccountVersion": {
-                  "description": "Version of the ledger account at the time of statement generation.",
-                  "type": "number",
-                },
-                "ledgerId": {
-                  "description": "The ledger's ID",
-                  "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                  "type": "string",
-                },
-                "metadata": {
-                  "additionalProperties": {
-                    "type": "string",
-                  },
-                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                  "type": "object",
-                },
-                "minorUnitExponent": {
-                  "maximum": 18,
-                  "minimum": 0,
-                  "type": "integer",
-                },
-                "normalBalance": {
-                  "anyOf": [
-                    {
-                      "enum": [
-                        "debit",
-                      ],
-                      "type": "string",
-                    },
-                    {
-                      "enum": [
-                        "credit",
-                      ],
-                      "type": "string",
-                    },
-                  ],
-                },
-                "startDatetime": {
-                  "description": "The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
-                  "type": "string",
-                },
-                "updated": {
-                  "description": "Timestamp of when the ledger account category was last updated.",
-                  "type": "string",
-                },
-              },
-              "required": [
-                "id",
-                "ledgerId",
-                "accountId",
-                "startDatetime",
-                "endDatetime",
-                "ledgerAccountVersion",
-                "normalBalance",
-                "assetId",
-                "assetCode",
-                "minorUnitExponent",
-                "created",
-                "updated",
-              ],
-              "type": "object",
+              "$ref": "#/components/schemas/LedgerAccountStatementResponse",
             },
           },
         },
@@ -627,6 +605,7 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -668,12 +647,21 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "BadRequestError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "401": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -715,12 +703,21 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "UnauthorizedError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "type": "integer",
+            },
+          },
+        },
       },
       "403": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -762,12 +759,22 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "ForbiddenError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "404": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -809,12 +816,22 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "NotFoundError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "409": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -856,12 +873,22 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "ConflictError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "429": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -903,12 +930,22 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "TooManyRequestsError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "500": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -950,12 +987,22 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "InternalServerError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
       "503": {
         "content": {
           "application/json": {
             "schema": {
+              "additionalProperties": false,
               "properties": {
                 "detail": {
                   "type": "string",
@@ -997,9 +1044,23 @@ exports[`LedgerAccountStatementRoutes > preserves the existing OpenAPI operation
             },
           },
         },
-        "description": "Default Response",
+        "description": "ServiceUnavailableError",
+        "headers": {
+          "retry-after": {
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string",
+            },
+          },
+        },
       },
     },
+    "security": [
+      {
+        "bearer": [],
+      },
+    ],
     "summary": "Create Ledger Account Statement",
     "tags": [
       "Ledger Account Statements",

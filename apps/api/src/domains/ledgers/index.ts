@@ -13,7 +13,6 @@ export {
 	LedgerPersistenceFailure,
 	LedgerRepositoryUnavailable,
 } from "./LedgerErrors";
-export { LedgerRoutes } from "./LedgerRoutes";
 export type {
 	LedgerCreateError,
 	LedgerDeleteError,

@@ -15,15 +15,14 @@
 		"dev:web": "turbo dev --filter=@exchequerio/web",
 		"dev:docs": "turbo dev --filter=@exchequerio/docs",
 		"build": "turbo build",
-		"test": "pnpm run docker:up && turbo test",
+		"test": "turbo test",
 		"test:ci": "turbo test:ci",
 		"lint": "turbo lint",
 		"format": "turbo format",
 		"format:check": "turbo format:check",
 		"types": "turbo types",
 		"check": "turbo run format:check lint types bench:check",
-		"ci": "pnpm run docker:up && turbo build format:check lint types bench:check test:ci",
-		"ci:gh": "turbo build format:check lint types bench:check test:ci"
+		"ci": "turbo build format:check lint types bench:check test:ci"
 	},
 	"devDependencies": {
 		"@typescript/native": "npm:typescript@7.0.2",

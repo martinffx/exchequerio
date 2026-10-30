@@ -60,6 +60,9 @@ const existingAccounting = Option.some(accounting);
 const request = {
 	settledAccountId: settledAccountId.toString(),
 	contraAccountId: contraAccountId.toString(),
+	// The route supplies these defaults before the service runs.
+	status: "pending" as const,
+	allowEitherDirection: false,
 };
 
 let repository: Mocked<LedgerAccountSettlementRepo>;
@@ -298,7 +301,11 @@ describe("LedgerAccountSettlementService", () => {
 			repository.getSettlement.mockReturnValue(Effect.succeed(voiding));
 			await expect(
 				Effect.runPromise(
-					service.createLedgerAccountSettlement(organizationId, ledgerId, key, { ...request, status })
+					service.createLedgerAccountSettlement(organizationId, ledgerId, key, {
+						...request,
+						// The service still tolerates an absent status; the cast skips the route default.
+						status: status as "pending" | "drafting",
+					})
 				)
 			).resolves.toBe(voiding);
 			expect(transactions.getSettlementTransaction).not.toHaveBeenCalled();

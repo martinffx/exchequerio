@@ -1,134 +1,87 @@
-import { CloneType, type Static, Type } from "@sinclair/typebox";
-import type { FastifyRequest } from "fastify";
+import { Schema } from "effect";
 import { AssetSummarySchema } from "@/lib/AssetSchema";
-import { AccountBalanceResponse } from "../AccountSchema";
-import { MetadataSchema } from "@/lib/schema";
-import type { PaginationQuery } from "@/lib/schema";
+import { MetadataSchema, OmittedWhenUndefined } from "@/lib/schema";
 import { LedgerIdSchema } from "@/domains/ledgers/LedgerSchema";
 import {
+	AccountBalanceResponse,
 	AccountIdSchema,
 	NormalBalanceSchema as NormalBalance,
 } from "@/domains/ledgers/accounts/AccountSchema";
 
-const LedgerId = CloneType(LedgerIdSchema, { description: "The ledger's ID" });
-const LedgerIdParameters = Type.Object({ ledgerId: LedgerId });
-type LedgerIdParameters = Static<typeof LedgerIdParameters>;
-const LedgerAccountId = CloneType(AccountIdSchema, { description: "The ledger account's ID" });
+const LedgerId = LedgerIdSchema.annotate({ description: "The ledger's ID" });
+const LedgerIdParameters = Schema.Struct({ ledgerId: LedgerId });
+type LedgerIdParameters = typeof LedgerIdParameters.Type;
+const LedgerAccountId = AccountIdSchema.annotate({ description: "The ledger account's ID" });
 
-const LedgerAccountCategoryId = Type.String({
+const LedgerAccountCategoryId = Schema.String.annotate({
 	description: "Unique identifier for the ledger account category.",
-	pattern: "^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-});
-type LedgerAccountCategoryId = Static<typeof LedgerAccountCategoryId>;
-const LedgerAccountCategoryIdParameters = Type.Object({
+}).check(Schema.isPattern(/^lac_[0-7][0-9a-hjkmnp-tv-z]{25}$/));
+type LedgerAccountCategoryId = typeof LedgerAccountCategoryId.Type;
+/** Ledger and Category identifiers in an item route. */
+const LedgerAccountCategoryIdParameters = Schema.Struct({
+	...LedgerIdParameters.fields,
 	categoryId: LedgerAccountCategoryId,
 });
-type LedgerAccountCategoryIdParameters = Static<typeof LedgerAccountCategoryIdParameters>;
+type LedgerAccountCategoryIdParameters = typeof LedgerAccountCategoryIdParameters.Type;
 
-const LinkAccountToCategoryParameters = Type.Object({
+const LinkAccountToCategoryParameters = Schema.Struct({
+	...LedgerIdParameters.fields,
 	categoryId: LedgerAccountCategoryId,
 	accountId: LedgerAccountId,
 });
-type LinkAccountToCategoryParameters = Static<typeof LinkAccountToCategoryParameters>;
+type LinkAccountToCategoryParameters = typeof LinkAccountToCategoryParameters.Type;
 
-const LinkCategoryToCategoryParameters = Type.Object({
+const LinkCategoryToCategoryParameters = Schema.Struct({
+	...LedgerIdParameters.fields,
 	categoryId: LedgerAccountCategoryId,
 	parentCategoryId: LedgerAccountCategoryId,
 });
-type LinkCategoryToCategoryParameters = Static<typeof LinkCategoryToCategoryParameters>;
+type LinkCategoryToCategoryParameters = typeof LinkCategoryToCategoryParameters.Type;
 
-const LedgerAccountCategoryResponse = Type.Object(
-	{
-		id: LedgerAccountCategoryId,
-		ledgerId: LedgerId,
-		name: Type.String({
-			description: "The name of the ledger account category.",
-		}),
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
-		),
-		normalBalance: NormalBalance,
-		metadata: Type.Optional(MetadataSchema),
-		created: Type.String({
-			description: "Timestamp of when the ledger account category was created.",
-		}),
-		updated: Type.String({
-			description: "Timestamp of when the ledger account category was last updated.",
-		}),
-	},
-	{
-		$id: "LedgerAccountCategoryResponse",
-		description:
-			"A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
-	}
-);
-type LedgerAccountCategoryResponse = Static<typeof LedgerAccountCategoryResponse>;
-const LedgerAccountCategoryBalancesResponse = Type.Object(
-	{
-		categoryId: LedgerAccountCategoryId,
-		normalBalance: NormalBalance,
-		assets: Type.Array(
-			Type.Object({
-				...AssetSummarySchema.properties,
-				balances: Type.Array(AccountBalanceResponse),
-			})
-		),
-	},
-	{ $id: "LedgerAccountCategoryBalancesResponse" }
-);
-type LedgerAccountCategoryBalancesResponse = Static<typeof LedgerAccountCategoryBalancesResponse>;
+const LedgerAccountCategoryResponse = Schema.Struct({
+	id: LedgerAccountCategoryId,
+	ledgerId: LedgerId,
+	name: Schema.String.annotate({ description: "The name of the ledger account category." }),
+	description: OmittedWhenUndefined(
+		Schema.String.annotate({ description: "An optional free-form description for internal use." })
+	),
+	normalBalance: NormalBalance,
+	metadata: OmittedWhenUndefined(MetadataSchema),
+	created: Schema.String.annotate({
+		description: "Timestamp of when the ledger account category was created.",
+	}),
+	updated: Schema.String.annotate({
+		description: "Timestamp of when the ledger account category was last updated.",
+	}),
+}).annotate({
+	identifier: "LedgerAccountCategoryResponse",
+	description:
+		"A ledger account category is a grouping of Ledger Accounts. Current balances are available from the Category balances endpoint. Ledger Account Categories can also contain other categories, which enables the creation of nested hierarchies.",
+});
+type LedgerAccountCategoryResponse = typeof LedgerAccountCategoryResponse.Type;
 
-const LedgerAccountCategoryRequest = Type.Object(
-	{
-		name: Type.String({
-			description: "The name of the ledger account category.",
-		}),
-		description: Type.Optional(
-			Type.String({
-				description: "An optional free-form description for internal use.",
-			})
-		),
-		normalBalance: NormalBalance,
-		metadata: Type.Optional(MetadataSchema),
-	},
-	{
-		$id: "LedgerAccountCategoryRequest",
-	}
-);
-type LedgerAccountCategoryRequest = Static<typeof LedgerAccountCategoryRequest>;
+const LedgerAccountCategoryBalancesResponse = Schema.Struct({
+	categoryId: LedgerAccountCategoryId,
+	normalBalance: NormalBalance,
+	assets: Schema.Array(
+		Schema.Struct({
+			...AssetSummarySchema.fields,
+			balances: Schema.Array(AccountBalanceResponse),
+		})
+	),
+}).annotate({ identifier: "LedgerAccountCategoryBalancesResponse" });
+type LedgerAccountCategoryBalancesResponse = typeof LedgerAccountCategoryBalancesResponse.Type;
 
-type ListLedgerAccountCategoriesRequest = FastifyRequest<{
-	Params: LedgerIdParameters;
-	Querystring: PaginationQuery;
-}>;
-type GetLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerIdParameters & LedgerAccountCategoryIdParameters;
-}>;
-type CreateLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerIdParameters;
-	Body: LedgerAccountCategoryRequest;
-}>;
-type UpdateLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerIdParameters & LedgerAccountCategoryIdParameters;
-	Body: LedgerAccountCategoryRequest;
-}>;
-type DeleteLedgerAccountCategoryRequest = FastifyRequest<{
-	Params: LedgerIdParameters & LedgerAccountCategoryIdParameters;
-}>;
-type LinkLedgerAccountToCategoryRequest = FastifyRequest<{
-	Params: LedgerIdParameters & LinkAccountToCategoryParameters;
-}>;
-type UnlinkLedgerAccountToCategoryRequest = FastifyRequest<{
-	Params: LedgerIdParameters & LinkAccountToCategoryParameters;
-}>;
-type LinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
-	Params: LedgerIdParameters & LinkCategoryToCategoryParameters;
-}>;
-type UnlinkLedgerAccountCategoryToCategoryRequest = FastifyRequest<{
-	Params: LedgerIdParameters & LinkCategoryToCategoryParameters;
-}>;
+const LedgerAccountCategoryRequest = Schema.Struct({
+	name: Schema.String.annotate({ description: "The name of the ledger account category." }),
+	description: Schema.optionalKey(
+		Schema.String.annotate({ description: "An optional free-form description for internal use." })
+	),
+	normalBalance: NormalBalance,
+	// Non-string metadata values are rejected here.
+	metadata: Schema.optionalKey(MetadataSchema),
+}).annotate({ identifier: "LedgerAccountCategoryRequest" });
+type LedgerAccountCategoryRequest = typeof LedgerAccountCategoryRequest.Type;
 
 export {
 	LedgerAccountCategoryBalancesResponse,
@@ -138,14 +91,5 @@ export {
 	LedgerAccountCategoryIdParameters as LedgerAccountCategoryIdParams,
 	LedgerAccountCategoryResponse,
 	LedgerAccountCategoryRequest,
-	type ListLedgerAccountCategoriesRequest,
-	type GetLedgerAccountCategoryRequest,
-	type CreateLedgerAccountCategoryRequest,
-	type UpdateLedgerAccountCategoryRequest,
-	type DeleteLedgerAccountCategoryRequest,
-	type LinkLedgerAccountToCategoryRequest,
-	type UnlinkLedgerAccountToCategoryRequest,
-	type LinkLedgerAccountCategoryToCategoryRequest,
-	type UnlinkLedgerAccountCategoryToCategoryRequest,
 	type LedgerAccountCategoryId,
 };

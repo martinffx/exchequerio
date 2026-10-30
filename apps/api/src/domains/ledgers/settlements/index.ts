@@ -20,5 +20,4 @@ export {
 	LedgerAccountSettlementServiceTag,
 	ledgerAccountSettlementServiceLayer,
 } from "./LedgerAccountSettlementService";
-export { LedgerAccountSettlementRoutes } from "./LedgerAccountSettlementRoutes";
 export * from "./LedgerAccountSettlementSchema";
