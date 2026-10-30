@@ -1,13 +1,8 @@
-import { createServer } from "node:http";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Cause, Exit, Layer } from "effect";
 import { Config } from "@/config";
 import { makeServerRuntimeLayer } from "@/runtime";
-import { serveApp } from "@/server";
-
-// The server keeps the pre-migration timeouts: 72 s keep-alive (the load balancer idle timeout must
-// stay below it) and no request timeout.
-const createHttpServer = () => createServer({ keepAliveTimeout: 72_000, requestTimeout: 0 });
+import { createHttpServer, serveApp } from "@/server";
 
 const main = serveApp(
 	// NodeHttpServer's default 20 s gracefulShutdownTimeout bounds reads: reads still in flight at the

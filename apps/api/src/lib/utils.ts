@@ -68,6 +68,7 @@ const encodeMetadata = (metadata: Metadata | undefined): string | undefined =>
  * disconnect or drain cut, as under the pre-migration server, because services release or complete
  * idempotency claims and publish monitor jobs after commit. Reads stay interruptible.
  */
+// review-decision: reads stay interruptible on client abort — @effect/sql-pg then cancels the in-flight query with pg_cancel_backend on a second pool connection; a stale-cancel race (the freed connection reused before the cancel lands, failing an unrelated statement with 57014) was found by code reading only and never reproduced. Reconsider if 57014 errors appear in logs, the pool saturates under load, or the race is reproduced.
 const runToCompletion = { uninterruptible: true } as const;
 
 export type { Metadata } from "./schema";

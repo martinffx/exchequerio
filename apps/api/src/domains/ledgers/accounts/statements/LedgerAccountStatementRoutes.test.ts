@@ -153,7 +153,8 @@ describe("Statement routes", () => {
 			.mockReturnValue(Effect.fail(new NotFoundError("Statement not found")));
 		vi
 			.mocked(implementation.createLedgerAccountStatement)
-			.mockReturnValue(Effect.fail(new ConflictError("Statement already exists")));
+			// Create declares 409 for the OpenAPI contract, but no service path produces it.
+			.mockReturnValue(Effect.fail(new ConflictError("Statement already exists")) as never);
 		const handler = build(implementation);
 		const missing = await handler(request("GET", resource));
 		const conflict = await handler(request("POST", base, { body: payload }));

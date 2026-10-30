@@ -12,10 +12,8 @@ import type { LedgerID, OrgID } from "@/lib/ids";
 import { newLedgerID, newLedgerAccountID } from "@/lib/ids";
 import { Ledger } from "@/domains/ledgers/Ledger";
 import { LedgerAccount } from "@/domains/ledgers/accounts/LedgerAccount";
-import { createServer } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Exit, Layer, ManagedRuntime, References, Scope } from "effect";
-import { HttpRouter } from "effect/unstable/http";
 import { DatabaseTag, makeDatabaseLive } from "@/db";
 import {
 	type LedgerAccountRepo,
@@ -24,7 +22,8 @@ import {
 } from "@/domains/ledgers/accounts/LedgerAccountRepo";
 import { type LedgerRepo, LedgerRepoTag, ledgerRepoLayer } from "@/domains/ledgers/LedgerRepo";
 import { AssetsTable, OrganizationsTable } from "@/db/schema";
-import { makeServerLayer } from "@/server";
+import { createHttpServer, serveApp } from "@/server";
+import { makeServerRuntimeLayer } from "@/runtime";
 import type { EffectDrizzleDatabase } from "@/db";
 
 interface BenchmarkScenario {
@@ -473,11 +472,11 @@ describe("Transaction Creation Benchmarks", () => {
 		serverScope = await Effect.runPromise(Scope.make());
 		await Effect.runPromise(
 			Layer.buildWithScope(
-				// The router logger is off; the app's global request logger is silenced below Warn so it does not skew the run.
-				HttpRouter.serve(makeServerLayer(new Config()), { disableLogger: true }).pipe(
-					Layer.provide(Layer.succeed(References.MinimumLogLevel, "Warn")),
-					Layer.provide(NodeHttpServer.layer(createServer, { port: 3333, host: "0.0.0.0" }))
-				),
+				// The app's global request logger is silenced below Warn so it does not skew the run.
+				serveApp(
+					NodeHttpServer.layer(createHttpServer, { port: 3333, host: "0.0.0.0" }),
+					makeServerRuntimeLayer(new Config())
+				).pipe(Layer.provide(Layer.succeed(References.MinimumLogLevel, "Warn"))),
 				serverScope
 			)
 		);

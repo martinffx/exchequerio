@@ -18,6 +18,7 @@ declare module "vitest" {
  */
 export default async function setup(project: TestProject) {
 	console.log("\n🔄 Starting test database and Valkey...");
+	// review-decision: API tests start their own Postgres and Valkey via Testcontainers — worktrees no longer share (and drift) one exchequer_test database, and CI relies on the runner's Docker instead of service containers. Reconsider if CI runners lose Docker access or container start-up dominates test time.
 	const [postgres, valkey] = await Promise.all([
 		new PostgreSqlContainer("postgres:17-alpine").start(),
 		new GenericContainer("valkey/valkey:8-alpine")

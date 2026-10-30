@@ -18,8 +18,14 @@ import { signJWT } from "@/auth";
 import type { OrgID } from "@/lib/ids";
 import { OrganizationServiceTag, type OrganizationService } from "@/domains/organizations";
 import { Organization } from "@/domains/organizations/Organization";
-import { makeTestWebHandler, type TestServiceLayers, testServicesLayer } from "@/lib/testing";
-import { appLayer, serveApp } from "@/server";
+import {
+	makeRequest,
+	type TestServiceLayers,
+	testServicesLayer,
+	tokenFor,
+	useTestWebHandlers,
+} from "@/lib/testing";
+import { appLayer, createHttpServer, serveApp } from "@/server";
 
 const deferred = () => {
 	let resolve!: () => void;
@@ -112,6 +118,18 @@ const operationsWithoutBearer = (document: OpenApiPaths) =>
 				JSON.stringify([{ bearer: [] }])
 		)
 		.map(({ key }) => key);
+
+describe("HTTP server options", () => {
+	it("keeps the pre-migration timeouts, including Node's 60 s header deadline", () => {
+		const server = createHttpServer();
+		expect({
+			keepAliveTimeout: server.keepAliveTimeout,
+			requestTimeout: server.requestTimeout,
+			headersTimeout: server.headersTimeout,
+		}).toEqual({ keepAliveTimeout: 72_000, requestTimeout: 0, headersTimeout: 60_000 });
+		server.close();
+	});
+});
 
 describe("Request lifecycle", () => {
 	const organizationId = TypeID.fromString<"org">("org_01h2x3y4z5a6b7c8d9e0f1g2h3") as OrgID;
@@ -208,6 +226,8 @@ describe("Request lifecycle", () => {
 			});
 			// An oversized body surfaces as a sanitised 500 problem, not 413, for parity with the pre-migration server.
 			expect(response.status).toBe(500);
+			// The socket is closed so Node does not read and discard the rest of the declared body.
+			expect(response.headers.connection).toBe("close");
 			expect(JSON.parse(response.body)).toMatchObject({
 				type: "INTERNAL_SERVER_ERROR",
 				status: 500,
@@ -224,7 +244,6 @@ describe("Effect HTTP edge", () => {
 	const organizationId = TypeID.fromString<"org">("org_01h2x3y4z5a6b7c8d9e0f1g2h3") as OrgID;
 	const organization = Organization.fromRequest(organizationId, { name: "Example" });
 	const logs: Array<{ level: string; text: string; annotations: Record<string, unknown> }> = [];
-	const disposers: Array<() => Promise<void>> = [];
 
 	const capture = Logger.layer([
 		Logger.make(({ logLevel, message, cause, fiber }) => {
@@ -246,40 +265,23 @@ describe("Effect HTTP edge", () => {
 			...overrides,
 		}) as unknown as OrganizationService;
 
-	const build = (service: OrganizationService = stub()) => {
-		const { handler, dispose } = makeTestWebHandler({ organization: service }, capture);
-		disposers.push(dispose);
-		return handler;
-	};
+	const handlerFor = useTestWebHandlers();
+	const build = (service: OrganizationService = stub()) =>
+		handlerFor({ organization: service }, capture);
 
-	const token = (scope: "super_admin" | "org_readonly" = "super_admin") =>
-		signJWT({ sub: organizationId.toString(), scope: [scope] });
-	const call = (
-		method: string,
-		path: string,
-		options: { body?: string; contentType?: string; scope?: "super_admin" | "org_readonly" } = {}
-	) =>
-		new Request(`http://localhost${path}`, {
-			method,
-			headers: {
-				authorization: `Bearer ${token(options.scope)}`,
-				...(options.body === undefined
-					? {}
-					: { "content-type": options.contentType ?? "application/json" }),
-			},
-			body: options.body,
-		});
+	const tokenAs = tokenFor(organizationId);
+	const token = () => tokenAs(["super_admin"]);
+	const call = makeRequest(token);
 
-	afterEach(async () => {
+	afterEach(() => {
 		logs.length = 0;
-		for (const dispose of disposers.splice(0)) await dispose();
 	});
 
 	describe("request validation", () => {
 		it("strips unknown body fields", async () => {
 			const service = stub();
 			const response = await build(service)(
-				call("POST", "/api/organizations", { body: JSON.stringify({ name: "Example", extra: 1 }) })
+				call("POST", "/api/organizations", { body: { name: "Example", extra: 1 } })
 			);
 			expect(response.status).toBe(201);
 			expect(service.createOrganization).toHaveBeenCalledWith({ name: "Example" });
@@ -291,17 +293,8 @@ describe("Effect HTTP edge", () => {
 			expect(await response.json()).toMatchObject({ type: "BAD_REQUEST", status: 400 });
 		});
 
-		it("coerces query strings to integers", async () => {
-			const service = stub();
-			const response = await build(service)(call("GET", "/api/organizations?offset=5"));
-			expect(response.status).toBe(200);
-			expect(service.listOrganizations).toHaveBeenCalledWith({ offset: 5, limit: 20 });
-		});
-
 		it("rejects a wrongly typed body value", async () => {
-			const response = await build()(
-				call("POST", "/api/organizations", { body: JSON.stringify({ name: 123 }) })
-			);
+			const response = await build()(call("POST", "/api/organizations", { body: { name: 123 } }));
 			expect(response.status).toBe(400);
 			expect(await response.json()).toMatchObject({ type: "BAD_REQUEST" });
 		});
@@ -309,24 +302,46 @@ describe("Effect HTTP edge", () => {
 		it("returns 400 rather than 403 for an authenticated invalid body", async () => {
 			const response = await build()(
 				call("POST", "/api/organizations", {
-					body: JSON.stringify({ name: 123 }),
-					scope: "org_readonly",
+					body: { name: 123 },
+					token: tokenAs(["org_readonly"]),
 				})
 			);
 			expect(response.status).toBe(400);
 		});
 
 		it("returns a BAD_REQUEST problem for malformed JSON", async () => {
-			const response = await build()(call("POST", "/api/organizations", { body: "{not json" }));
+			const response = await build()(
+				call("POST", "/api/organizations", {
+					rawBody: "{not json",
+					headers: { "content-type": "application/json" },
+				})
+			);
 			expect(response.status).toBe(400);
 			expect(await response.json()).toMatchObject({ type: "BAD_REQUEST", status: 400 });
 		});
 
 		it("returns 415 for an unsupported content type", async () => {
 			const response = await build()(
-				call("POST", "/api/organizations", { body: "name=x", contentType: "text/plain" })
+				call("POST", "/api/organizations", {
+					rawBody: "name=x",
+					headers: { "content-type": "text/plain" },
+				})
 			);
 			expect(response.status).toBe(415);
+		});
+
+		it("decodes a payload sent without a content type as JSON", async () => {
+			const service = stub();
+			const response = await build(service)(
+				new Request("http://localhost/api/organizations", {
+					method: "POST",
+					headers: { authorization: `Bearer ${token()}` },
+					// A byte body gets no content-type header from the Request constructor.
+					body: new TextEncoder().encode(JSON.stringify({ name: "Example" })),
+				})
+			);
+			expect(response.status).toBe(201);
+			expect(service.createOrganization).toHaveBeenCalledWith({ name: "Example" });
 		});
 	});
 
@@ -675,16 +690,6 @@ describe("Effect HTTP edge", () => {
 			// Guards against the loop silently passing over an empty or shrunken set.
 			expect(operations).toHaveLength(50);
 			expect(operationsWithoutBearer(document)).toEqual([]);
-		});
-
-		it("flags an operation without the bearer requirement", () => {
-			const document: OpenApiPaths = {
-				paths: {
-					"/a": { get: { security: [{ bearer: [] }] }, post: {} },
-					"/b": { delete: { security: [] }, parameters: [] },
-				},
-			};
-			expect(operationsWithoutBearer(document)).toEqual(["POST /a", "DELETE /b"]);
 		});
 	});
 

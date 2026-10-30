@@ -36,6 +36,7 @@ const payloadDetails: Readonly<Record<string, string | undefined>> = {
  * with the Effect Schema message as detail. Response kinds (Body, ResponseHeaders) are re-thrown
  * unchanged; HttpApi turns them into a defect that the global router middleware renders as a 500.
  */
+// review-decision: an empty JSON body on a payload endpoint is a decode failure rendered as 400 (the old server answered 500), and bodies with __proto__/constructor keys are accepted with unknown keys stripped by the schema — accepted as listed change 5. Reconsider if a payload decode starts passing unknown keys through to services.
 const SchemaErrorTransformLayer = HttpApiMiddleware.layerSchemaErrorTransform(
 	SchemaErrorTransform,
 	(schemaError, { endpoint, group }) =>

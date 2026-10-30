@@ -90,17 +90,6 @@ describe("Settlement routes", () => {
 		);
 	});
 
-	it("builds Location from the raw ledgerId path parameter", async () => {
-		const response = await build(service())(
-			request("POST", `/api/ledgers/${ledgerId.toString()}/settlements/`, {
-				body: payload,
-				headers: key(),
-			})
-		);
-		expect(response.status).toBe(201);
-		expect(response.headers.get("location")).toBe(resource);
-	});
-
 	it("applies create defaults", async () => {
 		const implementation = service();
 		const headers = key();

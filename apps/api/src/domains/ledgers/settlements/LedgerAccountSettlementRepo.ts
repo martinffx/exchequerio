@@ -43,7 +43,7 @@ const scope = (organizationId: OrgID, ledgerId: LedgerID, id: LedgerAccountSettl
 		eq(Settlements.ledgerId, encodeUuid(ledgerId)),
 		eq(Settlements.id, encodeUuid(id))
 	);
-/** Concrete problems a Settlement repository call may fail with; the HttpApi group declares each. */
+/** Concrete problems a Settlement repository call may fail with. */
 type SettlementRepoError =
 	| BadRequestError
 	| ConflictError
@@ -54,6 +54,26 @@ type SettlementRepoError =
 type SettlementReadError = Exclude<SettlementRepoError, ConflictError>;
 /** Page failures; listing is scoped by the Ledger identifier alone and never reports a missing row. */
 type SettlementListError = Exclude<SettlementReadError, NotFoundError>;
+/**
+ * Read paths take no locks, so a conflict or a missing referenced row there is not a declared failure.
+ * Such a failure becomes a defect, which the edge renders with its own status and logs once.
+ */
+const unlessConflict = <A>(
+	self: Effect.Effect<A, SettlementRepoError>
+): Effect.Effect<A, SettlementReadError> =>
+	Effect.catchIf(
+		self,
+		(error): error is ConflictError => error instanceof ConflictError,
+		Effect.die
+	);
+const unlessMissing = <A>(
+	self: Effect.Effect<A, SettlementReadError>
+): Effect.Effect<A, SettlementListError> =>
+	Effect.catchIf(
+		self,
+		(error): error is NotFoundError => error instanceof NotFoundError,
+		Effect.die
+	);
 /** Preserves HTTP failures and translates PostgreSQL failures at the repository boundary. */
 const mapError = (cause: unknown): SettlementRepoError => {
 	if (cause instanceof HttpError) return cause as SettlementRepoError;
@@ -144,10 +164,7 @@ class LedgerAccountSettlementRepoLive {
 		ledgerId: LedgerID,
 		id: LedgerAccountSettlementID
 	): Effect.Effect<LedgerAccountSettlementEntity, SettlementReadError> {
-		return this.read(this.db, organizationId, ledgerId, id) as Effect.Effect<
-			LedgerAccountSettlementEntity,
-			SettlementReadError
-		>;
+		return unlessConflict(this.read(this.db, organizationId, ledgerId, id));
 	}
 	/**
 	 * Lists scoped Settlements with accounting in descending creation and ID order.
@@ -196,7 +213,9 @@ class LedgerAccountSettlementRepoLive {
 					})
 				)
 			),
-			Effect.mapError(mapError as (cause: unknown) => SettlementListError)
+			Effect.mapError(mapError),
+			unlessConflict,
+			unlessMissing
 		);
 	}
 	/**
@@ -611,7 +630,7 @@ class LedgerAccountSettlementRepoLive {
 					}))
 				)
 			);
-		}).pipe(Effect.mapError(mapError as (cause: unknown) => SettlementReadError));
+		}).pipe(Effect.mapError(mapError), unlessConflict);
 	}
 }
 /** Public Settlement persistence operations, excluding connection-level helpers. */

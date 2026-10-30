@@ -308,12 +308,6 @@ describe("Category routes", () => {
 			expect(await json(response)).toMatchObject({ type: "BAD_REQUEST", status: 400 });
 			expect(implementation.listLedgerAccountCategories).not.toHaveBeenCalled();
 		});
-
-		it("returns 401 for an invalid token", async () => {
-			const response = await build(service())(request("GET", base, { token: "invalid_token" }));
-			expect(response.status).toBe(401);
-			expect(await json(response)).toMatchObject({ type: "UNAUTHORIZED", status: 401 });
-		});
 	});
 
 	describe("Get Ledger Account Category", () => {
@@ -345,12 +339,6 @@ describe("Category routes", () => {
 			expect(response.status).toBe(400);
 			expect(await json(response)).toMatchObject({ type: "BAD_REQUEST", status: 400 });
 			expect(implementation.getLedgerAccountCategory).not.toHaveBeenCalled();
-		});
-
-		it("returns 401 for an invalid token", async () => {
-			const response = await build(service())(request("GET", item, { token: "invalid_token" }));
-			expect(response.status).toBe(401);
-			expect(await json(response)).toMatchObject({ status: 401 });
 		});
 	});
 
@@ -406,13 +394,6 @@ describe("Category routes", () => {
 			expect(await json(response)).toMatchObject({ status: 409, detail: "Category already exists" });
 		});
 
-		it("returns 401 for an invalid token", async () => {
-			const response = await build(service())(
-				request("POST", base, { token: "invalid_token", body: payload })
-			);
-			expect(response.status).toBe(401);
-		});
-
 		it("returns 403 for a read-only token", async () => {
 			const implementation = service();
 			const response = await build(implementation)(
@@ -466,13 +447,6 @@ describe("Category routes", () => {
 			expect(await json(response)).toMatchObject({ status: 404 });
 		});
 
-		it("returns 401 for an invalid token", async () => {
-			const response = await build(service())(
-				request("PUT", item, { token: "invalid_token", body: payload })
-			);
-			expect(response.status).toBe(401);
-		});
-
 		it("returns 403 for a read-only token", async () => {
 			const implementation = service();
 			const response = await build(implementation)(
@@ -504,11 +478,6 @@ describe("Category routes", () => {
 			const response = await build(implementation)(request("DELETE", item));
 			expect(response.status).toBe(404);
 			expect(await json(response)).toMatchObject({ status: 404 });
-		});
-
-		it("returns 401 for an invalid token", async () => {
-			const response = await build(service())(request("DELETE", item, { token: "invalid_token" }));
-			expect(response.status).toBe(401);
 		});
 
 		it("returns 403 for a read-only token", async () => {
@@ -553,13 +522,6 @@ describe("Category routes", () => {
 			expect(implementation.linkLedgerAccountToCategory).not.toHaveBeenCalled();
 		});
 
-		it("returns 401 for an invalid token", async () => {
-			const response = await build(service())(
-				request("PATCH", accountLink, { token: "invalid_token" })
-			);
-			expect(response.status).toBe(401);
-		});
-
 		it("returns 403 for a read-only token", async () => {
 			const implementation = service();
 			const response = await build(implementation)(
@@ -592,13 +554,6 @@ describe("Category routes", () => {
 			const response = await build(implementation)(request("DELETE", accountLink));
 			expect(response.status).toBe(404);
 			expect(await json(response)).toMatchObject({ status: 404 });
-		});
-
-		it("returns 401 for an invalid token", async () => {
-			const response = await build(service())(
-				request("DELETE", accountLink, { token: "invalid_token" })
-			);
-			expect(response.status).toBe(401);
 		});
 
 		it("returns 403 for a read-only token", async () => {
@@ -646,13 +601,6 @@ describe("Category routes", () => {
 			expect(await json(response)).toMatchObject({ status: 404 });
 		});
 
-		it("returns 401 for an invalid token", async () => {
-			const response = await build(service())(
-				request("PATCH", categoryLink, { token: "invalid_token" })
-			);
-			expect(response.status).toBe(401);
-		});
-
 		it("returns 403 for a read-only token", async () => {
 			const implementation = service();
 			const response = await build(implementation)(
@@ -687,13 +635,6 @@ describe("Category routes", () => {
 			expect(await json(response)).toMatchObject({ status: 404 });
 		});
 
-		it("returns 401 for an invalid token", async () => {
-			const response = await build(service())(
-				request("DELETE", categoryLink, { token: "invalid_token" })
-			);
-			expect(response.status).toBe(401);
-		});
-
 		it("returns 403 for a read-only token", async () => {
 			const implementation = service();
 			const response = await build(implementation)(
@@ -705,13 +646,15 @@ describe("Category routes", () => {
 	});
 
 	describe("authorization", () => {
-		it("requires authentication on every route", async () => {
-			for (const [method, path, , body] of routes) {
-				const implementation = service();
-				const response = await build(implementation)(request(method, path, { anonymous: true, body }));
-				expect(response.status, `${method} ${path}`).toBe(401);
-				expect(await json(response)).toMatchObject({ type: "UNAUTHORIZED", detail: "Invalid token" });
-				for (const stub of Object.values(implementation)) expect(stub).not.toHaveBeenCalled();
+		it("requires a valid token on every route", async () => {
+			for (const credential of [{ anonymous: true }, { token: "invalid_token" }]) {
+				for (const [method, path, , body] of routes) {
+					const implementation = service();
+					const response = await build(implementation)(request(method, path, { ...credential, body }));
+					expect(response.status, `${method} ${path}`).toBe(401);
+					expect(await json(response)).toMatchObject({ type: "UNAUTHORIZED", detail: "Invalid token" });
+					for (const stub of Object.values(implementation)) expect(stub).not.toHaveBeenCalled();
+				}
 			}
 		});
 

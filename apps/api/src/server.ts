@@ -1,4 +1,5 @@
 import "@/lib/luxon";
+import { createServer } from "node:http";
 import {
 	Cause,
 	Effect,
@@ -22,7 +23,6 @@ import { HttpApiBuilder, HttpApiError, HttpApiSwagger } from "effect/unstable/ht
 import { v7 as uuid } from "uuid";
 import { LedgerApi, SchemaErrorTransformLayer } from "@/api";
 import { makeAuthenticationLayer } from "@/auth";
-import { Config } from "@/config";
 import {
 	BadRequestError,
 	HttpError,
@@ -31,7 +31,7 @@ import {
 	retryAfterHeaders,
 	ServiceUnavailableError,
 } from "@/lib/errors";
-import { makeServerRuntimeLayer, ServerConfigTag } from "@/runtime";
+import { ServerConfigTag } from "@/runtime";
 import { AssetRoutes } from "@/domains/assets/AssetRoutes";
 import { AccountRoutes } from "@/domains/ledgers/accounts/AccountRoutes";
 import { LedgerAccountCategoryRoutes } from "@/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes";
@@ -41,6 +41,15 @@ import { LedgerRoutes } from "@/domains/ledgers/LedgerRoutes";
 import { SettlementRoutes } from "@/domains/ledgers/settlements/LedgerAccountSettlementRoutes";
 import { TransactionRoutes } from "@/domains/ledgers/transactions/LedgerTransactionRoutes";
 import { OrganizationRoutes } from "@/domains/organizations/OrganizationRoutes";
+
+/**
+ * The server keeps the pre-migration timeouts: 72 s keep-alive (the load balancer idle timeout must
+ * stay below it) and no request timeout. `headersTimeout` is explicit because Node derives it as
+ * `min(60_000, requestTimeout)` when `requestTimeout` is passed to the constructor, which would
+ * turn it off; the old server assigned `requestTimeout` afterwards and so kept 60 s.
+ */
+const createHttpServer = () =>
+	createServer({ keepAliveTimeout: 72_000, requestTimeout: 0, headersTimeout: 60_000 });
 
 /** Handler layers for the groups served by HttpApi. */
 const handlerLayers = Layer.mergeAll(
@@ -96,6 +105,7 @@ const edgeErrors = <R>(
 		const failure = Cause.findError(cause);
 		if (Result.isSuccess(failure) && HttpServerError.isHttpServerError(failure.success)) {
 			const { reason } = failure.success;
+			// review-decision: a malformed percent-encoded path or a segment over 100 characters renders as this 404 where the old server answered 400 and 414 — Effect's router returns no match for both and only invalid requests are affected. Reconsider if a client or monitor treats 404 as "resource gone" for such paths.
 			if (reason._tag === "RouteNotFound") {
 				return Effect.succeed(
 					problemResponse(
@@ -167,13 +177,21 @@ const maxBodyBytes = 1_048_576;
  * for parity with the pre-migration server). Effect's `MaxBodySize`
  * aborts the read mid-stream and destroys the socket, so the client would get no response at all;
  * rejecting on the declared `content-length` first restores the problem response. `MaxBodySize` still
- * bounds bodies without a declared length (chunked), which end the connection instead.
+ * bounds bodies without a declared length (chunked), which end the connection instead. The response
+ * carries `connection: close` so Node does not keep the socket alive to read the rest of the body.
  */
+// review-decision: a body sent without Content-Type on a payload endpoint is decoded as JSON (HttpApi's default) where the old server refused it with a 500 before any handler — accepted as listed change 5; auth is bearer-only, so there is no cookie or CSRF path. Reconsider if cookie or other ambient authentication is added.
 const bodyLimit = <E, R>(httpEffect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
 	Effect.flatMap(Effect.service(HttpServerRequest.HttpServerRequest), request =>
 		Number(request.headers["content-length"]) > maxBodyBytes
 			? Effect.logWarning("Request body exceeds the 1 MiB limit").pipe(
-					Effect.as(problemResponse(new InternalServerError("Internal Server Error")))
+					Effect.as(
+						HttpServerResponse.setHeader(
+							problemResponse(new InternalServerError("Internal Server Error")),
+							"connection",
+							"close"
+						)
+					)
 				)
 			: httpEffect
 	);
@@ -213,6 +231,7 @@ const HealthRoute = HttpRouter.add("GET", "/health", HttpServerResponse.jsonUnsa
 /** The HTTP app: needs the services its handlers use and the server `Config`. */
 const appLayer = Layer.mergeAll(
 	HttpApiBuilder.layer(LedgerApi, { openapiPath: "/docs/json" }),
+	// review-decision: only /docs and /docs/json are served — the old swagger-ui plugin also served /docs/yaml and its static sub-routes, which now return the 404 problem; no consumer was found. Reconsider if a tool or pipeline needs the spec as YAML.
 	HttpApiSwagger.layer(LedgerApi, { path: "/docs" }),
 	HealthRoute,
 	EdgeMiddleware,
@@ -228,9 +247,6 @@ const appLayer = Layer.mergeAll(
 	Layer.provide(HttpServer.layerServices)
 );
 
-const makeServerLayer = (config: Config) =>
-	appLayer.pipe(Layer.provide(makeServerRuntimeLayer(config)));
-
 const shutdownLog = (message: string) =>
 	Layer.effectDiscard(Effect.addFinalizer(() => Effect.logInfo(message)));
 
@@ -244,6 +260,7 @@ const serveApp = <SO, SE, SR, VO, VE, VR>(
 	services: Layer.Layer<VO, VE, VR>
 ) =>
 	// Built after the router, so its finalizer runs before the router's release (which drains in-flight requests).
+	// review-decision: once shutdown starts the request listener is removed before server.close(), so a pipelined request or one on a keep-alive socket that was not reaped gets no answer until the process exits after the drain (the old server answered 503); it was never processed, so a retry is safe. Reconsider if a load balancer reuses upstream connections during deploys and ambiguous resets are reported.
 	shutdownLog("API shutdown started").pipe(
 		// HttpMiddleware.logger is already a global middleware of the app, so the router's own logger is off.
 		Layer.provideMerge(
@@ -255,4 +272,4 @@ const serveApp = <SO, SE, SR, VO, VE, VR>(
 		Layer.provide(shutdownLog("API shutdown complete"))
 	);
 
-export { appLayer, makeServerLayer, serveApp };
+export { appLayer, createHttpServer, serveApp };
