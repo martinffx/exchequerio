@@ -88,5 +88,5 @@ The Asset migration requires empty currency-bearing accounting tables. It locks 
 tables, then fails without changing existing data when records remain. Use a fresh development
 database for this clean API cutover. There is no automatic currency mapping or legacy API adapter.
 
-OpenAPI is generated from TypeBox route schemas and route metadata. Those schemas are the source of
-truth for the request and response contracts.
+OpenAPI is generated from the Effect HttpApi definition (`*Api.ts` groups and Effect Schema
+schemas). Those definitions are the source of truth for the request and response contracts.

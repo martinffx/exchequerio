@@ -1,5 +1,3105 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`LedgerAccountBalanceMonitorRoutes > OpenAPI > preserves the existing OpenAPI operations and response sets 1`] = `
+{
+  "collection": {
+    "get": {
+      "description": "List Ledger Account Balance Monitors",
+      "operationId": "listLedgerAccountBalanceMonitors",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "ledgerId",
+          "required": true,
+          "schema": {
+            "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "path",
+          "name": "accountId",
+          "required": true,
+          "schema": {
+            "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "query",
+          "name": "offset",
+          "required": false,
+          "schema": {
+            "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+            "type": "string",
+          },
+        },
+      ],
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "accountId": {
+                      "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
+                    "alertCondition": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "conditions": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "balanceType": {
+                                "enum": [
+                                  "posted",
+                                  "pending",
+                                  "availableBalance",
+                                ],
+                                "type": "string",
+                              },
+                              "operator": {
+                                "enum": [
+                                  "=",
+                                  "!=",
+                                  "<",
+                                  "<=",
+                                  ">",
+                                  ">=",
+                                ],
+                                "type": "string",
+                              },
+                              "value": {
+                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                                "maxLength": 20,
+                                "pattern": "^(0|-?[1-9][0-9]*)$",
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "balanceType",
+                              "operator",
+                              "value",
+                            ],
+                            "type": "object",
+                          },
+                          "minItems": 1,
+                          "type": "array",
+                        },
+                        "mode": {
+                          "enum": [
+                            "all",
+                            "any",
+                          ],
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "mode",
+                        "conditions",
+                      ],
+                      "type": "object",
+                    },
+                    "created": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                    "description": {
+                      "type": "string",
+                    },
+                    "id": {
+                      "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
+                    "ledgerId": {
+                      "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                      "type": "string",
+                    },
+                    "lockVersion": {
+                      "minimum": 1,
+                      "type": "integer",
+                    },
+                    "metadata": {
+                      "additionalProperties": {
+                        "type": "string",
+                      },
+                      "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                      "type": "object",
+                    },
+                    "updated": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                    "webhook": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "url",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "accountId",
+                    "ledgerId",
+                    "alertCondition",
+                    "webhook",
+                    "lockVersion",
+                    "created",
+                    "updated",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+            },
+          },
+          "description": "Success",
+        },
+        "400": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      400,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "BAD_REQUEST",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "BadRequestError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "401": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      401,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "UNAUTHORIZED",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "UnauthorizedError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      403,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "FORBIDDEN",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ForbiddenError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      404,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "NOT_FOUND",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "NotFoundError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "429": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      429,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "TOO_MANY_REQUESTS",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "TooManyRequestsError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      500,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "INTERNAL_SERVER_ERROR",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "InternalServerError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "503": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      503,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "SERVICE_UNAVAILABLE",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ServiceUnavailableError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+      },
+      "security": [
+        {
+          "bearer": [],
+        },
+      ],
+      "summary": "List Ledger Account Balance Monitors",
+      "tags": [
+        "Ledger Account Balance Monitors",
+      ],
+    },
+    "post": {
+      "description": "Create Ledger Account Balance Monitor",
+      "operationId": "createLedgerAccountBalanceMonitor",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "ledgerId",
+          "required": true,
+          "schema": {
+            "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "path",
+          "name": "accountId",
+          "required": true,
+          "schema": {
+            "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+      ],
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "alertCondition": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "conditions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "balanceType": {
+                            "enum": [
+                              "posted",
+                              "pending",
+                              "availableBalance",
+                            ],
+                            "type": "string",
+                          },
+                          "operator": {
+                            "enum": [
+                              "=",
+                              "!=",
+                              "<",
+                              "<=",
+                              ">",
+                              ">=",
+                            ],
+                            "type": "string",
+                          },
+                          "value": {
+                            "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                            "maxLength": 20,
+                            "pattern": "^(0|-?[1-9][0-9]*)$",
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "operator",
+                          "value",
+                        ],
+                        "type": "object",
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                    },
+                    "mode": {
+                      "enum": [
+                        "all",
+                        "any",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "mode",
+                    "conditions",
+                  ],
+                  "type": "object",
+                },
+                "description": {
+                  "type": "string",
+                },
+                "metadata": {
+                  "additionalProperties": {
+                    "type": "string",
+                  },
+                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                  "type": "object",
+                },
+                "webhook": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "signingSecret": {
+                      "pattern": "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+                      "type": "string",
+                      "writeOnly": true,
+                    },
+                    "url": {
+                      "format": "uri",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "url",
+                    "signingSecret",
+                  ],
+                  "type": "object",
+                },
+              },
+              "required": [
+                "alertCondition",
+                "webhook",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "required": true,
+      },
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "accountId": {
+                    "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "alertCondition": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "conditions": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "balanceType": {
+                              "enum": [
+                                "posted",
+                                "pending",
+                                "availableBalance",
+                              ],
+                              "type": "string",
+                            },
+                            "operator": {
+                              "enum": [
+                                "=",
+                                "!=",
+                                "<",
+                                "<=",
+                                ">",
+                                ">=",
+                              ],
+                              "type": "string",
+                            },
+                            "value": {
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "balanceType",
+                            "operator",
+                            "value",
+                          ],
+                          "type": "object",
+                        },
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "mode": {
+                        "enum": [
+                          "all",
+                          "any",
+                        ],
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "mode",
+                      "conditions",
+                    ],
+                    "type": "object",
+                  },
+                  "created": {
+                    "format": "date-time",
+                    "type": "string",
+                  },
+                  "description": {
+                    "type": "string",
+                  },
+                  "id": {
+                    "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "ledgerId": {
+                    "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "lockVersion": {
+                    "minimum": 1,
+                    "type": "integer",
+                  },
+                  "metadata": {
+                    "additionalProperties": {
+                      "type": "string",
+                    },
+                    "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                    "type": "object",
+                  },
+                  "updated": {
+                    "format": "date-time",
+                    "type": "string",
+                  },
+                  "webhook": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "url",
+                    ],
+                    "type": "object",
+                  },
+                },
+                "required": [
+                  "id",
+                  "accountId",
+                  "ledgerId",
+                  "alertCondition",
+                  "webhook",
+                  "lockVersion",
+                  "created",
+                  "updated",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "Success",
+        },
+        "400": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      400,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "BAD_REQUEST",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "BadRequestError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "401": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      401,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "UNAUTHORIZED",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "UnauthorizedError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      403,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "FORBIDDEN",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ForbiddenError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      404,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "NOT_FOUND",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "NotFoundError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "409": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      409,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "CONFLICT",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ConflictError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "429": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      429,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "TOO_MANY_REQUESTS",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "TooManyRequestsError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      500,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "INTERNAL_SERVER_ERROR",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "InternalServerError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "503": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      503,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "SERVICE_UNAVAILABLE",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ServiceUnavailableError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+      },
+      "security": [
+        {
+          "bearer": [],
+        },
+      ],
+      "summary": "Create Ledger Account Balance Monitor",
+      "tags": [
+        "Ledger Account Balance Monitors",
+      ],
+    },
+  },
+  "item": {
+    "delete": {
+      "description": "Delete Ledger Account Balance Monitor",
+      "operationId": "deleteLedgerAccountBalanceMonitor",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "ledgerId",
+          "required": true,
+          "schema": {
+            "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "path",
+          "name": "accountId",
+          "required": true,
+          "schema": {
+            "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "path",
+          "name": "balanceMonitorId",
+          "required": true,
+          "schema": {
+            "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+      ],
+      "responses": {
+        "200": {
+          "description": "<No Content>",
+        },
+        "400": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      400,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "BAD_REQUEST",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "BadRequestError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "401": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      401,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "UNAUTHORIZED",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "UnauthorizedError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      403,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "FORBIDDEN",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ForbiddenError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      404,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "NOT_FOUND",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "NotFoundError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "409": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      409,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "CONFLICT",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ConflictError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "429": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      429,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "TOO_MANY_REQUESTS",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "TooManyRequestsError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      500,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "INTERNAL_SERVER_ERROR",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "InternalServerError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "503": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      503,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "SERVICE_UNAVAILABLE",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ServiceUnavailableError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+      },
+      "security": [
+        {
+          "bearer": [],
+        },
+      ],
+      "summary": "Delete Ledger Account Balance Monitor",
+      "tags": [
+        "Ledger Account Balance Monitors",
+      ],
+    },
+    "get": {
+      "description": "Get Ledger Account Balance Monitor",
+      "operationId": "getLedgerAccountBalanceMonitor",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "ledgerId",
+          "required": true,
+          "schema": {
+            "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "path",
+          "name": "accountId",
+          "required": true,
+          "schema": {
+            "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "path",
+          "name": "balanceMonitorId",
+          "required": true,
+          "schema": {
+            "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+      ],
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "accountId": {
+                    "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "alertCondition": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "conditions": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "balanceType": {
+                              "enum": [
+                                "posted",
+                                "pending",
+                                "availableBalance",
+                              ],
+                              "type": "string",
+                            },
+                            "operator": {
+                              "enum": [
+                                "=",
+                                "!=",
+                                "<",
+                                "<=",
+                                ">",
+                                ">=",
+                              ],
+                              "type": "string",
+                            },
+                            "value": {
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "balanceType",
+                            "operator",
+                            "value",
+                          ],
+                          "type": "object",
+                        },
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "mode": {
+                        "enum": [
+                          "all",
+                          "any",
+                        ],
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "mode",
+                      "conditions",
+                    ],
+                    "type": "object",
+                  },
+                  "created": {
+                    "format": "date-time",
+                    "type": "string",
+                  },
+                  "description": {
+                    "type": "string",
+                  },
+                  "id": {
+                    "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "ledgerId": {
+                    "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "lockVersion": {
+                    "minimum": 1,
+                    "type": "integer",
+                  },
+                  "metadata": {
+                    "additionalProperties": {
+                      "type": "string",
+                    },
+                    "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                    "type": "object",
+                  },
+                  "updated": {
+                    "format": "date-time",
+                    "type": "string",
+                  },
+                  "webhook": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "url",
+                    ],
+                    "type": "object",
+                  },
+                },
+                "required": [
+                  "id",
+                  "accountId",
+                  "ledgerId",
+                  "alertCondition",
+                  "webhook",
+                  "lockVersion",
+                  "created",
+                  "updated",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "Success",
+        },
+        "400": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      400,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "BAD_REQUEST",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "BadRequestError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "401": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      401,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "UNAUTHORIZED",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "UnauthorizedError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      403,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "FORBIDDEN",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ForbiddenError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      404,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "NOT_FOUND",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "NotFoundError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "429": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      429,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "TOO_MANY_REQUESTS",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "TooManyRequestsError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      500,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "INTERNAL_SERVER_ERROR",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "InternalServerError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "503": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      503,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "SERVICE_UNAVAILABLE",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ServiceUnavailableError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+      },
+      "security": [
+        {
+          "bearer": [],
+        },
+      ],
+      "summary": "Get Ledger Account Balance Monitor",
+      "tags": [
+        "Ledger Account Balance Monitors",
+      ],
+    },
+    "put": {
+      "description": "Update Ledger Account Balance Monitor",
+      "operationId": "updateLedgerAccountBalanceMonitor",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "ledgerId",
+          "required": true,
+          "schema": {
+            "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "path",
+          "name": "accountId",
+          "required": true,
+          "schema": {
+            "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+        {
+          "in": "path",
+          "name": "balanceMonitorId",
+          "required": true,
+          "schema": {
+            "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+        },
+      ],
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "alertCondition": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "conditions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "balanceType": {
+                            "enum": [
+                              "posted",
+                              "pending",
+                              "availableBalance",
+                            ],
+                            "type": "string",
+                          },
+                          "operator": {
+                            "enum": [
+                              "=",
+                              "!=",
+                              "<",
+                              "<=",
+                              ">",
+                              ">=",
+                            ],
+                            "type": "string",
+                          },
+                          "value": {
+                            "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                            "maxLength": 20,
+                            "pattern": "^(0|-?[1-9][0-9]*)$",
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "balanceType",
+                          "operator",
+                          "value",
+                        ],
+                        "type": "object",
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                    },
+                    "mode": {
+                      "enum": [
+                        "all",
+                        "any",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "mode",
+                    "conditions",
+                  ],
+                  "type": "object",
+                },
+                "description": {
+                  "type": "string",
+                },
+                "metadata": {
+                  "additionalProperties": {
+                    "type": "string",
+                  },
+                  "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                  "type": "object",
+                },
+                "webhook": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "signingSecret": {
+                      "pattern": "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+                      "type": "string",
+                      "writeOnly": true,
+                    },
+                    "url": {
+                      "format": "uri",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "url",
+                  ],
+                  "type": "object",
+                },
+              },
+              "required": [
+                "alertCondition",
+                "webhook",
+              ],
+              "type": "object",
+            },
+          },
+        },
+        "required": true,
+      },
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "accountId": {
+                    "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "alertCondition": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "conditions": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "balanceType": {
+                              "enum": [
+                                "posted",
+                                "pending",
+                                "availableBalance",
+                              ],
+                              "type": "string",
+                            },
+                            "operator": {
+                              "enum": [
+                                "=",
+                                "!=",
+                                "<",
+                                "<=",
+                                ">",
+                                ">=",
+                              ],
+                              "type": "string",
+                            },
+                            "value": {
+                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
+                              "maxLength": 20,
+                              "pattern": "^(0|-?[1-9][0-9]*)$",
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "balanceType",
+                            "operator",
+                            "value",
+                          ],
+                          "type": "object",
+                        },
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "mode": {
+                        "enum": [
+                          "all",
+                          "any",
+                        ],
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "mode",
+                      "conditions",
+                    ],
+                    "type": "object",
+                  },
+                  "created": {
+                    "format": "date-time",
+                    "type": "string",
+                  },
+                  "description": {
+                    "type": "string",
+                  },
+                  "id": {
+                    "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "ledgerId": {
+                    "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+                    "type": "string",
+                  },
+                  "lockVersion": {
+                    "minimum": 1,
+                    "type": "integer",
+                  },
+                  "metadata": {
+                    "additionalProperties": {
+                      "type": "string",
+                    },
+                    "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+                    "type": "object",
+                  },
+                  "updated": {
+                    "format": "date-time",
+                    "type": "string",
+                  },
+                  "webhook": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "url",
+                    ],
+                    "type": "object",
+                  },
+                },
+                "required": [
+                  "id",
+                  "accountId",
+                  "ledgerId",
+                  "alertCondition",
+                  "webhook",
+                  "lockVersion",
+                  "created",
+                  "updated",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "Success",
+        },
+        "400": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      400,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "BAD_REQUEST",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "BadRequestError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "401": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      401,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "UNAUTHORIZED",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "UnauthorizedError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "type": "integer",
+              },
+            },
+          },
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      403,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "FORBIDDEN",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ForbiddenError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      404,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "NOT_FOUND",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "NotFoundError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "409": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      409,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "CONFLICT",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ConflictError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "429": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      429,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "TOO_MANY_REQUESTS",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "TooManyRequestsError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      500,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "INTERNAL_SERVER_ERROR",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "InternalServerError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+        "503": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "type": "string",
+                  },
+                  "instance": {
+                    "type": "string",
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                  },
+                  "status": {
+                    "enum": [
+                      503,
+                    ],
+                    "type": "number",
+                  },
+                  "title": {
+                    "type": "string",
+                  },
+                  "traceId": {
+                    "type": "string",
+                  },
+                  "type": {
+                    "enum": [
+                      "SERVICE_UNAVAILABLE",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "type",
+                  "status",
+                  "title",
+                  "detail",
+                  "instance",
+                  "traceId",
+                ],
+                "type": "object",
+              },
+            },
+          },
+          "description": "ServiceUnavailableError",
+          "headers": {
+            "retry-after": {
+              "required": false,
+              "schema": {
+                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                "type": "string",
+              },
+            },
+          },
+        },
+      },
+      "security": [
+        {
+          "bearer": [],
+        },
+      ],
+      "summary": "Update Ledger Account Balance Monitor",
+      "tags": [
+        "Ledger Account Balance Monitors",
+      ],
+    },
+  },
+}
+`;
+
 exports[`LedgerAccountBalanceMonitorRoutes > creates with the existing 200 response 1`] = `
 {
   "accountId": "lat_01h2x3y4z5a6b7c8d9e0f1g2h6",
@@ -50,2975 +3150,6 @@ exports[`LedgerAccountBalanceMonitorRoutes > lists through the Effect service wi
     },
   },
 ]
-`;
-
-exports[`LedgerAccountBalanceMonitorRoutes > preserves the complete OpenAPI contract 1`] = `
-{
-  "paths": {
-    "/api/ledgers/{ledgerId}/accounts/{accountId}/balance-monitors/": {
-      "get": {
-        "description": "List Ledger Account Balance Monitors",
-        "operationId": "listLedgerAccountBalanceMonitors",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "offset",
-            "required": true,
-            "schema": {
-              "default": 0,
-              "type": "number",
-            },
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": true,
-            "schema": {
-              "default": 20,
-              "type": "number",
-            },
-          },
-          {
-            "in": "path",
-            "name": "ledgerId",
-            "required": true,
-            "schema": {
-              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-          {
-            "in": "path",
-            "name": "accountId",
-            "required": true,
-            "schema": {
-              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "properties": {
-                      "accountId": {
-                        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                        "type": "string",
-                      },
-                      "alertCondition": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "conditions": {
-                            "items": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "balanceType": {
-                                  "anyOf": [
-                                    {
-                                      "enum": [
-                                        "posted",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        "pending",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        "availableBalance",
-                                      ],
-                                      "type": "string",
-                                    },
-                                  ],
-                                },
-                                "operator": {
-                                  "anyOf": [
-                                    {
-                                      "enum": [
-                                        "=",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        "!=",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        "<",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        "<=",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        ">",
-                                      ],
-                                      "type": "string",
-                                    },
-                                    {
-                                      "enum": [
-                                        ">=",
-                                      ],
-                                      "type": "string",
-                                    },
-                                  ],
-                                },
-                                "value": {
-                                  "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
-                                  "maxLength": 20,
-                                  "pattern": "^(0|-?[1-9][0-9]*)$",
-                                  "type": "string",
-                                },
-                              },
-                              "required": [
-                                "balanceType",
-                                "operator",
-                                "value",
-                              ],
-                              "type": "object",
-                            },
-                            "minItems": 1,
-                            "type": "array",
-                          },
-                          "mode": {
-                            "anyOf": [
-                              {
-                                "enum": [
-                                  "all",
-                                ],
-                                "type": "string",
-                              },
-                              {
-                                "enum": [
-                                  "any",
-                                ],
-                                "type": "string",
-                              },
-                            ],
-                          },
-                        },
-                        "required": [
-                          "mode",
-                          "conditions",
-                        ],
-                        "type": "object",
-                      },
-                      "created": {
-                        "format": "date-time",
-                        "type": "string",
-                      },
-                      "description": {
-                        "type": "string",
-                      },
-                      "id": {
-                        "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                        "type": "string",
-                      },
-                      "ledgerId": {
-                        "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                        "type": "string",
-                      },
-                      "lockVersion": {
-                        "minimum": 1,
-                        "type": "integer",
-                      },
-                      "metadata": {
-                        "additionalProperties": {
-                          "type": "string",
-                        },
-                        "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                        "type": "object",
-                      },
-                      "updated": {
-                        "format": "date-time",
-                        "type": "string",
-                      },
-                      "webhook": {
-                        "properties": {
-                          "url": {
-                            "type": "string",
-                          },
-                        },
-                        "required": [
-                          "url",
-                        ],
-                        "type": "object",
-                      },
-                    },
-                    "required": [
-                      "id",
-                      "accountId",
-                      "ledgerId",
-                      "alertCondition",
-                      "webhook",
-                      "lockVersion",
-                      "created",
-                      "updated",
-                    ],
-                    "type": "object",
-                  },
-                  "type": "array",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        400,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "BAD_REQUEST",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        401,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "UNAUTHORIZED",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        403,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "FORBIDDEN",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        429,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "TOO_MANY_REQUESTS",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        500,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "INTERNAL_SERVER_ERROR",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        503,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "SERVICE_UNAVAILABLE",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-        },
-        "summary": "List Ledger Account Balance Monitors",
-        "tags": [
-          "Ledger Account Balance Monitors",
-        ],
-      },
-      "post": {
-        "description": "Create Ledger Account Balance Monitor",
-        "operationId": "createLedgerAccountBalanceMonitor",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ledgerId",
-            "required": true,
-            "schema": {
-              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-          {
-            "in": "path",
-            "name": "accountId",
-            "required": true,
-            "schema": {
-              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "alertCondition": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "conditions": {
-                        "items": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "balanceType": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "posted",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "pending",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "availableBalance",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "operator": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "!=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">=",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "value": {
-                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
-                              "maxLength": 20,
-                              "pattern": "^(0|-?[1-9][0-9]*)$",
-                              "type": "string",
-                            },
-                          },
-                          "required": [
-                            "balanceType",
-                            "operator",
-                            "value",
-                          ],
-                          "type": "object",
-                        },
-                        "minItems": 1,
-                        "type": "array",
-                      },
-                      "mode": {
-                        "anyOf": [
-                          {
-                            "enum": [
-                              "all",
-                            ],
-                            "type": "string",
-                          },
-                          {
-                            "enum": [
-                              "any",
-                            ],
-                            "type": "string",
-                          },
-                        ],
-                      },
-                    },
-                    "required": [
-                      "mode",
-                      "conditions",
-                    ],
-                    "type": "object",
-                  },
-                  "description": {
-                    "type": "string",
-                  },
-                  "metadata": {
-                    "additionalProperties": {
-                      "type": "string",
-                    },
-                    "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                    "type": "object",
-                  },
-                  "webhook": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "signingSecret": {
-                        "pattern": "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
-                        "type": "string",
-                        "writeOnly": true,
-                      },
-                      "url": {
-                        "format": "uri",
-                        "type": "string",
-                      },
-                    },
-                    "required": [
-                      "url",
-                      "signingSecret",
-                    ],
-                    "type": "object",
-                  },
-                },
-                "required": [
-                  "alertCondition",
-                  "webhook",
-                ],
-                "type": "object",
-              },
-            },
-          },
-          "required": true,
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "accountId": {
-                      "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                      "type": "string",
-                    },
-                    "alertCondition": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "conditions": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "balanceType": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "posted",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "pending",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "availableBalance",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "operator": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "!=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "value": {
-                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
-                                "maxLength": 20,
-                                "pattern": "^(0|-?[1-9][0-9]*)$",
-                                "type": "string",
-                              },
-                            },
-                            "required": [
-                              "balanceType",
-                              "operator",
-                              "value",
-                            ],
-                            "type": "object",
-                          },
-                          "minItems": 1,
-                          "type": "array",
-                        },
-                        "mode": {
-                          "anyOf": [
-                            {
-                              "enum": [
-                                "all",
-                              ],
-                              "type": "string",
-                            },
-                            {
-                              "enum": [
-                                "any",
-                              ],
-                              "type": "string",
-                            },
-                          ],
-                        },
-                      },
-                      "required": [
-                        "mode",
-                        "conditions",
-                      ],
-                      "type": "object",
-                    },
-                    "created": {
-                      "format": "date-time",
-                      "type": "string",
-                    },
-                    "description": {
-                      "type": "string",
-                    },
-                    "id": {
-                      "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                      "type": "string",
-                    },
-                    "ledgerId": {
-                      "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                      "type": "string",
-                    },
-                    "lockVersion": {
-                      "minimum": 1,
-                      "type": "integer",
-                    },
-                    "metadata": {
-                      "additionalProperties": {
-                        "type": "string",
-                      },
-                      "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                      "type": "object",
-                    },
-                    "updated": {
-                      "format": "date-time",
-                      "type": "string",
-                    },
-                    "webhook": {
-                      "properties": {
-                        "url": {
-                          "type": "string",
-                        },
-                      },
-                      "required": [
-                        "url",
-                      ],
-                      "type": "object",
-                    },
-                  },
-                  "required": [
-                    "id",
-                    "accountId",
-                    "ledgerId",
-                    "alertCondition",
-                    "webhook",
-                    "lockVersion",
-                    "created",
-                    "updated",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        400,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "BAD_REQUEST",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        401,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "UNAUTHORIZED",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        403,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "FORBIDDEN",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        404,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "NOT_FOUND",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        409,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "CONFLICT",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        429,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "TOO_MANY_REQUESTS",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        500,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "INTERNAL_SERVER_ERROR",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        503,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "SERVICE_UNAVAILABLE",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-        },
-        "summary": "Create Ledger Account Balance Monitor",
-        "tags": [
-          "Ledger Account Balance Monitors",
-        ],
-      },
-    },
-    "/api/ledgers/{ledgerId}/accounts/{accountId}/balance-monitors/{balanceMonitorId}": {
-      "delete": {
-        "description": "Delete Ledger Account Balance Monitor",
-        "operationId": "deleteLedgerAccountBalanceMonitor",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ledgerId",
-            "required": true,
-            "schema": {
-              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-          {
-            "in": "path",
-            "name": "accountId",
-            "required": true,
-            "schema": {
-              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-          {
-            "in": "path",
-            "name": "balanceMonitorId",
-            "required": true,
-            "schema": {
-              "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {},
-              },
-            },
-            "description": "Default Response",
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        400,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "BAD_REQUEST",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        401,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "UNAUTHORIZED",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        403,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "FORBIDDEN",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        404,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "NOT_FOUND",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        409,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "CONFLICT",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        429,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "TOO_MANY_REQUESTS",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        500,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "INTERNAL_SERVER_ERROR",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        503,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "SERVICE_UNAVAILABLE",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-        },
-        "summary": "Delete Ledger Account Balance Monitor",
-        "tags": [
-          "Ledger Account Balance Monitors",
-        ],
-      },
-      "get": {
-        "description": "Get Ledger Account Balance Monitor",
-        "operationId": "getLedgerAccountBalanceMonitor",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ledgerId",
-            "required": true,
-            "schema": {
-              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-          {
-            "in": "path",
-            "name": "accountId",
-            "required": true,
-            "schema": {
-              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-          {
-            "in": "path",
-            "name": "balanceMonitorId",
-            "required": true,
-            "schema": {
-              "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "accountId": {
-                      "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                      "type": "string",
-                    },
-                    "alertCondition": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "conditions": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "balanceType": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "posted",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "pending",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "availableBalance",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "operator": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "!=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "value": {
-                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
-                                "maxLength": 20,
-                                "pattern": "^(0|-?[1-9][0-9]*)$",
-                                "type": "string",
-                              },
-                            },
-                            "required": [
-                              "balanceType",
-                              "operator",
-                              "value",
-                            ],
-                            "type": "object",
-                          },
-                          "minItems": 1,
-                          "type": "array",
-                        },
-                        "mode": {
-                          "anyOf": [
-                            {
-                              "enum": [
-                                "all",
-                              ],
-                              "type": "string",
-                            },
-                            {
-                              "enum": [
-                                "any",
-                              ],
-                              "type": "string",
-                            },
-                          ],
-                        },
-                      },
-                      "required": [
-                        "mode",
-                        "conditions",
-                      ],
-                      "type": "object",
-                    },
-                    "created": {
-                      "format": "date-time",
-                      "type": "string",
-                    },
-                    "description": {
-                      "type": "string",
-                    },
-                    "id": {
-                      "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                      "type": "string",
-                    },
-                    "ledgerId": {
-                      "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                      "type": "string",
-                    },
-                    "lockVersion": {
-                      "minimum": 1,
-                      "type": "integer",
-                    },
-                    "metadata": {
-                      "additionalProperties": {
-                        "type": "string",
-                      },
-                      "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                      "type": "object",
-                    },
-                    "updated": {
-                      "format": "date-time",
-                      "type": "string",
-                    },
-                    "webhook": {
-                      "properties": {
-                        "url": {
-                          "type": "string",
-                        },
-                      },
-                      "required": [
-                        "url",
-                      ],
-                      "type": "object",
-                    },
-                  },
-                  "required": [
-                    "id",
-                    "accountId",
-                    "ledgerId",
-                    "alertCondition",
-                    "webhook",
-                    "lockVersion",
-                    "created",
-                    "updated",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        400,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "BAD_REQUEST",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        401,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "UNAUTHORIZED",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        403,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "FORBIDDEN",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        404,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "NOT_FOUND",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        429,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "TOO_MANY_REQUESTS",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        500,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "INTERNAL_SERVER_ERROR",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        503,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "SERVICE_UNAVAILABLE",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-        },
-        "summary": "Get Ledger Account Balance Monitor",
-        "tags": [
-          "Ledger Account Balance Monitors",
-        ],
-      },
-      "put": {
-        "description": "Update Ledger Account Balance Monitor",
-        "operationId": "updateLedgerAccountBalanceMonitor",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ledgerId",
-            "required": true,
-            "schema": {
-              "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-          {
-            "in": "path",
-            "name": "accountId",
-            "required": true,
-            "schema": {
-              "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-          {
-            "in": "path",
-            "name": "balanceMonitorId",
-            "required": true,
-            "schema": {
-              "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-              "type": "string",
-            },
-          },
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "alertCondition": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "conditions": {
-                        "items": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "balanceType": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "posted",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "pending",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "availableBalance",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "operator": {
-                              "anyOf": [
-                                {
-                                  "enum": [
-                                    "=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "!=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    "<=",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">",
-                                  ],
-                                  "type": "string",
-                                },
-                                {
-                                  "enum": [
-                                    ">=",
-                                  ],
-                                  "type": "string",
-                                },
-                              ],
-                            },
-                            "value": {
-                              "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
-                              "maxLength": 20,
-                              "pattern": "^(0|-?[1-9][0-9]*)$",
-                              "type": "string",
-                            },
-                          },
-                          "required": [
-                            "balanceType",
-                            "operator",
-                            "value",
-                          ],
-                          "type": "object",
-                        },
-                        "minItems": 1,
-                        "type": "array",
-                      },
-                      "mode": {
-                        "anyOf": [
-                          {
-                            "enum": [
-                              "all",
-                            ],
-                            "type": "string",
-                          },
-                          {
-                            "enum": [
-                              "any",
-                            ],
-                            "type": "string",
-                          },
-                        ],
-                      },
-                    },
-                    "required": [
-                      "mode",
-                      "conditions",
-                    ],
-                    "type": "object",
-                  },
-                  "description": {
-                    "type": "string",
-                  },
-                  "metadata": {
-                    "additionalProperties": {
-                      "type": "string",
-                    },
-                    "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                    "type": "object",
-                  },
-                  "webhook": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "signingSecret": {
-                        "pattern": "^whsec_[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
-                        "type": "string",
-                        "writeOnly": true,
-                      },
-                      "url": {
-                        "format": "uri",
-                        "type": "string",
-                      },
-                    },
-                    "required": [
-                      "url",
-                    ],
-                    "type": "object",
-                  },
-                },
-                "required": [
-                  "alertCondition",
-                  "webhook",
-                ],
-                "type": "object",
-              },
-            },
-          },
-          "required": true,
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "accountId": {
-                      "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                      "type": "string",
-                    },
-                    "alertCondition": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "conditions": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "balanceType": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "posted",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "pending",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "availableBalance",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "operator": {
-                                "anyOf": [
-                                  {
-                                    "enum": [
-                                      "=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "!=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      "<=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">",
-                                    ],
-                                    "type": "string",
-                                  },
-                                  {
-                                    "enum": [
-                                      ">=",
-                                    ],
-                                    "type": "string",
-                                  },
-                                ],
-                              },
-                              "value": {
-                                "description": "Signed 64-bit integer minor units, encoded as a decimal string.",
-                                "maxLength": 20,
-                                "pattern": "^(0|-?[1-9][0-9]*)$",
-                                "type": "string",
-                              },
-                            },
-                            "required": [
-                              "balanceType",
-                              "operator",
-                              "value",
-                            ],
-                            "type": "object",
-                          },
-                          "minItems": 1,
-                          "type": "array",
-                        },
-                        "mode": {
-                          "anyOf": [
-                            {
-                              "enum": [
-                                "all",
-                              ],
-                              "type": "string",
-                            },
-                            {
-                              "enum": [
-                                "any",
-                              ],
-                              "type": "string",
-                            },
-                          ],
-                        },
-                      },
-                      "required": [
-                        "mode",
-                        "conditions",
-                      ],
-                      "type": "object",
-                    },
-                    "created": {
-                      "format": "date-time",
-                      "type": "string",
-                    },
-                    "description": {
-                      "type": "string",
-                    },
-                    "id": {
-                      "pattern": "^lbm_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                      "type": "string",
-                    },
-                    "ledgerId": {
-                      "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
-                      "type": "string",
-                    },
-                    "lockVersion": {
-                      "minimum": 1,
-                      "type": "integer",
-                    },
-                    "metadata": {
-                      "additionalProperties": {
-                        "type": "string",
-                      },
-                      "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
-                      "type": "object",
-                    },
-                    "updated": {
-                      "format": "date-time",
-                      "type": "string",
-                    },
-                    "webhook": {
-                      "properties": {
-                        "url": {
-                          "type": "string",
-                        },
-                      },
-                      "required": [
-                        "url",
-                      ],
-                      "type": "object",
-                    },
-                  },
-                  "required": [
-                    "id",
-                    "accountId",
-                    "ledgerId",
-                    "alertCondition",
-                    "webhook",
-                    "lockVersion",
-                    "created",
-                    "updated",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        400,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "BAD_REQUEST",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        401,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "UNAUTHORIZED",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        403,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "FORBIDDEN",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        404,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "NOT_FOUND",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        409,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "CONFLICT",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        429,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "TOO_MANY_REQUESTS",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        500,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "INTERNAL_SERVER_ERROR",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "detail": {
-                      "type": "string",
-                    },
-                    "instance": {
-                      "type": "string",
-                    },
-                    "retryable": {
-                      "type": "boolean",
-                    },
-                    "status": {
-                      "enum": [
-                        503,
-                      ],
-                      "type": "number",
-                    },
-                    "title": {
-                      "type": "string",
-                    },
-                    "traceId": {
-                      "type": "string",
-                    },
-                    "type": {
-                      "enum": [
-                        "SERVICE_UNAVAILABLE",
-                      ],
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "type",
-                    "status",
-                    "title",
-                    "detail",
-                    "instance",
-                    "traceId",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Default Response",
-          },
-        },
-        "summary": "Update Ledger Account Balance Monitor",
-        "tags": [
-          "Ledger Account Balance Monitors",
-        ],
-      },
-    },
-  },
-}
 `;
 
 exports[`LedgerAccountBalanceMonitorRoutes > updates with the existing response and service inputs 1`] = `

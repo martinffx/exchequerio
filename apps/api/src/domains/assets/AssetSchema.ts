@@ -1,33 +1,42 @@
-import { type Static, Type } from "@sinclair/typebox";
+import { Schema } from "effect";
 import { AssetCodeSchema, AssetIdSchema, MinorUnitExponentSchema } from "@/lib/AssetSchema";
 import { ListQuery } from "@/lib/ListQuery";
-import { MetadataSchema } from "@/lib/schema";
+import { MetadataSchema, OmittedWhenUndefined } from "@/lib/schema";
 
+const AssetNameSchema = Schema.String.check(Schema.isMinLength(1), Schema.isPattern(/[^ ]/));
+// Unknown fields are rejected rather than stripped.
+const strict = { parseOptions: { onExcessProperty: "error" } } as const;
 const mutableFields = {
 	code: AssetCodeSchema,
-	name: Type.String({ minLength: 1, pattern: "[^ ]" }),
-	description: Type.Optional(Type.String()),
-	metadata: Type.Optional(MetadataSchema),
+	name: AssetNameSchema,
+	description: Schema.optionalKey(Schema.String),
+	metadata: Schema.optionalKey(MetadataSchema),
 };
-export const AssetCreateRequest = Type.Object(
-	{ ...mutableFields, minorUnitExponent: MinorUnitExponentSchema },
-	{ additionalProperties: false }
-);
-export const AssetUpdateRequest = Type.Object(mutableFields, { additionalProperties: false });
-export const AssetIdParameters = Type.Object({ assetId: AssetIdSchema });
-export const AssetListQuery = Type.Object({
-	...ListQuery.properties,
-	code: Type.Optional(AssetCodeSchema),
-});
-export const AssetResponse = Type.Object({
+const AssetCreateRequest = Schema.Struct({
 	...mutableFields,
-	id: AssetIdSchema,
 	minorUnitExponent: MinorUnitExponentSchema,
-	created: Type.String({ format: "date-time" }),
-	updated: Type.String({ format: "date-time" }),
+}).annotate(strict);
+const AssetUpdateRequest = Schema.Struct(mutableFields).annotate(strict);
+const AssetIdParameters = Schema.Struct({ assetId: AssetIdSchema });
+const AssetListQuery = Schema.Struct({
+	...ListQuery.fields,
+	code: Schema.optionalKey(AssetCodeSchema),
 });
-export type AssetCreateRequest = Static<typeof AssetCreateRequest>;
-export type AssetUpdateRequest = Static<typeof AssetUpdateRequest>;
-export type AssetIdParameters = Static<typeof AssetIdParameters>;
-export type AssetListQuery = Static<typeof AssetListQuery>;
-export type AssetResponse = Static<typeof AssetResponse>;
+const AssetResponse = Schema.Struct({
+	id: AssetIdSchema,
+	code: AssetCodeSchema,
+	name: AssetNameSchema,
+	description: OmittedWhenUndefined(Schema.String),
+	metadata: OmittedWhenUndefined(MetadataSchema),
+	minorUnitExponent: MinorUnitExponentSchema,
+	created: Schema.String.annotate({ format: "date-time" }),
+	updated: Schema.String.annotate({ format: "date-time" }),
+});
+
+type AssetCreateRequest = typeof AssetCreateRequest.Type;
+type AssetUpdateRequest = typeof AssetUpdateRequest.Type;
+type AssetIdParameters = typeof AssetIdParameters.Type;
+type AssetListQuery = typeof AssetListQuery.Type;
+type AssetResponse = typeof AssetResponse.Type;
+
+export { AssetCreateRequest, AssetIdParameters, AssetListQuery, AssetResponse, AssetUpdateRequest };

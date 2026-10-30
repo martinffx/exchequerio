@@ -122,32 +122,30 @@ describe("LedgerAccountStatementService", () => {
 		expect(repository.createStatement).not.toHaveBeenCalled();
 	});
 
-	it.each([new NotFoundError("Statement not found"), new Error("unexpected repository failure")])(
-		"preserves the repository failure %#",
-		async error => {
-			repository.getStatement.mockReturnValue(Effect.fail(error));
-			repository.createStatement.mockReturnValue(Effect.fail(error));
+	it("preserves the repository failure", async () => {
+		const error = new NotFoundError("Statement not found");
+		repository.getStatement.mockReturnValue(Effect.fail(error));
+		repository.createStatement.mockReturnValue(Effect.fail(error));
 
-			expect(
-				await runtime.runPromise(
-					Effect.flip(service.getLedgerAccountStatement(statementId.toString(), orgId))
-				)
-			).toBe(error);
-			expect(
-				await runtime.runPromise(
-					Effect.flip(
-						service.createLedgerAccountStatement(
-							{
-								ledgerId: ledgerId.toString(),
-								accountId: accountId.toString(),
-								startDatetime: "2025-01-01T00:00:00.000Z",
-								endDatetime: "2025-02-01T00:00:00.000Z",
-							},
-							orgId
-						)
+		expect(
+			await runtime.runPromise(
+				Effect.flip(service.getLedgerAccountStatement(statementId.toString(), orgId))
+			)
+		).toBe(error);
+		expect(
+			await runtime.runPromise(
+				Effect.flip(
+					service.createLedgerAccountStatement(
+						{
+							ledgerId: ledgerId.toString(),
+							accountId: accountId.toString(),
+							startDatetime: "2025-01-01T00:00:00.000Z",
+							endDatetime: "2025-02-01T00:00:00.000Z",
+						},
+						orgId
 					)
 				)
-			).toBe(error);
-		}
-	);
+			)
+		).toBe(error);
+	});
 });

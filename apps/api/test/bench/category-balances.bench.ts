@@ -4,10 +4,13 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import autocannon from "autocannon";
 import { TypeID } from "typeid-js";
-import { ManagedRuntime } from "effect";
+import { NodeHttpServer } from "@effect/platform-node";
+import { Context, Effect, Exit, Layer, ManagedRuntime, References, Scope } from "effect";
+import { HttpServer } from "effect/unstable/http";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { buildServer } from "@/server";
+import { createHttpServer, serveApp } from "@/server";
+import { makeServerRuntimeLayer } from "@/runtime";
 import { Config } from "@/config";
 import { DatabaseTag, makeDatabaseLive, type EffectDrizzleDatabase } from "@/db";
 import { signJWT } from "@/auth";
@@ -31,7 +34,7 @@ const categories = Array.from({ length: 4 }, () => new TypeID("lac"));
 const accounts = Array.from({ length: 10_000 }, () => new TypeID("lat"));
 const ownership = { organizationId: org.toUUID(), ledgerId: ledger.toUUID() };
 let effectDb: EffectDrizzleDatabase;
-let server: Awaited<ReturnType<typeof buildServer>>;
+let serverScope: Scope.Closeable | undefined;
 let baseUrl: string;
 let authorization: string;
 
@@ -113,12 +116,27 @@ beforeAll(async () => {
 					.map(id => ({ ...ownership, accountId: id.toUUID(), categoryId: categories[0].toUUID() }))
 			)
 	);
-	server = await buildServer();
-	server.log.level = "silent";
-	baseUrl = await server.listen({ port: 0, host: "127.0.0.1" });
+	serverScope = await Effect.runPromise(Scope.make());
+	const context = await Effect.runPromise(
+		Layer.buildWithScope(
+			NodeHttpServer.layer(createHttpServer, { port: 0, host: "127.0.0.1" }),
+			serverScope
+		)
+	);
+	await Effect.runPromise(
+		Layer.buildWithScope(
+			// The app's global request logger is silenced below Warn so it does not skew the run.
+			serveApp(Layer.succeedContext(context), makeServerRuntimeLayer(new Config())).pipe(
+				Layer.provide(Layer.succeed(References.MinimumLogLevel, "Warn"))
+			),
+			serverScope
+		)
+	);
+	const { port } = Context.get(context, HttpServer.HttpServer).address as { port: number };
+	baseUrl = `http://127.0.0.1:${port}`;
 });
 afterAll(async () => {
-	if (server) await server.close();
+	if (serverScope) await Effect.runPromise(Scope.close(serverScope, Exit.void));
 	if (effectDb) {
 		await runtime.runPromise(
 			effectDb

@@ -1,18 +1,22 @@
-import { type Static, Type } from "@sinclair/typebox";
+import { Schema } from "effect";
 
-const AssetIdSchema = Type.String({ pattern: "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
-const AssetCodeSchema = Type.String({ minLength: 1, maxLength: 64, pattern: "^[A-Za-z0-9._:-]+$" });
-const MinorUnitExponentSchema = Type.Integer({ minimum: 0, maximum: 18 });
-const AssetSelectorSchema = Type.Union([
-	Type.Object({ assetId: AssetIdSchema, assetCode: Type.Optional(Type.Never()) }),
-	Type.Object({ assetCode: AssetCodeSchema, assetId: Type.Optional(Type.Never()) }),
+const AssetIdSchema = Schema.String.check(Schema.isPattern(/^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$/));
+const AssetCodeSchema = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(64),
+	Schema.isPattern(/^[A-Za-z0-9._:-]+$/)
+);
+const MinorUnitExponentSchema = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 18 }));
+const AssetSelectorSchema = Schema.Union([
+	Schema.Struct({ assetId: AssetIdSchema, assetCode: Schema.optionalKey(Schema.Never) }),
+	Schema.Struct({ assetCode: AssetCodeSchema, assetId: Schema.optionalKey(Schema.Never) }),
 ]);
-const AssetSummarySchema = Type.Object({
+const AssetSummarySchema = Schema.Struct({
 	assetId: AssetIdSchema,
 	assetCode: AssetCodeSchema,
 	minorUnitExponent: MinorUnitExponentSchema,
 });
-type AssetSummary = Static<typeof AssetSummarySchema>;
+type AssetSummary = typeof AssetSummarySchema.Type;
 const normalizeAssetCode = (code: string): string => code.toUpperCase();
 
 export {

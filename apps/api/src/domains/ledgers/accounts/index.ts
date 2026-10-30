@@ -17,7 +17,6 @@ export {
 	requireAccount,
 	requireAccountWrite,
 } from "./AccountErrors";
-export { AccountRoutes } from "./AccountRoutes";
 export type {
 	AccountCreateRequest,
 	AccountListQuery,

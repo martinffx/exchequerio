@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
 import { InvalidId } from "./errors";
+import type { LedgerID } from "./ids";
 import type { Metadata } from "./schema";
 
 const parseId = <Prefix extends string, Return extends TypeID<Prefix>>(
@@ -16,6 +17,8 @@ const parseId = <Prefix extends string, Return extends TypeID<Prefix>>(
 		},
 		catch: cause => new InvalidId(prefix, value, { cause }),
 	});
+
+const parseLedgerId = (ledgerId: string) => parseId<"lgr", LedgerID>("lgr", ledgerId);
 
 // Canonical TypeIDs can contain any 128 bits; toUUID() additionally rejects non-RFC UUIDs.
 const encodeUuid = (id: TypeID<string>): string =>
@@ -60,5 +63,23 @@ const parseMetadata = (value: string | null): Effect.Effect<Metadata | undefined
 const encodeMetadata = (metadata: Metadata | undefined): string | undefined =>
 	metadata === undefined ? undefined : JSON.stringify(metadata);
 
+/**
+ * Route option for every endpoint: handlers run to completion after a client disconnect or drain
+ * cut, as under the pre-migration server. Writes need it because services release or complete
+ * idempotency claims and publish monitor jobs after commit. Reads need it because interrupting one
+ * makes @effect/sql-pg cancel its query through the shared pool, and a late cancel can kill an
+ * unrelated statement on a reused connection.
+ */
+const runToCompletion = { uninterruptible: true } as const;
+
 export type { Metadata } from "./schema";
-export { encodeUuid, encodeMetadata, parseId, parseUuid, parseDate, parseMetadata };
+export {
+	runToCompletion,
+	encodeUuid,
+	encodeMetadata,
+	parseId,
+	parseLedgerId,
+	parseUuid,
+	parseDate,
+	parseMetadata,
+};

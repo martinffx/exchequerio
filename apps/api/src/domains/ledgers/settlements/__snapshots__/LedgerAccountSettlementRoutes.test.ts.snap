@@ -1,0 +1,328 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Settlement routes > OpenAPI > locks the Settlement body schemas 1`] = `
+{
+  "LedgerAccountSettlementRequest": {
+    "additionalProperties": false,
+    "properties": {
+      "allowEitherDirection": {
+        "default": false,
+        "type": "boolean",
+      },
+      "contraAccountId": {
+        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "description": {
+        "type": "string",
+      },
+      "effectiveAtUpperBound": {
+        "format": "date-time",
+        "type": "string",
+      },
+      "externalReference": {
+        "type": "string",
+      },
+      "metadata": {
+        "additionalProperties": {
+          "type": "string",
+        },
+        "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+        "type": "object",
+      },
+      "settledAccountId": {
+        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "status": {
+        "default": "pending",
+        "enum": [
+          "drafting",
+          "pending",
+          "posted",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "settledAccountId",
+      "contraAccountId",
+    ],
+    "type": "object",
+  },
+  "LedgerAccountSettlementResponse": {
+    "additionalProperties": false,
+    "properties": {
+      "allowEitherDirection": {
+        "type": "boolean",
+      },
+      "amount": {
+        "anyOf": [
+          {
+            "description": "Positive integer minor units, at most 9223372036854775807, encoded as a decimal string.",
+            "maxLength": 19,
+            "pattern": "^[1-9][0-9]*$",
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+      },
+      "assetCode": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9._:-]+$",
+        "type": "string",
+      },
+      "assetId": {
+        "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "contraAccountId": {
+        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "created": {
+        "format": "date-time",
+        "type": "string",
+      },
+      "description": {
+        "type": "string",
+      },
+      "effectiveAtUpperBound": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+      },
+      "externalReference": {
+        "type": "string",
+      },
+      "id": {
+        "pattern": "^las_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "ledgerId": {
+        "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "metadata": {
+        "additionalProperties": {
+          "type": "string",
+        },
+        "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+        "type": "object",
+      },
+      "minorUnitExponent": {
+        "maximum": 18,
+        "minimum": 0,
+        "type": "integer",
+      },
+      "settledAccountId": {
+        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "settlementEntryDirection": {
+        "anyOf": [
+          {
+            "enum": [
+              "debit",
+              "credit",
+            ],
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+      },
+      "status": {
+        "enum": [
+          "drafting",
+          "processing",
+          "pending",
+          "posted",
+          "voided",
+        ],
+        "type": "string",
+      },
+      "transactionId": {
+        "anyOf": [
+          {
+            "pattern": "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+      },
+      "updated": {
+        "format": "date-time",
+        "type": "string",
+      },
+    },
+    "required": [
+      "id",
+      "ledgerId",
+      "transactionId",
+      "status",
+      "settledAccountId",
+      "contraAccountId",
+      "amount",
+      "settlementEntryDirection",
+      "assetId",
+      "assetCode",
+      "minorUnitExponent",
+      "allowEitherDirection",
+      "effectiveAtUpperBound",
+      "created",
+      "updated",
+    ],
+    "type": "object",
+  },
+  "LedgerAccountSettlementResponse_1": {
+    "additionalProperties": false,
+    "properties": {
+      "allowEitherDirection": {
+        "type": "boolean",
+      },
+      "amount": {
+        "anyOf": [
+          {
+            "description": "Positive integer minor units, at most 9223372036854775807, encoded as a decimal string.",
+            "maxLength": 19,
+            "pattern": "^[1-9][0-9]*$",
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+      },
+      "assetCode": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9._:-]+$",
+        "type": "string",
+      },
+      "assetId": {
+        "pattern": "^ast_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "contraAccountId": {
+        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "created": {
+        "format": "date-time",
+        "type": "string",
+      },
+      "description": {
+        "type": "string",
+      },
+      "effectiveAtUpperBound": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+      },
+      "externalReference": {
+        "type": "string",
+      },
+      "id": {
+        "pattern": "^las_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "ledgerId": {
+        "pattern": "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "metadata": {
+        "additionalProperties": {
+          "type": "string",
+        },
+        "description": "Additional data represented as key-value pairs. Both the key and value must be strings.",
+        "type": "object",
+      },
+      "minorUnitExponent": {
+        "maximum": 18,
+        "minimum": 0,
+        "type": "integer",
+      },
+      "settledAccountId": {
+        "pattern": "^lat_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+        "type": "string",
+      },
+      "settlementEntryDirection": {
+        "anyOf": [
+          {
+            "enum": [
+              "debit",
+              "credit",
+            ],
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+      },
+      "status": {
+        "enum": [
+          "drafting",
+          "processing",
+          "pending",
+          "posted",
+          "voided",
+        ],
+        "type": "string",
+      },
+      "transactionId": {
+        "anyOf": [
+          {
+            "pattern": "^ltr_[0-7][0-9a-hjkmnp-tv-z]{25}$",
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+      },
+      "updated": {
+        "format": "date-time",
+        "type": "string",
+      },
+    },
+    "required": [
+      "id",
+      "ledgerId",
+      "transactionId",
+      "status",
+      "settledAccountId",
+      "contraAccountId",
+      "amount",
+      "settlementEntryDirection",
+      "assetId",
+      "assetCode",
+      "minorUnitExponent",
+      "allowEitherDirection",
+      "effectiveAtUpperBound",
+      "created",
+      "updated",
+    ],
+    "type": "object",
+  },
+}
+`;

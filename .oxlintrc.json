@@ -31,6 +31,21 @@
 		},
 		"boundaries/elements": [
 			{
+				"type": "tests",
+				"pattern": "src/**/*.test.ts",
+				"mode": "full"
+			},
+			{
+				"type": "bench",
+				"pattern": "test/bench/**/*",
+				"mode": "full"
+			},
+			{
+				"type": "test-support",
+				"pattern": "src/lib/testing.ts",
+				"mode": "full"
+			},
+			{
 				"type": "asset-composition",
 				"pattern": "src/domains/assets/index.ts",
 				"mode": "full"
@@ -43,6 +58,11 @@
 			{
 				"type": "asset-transport",
 				"pattern": "src/domains/assets/AssetSchema.ts",
+				"mode": "full"
+			},
+			{
+				"type": "asset-api",
+				"pattern": "src/domains/assets/AssetApi.ts",
 				"mode": "full"
 			},
 			{
@@ -61,18 +81,8 @@
 				"mode": "full"
 			},
 			{
-				"type": "tests",
-				"pattern": "src/**/*.test.ts",
-				"mode": "full"
-			},
-			{
-				"type": "shared-ids",
-				"pattern": "src/lib/ids.ts",
-				"mode": "full"
-			},
-			{
 				"type": "category-composition",
-				"pattern": ["src/domains/ledgers/accounts/categories/index.ts"],
+				"pattern": "src/domains/ledgers/accounts/categories/index.ts",
 				"mode": "full"
 			},
 			{
@@ -85,32 +95,32 @@
 			},
 			{
 				"type": "category-repo",
-				"pattern": ["src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.ts"],
+				"pattern": "src/domains/ledgers/accounts/categories/LedgerAccountCategoryRepo.ts",
 				"mode": "full"
 			},
 			{
 				"type": "category-service",
-				"pattern": ["src/domains/ledgers/accounts/categories/LedgerAccountCategoryService.ts"],
+				"pattern": "src/domains/ledgers/accounts/categories/LedgerAccountCategoryService.ts",
 				"mode": "full"
 			},
 			{
 				"type": "category-routes",
-				"pattern": ["src/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes.ts"],
+				"pattern": "src/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes.ts",
 				"mode": "full"
 			},
 			{
 				"type": "category-transport",
-				"pattern": ["src/domains/ledgers/accounts/categories/LedgerAccountCategorySchema.ts"],
+				"pattern": "src/domains/ledgers/accounts/categories/LedgerAccountCategorySchema.ts",
+				"mode": "full"
+			},
+			{
+				"type": "category-api",
+				"pattern": "src/domains/ledgers/accounts/categories/LedgerAccountCategoryApi.ts",
 				"mode": "full"
 			},
 			{
 				"type": "category-fixtures",
-				"pattern": ["src/domains/ledgers/accounts/categories/fixtures.ts"],
-				"mode": "full"
-			},
-			{
-				"type": "http",
-				"pattern": "src/http/**/*",
+				"pattern": "src/domains/ledgers/accounts/categories/fixtures.ts",
 				"mode": "full"
 			},
 			{
@@ -144,6 +154,11 @@
 				"mode": "full"
 			},
 			{
+				"type": "ledger-api",
+				"pattern": "src/domains/ledgers/LedgerApi.ts",
+				"mode": "full"
+			},
+			{
 				"type": "account-composition",
 				"pattern": "src/domains/ledgers/accounts/index.ts",
 				"mode": "full"
@@ -174,6 +189,132 @@
 			{
 				"type": "account-transport",
 				"pattern": "src/domains/ledgers/accounts/AccountSchema.ts",
+				"mode": "full"
+			},
+			{
+				"type": "account-api",
+				"pattern": "src/domains/ledgers/accounts/AccountApi.ts",
+				"mode": "full"
+			},
+			{
+				"type": "statement-composition",
+				"pattern": "src/domains/ledgers/accounts/statements/index.ts",
+				"mode": "full"
+			},
+			{
+				"type": "statement-routes",
+				"pattern": "src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.ts",
+				"mode": "full"
+			},
+			{
+				"type": "statement-service",
+				"pattern": "src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
+				"mode": "full"
+			},
+			{
+				"type": "statement-repo",
+				"pattern": "src/domains/ledgers/accounts/statements/LedgerAccountStatementRepo.ts",
+				"mode": "full"
+			},
+			{
+				"type": "statement-domain",
+				"pattern": "src/domains/ledgers/accounts/statements/LedgerAccountStatement.ts",
+				"mode": "full"
+			},
+			{
+				"type": "statement-transport",
+				"pattern": "src/domains/ledgers/accounts/statements/LedgerAccountStatementSchema.ts",
+				"mode": "full"
+			},
+			{
+				"type": "statement-api",
+				"pattern": "src/domains/ledgers/accounts/statements/LedgerAccountStatementApi.ts",
+				"mode": "full"
+			},
+			{
+				"type": "monitor-composition",
+				"pattern": "src/domains/ledgers/accounts/balance-monitors/index.ts",
+				"mode": "full"
+			},
+			{
+				"type": "monitor-routes",
+				"pattern": "src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes.ts",
+				"mode": "full"
+			},
+			{
+				"type": "monitor-service",
+				"pattern": "src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService.ts",
+				"mode": "full"
+			},
+			{
+				"type": "monitor-repo",
+				"pattern": "src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRepo.ts",
+				"mode": "full"
+			},
+			{
+				"type": "monitor-domain",
+				"pattern": [
+					"src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitor.ts",
+					"src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorErrors.ts"
+				],
+				"mode": "full"
+			},
+			{
+				"type": "monitor-transport",
+				"pattern": "src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorSchema.ts",
+				"mode": "full"
+			},
+			{
+				"type": "monitor-api",
+				"pattern": "src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorApi.ts",
+				"mode": "full"
+			},
+			{
+				"type": "monitor-capability",
+				"pattern": "src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob.ts",
+				"mode": "full"
+			},
+			{
+				"type": "monitor-fixtures",
+				"pattern": "src/domains/ledgers/accounts/balance-monitors/fixtures.ts",
+				"mode": "full"
+			},
+			{
+				"type": "settlement-composition",
+				"pattern": "src/domains/ledgers/settlements/index.ts",
+				"mode": "full"
+			},
+			{
+				"type": "settlement-routes",
+				"pattern": "src/domains/ledgers/settlements/LedgerAccountSettlementRoutes.ts",
+				"mode": "full"
+			},
+			{
+				"type": "settlement-service",
+				"pattern": "src/domains/ledgers/settlements/LedgerAccountSettlementService.ts",
+				"mode": "full"
+			},
+			{
+				"type": "settlement-repo",
+				"pattern": "src/domains/ledgers/settlements/LedgerAccountSettlementRepo.ts",
+				"mode": "full"
+			},
+			{
+				"type": "settlement-domain",
+				"pattern": [
+					"src/domains/ledgers/settlements/LedgerAccountSettlementEntity.ts",
+					"src/domains/ledgers/settlements/LedgerAccountSettlementErrors.ts"
+				],
+				"mode": "full"
+			},
+			{
+				"type": "settlement-transport",
+				"pattern": "src/domains/ledgers/settlements/LedgerAccountSettlementSchema.ts",
+				"mode": "full"
+			},
+			{
+				"type": "settlement-api",
+				"pattern": "src/domains/ledgers/settlements/LedgerAccountSettlementApi.ts",
 				"mode": "full"
 			},
 			{
@@ -221,6 +362,11 @@
 				"mode": "full"
 			},
 			{
+				"type": "transaction-api",
+				"pattern": "src/domains/ledgers/transactions/LedgerTransactionApi.ts",
+				"mode": "full"
+			},
+			{
 				"type": "organization-composition",
 				"pattern": "src/domains/organizations/index.ts",
 				"mode": "full"
@@ -259,6 +405,11 @@
 				"mode": "full"
 			},
 			{
+				"type": "organization-api",
+				"pattern": "src/domains/organizations/OrganizationApi.ts",
+				"mode": "full"
+			},
+			{
 				"type": "persistence-schema",
 				"pattern": "src/db/schema.ts",
 				"mode": "full"
@@ -269,21 +420,73 @@
 				"mode": "full"
 			},
 			{
+				"type": "api-composition",
+				"pattern": "src/api.ts",
+				"mode": "full"
+			},
+			{
+				"type": "auth",
+				"pattern": "src/auth.ts",
+				"mode": "full"
+			},
+			{
 				"type": "runtime",
 				"pattern": "src/runtime.ts",
 				"mode": "full"
 			},
 			{
 				"type": "config",
-				"pattern": "src/Config.ts",
+				"pattern": "src/config.ts",
 				"mode": "full"
 			},
 			{
 				"type": "server",
-				"pattern": "src/Server.ts",
+				"pattern": "src/server.ts",
+				"mode": "full"
+			},
+			{
+				"type": "entrypoint",
+				"pattern": ["src/index.ts", "src/worker.ts", "src/monitor-jobs.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "shared-ids",
+				"pattern": "src/lib/ids.ts",
+				"mode": "full"
+			},
+			{
+				"type": "lib-errors",
+				"pattern": "src/lib/errors.ts",
+				"mode": "full"
+			},
+			{
+				"type": "lib-contract",
+				"pattern": "src/lib/ApiContract.ts",
+				"mode": "full"
+			},
+			{
+				"type": "lib-schema",
+				"pattern": [
+					"src/lib/schema.ts",
+					"src/lib/ListQuery.ts",
+					"src/lib/amounts.ts",
+					"src/lib/AssetSchema.ts",
+					"src/lib/IdempotencySchema.ts"
+				],
+				"mode": "full"
+			},
+			{
+				"type": "lib-util",
+				"pattern": ["src/lib/utils.ts", "src/lib/crypto.ts", "src/lib/luxon.ts"],
+				"mode": "full"
+			},
+			{
+				"type": "lib-queues",
+				"pattern": "src/lib/queues.ts",
 				"mode": "full"
 			}
-		]
+		],
+		"boundaries/include": ["src/**/*", "test/bench/**/*"]
 	},
 	"rules": {
 		"eqeqeq": "error",
@@ -366,243 +569,561 @@
 				"default": "disallow",
 				"rules": [
 					{
-						"from": ["tests"],
+						"from": ["tests", "bench"],
 						"allow": ["*"]
 					},
 					{
-						"from": ["persistence-schema"],
-						"disallow": ["*"]
+						"from": ["test-support"],
+						"allow": [
+							"auth",
+							"config",
+							"asset-service",
+							"account-service",
+							"monitor-service",
+							"category-service",
+							"statement-service",
+							"ledger-service",
+							"settlement-service",
+							"transaction-service",
+							"organization-composition",
+							"runtime",
+							"server"
+						]
 					},
 					{
-						"from": ["ledger-domain"],
+						"from": ["asset-composition"],
+						"allow": ["asset-domain", "asset-repo", "asset-service"]
+					},
+					{
+						"from": ["asset-domain"],
 						"allow": [
-							"ledger-domain",
-							"ledger-transport",
-							"database",
-							"http",
+							"persistence-schema",
+							"lib-schema",
+							"lib-errors",
 							"shared-ids",
-							"organization-composition",
+							"lib-util",
+							"asset-transport"
+						]
+					},
+					{
+						"from": ["asset-transport"],
+						"allow": ["lib-schema"]
+					},
+					{
+						"from": ["asset-api"],
+						"allow": ["lib-errors", "lib-contract", "asset-transport"]
+					},
+					{
+						"from": ["asset-routes"],
+						"allow": ["api-composition", "auth", "shared-ids", "lib-util", "asset-service"]
+					},
+					{
+						"from": ["asset-repo"],
+						"allow": [
+							"lib-util",
+							"database",
+							"lib-errors",
+							"shared-ids",
+							"persistence-schema",
+							"asset-domain",
+							"asset-transport"
+						]
+					},
+					{
+						"from": ["asset-service"],
+						"allow": ["lib-schema", "shared-ids", "asset-domain", "asset-repo", "asset-transport"]
+					},
+					{
+						"from": ["category-composition"],
+						"allow": ["category-repo", "category-service"]
+					},
+					{
+						"from": ["category-domain"],
+						"allow": [
+							"lib-schema",
+							"persistence-schema",
+							"lib-util",
+							"category-transport",
+							"shared-ids",
+							"database",
+							"lib-errors"
+						]
+					},
+					{
+						"from": ["category-repo"],
+						"allow": [
+							"lib-errors",
+							"category-domain",
+							"lib-util",
+							"database",
+							"account-domain",
+							"ledger-domain",
+							"shared-ids",
 							"persistence-schema"
 						]
+					},
+					{
+						"from": ["category-service"],
+						"allow": [
+							"ledger-service",
+							"category-domain",
+							"shared-ids",
+							"category-repo",
+							"category-transport"
+						]
+					},
+					{
+						"from": ["category-routes"],
+						"allow": ["api-composition", "auth", "shared-ids", "lib-util", "category-service"]
+					},
+					{
+						"from": ["category-transport"],
+						"allow": ["lib-schema", "ledger-transport", "account-transport"]
+					},
+					{
+						"from": ["category-api"],
+						"allow": ["lib-contract", "lib-errors", "lib-schema", "category-transport"]
+					},
+					{
+						"from": ["category-fixtures"],
+						"allow": [
+							"organization-domain",
+							"organization-repo",
+							"ledger-domain",
+							"ledger-repo",
+							"account-domain",
+							"account-repo",
+							"shared-ids",
+							"lib-schema",
+							"category-domain"
+						]
+					},
+					{
+						"from": ["ledger-composition"],
+						"allow": ["ledger-repo", "ledger-service", "ledger-domain"]
+					},
+					{
+						"from": ["ledger-routes"],
+						"allow": ["api-composition", "auth", "lib-util", "ledger-service"]
+					},
+					{
+						"from": ["ledger-service"],
+						"allow": ["lib-errors", "shared-ids", "ledger-domain", "ledger-repo", "ledger-transport"]
 					},
 					{
 						"from": ["ledger-repo"],
 						"allow": [
-							"ledger-domain",
+							"lib-util",
 							"database",
 							"organization-composition",
 							"shared-ids",
-							"persistence-schema"
+							"persistence-schema",
+							"ledger-domain"
 						]
 					},
 					{
-						"from": ["ledger-service"],
-						"allow": ["ledger-domain", "ledger-repo", "ledger-transport", "http", "shared-ids"]
+						"from": ["ledger-domain"],
+						"allow": [
+							"lib-schema",
+							"shared-ids",
+							"persistence-schema",
+							"lib-util",
+							"ledger-transport",
+							"ledger-domain",
+							"database",
+							"lib-errors",
+							"organization-composition"
+						]
 					},
 					{
 						"from": ["ledger-transport"],
-						"allow": ["ledger-domain"]
+						"allow": ["lib-schema"]
 					},
 					{
-						"from": ["ledger-routes"],
-						"allow": ["ledger-domain", "ledger-service", "ledger-transport", "http", "shared-ids"]
+						"from": ["ledger-api"],
+						"allow": ["lib-errors", "lib-contract", "ledger-transport"]
 					},
 					{
-						"from": ["ledger-composition"],
-						"allow": ["ledger-domain", "ledger-repo", "ledger-routes", "ledger-service"]
+						"from": ["account-composition"],
+						"allow": ["account-repo", "account-service", "account-domain", "account-transport"]
 					},
 					{
-						"from": ["account-domain"],
+						"from": ["account-routes"],
+						"allow": ["api-composition", "auth", "shared-ids", "lib-util", "account-service"]
+					},
+					{
+						"from": ["account-service"],
 						"allow": [
-							"account-domain",
-							"account-transport",
-							"database",
-							"ledger-domain",
+							"asset-service",
+							"lib-errors",
+							"lib-util",
 							"shared-ids",
-							"persistence-schema"
+							"ledger-service",
+							"account-domain",
+							"account-repo",
+							"account-transport"
 						]
 					},
 					{
 						"from": ["account-repo"],
 						"allow": [
-							"account-repo",
-							"account-domain",
-							"ledger-domain",
+							"lib-util",
 							"database",
-							"http",
+							"lib-errors",
 							"shared-ids",
-							"persistence-schema"
+							"persistence-schema",
+							"account-domain"
 						]
 					},
 					{
-						"from": ["account-service"],
+						"from": ["account-domain"],
 						"allow": [
-							"account-domain",
-							"account-repo",
-							"account-transport",
+							"database",
 							"ledger-domain",
-							"ledger-service",
-							"http",
+							"lib-errors",
+							"lib-schema",
+							"lib-util",
 							"shared-ids",
-							"asset-service"
-						]
-					},
-					{
-						"from": ["account-transport"],
-						"allow": ["account-domain", "ledger-domain", "ledger-transport"]
-					},
-					{
-						"from": ["account-routes"],
-						"allow": ["account-service", "account-transport", "http", "shared-ids"]
-					},
-					{
-						"from": ["account-composition"],
-						"allow": [
+							"persistence-schema",
 							"account-domain",
-							"account-repo",
-							"account-routes",
-							"account-service",
 							"account-transport"
 						]
 					},
 					{
-						"from": ["transaction-domain"],
+						"from": ["account-transport"],
+						"allow": ["lib-schema", "ledger-transport"]
+					},
+					{
+						"from": ["account-api"],
+						"allow": ["lib-errors", "lib-contract", "account-transport"]
+					},
+					{
+						"from": ["statement-composition"],
+						"allow": ["statement-repo", "statement-service", "statement-domain", "statement-transport"]
+					},
+					{
+						"from": ["statement-routes"],
+						"allow": ["api-composition", "auth", "statement-service", "lib-util"]
+					},
+					{
+						"from": ["statement-service"],
+						"allow": ["shared-ids", "statement-domain", "statement-repo", "statement-transport"]
+					},
+					{
+						"from": ["statement-repo"],
 						"allow": [
-							"transaction-domain",
-							"transaction-transport",
-							"account-composition",
-							"account-domain",
+							"lib-util",
 							"database",
-							"http",
+							"lib-schema",
+							"lib-errors",
 							"shared-ids",
-							"persistence-schema"
+							"persistence-schema",
+							"statement-domain"
+						]
+					},
+					{
+						"from": ["statement-domain"],
+						"allow": ["lib-util", "lib-schema", "shared-ids", "persistence-schema", "statement-transport"]
+					},
+					{
+						"from": ["statement-transport"],
+						"allow": ["ledger-transport", "account-transport", "lib-schema"]
+					},
+					{
+						"from": ["statement-api"],
+						"allow": ["lib-contract", "lib-errors", "statement-transport"]
+					},
+					{
+						"from": ["monitor-composition"],
+						"allow": ["monitor-repo", "monitor-service", "monitor-transport"]
+					},
+					{
+						"from": ["monitor-routes"],
+						"allow": ["api-composition", "auth", "monitor-service", "lib-util"]
+					},
+					{
+						"from": ["monitor-service"],
+						"allow": [
+							"lib-schema",
+							"lib-errors",
+							"lib-util",
+							"shared-ids",
+							"monitor-domain",
+							"monitor-repo",
+							"monitor-transport",
+							"monitor-capability"
+						]
+					},
+					{
+						"from": ["monitor-repo"],
+						"allow": [
+							"lib-util",
+							"database",
+							"lib-errors",
+							"shared-ids",
+							"persistence-schema",
+							"monitor-domain",
+							"monitor-transport"
+						]
+					},
+					{
+						"from": ["monitor-domain"],
+						"allow": [
+							"lib-schema",
+							"lib-util",
+							"shared-ids",
+							"persistence-schema",
+							"monitor-domain",
+							"monitor-transport",
+							"lib-errors"
+						]
+					},
+					{
+						"from": ["monitor-transport"],
+						"allow": ["lib-schema", "account-transport"]
+					},
+					{
+						"from": ["monitor-api"],
+						"allow": ["lib-errors", "lib-contract", "account-transport", "monitor-transport"]
+					},
+					{
+						"from": ["monitor-capability"],
+						"allow": ["lib-schema", "lib-queues"]
+					},
+					{
+						"from": ["monitor-fixtures"],
+						"allow": ["monitor-capability"]
+					},
+					{
+						"from": ["settlement-composition"],
+						"allow": [
+							"transaction-repo",
+							"settlement-repo",
+							"settlement-service",
+							"settlement-domain",
+							"settlement-transport"
+						]
+					},
+					{
+						"from": ["settlement-routes"],
+						"allow": ["api-composition", "auth", "shared-ids", "lib-util", "settlement-service"]
+					},
+					{
+						"from": ["settlement-service"],
+						"allow": [
+							"monitor-capability",
+							"monitor-service",
+							"account-service",
+							"transaction-repo",
+							"lib-errors",
+							"lib-util",
+							"shared-ids",
+							"idempotency-capability",
+							"settlement-domain",
+							"settlement-repo",
+							"settlement-transport"
+						]
+					},
+					{
+						"from": ["settlement-repo"],
+						"allow": [
+							"database",
+							"lib-errors",
+							"lib-util",
+							"shared-ids",
+							"persistence-schema",
+							"transaction-domain",
+							"settlement-domain",
+							"settlement-transport"
+						]
+					},
+					{
+						"from": ["settlement-domain"],
+						"allow": [
+							"lib-schema",
+							"transaction-domain",
+							"lib-errors",
+							"lib-util",
+							"shared-ids",
+							"persistence-schema",
+							"settlement-transport",
+							"settlement-domain"
+						]
+					},
+					{
+						"from": ["settlement-transport"],
+						"allow": ["lib-schema", "ledger-transport", "account-transport"]
+					},
+					{
+						"from": ["settlement-api"],
+						"allow": ["lib-errors", "lib-contract", "settlement-transport"]
+					},
+					{
+						"from": ["transaction-composition"],
+						"allow": ["transaction-repo", "transaction-service"]
+					},
+					{
+						"from": ["transaction-routes"],
+						"allow": ["api-composition", "auth", "shared-ids", "lib-util", "transaction-service"]
+					},
+					{
+						"from": ["transaction-service"],
+						"allow": [
+							"monitor-capability",
+							"monitor-service",
+							"asset-service",
+							"account-composition",
+							"ledger-service",
+							"lib-errors",
+							"lib-util",
+							"shared-ids",
+							"transaction-domain",
+							"idempotency-capability",
+							"transaction-repo",
+							"transaction-transport"
 						]
 					},
 					{
 						"from": ["transaction-repo"],
 						"allow": [
-							"transaction-repo",
-							"transaction-domain",
-							"transaction-transport",
-							"account-composition",
-							"account-domain",
+							"monitor-capability",
+							"lib-util",
+							"lib-errors",
 							"database",
-							"http",
+							"account-composition",
 							"shared-ids",
-							"persistence-schema"
+							"persistence-schema",
+							"transaction-domain",
+							"transaction-transport"
 						]
 					},
 					{
 						"from": ["transaction-capability"],
-						"allow": ["transaction-domain", "http", "shared-ids"]
+						"disallow": ["*"]
 					},
 					{
 						"from": ["idempotency-capability"],
-						"allow": ["http", "shared-ids"]
+						"allow": ["lib-errors", "shared-ids"]
 					},
 					{
-						"from": ["transaction-service"],
+						"from": ["transaction-domain"],
 						"allow": [
-							"transaction-domain",
-							"transaction-repo",
-							"transaction-capability",
-							"idempotency-capability",
-							"transaction-transport",
-							"account-composition",
-							"account-domain",
-							"ledger-service",
-							"database",
-							"http",
+							"lib-schema",
+							"lib-util",
 							"shared-ids",
-							"asset-service"
+							"persistence-schema",
+							"transaction-domain",
+							"transaction-transport",
+							"database",
+							"account-composition",
+							"lib-errors"
 						]
 					},
 					{
 						"from": ["transaction-transport"],
-						"allow": ["ledger-transport", "transaction-domain"]
+						"allow": ["lib-schema", "ledger-transport"]
 					},
 					{
-						"from": ["transaction-routes"],
-						"allow": ["transaction-service", "transaction-transport", "http", "shared-ids"]
-					},
-					{
-						"from": ["transaction-composition"],
-						"allow": ["transaction-repo", "transaction-routes", "transaction-service"]
-					},
-					{
-						"from": ["organization-domain"],
-						"allow": [
-							"organization-domain",
-							"organization-transport",
-							"http",
-							"shared-ids",
-							"persistence-schema"
-						]
-					},
-					{
-						"from": ["organization-capability"],
-						"allow": ["organization-domain", "shared-ids"]
-					},
-					{
-						"from": ["organization-repo"],
-						"allow": ["organization-domain", "database", "shared-ids", "persistence-schema"]
-					},
-					{
-						"from": ["organization-service"],
-						"allow": [
-							"organization-domain",
-							"organization-capability",
-							"organization-repo",
-							"organization-transport",
-							"shared-ids"
-						]
-					},
-					{
-						"from": ["organization-transport"],
-						"allow": ["organization-domain", "http"]
-					},
-					{
-						"from": ["organization-routes"],
-						"allow": [
-							"organization-domain",
-							"organization-service",
-							"organization-transport",
-							"http",
-							"shared-ids"
-						]
+						"from": ["transaction-api"],
+						"allow": ["lib-errors", "lib-contract", "transaction-transport"]
 					},
 					{
 						"from": ["organization-composition"],
 						"allow": [
 							"organization-capability",
 							"organization-repo",
-							"organization-routes",
 							"organization-service",
+							"organization-domain"
+						]
+					},
+					{
+						"from": ["organization-routes"],
+						"allow": ["api-composition", "auth", "shared-ids", "lib-util", "organization-service"]
+					},
+					{
+						"from": ["organization-service"],
+						"allow": [
+							"shared-ids",
+							"organization-domain",
+							"organization-capability",
+							"organization-repo",
 							"organization-transport"
 						]
 					},
 					{
-						"from": ["http"],
-						"allow": ["http"]
+						"from": ["organization-repo"],
+						"allow": ["lib-util", "database", "shared-ids", "persistence-schema", "organization-domain"]
+					},
+					{
+						"from": ["organization-domain"],
+						"allow": [
+							"shared-ids",
+							"persistence-schema",
+							"organization-transport",
+							"organization-domain",
+							"lib-util",
+							"lib-errors"
+						]
+					},
+					{
+						"from": ["organization-capability"],
+						"allow": ["shared-ids", "lib-util"]
+					},
+					{
+						"from": ["organization-transport"],
+						"allow": ["lib-schema"]
+					},
+					{
+						"from": ["organization-api"],
+						"allow": ["lib-errors", "lib-contract", "organization-transport"]
+					},
+					{
+						"from": ["persistence-schema"],
+						"importKind": "type",
+						"allow": ["monitor-transport"]
 					},
 					{
 						"from": ["database"],
-						"allow": ["database", "persistence-schema"]
+						"allow": ["persistence-schema", "database"]
+					},
+					{
+						"from": ["api-composition"],
+						"allow": [
+							"auth",
+							"category-api",
+							"account-api",
+							"monitor-api",
+							"statement-api",
+							"asset-api",
+							"settlement-api",
+							"transaction-api",
+							"ledger-api",
+							"organization-api",
+							"lib-contract",
+							"lib-errors"
+						]
+					},
+					{
+						"from": ["auth"],
+						"allow": ["config", "lib-contract", "lib-errors", "lib-util", "shared-ids"]
 					},
 					{
 						"from": ["runtime"],
 						"allow": [
+							"monitor-capability",
+							"monitor-service",
 							"config",
 							"database",
+							"asset-composition",
 							"ledger-composition",
 							"account-composition",
+							"monitor-composition",
+							"statement-composition",
+							"settlement-composition",
 							"transaction-composition",
-							"transaction-capability",
-							"idempotency-capability",
 							"organization-composition",
-							"runtime",
 							"category-composition",
-							"asset-composition"
+							"idempotency-capability"
 						]
 					},
 					{
@@ -612,114 +1133,143 @@
 					{
 						"from": ["server"],
 						"allow": [
+							"lib-util",
+							"api-composition",
+							"auth",
 							"config",
-							"database",
-							"http",
-							"organization-composition",
+							"lib-errors",
 							"runtime",
-							"ledger-composition",
-							"account-composition",
-							"transaction-composition",
-							"category-composition",
-							"asset-composition"
+							"asset-routes",
+							"account-routes",
+							"category-routes",
+							"statement-routes",
+							"monitor-routes",
+							"ledger-routes",
+							"settlement-routes",
+							"transaction-routes",
+							"organization-routes"
 						]
+					},
+					{
+						"from": ["entrypoint"],
+						"allow": ["config", "runtime", "server", "monitor-capability", "monitor-service", "lib-util"]
 					},
 					{
 						"from": ["shared-ids"],
 						"disallow": ["*"]
 					},
 					{
-						"from": ["category-composition"],
-						"allow": ["category-repo", "category-service", "category-routes"]
+						"from": ["lib-errors"],
+						"disallow": ["*"]
 					},
 					{
-						"from": ["category-domain"],
-						"allow": ["category-transport", "shared-ids", "persistence-schema", "database"]
+						"from": ["lib-contract"],
+						"allow": ["lib-errors"]
 					},
 					{
-						"from": ["category-repo"],
-						"allow": [
-							"category-domain",
-							"shared-ids",
-							"persistence-schema",
-							"database",
-							"account-domain",
-							"ledger-domain"
-						]
+						"from": ["lib-schema"],
+						"allow": ["lib-errors", "lib-schema"]
 					},
 					{
-						"from": ["category-service"],
-						"allow": [
-							"category-domain",
-							"category-repo",
-							"category-transport",
-							"shared-ids",
-							"ledger-service",
-							"ledger-domain"
-						]
+						"from": ["lib-util"],
+						"allow": ["lib-errors", "shared-ids", "lib-schema"]
 					},
 					{
-						"from": ["category-routes"],
-						"allow": ["category-service", "category-transport", "shared-ids"]
-					},
-					{
-						"from": ["category-transport"],
-						"allow": ["ledger-transport", "account-transport"]
-					},
-					{
-						"from": ["category-fixtures"],
-						"allow": [
-							"category-domain",
-							"organization-domain",
-							"organization-repo",
-							"ledger-domain",
-							"ledger-repo",
-							"account-domain",
-							"account-repo",
-							"shared-ids"
-						]
-					},
-					{
-						"from": ["asset-composition"],
-						"allow": ["asset-domain", "asset-transport", "asset-routes", "asset-repo", "asset-service"]
-					},
-					{
-						"from": ["asset-domain"],
-						"allow": ["asset-domain", "asset-transport", "shared-ids", "persistence-schema"]
-					},
-					{
-						"from": ["asset-transport"],
-						"allow": ["asset-transport"]
-					},
-					{
-						"from": ["asset-repo"],
-						"allow": [
-							"asset-repo",
-							"asset-domain",
-							"asset-transport",
-							"database",
-							"shared-ids",
-							"persistence-schema"
-						]
-					},
-					{
-						"from": ["asset-service"],
-						"allow": ["asset-service", "asset-domain", "asset-transport", "asset-repo", "shared-ids"]
-					},
-					{
-						"from": ["asset-routes"],
-						"allow": ["asset-routes", "asset-domain", "asset-service", "asset-transport", "shared-ids"]
+						"from": ["lib-queues"],
+						"disallow": ["*"]
 					}
 				]
 			}
 		],
-		"boundaries/entry-point": "error"
+		"boundaries/entry-point": "error",
+		"boundaries/external": [
+			"error",
+			{
+				"default": "allow",
+				"rules": [
+					{
+						"from": [
+							"*"
+						],
+						"message": "HTTP transport framework imports are restricted to *-api, *-routes, api-composition, auth, server, entrypoint, lib-contract, test-support, tests and bench elements",
+						"disallow": [
+							[
+								"effect",
+								{
+									"path": [
+										"/unstable/http",
+										"/unstable/http/**",
+										"/unstable/httpapi",
+										"/unstable/httpapi/**"
+									]
+								}
+							],
+							"@effect/platform-node"
+						]
+					},
+					{
+						"from": [
+							"tests",
+							"bench",
+							"test-support",
+							"asset-api",
+							"asset-routes",
+							"category-routes",
+							"category-api",
+							"ledger-routes",
+							"ledger-api",
+							"account-routes",
+							"account-api",
+							"statement-routes",
+							"statement-api",
+							"monitor-routes",
+							"monitor-api",
+							"settlement-routes",
+							"settlement-api",
+							"transaction-routes",
+							"transaction-api",
+							"organization-routes",
+							"organization-api",
+							"api-composition",
+							"auth",
+							"server",
+							"entrypoint",
+							"lib-contract"
+						],
+						"allow": [
+							[
+								"effect",
+								{
+									"path": [
+										"/unstable/http",
+										"/unstable/http/**",
+										"/unstable/httpapi",
+										"/unstable/httpapi/**"
+									]
+								}
+							],
+							"@effect/platform-node"
+						]
+					}
+				]
+			}
+		],
+		"boundaries/no-unknown-files": "error",
+		"boundaries/no-unknown": "error"
 	},
 	"overrides": [
 		{
 			"files": ["apps/api/src/**/*.test.ts"],
 			"rules": {
 				"boundaries/entry-point": "off"
+			}
+		},
+		{
+			"files": ["apps/web/**/*", "apps/docs/**/*"],
+			"rules": {
+				"boundaries/no-unknown-files": "off",
+				"boundaries/no-unknown": "off",
+				"boundaries/external": "off"
 			}
 		},
 		{

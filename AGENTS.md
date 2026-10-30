@@ -38,7 +38,6 @@ Read only the documents relevant to the work:
 Use these project-owned skills when their descriptions match the task:
 
 - [typescript-api-design](./.agents/skills/typescript-api-design/SKILL.md) — REST resources, endpoints, errors, pagination, and versioning.
-- [typescript-fastify](./.agents/skills/typescript-fastify/SKILL.md) — Fastify routes, plugins, TypeBox validation, and OpenAPI wiring.
 - [typescript-drizzle-orm](./.agents/skills/typescript-drizzle-orm/SKILL.md) — database schemas, queries, relations, and migrations.
 - [typescript-functional-patterns](./.agents/skills/typescript-functional-patterns/SKILL.md) — state machines, discriminated unions, branded types, and typed domain models.
 - [typescript-effect-ts](./.agents/skills/typescript-effect-ts/SKILL.md) — Effect programs, typed errors, Layers, and resource management when Effect is actually in scope.
@@ -69,7 +68,7 @@ pnpm run dev:docs         # Documentation site only
 
 pnpm run build            # Build all buildable apps
 pnpm run check            # Check formatting, lint, and types
-pnpm run test             # Start PostgreSQL and run Vitest suites
+pnpm run test             # Run Vitest suites (API tests start their own PostgreSQL and Valkey via Docker)
 pnpm run ci               # Full local CI pipeline
 
 pnpm --filter=@exchequerio/api test
@@ -78,8 +77,8 @@ pnpm --filter=@exchequerio/api db:gen
 pnpm --filter=@exchequerio/api db:migrate
 ```
 
-Tests use Vitest through the package scripts. Start PostgreSQL with `pnpm run docker:up` before
-targeted API tests when it is not already running. Copy `apps/api/.env.example` to
+Tests use Vitest through the package scripts. API tests start throwaway PostgreSQL and Valkey
+containers (Testcontainers), so Docker must be running; nothing else needs to be started first. Copy `apps/api/.env.example` to
 `apps/api/.env` for the documented local defaults.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->

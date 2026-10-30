@@ -87,7 +87,7 @@ class LedgerTransactionEntry {
 	/**
 	 * Creates an Entry from a validated API request and its parent Transaction state.
 	 *
-	 * @param request - TypeBox-validated Entry request.
+	 * @param request - schema-validated Entry request.
 	 * @param status - Status inherited from the parent Transaction.
 	 * @param created - Creation time; defaults to the current UTC time and may be supplied by tests.
 	 * @returns An Effect containing the Entry or an invalid Account identifier failure.
