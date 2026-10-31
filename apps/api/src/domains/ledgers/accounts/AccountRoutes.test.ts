@@ -274,7 +274,7 @@ describe("AccountRoutes", () => {
 				}
 			>;
 
-		it("advertises operation-specific failures without 429", () => {
+		it("advertises operation-specific failures alongside 429", () => {
 			const statuses = (path: string, method: string) =>
 				Object.keys(operations(path)[method].responses);
 
@@ -293,7 +293,7 @@ describe("AccountRoutes", () => {
 				"deleteLedgerAccount"
 			);
 			expect(own).toHaveLength(5);
-			expect(JSON.stringify(own)).not.toContain('"429"');
+			expect(JSON.stringify(own)).toContain('"429"');
 		});
 
 		it("documents the list offset and limit as optional", () => {

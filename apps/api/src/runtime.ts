@@ -1,6 +1,7 @@
 import { makeLedgerAccountBalanceMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { ledgerAccountBalanceMonitorPublisherLayer } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService";
 import { Context, Effect, Layer } from "effect";
+import { RateLimiter } from "effect/unstable/persistence";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
 import { assetServiceLayer, assetRepoLayer, type AssetService } from "@/domains/assets";
@@ -25,6 +26,7 @@ import {
 	type LedgerAccountCategoryService,
 } from "@/domains/ledgers/accounts/categories";
 import { makeIdempotencyService, type IdempotencyService } from "@/lib/IdempotencyService";
+import { makeRedisLayer } from "@/lib/queues";
 
 const ServerConfigTag = Context.Service<Config>("ServerConfig");
 
@@ -32,6 +34,7 @@ type ServerRuntimeServices =
 	| Config
 	| Database
 	| Valkey
+	| RateLimiter.RateLimiter
 	| LedgerService
 	| AccountService
 	| LedgerAccountSettlementService
@@ -50,11 +53,19 @@ const makeServerRuntimeLayer = (config: Config): ServerRuntimeLayer => {
 	const idempotency = Layer.unwrap(
 		ValkeyTag.pipe(Effect.map(valkey => makeIdempotencyService(valkey.client)))
 	).pipe(Layer.provide(valkey));
+	// A separate fail-fast connection: a slow or unavailable Valkey must not queue or stall requests.
+	const rateLimiter = RateLimiter.layer.pipe(
+		Layer.provide(RateLimiter.layerStoreRedis({ prefix: "exchequer:ratelimit:" })),
+		Layer.provide(
+			makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 })
+		)
+	);
 	const infrastructure = Layer.mergeAll(
 		Layer.succeed(ServerConfigTag, config),
 		makeDatabaseLive(config.databaseUrl),
 		valkey,
 		idempotency,
+		rateLimiter,
 		ledgerAccountBalanceMonitorPublisherLayer.pipe(
 			Layer.provide(makeLedgerAccountBalanceMonitorJobStore(config.valkeyUrl))
 		)

@@ -2,6 +2,7 @@ import "@/lib/luxon";
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import {
 	Cause,
+	Duration,
 	Effect,
 	FileSystem,
 	ErrorReporter,
@@ -30,6 +31,7 @@ import {
 	NotFoundError,
 	retryAfterHeaders,
 } from "@/lib/errors";
+import { makeRateLimitLayer } from "@/lib/RateLimit";
 import { ServerConfigTag } from "@/runtime";
 import { AssetRoutes } from "@/domains/assets/AssetRoutes";
 import { AccountRoutes } from "@/domains/ledgers/accounts/AccountRoutes";
@@ -304,6 +306,16 @@ const appLayer = Layer.mergeAll(
 	Layer.provide(SchemaErrorTransformLayer),
 	Layer.provide(
 		Layer.unwrap(Effect.map(ServerConfigTag, config => makeAuthenticationLayer(config.jwtSecret)))
+	),
+	Layer.provide(
+		Layer.unwrap(
+			Effect.map(ServerConfigTag, config =>
+				makeRateLimitLayer({
+					limit: config.rateLimitMax,
+					window: Duration.seconds(config.rateLimitWindowSeconds),
+				})
+			)
+		)
 	),
 	// Request bodies are limited to 1 MiB (the pre-migration limit); Effect's default is unlimited.
 	Layer.provide(Layer.succeed(HttpIncomingMessage.MaxBodySize, FileSystem.Size(maxBodyBytes))),
