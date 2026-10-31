@@ -36,7 +36,7 @@ All are priority **must**.
 - US-2: As an engineer, I want to follow a request through the system, so that I can find where time and errors come from.
   - Given a request, when I open its trace, then I see HTTP server span, `Service.method`, `Repo.method` and `sql.*` spans, plus Valkey client spans.
   - Spans carry `organization.id` and `ledger.id`.
-  - A failed span has error status and the error's class.
+  - A failed span has error status and the error's class. A 5xx response rendered at the HTTP edge also ends the `http.server` span in error status.
 - US-3: As an API client or support engineer, I want the `traceId` in an error response to be the request's trace id, so that I can find the trace for a reported error.
 - US-4: As an engineer, I want a trace to continue from the request through the queue to delivery, so that I can see why a webhook was slow or failed.
   - Given a request enqueues a balance-monitor job, when the worker runs it, then the run span is a child of the enqueue span and contains a `webhook.deliver` client span.
@@ -73,7 +73,7 @@ Existing observability the design reuses:
 
 - `@effect/sql-pg` creates `sql.execute` and `sql.transaction` client spans with `db.query.text` (SQL with placeholders only) and `db.system.name`, `db.namespace`, `server.address`.
 - effect-mq creates `<job>.enqueue`, `<job>.enqueueMany` and `<job>.run` spans, stores the enqueuing span as `trace` on the job record, and parents the worker's run span to it (`traceLinking: "auto"`). It also emits `effect_mq_jobs_enqueued`, `effect_mq_job_runs{outcome}`, `effect_mq_job_run_duration_ms` and `effect_mq_job_wait_duration_ms`.
-- `Otlp.layerFromConfig` reads the `OTEL_*` variables. A signal is off unless its endpoint is set and `OTEL_<SIGNAL>_EXPORTER` lists `otlp`. The exporter retries transient errors, and after a hard failure drops its buffer and disables itself for 60 seconds. `OtlpLogger` attaches `traceId`/`spanId` from the active span and, by default, adds to the existing logger rather than replacing it.
+- `Otlp.layerFromConfig` reads the `OTEL_*` variables. A signal is off unless its endpoint is set and `OTEL_<SIGNAL>_EXPORTER` lists `otlp`. The exporter retries transient errors, and after a hard failure drops its buffer and disables itself for 60 seconds. It sets no request timeout of its own, so `makeTelemetryLayer` gives it an HTTP client that fails an export after 10 seconds without a response; a collector that accepts connections and never answers then ends in the same retry and disable path instead of holding batches in memory. `OtlpLogger` attaches `traceId`/`spanId` from the active span and, by default, adds to the existing logger rather than replacing it.
 - `@effect/platform-node` is installed. `FetchHttpClient` is still chosen for the exporter because `NodeHttpClient` offers no advantage here.
 
 Gotchas:
@@ -108,7 +108,7 @@ Approach: native Effect OTLP export with explicit `withSpan` calls (approach A).
 
 1. **`src/telemetry.ts`: `makeTelemetryLayer({ serviceName, environment })`.**
    - Combines `Otlp.layerFromConfig`, `OtlpSerialization.layerProtobuf` and `FetchHttpClient.layer`.
-   - Resource: fixed `serviceName` (`exchequer-api`, `exchequer-worker`) and a `deployment.environment.name` attribute.
+   - Resource: fixed `serviceName` (`exchequer-api`, `exchequer-worker`) and nothing else; `deployment.environment.name` comes from `OTEL_RESOURCE_ATTRIBUTES`, because `NODE_ENV` is always `production` in the image and only selects the console log format.
    - Replaces the console logger. In production it writes one JSON line built from `Logger.formatStructured` plus `traceId` and `spanId` from the active span, serialized with `Formatter.formatJson` (plain `JSON.stringify` throws on the bigint ledger amounts and on circular errors, and a throwing logger fails the logging effect). Otherwise it uses `Logger.consolePretty`. The OTLP logger still merges in. `Logger.layer` replaces Effect's default `tracerLogger`, so log lines are not attached to spans as span events; the OTLP logs carry the trace ids instead.
    - Provided outermost in `index.ts` (around `HttpRouter.serve(...)`) and in `worker.ts`, so it flushes last on shutdown.
 2. **`src/lib/metrics.ts`.** Two `Metric.counter`s: `transactionsPosted` with attribute `path`, and `idempotencyClaims` with attribute `outcome`.
@@ -127,7 +127,7 @@ Approach: native Effect OTLP export with explicit `withSpan` calls (approach A).
 
 Seams and test surfaces:
 
-- **Untrusted input:** an incoming `traceparent` is parsed by Effect's `HttpTraceContext`; nothing new is parsed by this change.
+- **Untrusted input:** an incoming trace context is continued, following the OpenTelemetry propagation rules: the server span becomes a child of a valid W3C `traceparent`, `b3` or `x-b3-*` parent and keeps its sampled flag, so an unsampled parent means that request and the jobs it enqueues are not exported. Effect validates `traceparent` but not the B3 headers, so the server normalizes them before Effect reads them: malformed ids are dropped (the request starts a new trace) and a 64-bit B3 trace id is left-padded to 128 bits.
 - **Layer:** `makeTelemetryLayer` is tested through `Layer` composition, not by inspecting exporter internals.
 - **Metrics:** tested through `Metric.value` on the counters.
 - **Repo and service spans:** not tested individually; they are mechanical.
@@ -137,7 +137,7 @@ Seams and test surfaces:
 - `makeTelemetryLayer` with no `OTEL_*` variables builds and tears down without error and exports nothing.
 - `IdempotencyServiceRedis.claim` increments `idempotencyClaims` with the right `outcome` for new, replay, pending and unavailable.
 - `LedgerTransactionRepo` increments `transactionsPosted` once per real transition and not on a no-op re-post (Postgres integration test).
-- An error response produced inside a span has `traceId` equal to that span's trace id (extends `errors.test.ts` and the web-handler tests).
+- An error response produced inside a span has `traceId` equal to that span's trace id (the web-handler tests in `ServerRoutes.test.ts`).
 - A balance-monitor webhook request carries no `traceparent` header.
 
 ## API Design
@@ -166,7 +166,7 @@ None. No schema, migration, job-payload or persisted-format change. The trace co
   - The `monitor-jobs` CLI is not instrumented.
   - `traceId` format change is client-visible.
 - **Acceptable failures:** telemetry is lost during a collector outage (the exporter drops its buffer and backs off for 60 seconds), and in-flight spans are lost if the process crashes.
-- **Sampling:** every span is exported. Sampling is the collector's job (tail sampling), so no sampler code ships in v1.
+- **Sampling:** every span of a trace that was not marked unsampled by its caller is exported. Otherwise sampling is the collector's job (tail sampling), so no sampler code ships in v1.
 
 ## Open Questions
 

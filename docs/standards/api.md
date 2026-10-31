@@ -108,7 +108,9 @@ Test application behavior at exactly three boundaries:
 Use `*Repo.test.ts`, `*Service.test.ts`, and `*Routes.test.ts` suites. Fixtures may construct domain
 objects directly; assertions must exercise the owning boundary. Do not create standalone entity,
 helper, Job, migration, or full-stack journey suites, or duplicate the same contract across layers.
-A filename change alone does not establish a testing boundary.
+A filename change alone does not establish a testing boundary. The telemetry layer and the job-store
+adapter may have their own suites, because they are application-shell modules with no owning
+Repo, Service, or Routes boundary.
 
 Jobs are thin adapters that call services. Test handler delegation with a stubbed service and test
 publication with mocked EffectMQ enqueue operations. Test our retry policy, captured payloads,

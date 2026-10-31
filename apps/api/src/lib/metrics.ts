@@ -22,7 +22,6 @@ const recordIdempotencyClaim = (outcome: IdempotencyOutcome): Effect.Effect<void
 const recordLedgerTransactionPosted = (path: LedgerTransactionPath): Effect.Effect<void> =>
 	Metric.update(Metric.withAttributes(ledgerTransactionsPosted, { path }), 1);
 
-export type { IdempotencyOutcome, LedgerTransactionPath };
 export {
 	idempotencyClaims,
 	ledgerTransactionsPosted,

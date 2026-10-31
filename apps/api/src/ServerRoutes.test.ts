@@ -11,7 +11,7 @@ import {
 } from "@/lib/errors";
 import { Agent, type IncomingHttpHeaders, request } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Cause, Effect, Exit, Layer, Logger, References, Scope } from "effect";
+import { Cause, Effect, Exit, Layer, Logger, References, Scope, Tracer } from "effect";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { TypeID } from "typeid-js";
 import { signJWT } from "@/auth";
@@ -34,6 +34,9 @@ const deferred = () => {
 	});
 	return { promise, resolve };
 };
+
+/** A sampled W3C `traceparent` header for a trace id. */
+const traceparent = (traceId: string) => ({ traceparent: `00-${traceId}-b7ad6b7169203331-01` });
 
 /** Polls (up to ~1 s) until the condition holds. */
 const until = async (condition: () => boolean) => {
@@ -300,19 +303,7 @@ describe("Effect HTTP edge", () => {
 	const tokenAs = tokenFor(organizationId);
 	const token = () => tokenAs(["super_admin"]);
 	const request = makeRequest(token);
-	/** `request` plus a `traceId` option that is sent as a sampled W3C `traceparent` header. */
-	const call = (
-		method: string,
-		path: string,
-		{ traceId, ...options }: NonNullable<Parameters<typeof request>[2]> & { traceId?: string } = {}
-	) =>
-		request(method, path, {
-			...options,
-			headers: {
-				...(traceId === undefined ? {} : { traceparent: `00-${traceId}-b7ad6b7169203331-01` }),
-				...options.headers,
-			},
-		});
+	const call = request;
 
 	afterEach(() => {
 		logs.length = 0;
@@ -459,7 +450,9 @@ describe("Effect HTTP edge", () => {
 			async (ErrorClass, status, type, title) => {
 				const service = stub({ getOrganization: () => Effect.die(new ErrorClass("x")) });
 				const response = await build(service)(
-					call("GET", `/api/organizations/${organizationId.toString()}`, { traceId })
+					call("GET", `/api/organizations/${organizationId.toString()}`, {
+						headers: traceparent(traceId),
+					})
 				);
 				expect(response.status).toBe(status);
 				const body = (await response.json()) as Record<string, unknown>;
@@ -474,7 +467,9 @@ describe("Effect HTTP edge", () => {
 		it("carries the request trace id on a declared error", async () => {
 			const service = stub({ getOrganization: () => Effect.fail(new NotFoundError("gone")) });
 			const response = await build(service)(
-				call("GET", `/api/organizations/${organizationId.toString()}`, { traceId })
+				call("GET", `/api/organizations/${organizationId.toString()}`, {
+					headers: traceparent(traceId),
+				})
 			);
 			expect(response.status).toBe(404);
 			expect(((await response.json()) as { traceId: string }).traceId).toBe(traceId);
@@ -589,9 +584,53 @@ describe("Effect HTTP edge", () => {
 
 		it("carries the request trace id on an unknown-route problem", async () => {
 			const id = "4bf92f3577b34da6a3ce929d0e0e4736";
-			const response = await build()(call("GET", "/api/nope", { traceId: id }));
+			const response = await build()(call("GET", "/api/nope", { headers: traceparent(id) }));
 			expect(response.status).toBe(404);
 			expect(((await response.json()) as { traceId: string }).traceId).toBe(id);
+		});
+
+		it("ends the server span in Error status when a 5xx is rendered", async () => {
+			const spans: Tracer.NativeSpan[] = [];
+			const tracer = Tracer.make({
+				span: options => {
+					const span = new Tracer.NativeSpan(options);
+					spans.push(span);
+					return span;
+				},
+			});
+			const service = stub({
+				getOrganization: () => Effect.succeed({ toResponse: () => ({ id: 1 }) }),
+			});
+			const response = await handlerFor(
+				{ organization: service },
+				Layer.mergeAll(capture, Layer.succeed(Tracer.Tracer, tracer))
+			)(call("GET", `/api/organizations/${organizationId.toString()}`));
+			expect(response.status).toBe(500);
+			expect(await response.json()).toMatchObject({ type: "INTERNAL_SERVER_ERROR" });
+			const server = () => spans.find(span => span.name.startsWith("http.server"));
+			await until(() => server()?.status._tag === "Ended");
+			const status = server()?.status;
+			expect(status?._tag === "Ended" && status.exit._tag).toBe("Failure");
+		});
+
+		it("leaves the server span successful for a 4xx", async () => {
+			const spans: Tracer.NativeSpan[] = [];
+			const tracer = Tracer.make({
+				span: options => {
+					const span = new Tracer.NativeSpan(options);
+					spans.push(span);
+					return span;
+				},
+			});
+			const response = await handlerFor(
+				{ organization: stub() },
+				Layer.mergeAll(capture, Layer.succeed(Tracer.Tracer, tracer))
+			)(call("GET", "/api/nope"));
+			expect(response.status).toBe(404);
+			const server = () => spans.find(span => span.name.startsWith("http.server"));
+			await until(() => server()?.status._tag === "Ended");
+			const status = server()?.status;
+			expect(status?._tag === "Ended" && status.exit._tag).toBe("Success");
 		});
 
 		it("renders an unknown route as a NOT_FOUND problem", async () => {
@@ -856,5 +895,41 @@ describe("Effect HTTP edge", () => {
 				);
 			});
 		});
+	});
+});
+
+describe("Inbound trace context", () => {
+	const traceIdFor = async (headers: Record<string, string>) => {
+		const server = await listen();
+		try {
+			const response = await sendRequest(server.port, { path: "/api/nope", headers });
+			expect(response.status).toBe(404);
+			return (JSON.parse(response.body) as { traceId: string }).traceId;
+		} finally {
+			await server.close();
+		}
+	};
+
+	it("continues a valid unsampled W3C trace", async () => {
+		const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+		expect(await traceIdFor({ traceparent: `00-${traceId}-00f067aa0ba902b7-00` })).toBe(traceId);
+	});
+
+	it("continues a valid B3 trace and pads a 64-bit trace id to 128 bits", async () => {
+		expect(
+			await traceIdFor({ "x-b3-traceid": "463ac35c9f6413ad", "x-b3-spanid": "a2fb4a1d1a96d312" })
+		).toBe("0000000000000000463ac35c9f6413ad");
+		expect(await traceIdFor({ b3: "463ac35c9f6413ad463ac35c9f6413ad-a2fb4a1d1a96d312-1" })).toBe(
+			"463ac35c9f6413ad463ac35c9f6413ad"
+		);
+	});
+
+	it("ignores malformed B3 context and starts a new trace", async () => {
+		const fresh = /^[0-9a-f]{32}$/;
+		expect(await traceIdFor({ "x-b3-traceid": "zz", "x-b3-spanid": "zz" })).toMatch(fresh);
+		expect(await traceIdFor({ b3: "zz-zz-1" })).toMatch(fresh);
+		expect(await traceIdFor({ "x-b3-traceid": "463ac35c9f6413ad", "x-b3-spanid": "zz" })).toMatch(
+			fresh
+		);
 	});
 });
