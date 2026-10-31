@@ -667,7 +667,7 @@ describe("Effect HTTP edge", () => {
 			await Effect.runPromise(Scope.close(scope, Exit.void));
 
 			const api = added.filter(route => route.path.startsWith("/api"));
-			expect(api).toHaveLength(50);
+			expect(api).toHaveLength(53);
 			for (const route of api) {
 				expect(
 					[route.method, route.path, route.uninterruptible],
@@ -722,7 +722,7 @@ describe("Effect HTTP edge", () => {
 
 			const operations = operationKeys(document);
 			// Guards against the loop silently passing over an empty or shrunken set.
-			expect(operations).toHaveLength(50);
+			expect(operations).toHaveLength(53);
 			expect(operationsWithoutBearer(document)).toEqual([]);
 		});
 	});

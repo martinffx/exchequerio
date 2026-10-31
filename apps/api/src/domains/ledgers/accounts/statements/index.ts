@@ -1,14 +1,11 @@
 import { Layer } from "effect";
-
 import { ledgerAccountStatementRepoLayer } from "./LedgerAccountStatementRepo";
 import { ledgerAccountStatementServiceLayer } from "./LedgerAccountStatementService";
 
 const ledgerAccountStatementLayer = ledgerAccountStatementServiceLayer.pipe(
 	Layer.provide(ledgerAccountStatementRepoLayer)
 );
-
 export { LedgerAccountStatement } from "./LedgerAccountStatement";
-export type { LedgerAccountStatementOptions } from "./LedgerAccountStatement";
 export {
 	LedgerAccountStatementIdParameters,
 	LedgerAccountStatementRequest,

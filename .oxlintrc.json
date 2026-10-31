@@ -218,7 +218,10 @@
 			},
 			{
 				"type": "statement-domain",
-				"pattern": "src/domains/ledgers/accounts/statements/LedgerAccountStatement.ts",
+				"pattern": [
+					"src/domains/ledgers/accounts/statements/LedgerAccountStatement.ts",
+					"src/domains/ledgers/accounts/statements/StatementErrors.ts"
+				],
 				"mode": "full"
 			},
 			{
@@ -803,11 +806,19 @@
 					},
 					{
 						"from": ["statement-routes"],
-						"allow": ["api-composition", "auth", "statement-service", "lib-util"]
+						"allow": ["api-composition", "auth", "statement-service", "shared-ids", "lib-util"]
 					},
 					{
 						"from": ["statement-service"],
-						"allow": ["shared-ids", "statement-domain", "statement-repo", "statement-transport"]
+						"allow": [
+							"idempotency-capability",
+							"lib-errors",
+							"lib-util",
+							"shared-ids",
+							"statement-domain",
+							"statement-repo",
+							"statement-transport"
+						]
 					},
 					{
 						"from": ["statement-repo"],
@@ -818,20 +829,30 @@
 							"lib-errors",
 							"shared-ids",
 							"persistence-schema",
-							"statement-domain"
+							"statement-domain",
+							"statement-transport"
 						]
 					},
 					{
 						"from": ["statement-domain"],
-						"allow": ["lib-util", "lib-schema", "shared-ids", "persistence-schema", "statement-transport"]
+						"allow": [
+							"lib-util",
+							"lib-schema",
+							"lib-errors",
+							"database",
+							"shared-ids",
+							"persistence-schema",
+							"statement-domain",
+							"statement-transport"
+						]
 					},
 					{
 						"from": ["statement-transport"],
-						"allow": ["ledger-transport", "account-transport", "lib-schema"]
+						"allow": ["ledger-transport", "account-transport", "transaction-transport", "lib-schema"]
 					},
 					{
 						"from": ["statement-api"],
-						"allow": ["lib-contract", "lib-errors", "statement-transport"]
+						"allow": ["lib-contract", "lib-errors", "lib-schema", "statement-transport"]
 					},
 					{
 						"from": ["monitor-composition"],
@@ -1080,7 +1101,7 @@
 					{
 						"from": ["persistence-schema"],
 						"importKind": "type",
-						"allow": ["monitor-transport"]
+						"allow": ["monitor-transport", "statement-transport", "lib-schema"]
 					},
 					{
 						"from": ["database"],
