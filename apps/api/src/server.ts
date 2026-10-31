@@ -24,13 +24,8 @@ import { HttpApiBuilder, HttpApiError, HttpApiSwagger } from "effect/unstable/ht
 import { v7 as uuid } from "uuid";
 import { LedgerApi, SchemaErrorTransformLayer } from "@/api";
 import { makeAuthenticationLayer } from "@/auth";
-import {
-	BadRequestError,
-	HttpError,
-	InternalServerError,
-	NotFoundError,
-	retryAfterHeaders,
-} from "@/lib/errors";
+import { BadRequestError, HttpError, InternalServerError, NotFoundError } from "@/lib/errors";
+import { problemResponse, shedLoad, startSampler } from "@/lib/LoadShedding";
 import { makeRateLimitLayer } from "@/lib/RateLimit";
 import { ServerConfigTag } from "@/runtime";
 import { AssetRoutes } from "@/domains/assets/AssetRoutes";
@@ -114,14 +109,6 @@ const handlerLayers = Layer.mergeAll(
 	LedgerAccountStatementRoutes,
 	LedgerAccountBalanceMonitorRoutes
 );
-
-const problemResponse = (error: HttpError) =>
-	HttpServerResponse.jsonUnsafe(error.toProblemDetail(), {
-		status: error.statusCode,
-		headers: Object.fromEntries(
-			Object.entries(retryAfterHeaders(error)).map(([name, seconds]) => [name, String(seconds)])
-		),
-	});
 
 /**
  * Fails a rendered 5xx so the server span ends in Error status: `edgeErrors` recovers every failure
@@ -281,13 +268,23 @@ const correlate = <E, R>(httpEffect: Effect.Effect<HttpServerResponse.HttpServer
  * `connectionClose`, which wraps `bodyLimit` and `edgeErrors`, so the logged status is that of the
  * response edgeErrors renders and every response, rendered errors included, is marked while draining.
  * `failServerSpan` is outermost so everything inside it still sees the rendered response.
+ * `edgeErrors` wraps `shedLoad`, so a shed 503 is logged and marks the span; the API middleware
+ * (RateLimit/Valkey) never runs for a shed request. The sampler is skipped in test and test-* environments.
  */
 const EdgeMiddleware = HttpRouter.middleware(
-	Effect.succeed(httpEffect =>
-		failServerSpan(
-			correlate(HttpMiddleware.logger(connectionClose(bodyLimit(edgeErrors(httpEffect)))))
-		)
-	),
+	Effect.gen(function* () {
+		const { environment } = yield* ServerConfigTag;
+		const verdict =
+			environment === "test" || environment.startsWith("test-")
+				? Effect.succeed(false)
+				: yield* startSampler;
+		return httpEffect =>
+			failServerSpan(
+				correlate(
+					HttpMiddleware.logger(connectionClose(bodyLimit(edgeErrors(shedLoad(verdict)(httpEffect)))))
+				)
+			);
+	}),
 	{ global: true }
 );
 

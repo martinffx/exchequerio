@@ -1167,7 +1167,8 @@
 							"settlement-routes",
 							"transaction-routes",
 							"organization-routes",
-							"lib-ratelimit"
+							"lib-ratelimit",
+							"lib-loadshedding"
 						]
 					},
 					{
@@ -1211,7 +1212,7 @@
 						"disallow": ["*"]
 					},
 					{ "from": ["lib-ratelimit"], "allow": ["auth", "lib-contract", "lib-errors"] },
-					{ "from": ["lib-loadshedding"], "disallow": ["*"] }
+					{ "from": ["lib-loadshedding"], "allow": ["lib-errors"] }
 				]
 			}
 		],
@@ -1223,7 +1224,7 @@
 				"rules": [
 					{
 						"from": ["*"],
-						"message": "HTTP transport framework imports are restricted to *-api, *-routes, api-composition, auth, server, entrypoint, telemetry, lib-contract, lib-ratelimit, test-support, tests and bench elements",
+						"message": "HTTP transport framework imports are restricted to *-api, *-routes, api-composition, auth, server, entrypoint, telemetry, lib-contract, lib-ratelimit, lib-loadshedding, test-support, tests and bench elements",
 						"disallow": [
 							[
 								"effect",
@@ -1268,7 +1269,8 @@
 							"entrypoint",
 							"telemetry",
 							"lib-contract",
-							"lib-ratelimit"
+							"lib-ratelimit",
+							"lib-loadshedding"
 						],
 						"allow": [
 							[

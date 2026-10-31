@@ -48,18 +48,19 @@ type ServerRuntimeServices =
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
+/** A separate fail-fast connection: a slow or unavailable Valkey must not queue or stall requests. */
+const makeRateLimiterLayer = (valkeyUrl: string) =>
+	RateLimiter.layer.pipe(
+		Layer.provide(RateLimiter.layerStoreRedis({ prefix: "exchequer:ratelimit:" })),
+		Layer.provide(makeRedisLayer(valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 }))
+	);
+
 const makeServerRuntimeLayer = (config: Config): ServerRuntimeLayer => {
 	const valkey = makeValkeyLive(config.valkeyUrl);
 	const idempotency = Layer.unwrap(
 		ValkeyTag.pipe(Effect.map(valkey => makeIdempotencyService(valkey.client)))
 	).pipe(Layer.provide(valkey));
-	// A separate fail-fast connection: a slow or unavailable Valkey must not queue or stall requests.
-	const rateLimiter = RateLimiter.layer.pipe(
-		Layer.provide(RateLimiter.layerStoreRedis({ prefix: "exchequer:ratelimit:" })),
-		Layer.provide(
-			makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 })
-		)
-	);
+	const rateLimiter = makeRateLimiterLayer(config.valkeyUrl);
 	const infrastructure = Layer.mergeAll(
 		Layer.succeed(ServerConfigTag, config),
 		makeDatabaseLive(config.databaseUrl),
@@ -92,4 +93,4 @@ const makeServerRuntimeLayer = (config: Config): ServerRuntimeLayer => {
 	).pipe(Layer.provideMerge(infrastructure));
 };
 
-export { makeServerRuntimeLayer, ServerConfigTag };
+export { makeRateLimiterLayer, makeServerRuntimeLayer, ServerConfigTag };
