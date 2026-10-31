@@ -14,7 +14,6 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
   - A per-Organization request limit on every `LedgerApi` endpoint, applied after authentication.
   - Counters in Valkey, so the limit holds across instances.
   - A token-bucket budget per Organization, so an exhausted Organization recovers gradually instead of waiting for a full reset.
-  - Per-endpoint request costs: an endpoint may declare a weight in tokens; unannotated endpoints cost 1.
   - Configurable `RATE_LIMIT_MAX` and `RATE_LIMIT_WINDOW_SECONDS`, validated at startup.
   - A 429 `TOO_MANY_REQUESTS` problem with `retry-after`.
   - `x-ratelimit-*` headers on successful responses.
@@ -29,6 +28,7 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
   - The under-pressure event-loop-utilisation check. It measured utilisation cumulatively since boot, so it was effectively inert; measured per interval it would shed a healthy busy process.
   - A per-IP limit on authentication failures (counting 401s per client IP, with trusted-proxy handling). It is abuse protection, not tenant isolation, and needs its own design because Effect's limiter has no non-consuming check. It is a follow-up spec.
   - Per-Organization tiers, separate read/write or per-endpoint counters, per-Account or per-Ledger limits, and adaptive modes.
+  - Per-endpoint request costs. Every request costs one token. Revisit with OTel span durations: the only measured heavy read is Category balances, which cost roughly 1.5 writes in the benchmark, and a first guess at weights landed on cheap endpoints.
   - `/health`, `/docs`, and the worker are not rate limited.
 
 ## User Stories
@@ -49,11 +49,7 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
   - Given the next sample is under every threshold, then requests are served normally.
   - Given `environment` is `test` or `test-*`, then shedding is never applied.
 - **US-6 (must):** As an operator, I want an invalid rate-limit setting to fail at startup rather than silently disable or block all traffic.
-  - Given `RATE_LIMIT_MAX` or `RATE_LIMIT_WINDOW_SECONDS` is set to anything other than a positive integer, then startup fails with a clear error. When unset, the defaults (30000 and 60) apply.
-- **US-7 (should):** As an operator, I want expensive operations to cost more tokens than cheap ones, so a tenant running heavy operations is limited sooner than one running cheap ones.
-  - Given an endpoint declares a cost of N, when it is requested, then N tokens are consumed. An endpoint with no declared cost consumes 1.
-  - Given a declared cost larger than `RATE_LIMIT_MAX`, then the cost is clamped to `RATE_LIMIT_MAX`, so the endpoint stays usable.
-  - Initial costs: settlement create, add entries and remove entries = 10; statement create = 10; category list and get = 5; everything else 1.
+  - Given `RATE_LIMIT_MAX` or `RATE_LIMIT_WINDOW_SECONDS` is set to anything other than a positive integer, then startup fails with a clear error. When unset, the defaults (500 and 1) apply.
 
 ## Constraints
 
@@ -73,10 +69,9 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
 - `src/lib/ApiContract.ts`: settlements, balance monitors, statements and categories already declare `TooManyRequestsApiError`; the other groups use `commonErrors`. Identical error schemas are de-duplicated.
 - `src/server.ts`: `EdgeMiddleware` is the single global router middleware with an explicit order `failServerSpan(correlate(logger(connectionClose(bodyLimit(edgeErrors(httpEffect))))))`. `problemResponse` renders an `HttpError` with `retry-after`. `appLayer` provides `makeAuthenticationLayer` from `ServerConfigTag`.
 - `src/lib/testing.ts`: `testServicesLayer` is the shared route-test harness behind `makeTestWebHandler`, `useTestWebHandlers` and `ServerRoutes.test.ts`. It builds the route-test service set with die-if-called defaults and always uses `new Config()` from `.env.test`.
-- An `HttpApiMiddleware` receives the matched `endpoint` and `group` with the request, so a middleware can read per-endpoint annotations.
 - `src/runtime.ts` builds the Valkey client (`makeValkeyLive`), idempotency, and the balance-monitor job store. `src/lib/queues.ts` builds an Effect `Redis.Redis` over ioredis inline.
 - The effect-http migration deleted `@fastify/under-pressure` and `@fastify/rate-limit`, and its design left load shedding to infrastructure. This spec reverses that for load shedding, at the user's request.
-- Effect 4.0.0-rc.112 ships `effect/unstable/persistence` `RateLimiter` with `consume` (`algorithm: "token-bucket"`, `onExceeded: "fail"`, optional `tokens`), `layerStoreRedis({ prefix })`, and `layerStoreMemory`.
+- Effect 4.0.0-rc.112 ships `effect/unstable/persistence` `RateLimiter` with `consume` (`algorithm: "token-bucket"`, `onExceeded: "fail"`), `layerStoreRedis({ prefix })`, and `layerStoreMemory`.
 
 ### Research
 
@@ -89,7 +84,6 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
 | 429 problem + header | `TooManyRequestsError` / `TooManyRequestsApiError` | reuse | US-1 |
 | Middleware layer wiring | `appLayer` provides `makeAuthenticationLayer` from `ServerConfigTag` | modify (+ rate-limit layer) | Wire the middleware |
 | Limiter provisioning | `makeServerRuntimeLayer` (`src/runtime.ts`); `testServicesLayer` (`src/lib/testing.ts`) | modify (Redis store in runtime; memory store in tests) | Production counting; route tests without Valkey |
-| Per-endpoint cost | Endpoint annotations (`operation` helpers in `src/lib/ApiContract.ts`) and the `endpoint` passed to middleware | new: a `RequestCost` annotation key | US-7 |
 | Config | `Config` (`src/config.ts`) | modify (+ validated `rateLimitMax`, `rateLimitWindowSeconds`) | US-6 |
 | Load metrics | `node:perf_hooks` `monitorEventLoopDelay`, `process.memoryUsage()` | reuse | US-5 |
 | Load-shedding middleware | `EdgeMiddleware` global chain (`src/server.ts`) | modify (+ `shedLoad` step) | US-5 on every route |
@@ -102,16 +96,15 @@ Transport-only. There are no Service, Repository, or Entity changes, and `CONTEX
 
 ### Rate limiting (`src/lib/RateLimit.ts`)
 
-One job: consume the endpoint's cost in tokens (1 by default) from the caller's Organization, then annotate or reject.
+One job: consume one token per authenticated request for the caller's Organization, then annotate or reject.
 
 - `class RateLimit extends HttpApiMiddleware.Service<RateLimit, { requires: CurrentToken }>()("RateLimit", { error: TooManyRequestsApiError })`.
 - `makeRateLimitLayer({ limit, window })` takes `RateLimiter.RateLimiter` and returns `(httpEffect) => …`:
-  1. Read `CurrentToken`, then `limiter.consume({ key: token.organizationId.toString(), limit, window, tokens: min(cost, limit), algorithm: "token-bucket", onExceeded: "fail" })`, where `cost` is the matched endpoint's `RequestCost` annotation or 1.
+  1. Read `CurrentToken`, then `limiter.consume({ key: token.organizationId.toString(), limit, window, algorithm: "token-bucket", onExceeded: "fail" })`.
   2. On success, run `httpEffect` and set `x-ratelimit-limit`, `x-ratelimit-remaining`, and `x-ratelimit-reset` from `ConsumeResult`, with durations rounded up to whole seconds.
   3. On a `RateLimiterError` whose `reason._tag` is `RateLimitExceeded`, fail with `TooManyRequestsError("Rate limit exceeded", { retryable: true, retryAfterSeconds: ceil(retryAfter in seconds) })`.
   4. On a `RateLimiterError` whose `reason._tag` is `RateLimitStoreError`, return `httpEffect` unchanged (fail-open) and log only on the transition into and out of the failing state.
-- **Semantics.** Each Organization has a bucket that starts full at `limit` tokens and gains one token every `window/limit`, up to `limit`. A request is accepted if the bucket holds enough tokens for its cost; a rejected request consumes nothing. An Organization can burst up to `limit`, then is held to `limit/window` per second, and recovers gradually (a rejected 10-token request waits for 10 tokens, not for a full reset). `x-ratelimit-remaining` is tokens, not requests, `x-ratelimit-reset` is the time until the bucket is full, and `retry-after` is the time until enough tokens exist for that request.
-- **Request cost.** `RequestCost` is an annotation key declared in `src/lib/ApiContract.ts`. Heavy endpoints set it where they are defined; the middleware reads it from the endpoint it receives and defaults to 1. The cost is clamped to `limit`, because Effect rejects any `tokens > limit` permanently. Costs are not exposed in OpenAPI or the public docs; clients pace from the response headers.
+- **Semantics.** Each Organization has a bucket that starts full at `limit` tokens and gains one token every `window/limit`, up to `limit`. A request is accepted if the bucket holds a token; a rejected request consumes nothing. An Organization can burst up to `limit`, then is held to `limit/window` per second, and recovers gradually instead of waiting for a full reset. The burst equals `limit`, so the window sets the burst size. `x-ratelimit-remaining` is the tokens left, `x-ratelimit-reset` is the time until the bucket is full, and `retry-after` is the time until the next token.
 - `src/api.ts`: `.prefix("/api").middleware(RateLimit).middleware(Authentication).middleware(SchemaErrorTransform)`. `RateLimit` is added before `Authentication`, so it runs inside auth (with `CurrentToken` in scope) and before request decoding. The ordering comment is updated.
 - `src/server.ts` `appLayer`: provide the rate-limit layer from `ServerConfigTag` (`limit: rateLimitMax`, `window: Duration.seconds(rateLimitWindowSeconds)`), mirroring the Authentication wiring.
 - `src/runtime.ts`: add `RateLimiter.layer` ← `RateLimiter.layerStoreRedis({ prefix: "exchequer:ratelimit:" })` ← `makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 })` to the infrastructure layer, and add `RateLimiter` to `ServerRuntimeServices`. The limiter and the job store hold separate connections, which is intended.
@@ -131,7 +124,7 @@ One job: answer "is this process over its limits right now?" and reject early wh
 
 ### Config (`src/config.ts`)
 
-`rateLimitMax` and `rateLimitWindowSeconds` are parsed as positive integers, default 30000 and 60 when unset, and throw on anything else. NaN would silently disable limiting and 0 would reject every request; neither is a store error, so fail-open would not catch them. The default of 30000 per 60 seconds (about 500 requests per second) is sized from `apps/api/docs/product/category-balances-benchmark.md`, where one Organization reached 650 to 940 writes per second on a single dev machine. Both settings are environment variables so the cap can be tuned without a deploy.
+`rateLimitMax` and `rateLimitWindowSeconds` are parsed as positive integers, default 500 and 1 when unset, and throw on anything else. NaN would silently disable limiting and 0 would reject every request; neither is a store error, so fail-open would not catch them. The default of 500 per 1 second (about 500 requests per second, a burst of about 0.5 to 0.8 seconds of capacity) is sized from `apps/api/docs/product/category-balances-benchmark.md`, where one Organization reached 650 to 940 writes per second on a single dev machine. A long window would not do: with a token-bucket the burst equals the limit, so 30000 per 60 seconds would let one Organization saturate an instance for minutes before it is throttled. Both settings are environment variables so the cap can be tuned without a deploy.
 
 ### Where IO lives
 
@@ -141,16 +134,15 @@ Only the `RateLimiter` store and the load-shedding sampler. The middleware funct
 
 1. `src/config.test.ts`: a table for the validation rules.
 2. `src/lib/RateLimit.test.ts` drives a minimal `HttpApi` with the real `Authentication` and the middleware through a web handler:
-   - memory store, `limit: 2`, window about 200 ms, for US-1 and US-2;
-   - an endpoint with a declared cost, one without (cost 1), and a cost above the limit (clamped), for US-7;
+   - memory store, `limit: 2`; a long window (about 10 s) for the rejection, per-Organization and header cases, and a short window only for the recovery case, so a slow run cannot refill a token mid-test;
    - a store layer failing with `RateLimitStoreError` for US-3;
    - no token for US-4.
 3. `src/lib/LoadShedding.test.ts`:
    - a table test of `sample` at each threshold boundary, including NaN;
    - `shedLoad` with a fixed verdict (true → 503 + `retry-after: 50` and the handler is not run; false → passthrough).
    The real sampler loop is not tested.
-4. One integration test against the Valkey Testcontainer that the API test run starts proves the Redis store wiring and the token-bucket keys for `exchequer:ratelimit:<org_id>`.
-5. The benches assert `non2xx === 0`, so they cannot silently measure the limiter.
+4. One integration test against the Valkey Testcontainer that the API test run starts goes through the real runtime layer and proves the Redis store wiring: the `exchequer:ratelimit:<org_id>` key and its `…:refill` key exist with a positive TTL, and, with a dead Valkey address, a request fails open within about 250 ms. It does not repeat the 429 and header cases from seam 2.
+5. The benches run the real runtime under the limiter, so `.env.test` carries a very high `RATE_LIMIT_MAX`, and they assert that no response is a 429, so they cannot silently measure the limiter. They do not assert `non2xx === 0`: the write benches already return retryable 409s under contention.
 6. There is no route-level 429 test: `testServicesLayer` always reads `new Config()`, so a low limit would need a new harness parameter. Seam 2 covers the behaviour at module level, and route suites only assert the declared 429 in OpenAPI.
 
 ## API Design
@@ -165,7 +157,7 @@ Only the `RateLimiter` store and the load-shedding sampler. The middleware funct
 
 - No Postgres changes.
 - Valkey keys are `exchequer:ratelimit:<org_id>`, owned by the Effect Redis store and with a companion last-refill key, both owned by the Effect Redis store and expiring when the bucket is full again.
-- New env vars `RATE_LIMIT_MAX` (default 30000) and `RATE_LIMIT_WINDOW_SECONDS` (default 60), documented in `apps/api/.env.example`, with a very high `RATE_LIMIT_MAX` in `apps/api/.env.test`.
+- New env vars `RATE_LIMIT_MAX` (default 500) and `RATE_LIMIT_WINDOW_SECONDS` (default 1), documented in `apps/api/.env.example`, with a very high `RATE_LIMIT_MAX` in `apps/api/.env.test`.
 
 ## Trade-offs
 
@@ -176,7 +168,6 @@ Only the `RateLimiter` store and the load-shedding sampler. The middleware funct
 - **Load shedding, rejected:** relying on platform autoscaling or health checks alone, which do not protect an instance while it is overloaded.
 - **Limitations:**
   - A full bucket allows a burst of `limit` before the steady `limit/window` rate applies.
-  - Costs are static annotations tuned by hand; they do not adapt to measured load, and the initial values are estimates.
   - Fail-open lets traffic through during a Valkey outage.
   - `RateLimiter` is in `effect/unstable`, so its API may change between rc releases.
   - Rate limiting runs before request decoding, so invalid requests consume tokens.
