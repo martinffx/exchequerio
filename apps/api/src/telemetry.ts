@@ -1,5 +1,5 @@
-import { Formatter, Layer, Logger } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { Duration, Effect, Formatter, Layer, Logger } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientError } from "effect/unstable/http";
 import { Otlp, OtlpSerialization } from "effect/unstable/observability";
 
 // Formatter.formatJson tolerates bigint and circular values; loggers run unguarded in the calling effect.
@@ -20,14 +20,36 @@ const jsonWithTrace = Logger.withConsoleLog(
 const consoleLoggerLayer = (environment: string) =>
 	Logger.layer([environment === "production" ? jsonWithTrace : Logger.consolePretty()]);
 
+// The exporter only disables itself after a failed export, so a collector that accepts connections
+// and never answers would otherwise hold every forked export and its batch in memory.
+export const makeExporterClient = (timeout: Duration.Input) =>
+	Layer.effect(
+		HttpClient.HttpClient,
+		Effect.map(HttpClient.HttpClient, client =>
+			client.pipe(
+				HttpClient.transform((response, request) =>
+					Effect.timeoutOrElse(response, {
+						duration: timeout,
+						// A transport error is transient, so the exporter retries and then disables itself.
+						orElse: () =>
+							Effect.fail(
+								new HttpClientError.HttpClientError({
+									reason: new HttpClientError.TransportError({
+										request,
+										description: "Export timed out",
+									}),
+								})
+							),
+					})
+				)
+			)
+		)
+	).pipe(Layer.provide(FetchHttpClient.layer));
+
 export const makeTelemetryLayer = (options: { serviceName: string; environment: string }) =>
-	Otlp.layerFromConfig({
-		resource: {
-			serviceName: options.serviceName,
-			attributes: { "deployment.environment.name": options.environment },
-		},
-	}).pipe(
+	// deployment.environment.name comes from OTEL_RESOURCE_ATTRIBUTES; NODE_ENV only picks the log format.
+	Otlp.layerFromConfig({ resource: { serviceName: options.serviceName } }).pipe(
 		Layer.provideMerge(consoleLoggerLayer(options.environment)),
 		Layer.provide(OtlpSerialization.layerProtobuf),
-		Layer.provide(FetchHttpClient.layer)
+		Layer.provide(makeExporterClient("10 seconds"))
 	);

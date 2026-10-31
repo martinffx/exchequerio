@@ -19,8 +19,9 @@ const runtime = ManagedRuntime.make(
 			deliverBalanceMonitor(payload, config.balanceMonitorEncryptionKey, attempt)
 		).pipe(Layer.provide(store))
 	).pipe(
-		// Underneath, not a sibling: effect-mq forks its loops at layer-build time and must see it.
-		Layer.provide(
+		// Underneath, not a sibling: effect-mq forks its loops at layer-build time and must see it. Merged so
+		// the worker's own log lines use the same logger.
+		Layer.provideMerge(
 			makeTelemetryLayer({ serviceName: "exchequer-worker", environment: config.environment })
 		)
 	)

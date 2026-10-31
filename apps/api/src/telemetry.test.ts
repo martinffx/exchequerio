@@ -1,6 +1,8 @@
+import { createServer, type Socket } from "node:net";
 import { ConfigProvider, Console, Effect, Layer } from "effect";
+import { HttpClient } from "effect/unstable/http";
 import { describe, expect, it } from "vitest";
-import { makeTelemetryLayer } from "@/telemetry";
+import { makeExporterClient, makeTelemetryLayer } from "@/telemetry";
 
 // Pinned provider: a developer shell may have OTEL_* set.
 const make = (env: Record<string, string>, environment = "test") =>
@@ -42,6 +44,30 @@ describe("makeTelemetryLayer", () => {
 		expect(Date.now() - started).toBeLessThan(5_000);
 	});
 
+	it("times out an export to a collector that accepts connections and never answers", async () => {
+		const sockets = new Set<Socket>();
+		const server = createServer(socket => {
+			sockets.add(socket);
+		});
+		await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+		const address = server.address();
+		const port = typeof address === "object" && address !== null ? address.port : 0;
+		const started = Date.now();
+		try {
+			const result = await Effect.runPromise(
+				HttpClient.get(`http://127.0.0.1:${port}`).pipe(
+					Effect.flip,
+					Effect.provide(makeExporterClient("200 millis"))
+				)
+			);
+			expect(result).toMatchObject({ _tag: "HttpClientError", reason: { _tag: "TransportError" } });
+			expect(Date.now() - started).toBeLessThan(3_000);
+		} finally {
+			for (const socket of sockets) socket.destroy();
+			server.close();
+		}
+	});
+
 	it("adds traceId and spanId to production JSON logs", async () => {
 		const lines: Array<unknown> = [];
 		const program = Effect.gen(function* () {
@@ -50,12 +76,7 @@ describe("makeTelemetryLayer", () => {
 			return span;
 		}).pipe(
 			Effect.withSpan("work"),
-			Effect.provideService(Console.Console, {
-				...console,
-				log: (line: unknown) => {
-					lines.push(line);
-				},
-			})
+			Effect.provideService(Console.Console, collectingConsole(lines))
 		);
 		const span = await run(make({}, "production"), program);
 		const entry: unknown = JSON.parse(String(lines[0]));

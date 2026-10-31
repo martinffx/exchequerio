@@ -4,6 +4,7 @@ import type Redis from "ioredis";
 import { ConflictError, ServiceUnavailableError } from "@/lib/errors";
 import type { OrgID } from "@/lib/ids";
 import { recordIdempotencyClaim } from "@/lib/metrics";
+import { withValkeySpan } from "@/lib/queues";
 
 /** Lifetime of an action claim and its stored result, in seconds. */
 const TTL_SECONDS = 15 * 60;
@@ -118,15 +119,6 @@ interface IdempotencyService {
 /** Effect service key for action claims and replay identifiers. */
 const IdempotencyServiceTag = Context.Service<IdempotencyService>("IdempotencyService");
 
-/** Traces a Valkey call as a client span without recording keys or script text. */
-const valkeySpan =
-	(command: "EVAL" | "GET") =>
-	<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-		Effect.withSpan(effect, `valkey.${command}`, {
-			kind: "client",
-			attributes: { "db.system.name": "valkey", "db.operation.name": command },
-		});
-
 /** Builds an Organization- and action-scoped store key. */
 const redisKey = (organizationId: OrgID, action: string, key: string) =>
 	`exchequer:idempotency:${organizationId.toString()}:${action}:${key}`;
@@ -207,10 +199,13 @@ class IdempotencyServiceRedis implements IdempotencyService {
 	 * @returns An Effect containing acquisition state, or an unavailable failure.
 	 */
 	private acquire(key: string): Effect.Effect<IdempotencyClaim, IdempotencyUnavailable> {
-		return Effect.tryPromise({
-			try: async () => parseClaim(await this.client.eval(CLAIM_SCRIPT, 1, key, PENDING, TTL_SECONDS)),
-			catch: cause => new IdempotencyUnavailable(cause),
-		}).pipe(valkeySpan("EVAL"));
+		return withValkeySpan(
+			"EVAL",
+			Effect.tryPromise({
+				try: async () => parseClaim(await this.client.eval(CLAIM_SCRIPT, 1, key, PENDING, TTL_SECONDS)),
+				catch: cause => new IdempotencyUnavailable(cause),
+			})
+		);
 	}
 
 	/**
@@ -220,10 +215,13 @@ class IdempotencyServiceRedis implements IdempotencyService {
 	 * @returns An Effect containing the result ID or pending state, or an unavailable failure.
 	 */
 	private getResultId(key: string): Effect.Effect<string | undefined, IdempotencyUnavailable> {
-		return Effect.tryPromise({
-			try: async () => parseStoredResultId(await this.client.get(key)),
-			catch: cause => new IdempotencyUnavailable(cause),
-		}).pipe(valkeySpan("GET"));
+		return withValkeySpan(
+			"GET",
+			Effect.tryPromise({
+				try: async () => parseStoredResultId(await this.client.get(key)),
+				catch: cause => new IdempotencyUnavailable(cause),
+			})
+		);
 	}
 
 	/**
@@ -262,13 +260,16 @@ class IdempotencyServiceRedis implements IdempotencyService {
 		resultId: string
 	): Effect.Effect<void, IdempotencyUnavailable> {
 		const key = redisKey(organizationId, action, clientKey);
-		return Effect.tryPromise({
-			try: async () => {
-				const completed = await this.client.eval(COMPLETE_SCRIPT, 1, key, PENDING, resultId);
-				if (completed !== "OK") throw new Error("Valkey no longer contains the pending claim");
-			},
-			catch: cause => new IdempotencyUnavailable(cause),
-		}).pipe(valkeySpan("EVAL"));
+		return withValkeySpan(
+			"EVAL",
+			Effect.tryPromise({
+				try: async () => {
+					const completed = await this.client.eval(COMPLETE_SCRIPT, 1, key, PENDING, resultId);
+					if (completed !== "OK") throw new Error("Valkey no longer contains the pending claim");
+				},
+				catch: cause => new IdempotencyUnavailable(cause),
+			})
+		);
 	}
 
 	/**
@@ -285,10 +286,13 @@ class IdempotencyServiceRedis implements IdempotencyService {
 		clientKey: string
 	): Effect.Effect<void, IdempotencyUnavailable> {
 		const key = redisKey(organizationId, action, clientKey);
-		return Effect.tryPromise({
-			try: () => this.client.eval(RELEASE_SCRIPT, 1, key, PENDING),
-			catch: cause => new IdempotencyUnavailable(cause),
-		}).pipe(valkeySpan("EVAL"), Effect.asVoid);
+		return withValkeySpan(
+			"EVAL",
+			Effect.tryPromise({
+				try: () => this.client.eval(RELEASE_SCRIPT, 1, key, PENDING),
+				catch: cause => new IdempotencyUnavailable(cause),
+			})
+		).pipe(Effect.asVoid);
 	}
 }
 

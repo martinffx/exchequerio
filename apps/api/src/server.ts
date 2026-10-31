@@ -1,5 +1,5 @@
 import "@/lib/luxon";
-import { createServer } from "node:http";
+import { createServer, type IncomingHttpHeaders } from "node:http";
 import {
 	Cause,
 	Effect,
@@ -41,14 +41,64 @@ import { LedgerAccountSettlementRoutes } from "@/domains/ledgers/settlements/Led
 import { TransactionRoutes } from "@/domains/ledgers/transactions/LedgerTransactionRoutes";
 import { OrganizationRoutes } from "@/domains/organizations/OrganizationRoutes";
 
+const b3Id = (length: number) => new RegExp(`^(?!0+$)[0-9a-f]{${length}}$`);
+const b3TraceId = /^(?!0+$)[0-9a-f]{16}(?:[0-9a-f]{16})?$/;
+const b3SpanId = b3Id(16);
+const pad = (traceId: string) => traceId.padStart(32, "0");
+
+/**
+ * Makes inbound B3 trace context safe to continue. Effect's tracer takes the parent's ids from the
+ * `b3` and `x-b3-*` headers without validating them, and they become the exported trace id, so a
+ * malformed value would produce an invalid OTLP id. Valid contexts are continued (a 64-bit trace id is
+ * left-padded to 128 bits, as the OpenTelemetry B3 propagator does); malformed ones are dropped, which
+ * makes the request a new root trace. W3C `traceparent` is already validated by Effect.
+ */
+const normalizeB3Headers = (headers: IncomingHttpHeaders) => {
+	const single = headers["b3"];
+	if (single !== undefined) {
+		const [traceId, spanId, ...rest] = typeof single === "string" ? single.split("-") : [];
+		if (
+			traceId !== undefined &&
+			spanId !== undefined &&
+			b3TraceId.test(traceId) &&
+			b3SpanId.test(spanId)
+		) {
+			headers["b3"] = [pad(traceId), spanId, ...rest].join("-");
+		} else {
+			delete headers["b3"];
+		}
+	}
+	const traceId = headers["x-b3-traceid"];
+	const spanId = headers["x-b3-spanid"];
+	if (
+		typeof traceId === "string" &&
+		typeof spanId === "string" &&
+		b3TraceId.test(traceId) &&
+		b3SpanId.test(spanId)
+	) {
+		headers["x-b3-traceid"] = pad(traceId);
+	} else {
+		delete headers["x-b3-traceid"];
+		delete headers["x-b3-spanid"];
+	}
+};
+
 /**
  * The server keeps the pre-migration timeouts: 72 s keep-alive (the load balancer idle timeout must
  * stay below it) and no request timeout. `headersTimeout` is explicit because Node derives it as
  * `min(60_000, requestTimeout)` when `requestTimeout` is passed to the constructor, which would
  * turn it off; the old server assigned `requestTimeout` afterwards and so kept 60 s.
  */
-const createHttpServer = () =>
-	createServer({ keepAliveTimeout: 72_000, requestTimeout: 0, headersTimeout: 60_000 });
+const createHttpServer = () => {
+	const server = createServer({
+		keepAliveTimeout: 72_000,
+		requestTimeout: 0,
+		headersTimeout: 60_000,
+	});
+	// Prepended so it runs before Effect's listener reads the headers for the server span's parent.
+	server.prependListener("request", request => normalizeB3Headers(request.headers));
+	return server;
+};
 
 /** Handler layers for the groups served by HttpApi. */
 const handlerLayers = Layer.mergeAll(
@@ -70,6 +120,32 @@ const problemResponse = (error: HttpError) =>
 			Object.entries(retryAfterHeaders(error)).map(([name, seconds]) => [name, String(seconds)])
 		),
 	});
+
+/**
+ * Fails a rendered 5xx so the server span ends in Error status: `edgeErrors` recovers every failure
+ * into a response, which the tracer would otherwise record as a success. The `Die` carries the response
+ * (Effect sends it and strips it from the span's cause); the failure is only the span's exception.
+ */
+class RenderedServerError extends Error {
+	constructor(status: number) {
+		super(`HTTP ${status}`);
+		this.name = "RenderedServerError";
+	}
+}
+
+const failServerSpan = <E, R>(
+	httpEffect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
+) =>
+	Effect.flatMap(httpEffect, response =>
+		response.status >= 500
+			? Effect.failCause(
+					Cause.fromReasons([
+						Cause.makeDieReason(response),
+						Cause.makeFailReason(new RenderedServerError(response.status)),
+					])
+				)
+			: Effect.succeed(response)
+	) as Effect.Effect<HttpServerResponse.HttpServerResponse, Types.unhandled | E, R>;
 
 /** A sanitised 500: the cause is logged and never exposed. */
 const internalServerProblem = (cause: Cause.Cause<unknown>) =>
@@ -128,6 +204,8 @@ const ServerErrorReporter = ErrorReporter.layer([
 		const failure = Cause.findError(cause);
 		if (Result.isFailure(failure)) return;
 		const error = failure.success;
+		// Already logged where it was rendered; this one only marks the server span.
+		if (error instanceof RenderedServerError) return;
 		if (HttpApiError.HttpApiSchemaError.is(error)) return;
 		if (error instanceof HttpError) {
 			if (error.statusCode < 500) return;
@@ -200,10 +278,13 @@ const correlate = <E, R>(httpEffect: Effect.Effect<HttpServerResponse.HttpServer
  * The one global middleware, with an explicit order: `correlate` annotates everything, the logger wraps
  * `connectionClose`, which wraps `bodyLimit` and `edgeErrors`, so the logged status is that of the
  * response edgeErrors renders and every response, rendered errors included, is marked while draining.
+ * `failServerSpan` is outermost so everything inside it still sees the rendered response.
  */
 const EdgeMiddleware = HttpRouter.middleware(
 	Effect.succeed(httpEffect =>
-		correlate(HttpMiddleware.logger(connectionClose(bodyLimit(edgeErrors(httpEffect)))))
+		failServerSpan(
+			correlate(HttpMiddleware.logger(connectionClose(bodyLimit(edgeErrors(httpEffect)))))
+		)
 	),
 	{ global: true }
 );

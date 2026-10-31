@@ -1014,7 +1014,7 @@
 					},
 					{
 						"from": ["idempotency-capability"],
-						"allow": ["lib-errors", "lib-metrics", "shared-ids"]
+						"allow": ["lib-errors", "lib-metrics", "lib-queues", "shared-ids"]
 					},
 					{
 						"from": ["transaction-domain"],

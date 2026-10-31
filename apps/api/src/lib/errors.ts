@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { Fiber, Schema } from "effect";
 import { v7 as uuid } from "uuid";
 
@@ -16,8 +17,9 @@ type ProblemDetail = {
 	readonly retryable?: boolean | undefined;
 };
 
-/** The current span's trace id; a fresh uuid when running outside any span. */
-const currentTraceId = (): string => Fiber.getCurrent()?.currentSpan?.traceId ?? uuid();
+/** The current span's trace id; a fresh W3C-format id (32 hex characters) when running outside any span. */
+const currentTraceId = (): string =>
+	Fiber.getCurrent()?.currentSpan?.traceId ?? randomBytes(16).toString("hex");
 
 /**
  * Shared base of every problem. `detail` and `retryable` are the only encoded fields;
