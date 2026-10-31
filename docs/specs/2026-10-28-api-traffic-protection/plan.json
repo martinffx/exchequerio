@@ -118,7 +118,10 @@
 							"apps/api/src/domains/ledgers/LedgerRoutes.test.ts",
 							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRoutes.test.ts",
 							"apps/api/src/domains/ledgers/accounts/AccountRoutes.test.ts",
-							"apps/api/src/domains/assets/AssetRoutes.test.ts"
+							"apps/api/src/domains/assets/AssetRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes.test.ts"
 						],
 						"delete": []
 					},
@@ -131,7 +134,7 @@
 						],
 						"acceptance": [
 							"Typecheck passes with RateLimiter in ServerRuntimeServices",
-							"The throttled groups (settlements, balance monitors, statements, categories) have no OpenAPI changes",
+							"The throttled groups (settlements, balance monitors, statements, categories) change in OpenAPI only by the 429 retry-after header schema becoming an integer, and their snapshots are re-recorded with no other difference",
 							"Boundaries lint passes",
 							"pnpm run check passes"
 						]

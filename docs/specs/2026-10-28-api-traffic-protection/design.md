@@ -141,7 +141,7 @@ Only the `RateLimiter` store and the load-shedding sampler. The middleware funct
 ## API Design
 
 - No new endpoints.
-- The groups that use `commonErrors` (Organization, Ledger, Transaction, Account, Asset) gain a declared 429 `TOO_MANY_REQUESTS` response through the middleware `error`. The throttled groups (settlements, balance monitors, statements, categories) already declare it, so their documents don't change. Explicit status-set assertions for the changed groups are updated, and each differs only by 429.
+- The groups that use `commonErrors` (Organization, Ledger, Transaction, Account, Asset) gain a declared 429 `TOO_MANY_REQUESTS` response through the middleware `error`. The throttled groups (settlements, balance monitors, statements, categories) already declare it, so their documents change only in the 429 `retry-after` header schema, which becomes an integer (the wire value is the same whole seconds). Explicit status-set assertions for the changed groups are updated, and each differs only by 429.
 - Successful (2xx) responses gain `x-ratelimit-limit`, `x-ratelimit-remaining`, and `x-ratelimit-reset`. Declared errors are encoded outside the middleware, so 4xx responses carry no rate-limit headers, even though a 400 from request decoding has consumed a token.
 - A 429 carries `retry-after` (whole seconds), encoded by `TooManyRequestsApiError`.
 - Under pressure, any route returns 503 `SERVICE_UNAVAILABLE` with `retry-after: 50`. It is rendered at the edge and is not declared per endpoint in OpenAPI, as before the migration.
