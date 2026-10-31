@@ -39,8 +39,8 @@ class Config {
 		this.valkeyUrl = valkeyUrl ?? process.env.VALKEY_URL ?? "";
 		this.jwtSecret = jwtSecret ?? process.env.JWT_SECRET ?? "";
 		this.environment = environment ?? process.env.NODE_ENV ?? "development";
-		this.rateLimitMax = positiveIntegerFromEnv("RATE_LIMIT_MAX", 600);
-		this.rateLimitWindowSeconds = positiveIntegerFromEnv("RATE_LIMIT_WINDOW_SECONDS", 60);
+		this.rateLimitMax = positiveIntegerFromEnv("RATE_LIMIT_MAX", 500);
+		this.rateLimitWindowSeconds = positiveIntegerFromEnv("RATE_LIMIT_WINDOW_SECONDS", 1);
 	}
 }
 

@@ -11,14 +11,14 @@ describe("Config rate limit settings", () => {
 		vi.unstubAllEnvs();
 	});
 
-	it("defaults to 600 requests per 60 seconds when neither variable is set", () => {
+	it("defaults to 500 requests per 1 second when neither variable is set", () => {
 		vi.stubEnv("RATE_LIMIT_MAX", undefined);
 		vi.stubEnv("RATE_LIMIT_WINDOW_SECONDS", undefined);
 
 		const config = new Config();
 
-		expect(config.rateLimitMax).toBe(600);
-		expect(config.rateLimitWindowSeconds).toBe(60);
+		expect(config.rateLimitMax).toBe(500);
+		expect(config.rateLimitWindowSeconds).toBe(1);
 	});
 
 	it("accepts positive integers", () => {

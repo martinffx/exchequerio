@@ -495,7 +495,8 @@
 				"pattern": "src/lib/metrics.ts",
 				"mode": "full"
 			},
-			{ "type": "lib-ratelimit", "pattern": "src/lib/RateLimit.ts", "mode": "full" }
+			{ "type": "lib-ratelimit", "pattern": "src/lib/RateLimit.ts", "mode": "full" },
+			{ "type": "lib-loadshedding", "pattern": "src/lib/LoadShedding.ts", "mode": "full" }
 		],
 		"boundaries/include": ["src/**/*", "test/bench/**/*"]
 	},
@@ -1209,7 +1210,8 @@
 						"from": ["lib-metrics"],
 						"disallow": ["*"]
 					},
-					{ "from": ["lib-ratelimit"], "allow": ["auth", "lib-contract", "lib-errors"] }
+					{ "from": ["lib-ratelimit"], "allow": ["auth", "lib-contract", "lib-errors"] },
+					{ "from": ["lib-loadshedding"], "disallow": ["*"] }
 				]
 			}
 		],

@@ -23,7 +23,7 @@ const failingStore = (consumed: { count: number }) =>
 	Layer.succeed(
 		RateLimiter.RateLimiterStore,
 		RateLimiter.RateLimiterStore.of({
-			fixedWindow: () => {
+			tokenBucket: () => {
 				consumed.count++;
 				return Effect.fail(
 					new RateLimiter.RateLimiterError({
@@ -31,7 +31,7 @@ const failingStore = (consumed: { count: number }) =>
 					})
 				);
 			},
-			tokenBucket: () => Effect.die("unused"),
+			fixedWindow: () => Effect.die("unused"),
 			adaptiveConsume: () => Effect.die("unused"),
 			adaptiveFeedback: () => Effect.die("unused"),
 		})
@@ -77,7 +77,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 describe("RateLimit", () => {
 	it("rejects the request over the limit with a retryable 429 and retry-after", async () => {
-		const { get, dispose } = setup(RateLimiter.layerStoreMemory, { limit: 2, window: "200 millis" });
+		const { get, dispose } = setup(RateLimiter.layerStoreMemory, { limit: 2, window: "10 seconds" });
 		try {
 			expect((await get(tokenFor(orgA))).status).toBe(200);
 			expect((await get(tokenFor(orgA))).status).toBe(200);
@@ -92,8 +92,9 @@ describe("RateLimit", () => {
 	});
 
 	it("limits each Organization separately", async () => {
-		const { get, dispose } = setup(RateLimiter.layerStoreMemory, { limit: 1, window: "5 seconds" });
+		const { get, dispose } = setup(RateLimiter.layerStoreMemory, { limit: 2, window: "10 seconds" });
 		try {
+			expect((await get(tokenFor(orgA))).status).toBe(200);
 			expect((await get(tokenFor(orgA))).status).toBe(200);
 			expect((await get(tokenFor(orgA))).status).toBe(429);
 			expect((await get(tokenFor(orgB))).status).toBe(200);

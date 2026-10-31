@@ -428,8 +428,7 @@ exports[`Statement routes > OpenAPI > preserves the existing OpenAPI operations 
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -935,8 +934,7 @@ exports[`Statement routes > OpenAPI > preserves the existing OpenAPI operations 
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },

@@ -40,7 +40,7 @@ const makeRateLimitLayer = ({
 							key: token.organizationId.toString(),
 							limit,
 							window,
-							algorithm: "fixed-window",
+							algorithm: "token-bucket",
 							onExceeded: "fail",
 						})
 						.pipe(
