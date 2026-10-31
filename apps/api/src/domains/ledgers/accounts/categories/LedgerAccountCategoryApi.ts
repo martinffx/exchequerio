@@ -1,0 +1,129 @@
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+import {
+	ConflictApiError,
+	describedOperation,
+	NotFoundApiError,
+	operation,
+	throttledErrors,
+} from "@/lib/ApiContract";
+import { PaginationQuery } from "@/lib/schema";
+import { Schema } from "effect";
+import {
+	LedgerAccountCategoryBalancesResponse,
+	LedgerAccountCategoryIdParams,
+	LedgerAccountCategoryRequest,
+	LedgerAccountCategoryResponse,
+	LedgerIdParameters,
+	LinkAccountToCategoryParams,
+	LinkCategoryToCategoryParams,
+} from "./LedgerAccountCategorySchema";
+
+// Every Category route declares 429. Permissions are enforced by the handlers:
+// read for GETs, write for create/update/link/unlink, delete for DELETE /:categoryId.
+
+const prefix = "/ledgers/:ledgerId/accounts/categories";
+
+const CategoriesApi = HttpApiGroup.make("categories")
+	.add(
+		HttpApiEndpoint.get("balances", `${prefix}/:categoryId/balances`, {
+			params: LedgerAccountCategoryIdParams,
+			success: LedgerAccountCategoryBalancesResponse,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
+		}).annotateMerge(
+			operation(
+				"getLedgerAccountCategoryBalances",
+				"Get Ledger Account Category balances",
+				"Current balances by Asset for all distinct descendant Accounts, using one snapshot and the Category's normal balance. Membership changes after the snapshot appear on the next read."
+			)
+		),
+		HttpApiEndpoint.get("list", `${prefix}/`, {
+			params: LedgerIdParameters,
+			query: PaginationQuery,
+			success: Schema.Array(LedgerAccountCategoryResponse),
+			error: [NotFoundApiError, ...throttledErrors],
+		}).annotateMerge(
+			describedOperation("listLedgerAccountCategories", "List Ledger Account Categories")
+		),
+		HttpApiEndpoint.get("get", `${prefix}/:categoryId`, {
+			params: LedgerAccountCategoryIdParams,
+			success: LedgerAccountCategoryResponse,
+			error: [NotFoundApiError, ...throttledErrors],
+		}).annotateMerge(describedOperation("getLedgerAccountCategory", "Get Ledger Account Category")),
+		// Create answers 200 without a Location header (published contract).
+		HttpApiEndpoint.post("create", `${prefix}/`, {
+			params: LedgerIdParameters,
+			payload: LedgerAccountCategoryRequest,
+			success: LedgerAccountCategoryResponse,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
+		}).annotateMerge(
+			describedOperation("createLedgerAccountCategory", "Create Ledger Account Category")
+		),
+		HttpApiEndpoint.put("update", `${prefix}/:categoryId`, {
+			params: LedgerAccountCategoryIdParams,
+			payload: LedgerAccountCategoryRequest,
+			success: LedgerAccountCategoryResponse,
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
+		}).annotateMerge(
+			describedOperation("updateLedgerAccountCategory", "Update Ledger Account Category")
+		),
+		HttpApiEndpoint.delete("delete", `${prefix}/:categoryId`, {
+			params: LedgerAccountCategoryIdParams,
+			success: HttpApiSchema.Empty(200),
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
+		}).annotateMerge(
+			describedOperation("deleteLedgerAccountCategory", "Delete Ledger Account Category")
+		),
+		HttpApiEndpoint.patch("linkAccount", `${prefix}/:categoryId/accounts/:accountId`, {
+			params: LinkAccountToCategoryParams,
+			success: HttpApiSchema.Empty(200),
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
+		}).annotateMerge(
+			operation(
+				"linkLedgerAccountToCategory",
+				"Link Ledger Account to Category",
+				"Add a Ledger Account to a Ledger Account Category."
+			)
+		),
+		HttpApiEndpoint.delete("unlinkAccount", `${prefix}/:categoryId/accounts/:accountId`, {
+			params: LinkAccountToCategoryParams,
+			success: HttpApiSchema.Empty(200),
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
+		}).annotateMerge(
+			operation(
+				"unlinkLedgerAccountToCategory",
+				"Unlink Ledger Account to Category",
+				"Remove a Ledger Account from a Ledger Account Category"
+			)
+		),
+		HttpApiEndpoint.patch("linkCategory", `${prefix}/:categoryId/categories/:parentCategoryId`, {
+			params: LinkCategoryToCategoryParams,
+			success: HttpApiSchema.Empty(200),
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
+		}).annotateMerge(
+			operation(
+				"linkLedgerAccountCategoryToCategory",
+				"Link Ledger Account Category to Category",
+				"Nest a Ledger Account Category within a higher-level Ledger Account Category."
+			)
+		),
+		HttpApiEndpoint.delete("unlinkCategory", `${prefix}/:categoryId/categories/:parentCategoryId`, {
+			params: LinkCategoryToCategoryParams,
+			success: HttpApiSchema.Empty(200),
+			error: [NotFoundApiError, ConflictApiError, ...throttledErrors],
+		}).annotateMerge(
+			operation(
+				"unlinkLedgerAccountCategoryToCategory",
+				"Unlink Ledger Account Category to Category",
+				"Remove a Ledger Account Category from a higher-level Ledger Account Category"
+			)
+		)
+	)
+	.annotateMerge(
+		OpenApi.annotations({
+			title: "Ledger Account Categories",
+			description:
+				"A ledger account category groups Ledger Accounts and can nest within other categories.",
+		})
+	);
+
+export { CategoriesApi };

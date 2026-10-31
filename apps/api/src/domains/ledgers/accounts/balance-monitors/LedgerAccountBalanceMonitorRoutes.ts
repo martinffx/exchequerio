@@ -1,255 +1,95 @@
-import { AccountItemParameters } from "../AccountSchema";
-import { Type } from "@sinclair/typebox";
-import { Effect, Result } from "effect";
-import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-
-import {
-	BadRequestError,
-	BadRequestProblem,
-	ConflictProblem,
-	ForbiddenProblem,
-	InternalServerProblem,
-	NotFoundProblem,
-	ServiceUnavailableProblem,
-	TooManyRequestsProblem,
-	UnauthorizedProblem,
-} from "@/lib/errors";
-
-import {
-	LedgerAccountBalanceMonitorIdParameters,
-	type LedgerAccountBalanceMonitorListQuery,
-	LedgerAccountBalanceMonitorListQuerySchema,
-	LedgerAccountBalanceMonitorRequest,
-	LedgerAccountBalanceMonitorUpdateRequest,
-	LedgerAccountBalanceMonitorResponse,
-} from "./LedgerAccountBalanceMonitorSchema";
+import { Effect } from "effect";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { LedgerApi } from "@/api";
+import { CurrentToken, requirePermissions } from "@/auth";
 import { LedgerAccountBalanceMonitorServiceTag } from "./LedgerAccountBalanceMonitorService";
+import { runToCompletion } from "@/lib/utils";
 
-const requireStringAmounts = async (request: FastifyRequest) => {
-	const body = request.body as { alertCondition?: { conditions?: unknown } } | undefined;
-	const conditions = body?.alertCondition?.conditions;
-	if (
-		Array.isArray(conditions) &&
-		conditions.some(
-			(condition: unknown) =>
-				condition !== null &&
-				typeof condition === "object" &&
-				"value" in condition &&
-				typeof condition.value !== "string"
-		)
-	) {
-		throw new BadRequestError("Monitor thresholds must be decimal strings");
-	}
-};
-const tags = ["Ledger Account Balance Monitors"];
-const commonErrors = {
-	400: BadRequestProblem,
-	401: UnauthorizedProblem,
-	403: ForbiddenProblem,
-	429: TooManyRequestsProblem,
-	500: InternalServerProblem,
-	503: ServiceUnavailableProblem,
-};
+const scopeOf = (params: { ledgerId: string; accountId: string }) =>
+	Effect.gen(function* () {
+		const token = yield* CurrentToken;
+		return {
+			organizationId: token.orgId.toString(),
+			ledgerId: params.ledgerId,
+			accountId: params.accountId,
+		};
+	});
 
-const LedgerAccountBalanceMonitorRoutes: FastifyPluginAsync = async server => {
-	server.get<{ Params: AccountItemParameters; Querystring: LedgerAccountBalanceMonitorListQuery }>(
-		"/",
-		{
-			preHandler: [server.hasPermissions(["ledger:account:balance_monitor:read"])],
-			schema: {
-				operationId: "listLedgerAccountBalanceMonitors",
-				tags,
-				summary: "List Ledger Account Balance Monitors",
-				description: "List Ledger Account Balance Monitors",
-				params: AccountItemParameters,
-				querystring: LedgerAccountBalanceMonitorListQuerySchema,
-				response: { 200: Type.Array(LedgerAccountBalanceMonitorResponse), ...commonErrors },
-			},
-		},
-		async request => {
-			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.listLedgerAccountBalanceMonitors(
-					{
-						organizationId: request.token.orgId.toString(),
-						ledgerId: request.params.ledgerId,
-						accountId: request.params.accountId,
-					},
-					request.query.offset,
-					request.query.limit
+/** The service parses the raw path IDs, so they are forwarded as strings inside the scope. */
+const LedgerAccountBalanceMonitorRoutes = HttpApiBuilder.group(
+	LedgerApi,
+	"balanceMonitors",
+	handlers =>
+		Effect.gen(function* () {
+			const service = yield* LedgerAccountBalanceMonitorServiceTag;
+			return handlers
+				.handle(
+					"list",
+					({ params, query }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:read"]);
+							const monitors = yield* service.listLedgerAccountBalanceMonitors(
+								yield* scopeOf(params),
+								query.offset,
+								query.limit
+							);
+							return monitors.map(monitor => monitor.toResponse());
+						}),
+					runToCompletion
 				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: monitors => monitors.map(monitor => monitor.toResponse()),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.get<{ Params: LedgerAccountBalanceMonitorIdParameters }>(
-		"/:balanceMonitorId",
-		{
-			preHandler: [server.hasPermissions(["ledger:account:balance_monitor:read"])],
-			schema: {
-				operationId: "getLedgerAccountBalanceMonitor",
-				tags,
-				summary: "Get Ledger Account Balance Monitor",
-				description: "Get Ledger Account Balance Monitor",
-				params: LedgerAccountBalanceMonitorIdParameters,
-				response: {
-					200: LedgerAccountBalanceMonitorResponse,
-					404: NotFoundProblem,
-					...commonErrors,
-				},
-			},
-		},
-		async request => {
-			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.getLedgerAccountBalanceMonitor(
-					{
-						organizationId: request.token.orgId.toString(),
-						ledgerId: request.params.ledgerId,
-						accountId: request.params.accountId,
-					},
-					request.params.balanceMonitorId
+				.handle(
+					"get",
+					({ params }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:read"]);
+							const monitor = yield* service.getLedgerAccountBalanceMonitor(
+								yield* scopeOf(params),
+								params.balanceMonitorId
+							);
+							return monitor.toResponse();
+						}),
+					runToCompletion
 				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: monitor => monitor.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.post<{ Params: AccountItemParameters; Body: LedgerAccountBalanceMonitorRequest }>(
-		"/",
-		{
-			preValidation: requireStringAmounts,
-			preHandler: [server.hasPermissions(["ledger:account:balance_monitor:write"])],
-			schema: {
-				operationId: "createLedgerAccountBalanceMonitor",
-				tags,
-				summary: "Create Ledger Account Balance Monitor",
-				description: "Create Ledger Account Balance Monitor",
-				params: AccountItemParameters,
-				body: LedgerAccountBalanceMonitorRequest,
-				response: {
-					200: LedgerAccountBalanceMonitorResponse,
-					409: ConflictProblem,
-					404: NotFoundProblem,
-					...commonErrors,
-				},
-			},
-		},
-		async request => {
-			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.createLedgerAccountBalanceMonitor(
-					{
-						organizationId: request.token.orgId.toString(),
-						ledgerId: request.params.ledgerId,
-						accountId: request.params.accountId,
-					},
-					request.body
+				.handle(
+					"create",
+					({ params, payload }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:write"]);
+							const monitor = yield* service.createLedgerAccountBalanceMonitor(
+								yield* scopeOf(params),
+								payload
+							);
+							return monitor.toResponse();
+						}),
+					runToCompletion
 				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: monitor => monitor.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.put<{
-		Params: LedgerAccountBalanceMonitorIdParameters;
-		Body: LedgerAccountBalanceMonitorUpdateRequest;
-	}>(
-		"/:balanceMonitorId",
-		{
-			preValidation: requireStringAmounts,
-			preHandler: [server.hasPermissions(["ledger:account:balance_monitor:write"])],
-			schema: {
-				operationId: "updateLedgerAccountBalanceMonitor",
-				tags,
-				summary: "Update Ledger Account Balance Monitor",
-				description: "Update Ledger Account Balance Monitor",
-				params: LedgerAccountBalanceMonitorIdParameters,
-				body: LedgerAccountBalanceMonitorUpdateRequest,
-				response: {
-					200: LedgerAccountBalanceMonitorResponse,
-					409: ConflictProblem,
-					404: NotFoundProblem,
-					...commonErrors,
-				},
-			},
-		},
-		async request => {
-			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.updateLedgerAccountBalanceMonitor(
-					{
-						organizationId: request.token.orgId.toString(),
-						ledgerId: request.params.ledgerId,
-						accountId: request.params.accountId,
-					},
-					request.params.balanceMonitorId,
-					request.body
+				.handle(
+					"update",
+					({ params, payload }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:write"]);
+							const monitor = yield* service.updateLedgerAccountBalanceMonitor(
+								yield* scopeOf(params),
+								params.balanceMonitorId,
+								payload
+							);
+							return monitor.toResponse();
+						}),
+					runToCompletion
 				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: monitor => monitor.toResponse(),
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-
-	server.delete<{ Params: LedgerAccountBalanceMonitorIdParameters }>(
-		"/:balanceMonitorId",
-		{
-			preHandler: [server.hasPermissions(["ledger:account:balance_monitor:delete"])],
-			schema: {
-				operationId: "deleteLedgerAccountBalanceMonitor",
-				tags,
-				summary: "Delete Ledger Account Balance Monitor",
-				description: "Delete Ledger Account Balance Monitor",
-				params: LedgerAccountBalanceMonitorIdParameters,
-				response: {
-					200: {},
-					409: ConflictProblem,
-					404: NotFoundProblem,
-					...commonErrors,
-				},
-			},
-		},
-		async request => {
-			const effect = LedgerAccountBalanceMonitorServiceTag.use(service =>
-				service.deleteLedgerAccountBalanceMonitor(
-					{
-						organizationId: request.token.orgId.toString(),
-						ledgerId: request.params.ledgerId,
-						accountId: request.params.accountId,
-					},
-					request.params.balanceMonitorId
-				)
-			);
-			const result = await request.server.runtime.runPromise(Effect.result(effect));
-			return Result.match(result, {
-				onSuccess: () => undefined,
-				onFailure: error => {
-					throw error;
-				},
-			});
-		}
-	);
-};
+				.handle(
+					"delete",
+					({ params }) =>
+						Effect.gen(function* () {
+							yield* requirePermissions(["ledger:account:balance_monitor:delete"]);
+							yield* service.deleteLedgerAccountBalanceMonitor(
+								yield* scopeOf(params),
+								params.balanceMonitorId
+							);
+						}),
+					runToCompletion
+				);
+		})
+);
 
 export { LedgerAccountBalanceMonitorRoutes };

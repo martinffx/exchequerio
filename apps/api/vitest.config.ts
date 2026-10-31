@@ -4,7 +4,7 @@ import path from "node:path";
 export default defineConfig({
 	test: {
 		globals: true,
-		setupFiles: ["./src/lib/luxon.ts"],
+		setupFiles: ["./src/lib/luxon.ts", "./test.env.ts"],
 		environment: "node",
 		include: ["src/**/*.test.ts"],
 		globalSetup: "./test.setup.ts",

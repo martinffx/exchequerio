@@ -655,12 +655,17 @@ describe("LedgerTransactionRepoLive", () => {
 		const { organizationId, ledgerId } = await createLedger();
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
-		const transactionRequest = request("pending", [
+		const original = request("pending", [
 			{ accountId: debit, direction: "debit", amount: "10" },
 			{ accountId: credit, direction: "credit", amount: "10" },
 		]);
-		transactionRequest.ledgerEntries[0]!.assetId = "ast_00000000000000000000000002";
-		transactionRequest.ledgerEntries[1]!.assetId = "ast_00000000000000000000000002";
+		const transactionRequest = {
+			...original,
+			ledgerEntries: original.ledgerEntries.map(entry => ({
+				...entry,
+				assetId: "ast_00000000000000000000000002",
+			})),
+		};
 
 		const error = await runtime.runPromise(
 			Effect.flip(

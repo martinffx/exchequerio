@@ -1,41 +1,20 @@
-import type { FastifyInstance } from "fastify";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
+import { OpenApi } from "effect/unstable/httpapi";
 import { DateTime } from "luxon";
 import { TypeID } from "typeid-js";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { signJWT } from "@/auth";
-import { Config } from "@/config";
-import { makeDatabaseLive } from "@/db";
+import { describe, expect, it, vi } from "vitest";
+import { LedgerApi } from "@/api";
+import { makeRequest, tokenFor, useTestWebHandlers } from "@/lib/testing";
 import { ConflictError, NotFoundError } from "@/lib/errors";
-import { buildServer } from "@/server";
-import { ServerConfigTag, type ServerRuntimeLayer } from "@/runtime";
-import type { LedgerAccountSettlementResponse } from "./LedgerAccountSettlementSchema";
+import type { LedgerAccountID, LedgerAccountSettlementID, LedgerID, OrgID } from "@/lib/ids";
 import { LedgerAccountSettlementEntity } from "./LedgerAccountSettlementEntity";
-import {
-	type LedgerAccountSettlementService,
-	LedgerAccountSettlementServiceTag,
-} from "./LedgerAccountSettlementService";
+import type { LedgerAccountSettlementService } from "./LedgerAccountSettlementService";
 
-const service = {
-	listLedgerAccountSettlements:
-		vi.fn<LedgerAccountSettlementService["listLedgerAccountSettlements"]>(),
-	getLedgerAccountSettlement: vi.fn<LedgerAccountSettlementService["getLedgerAccountSettlement"]>(),
-	createLedgerAccountSettlement:
-		vi.fn<LedgerAccountSettlementService["createLedgerAccountSettlement"]>(),
-	patchLedgerAccountSettlement:
-		vi.fn<LedgerAccountSettlementService["patchLedgerAccountSettlement"]>(),
-	addLedgerAccountSettlementEntries:
-		vi.fn<LedgerAccountSettlementService["addLedgerAccountSettlementEntries"]>(),
-	removeLedgerAccountSettlementEntries:
-		vi.fn<LedgerAccountSettlementService["removeLedgerAccountSettlementEntries"]>(),
-	listLedgerAccountSettlementEntries:
-		vi.fn<LedgerAccountSettlementService["listLedgerAccountSettlementEntries"]>(),
-};
-const orgId = new TypeID("org");
-const ledgerId = new TypeID("lgr");
-const settlementId = new TypeID("las");
-const settledAccountId = new TypeID("lat");
-const contraAccountId = new TypeID("lat");
+const orgId = new TypeID("org") as OrgID;
+const ledgerId = new TypeID("lgr") as LedgerID;
+const settlementId = new TypeID("las") as LedgerAccountSettlementID;
+const settledAccountId = new TypeID("lat") as LedgerAccountID;
+const contraAccountId = new TypeID("lat") as LedgerAccountID;
 const date = DateTime.fromISO("2026-09-06T12:00:00Z");
 const settlement = new LedgerAccountSettlementEntity({
 	id: settlementId,
@@ -58,112 +37,117 @@ const payload = {
 	contraAccountId: contraAccountId.toString(),
 	status: "drafting",
 };
-const auth = {
-	authorization: `Bearer ${signJWT({ sub: orgId.toString(), scope: ["org_admin"] })}`,
+
+const service = (): LedgerAccountSettlementService =>
+	vi.mocked<LedgerAccountSettlementService>({
+		listLedgerAccountSettlements: vi.fn(() => Effect.succeed([settlement])),
+		getLedgerAccountSettlement: vi.fn(() => Effect.succeed(settlement)),
+		createLedgerAccountSettlement: vi.fn(() => Effect.succeed(settlement)),
+		patchLedgerAccountSettlement: vi.fn(() => Effect.succeed(settlement)),
+		addLedgerAccountSettlementEntries: vi.fn(() => Effect.void),
+		removeLedgerAccountSettlementEntries: vi.fn(() => Effect.void),
+		listLedgerAccountSettlementEntries: vi.fn(() => Effect.succeed([])),
+	} as unknown as LedgerAccountSettlementService);
+
+const buildHandler = useTestWebHandlers();
+const build = (implementation: LedgerAccountSettlementService) => {
+	return buildHandler({ settlement: implementation });
 };
-const userAuth = {
-	authorization: `Bearer ${signJWT({ sub: orgId.toString(), scope: ["org_user"] })}`,
-};
-const readAuth = {
-	authorization: `Bearer ${signJWT({ sub: orgId.toString(), scope: ["org_readonly"] })}`,
-};
-let headers: Record<string, string>;
+const tokenWith = tokenFor(orgId);
+const request = makeRequest(() => tokenWith(["org_admin"]));
+const key = (value = crypto.randomUUID()) => ({ "idempotency-key": value });
+const entryId = () => new TypeID("lte").toString();
+
+const routes: Array<[string, string, string, unknown]> = [
+	["GET", base, "ledger:account:settlement:read", undefined],
+	["GET", resource, "ledger:account:settlement:read", undefined],
+	["POST", base, "ledger:account:settlement:write", payload],
+	["PATCH", resource, "ledger:account:settlement:write", { description: "x" }],
+	["PATCH", `${resource}/entries`, "ledger:account:settlement:write", { entries: [entryId()] }],
+	["DELETE", `${resource}/entries`, "ledger:account:settlement:write", { entries: [entryId()] }],
+	["GET", `${resource}/entries`, "ledger:account:settlement:read", undefined],
+];
 
 describe("Settlement routes", () => {
-	let server: FastifyInstance;
-	beforeAll(async () => {
-		const config = new Config();
-		server = await buildServer({
-			runtimeLayer: Layer.mergeAll(
-				Layer.succeed(ServerConfigTag, config),
-				makeDatabaseLive(config.databaseUrl),
-				Layer.succeed(
-					LedgerAccountSettlementServiceTag,
-					service as unknown as LedgerAccountSettlementService
-				)
-			) as ServerRuntimeLayer,
-		});
-	});
-	afterAll(async () => {
-		await server.close();
-	});
-	beforeEach(() => {
-		vi.resetAllMocks();
-		headers = { ...auth, "idempotency-key": crypto.randomUUID() };
-	});
-
 	it("creates a draft and returns its Location", async () => {
-		service.createLedgerAccountSettlement.mockReturnValue(Effect.succeed(settlement));
-		const response = await server.inject({ method: "POST", url: base, headers, payload });
-		expect(response.statusCode).toBe(201);
-		expect(response.headers.location).toBe(resource);
-		expect(response.json()).toMatchObject({
-			id: settlementId.toString(),
-			ledgerId: ledgerId.toString(),
-		});
-		expect(response.json<LedgerAccountSettlementResponse>().transactionId).toBeNull();
-		expect(response.json<LedgerAccountSettlementResponse>().amount).toBeNull();
-		expect(response.json<LedgerAccountSettlementResponse>().settlementEntryDirection).toBeNull();
-		expect(service.createLedgerAccountSettlement).toHaveBeenCalledWith(
+		const implementation = service();
+		const headers = key();
+		const response = await build(implementation)(request("POST", base, { body: payload, headers }));
+		expect(response.status).toBe(201);
+		expect(response.headers.get("location")).toBe(resource);
+		const json = (await response.json()) as Record<string, unknown>;
+		expect(json).toMatchObject({ id: settlementId.toString(), ledgerId: ledgerId.toString() });
+		expect(json.transactionId).toBeNull();
+		expect(json.amount).toBeNull();
+		expect(json.settlementEntryDirection).toBeNull();
+		expect(json.effectiveAtUpperBound).toBeNull();
+		expect(json).not.toHaveProperty("description");
+		expect(implementation.createLedgerAccountSettlement).toHaveBeenCalledWith(
 			orgId,
 			ledgerId,
 			headers["idempotency-key"],
 			expect.objectContaining(payload)
 		);
 	});
+
 	it("applies create defaults", async () => {
-		service.createLedgerAccountSettlement.mockReturnValue(Effect.succeed(settlement));
-		const response = await server.inject({
-			method: "POST",
-			url: base,
-			headers,
-			payload: {
-				settledAccountId: payload.settledAccountId,
-				contraAccountId: payload.contraAccountId,
-			},
-		});
-		expect(response.statusCode).toBe(201);
-		expect(service.createLedgerAccountSettlement).toHaveBeenCalledWith(
+		const implementation = service();
+		const headers = key();
+		const response = await build(implementation)(
+			request("POST", base, {
+				headers,
+				body: {
+					settledAccountId: payload.settledAccountId,
+					contraAccountId: payload.contraAccountId,
+				},
+			})
+		);
+		expect(response.status).toBe(201);
+		expect(implementation.createLedgerAccountSettlement).toHaveBeenCalledWith(
 			orgId,
 			ledgerId,
 			headers["idempotency-key"],
 			expect.objectContaining({ status: "pending", allowEitherDirection: false })
 		);
 	});
+
 	it("scopes listing and forwards pagination", async () => {
-		service.listLedgerAccountSettlements.mockReturnValue(Effect.succeed([settlement]));
-		const response = await server.inject({
-			method: "GET",
-			url: `${base}?offset=10&limit=5`,
-			headers: auth,
-		});
-		expect(response.statusCode).toBe(200);
-		expect(service.listLedgerAccountSettlements).toHaveBeenCalledWith(orgId, ledgerId, 10, 5);
+		const implementation = service();
+		const response = await build(implementation)(request("GET", `${base}?offset=10&limit=5`));
+		expect(response.status).toBe(200);
+		expect(implementation.listLedgerAccountSettlements).toHaveBeenCalledWith(orgId, ledgerId, 10, 5);
 	});
+
 	it("scopes individual lookup to the path Ledger", async () => {
-		const other = new TypeID("lgr");
-		service.getLedgerAccountSettlement.mockReturnValue(
-			Effect.fail(new NotFoundError("Settlement not found"))
+		const other = new TypeID("lgr") as LedgerID;
+		const implementation = service();
+		vi
+			.mocked(implementation.getLedgerAccountSettlement)
+			.mockReturnValue(Effect.fail(new NotFoundError("Settlement not found")));
+		const response = await build(implementation)(
+			request("GET", `/api/ledgers/${other.toString()}/settlements/${settlementId.toString()}`)
 		);
-		const response = await server.inject({
-			method: "GET",
-			url: `/api/ledgers/${other.toString()}/settlements/${settlementId.toString()}`,
-			headers: auth,
-		});
-		expect(response.statusCode).toBe(404);
-		expect(service.getLedgerAccountSettlement).toHaveBeenCalledWith(orgId, other, settlementId);
+		expect(response.status).toBe(404);
+		expect(implementation.getLedgerAccountSettlement).toHaveBeenCalledWith(
+			orgId,
+			other,
+			settlementId
+		);
 	});
+
 	it("patches metadata and status with the full scope", async () => {
-		service.patchLedgerAccountSettlement.mockReturnValue(Effect.succeed(settlement));
+		const implementation = service();
+		const headers = key();
 		const patch = { status: "pending", metadata: { batch: "daily" } };
-		const response = await server.inject({
-			method: "PATCH",
-			url: resource,
-			headers: { ...headers, ...userAuth },
-			payload: patch,
-		});
-		expect(response.statusCode).toBe(200);
-		expect(service.patchLedgerAccountSettlement).toHaveBeenCalledWith(
+		const response = await build(implementation)(
+			request("PATCH", resource, {
+				token: tokenWith(["org_user"]),
+				headers,
+				body: patch,
+			})
+		);
+		expect(response.status).toBe(200);
+		expect(implementation.patchLedgerAccountSettlement).toHaveBeenCalledWith(
 			orgId,
 			ledgerId,
 			settlementId,
@@ -171,60 +155,55 @@ describe("Settlement routes", () => {
 			patch
 		);
 	});
+
 	it("requires delete permission in addition to write for voiding", async () => {
-		service.patchLedgerAccountSettlement.mockReturnValue(Effect.succeed(settlement));
-		const response = await server.inject({
-			method: "PATCH",
-			url: resource,
-			headers: { ...headers, ...userAuth },
-			payload: { status: "voided" },
-		});
-		expect(response.statusCode).toBe(403);
-		expect(service.patchLedgerAccountSettlement).not.toHaveBeenCalled();
-		const allowed = await server.inject({
-			method: "PATCH",
-			url: resource,
-			headers,
-			payload: { status: "voided" },
-		});
-		expect(allowed.statusCode).toBe(200);
+		const implementation = service();
+		const handler = build(implementation);
+		const denied = await handler(
+			request("PATCH", resource, {
+				token: tokenWith(["org_user"]),
+				headers: key(),
+				body: { status: "voided" },
+			})
+		);
+		expect(denied.status).toBe(403);
+		const problem = (await denied.json()) as { type: string; detail: string };
+		expect(problem.type).toBe("FORBIDDEN");
+		expect(problem.detail).toBe("One of: ledger:account:settlement:delete; permissions is required");
+		expect(implementation.patchLedgerAccountSettlement).not.toHaveBeenCalled();
+		const allowed = await handler(
+			request("PATCH", resource, { headers: key(), body: { status: "voided" } })
+		);
+		expect(allowed.status).toBe(200);
 	});
+
 	it.each(["PATCH", "DELETE"] as const)(
 		"%s membership returns 204 and forwards scope",
 		async method => {
-			const mock =
-				method === "PATCH"
-					? service.addLedgerAccountSettlementEntries
-					: service.removeLedgerAccountSettlementEntries;
-			mock.mockReturnValue(Effect.void);
-			const entries = [new TypeID("lte").toString()];
-			const response = await server.inject({
-				method,
-				url: `${resource}/entries`,
-				headers,
-				payload: { entries },
-			});
-			expect(response.statusCode).toBe(204);
-			expect(response.body).toBe("");
-			expect(mock).toHaveBeenCalledWith(
-				orgId,
-				ledgerId,
-				settlementId,
-				headers["idempotency-key"],
-				entries
+			const implementation = service();
+			const headers = key();
+			const entries = [entryId()];
+			const response = await build(implementation)(
+				request(method, `${resource}/entries`, { headers, body: { entries } })
 			);
+			expect(response.status).toBe(204);
+			expect(await response.text()).toBe("");
+			expect(
+				method === "PATCH"
+					? implementation.addLedgerAccountSettlementEntries
+					: implementation.removeLedgerAccountSettlementEntries
+			).toHaveBeenCalledWith(orgId, ledgerId, settlementId, headers["idempotency-key"], entries);
 		}
 	);
+
 	it("lists sources with default pagination and read permission", async () => {
-		service.listLedgerAccountSettlementEntries.mockReturnValue(Effect.succeed([]));
-		const response = await server.inject({
-			method: "GET",
-			url: `${resource}/entries`,
-			headers: readAuth,
-		});
-		expect(response.statusCode).toBe(200);
-		expect(response.json()).toEqual([]);
-		expect(service.listLedgerAccountSettlementEntries).toHaveBeenCalledWith(
+		const implementation = service();
+		const response = await build(implementation)(
+			request("GET", `${resource}/entries`, { token: tokenWith(["org_readonly"]) })
+		);
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual([]);
+		expect(implementation.listLedgerAccountSettlementEntries).toHaveBeenCalledWith(
 			orgId,
 			ledgerId,
 			settlementId,
@@ -232,75 +211,281 @@ describe("Settlement routes", () => {
 			20
 		);
 	});
+
 	it.each(["offset=-1", "offset=10001", "limit=0", "limit=101", "offset=1.5"])(
 		"rejects invalid pagination %s",
 		async query => {
-			for (const url of [base, `${resource}/entries`])
-				expect(
-					(await server.inject({ method: "GET", url: `${url}?${query}`, headers: auth })).statusCode
-				).toBe(400);
-			expect(service.listLedgerAccountSettlements).not.toHaveBeenCalled();
-			expect(service.listLedgerAccountSettlementEntries).not.toHaveBeenCalled();
+			const implementation = service();
+			const handler = build(implementation);
+			for (const url of [base, `${resource}/entries`]) {
+				const response = await handler(request("GET", `${url}?${query}`));
+				expect(response.status).toBe(400);
+				expect(await response.json()).toMatchObject({ type: "BAD_REQUEST", status: 400 });
+			}
+			expect(implementation.listLedgerAccountSettlements).not.toHaveBeenCalled();
+			expect(implementation.listLedgerAccountSettlementEntries).not.toHaveBeenCalled();
 		}
 	);
+
 	it.each(
-		[[], ["invalid"], Array.from({ length: 501 }, () => new TypeID("lte").toString())].map(
-			entries => ({ entries })
-		)
+		[
+			[],
+			["invalid"],
+			Array.from({ length: 501 }, () => entryId()),
+			(() => {
+				const id = entryId();
+				return [id, id];
+			})(),
+		].map(entries => ({ entries }))
 	)("rejects invalid membership input %#", async ({ entries }) => {
-		const response = await server.inject({
-			method: "PATCH",
-			url: `${resource}/entries`,
-			headers,
-			payload: { entries },
-		});
-		expect(response.statusCode).toBe(400);
-		expect(service.addLedgerAccountSettlementEntries).not.toHaveBeenCalled();
+		const implementation = service();
+		const handler = build(implementation);
+		for (const method of ["PATCH", "DELETE"]) {
+			const response = await handler(
+				request(method, `${resource}/entries`, { headers: key(), body: { entries } })
+			);
+			expect(response.status).toBe(400);
+			expect(await response.json()).toMatchObject({ type: "BAD_REQUEST" });
+		}
+		expect(implementation.addLedgerAccountSettlementEntries).not.toHaveBeenCalled();
+		expect(implementation.removeLedgerAccountSettlementEntries).not.toHaveBeenCalled();
 	});
-	it.each(["drafting", "processing", "invalid"])("rejects client patch status %s", async status => {
-		expect(
-			(await server.inject({ method: "PATCH", url: resource, headers, payload: { status } }))
-				.statusCode
-		).toBe(400);
-		expect(service.patchLedgerAccountSettlement).not.toHaveBeenCalled();
-	});
-	it("requires a client key on mutations", async () => {
-		expect(
-			(await server.inject({ method: "POST", url: base, headers: auth, payload })).statusCode
-		).toBe(400);
-		expect(service.createLedgerAccountSettlement).not.toHaveBeenCalled();
-	});
-	it("rejects readonly writes", async () => {
-		expect(
-			(
-				await server.inject({
-					method: "POST",
-					url: base,
-					headers: { ...headers, ...readAuth },
-					payload,
-				})
-			).statusCode
-		).toBe(403);
-		expect(service.createLedgerAccountSettlement).not.toHaveBeenCalled();
-	});
-	it("requires authentication", async () => {
-		expect((await server.inject({ method: "GET", url: base })).statusCode).toBe(401);
-	});
-	it.each(["PUT", "DELETE"] as const)("removes resource %s", async method => {
-		expect((await server.inject({ method, url: resource, headers, payload })).statusCode).toBe(404);
-	});
-	it("removes status POST", async () => {
-		expect(
-			(await server.inject({ method: "POST", url: `${resource}/pending`, headers })).statusCode
-		).toBe(404);
-	});
-	it("translates a service conflict", async () => {
-		service.patchLedgerAccountSettlement.mockReturnValue(
-			Effect.fail(new ConflictError("Cannot change a posted Settlement"))
+
+	it("accepts 500 distinct entries", async () => {
+		const implementation = service();
+		const response = await build(implementation)(
+			request("PATCH", `${resource}/entries`, {
+				headers: key(),
+				body: { entries: Array.from({ length: 500 }, () => entryId()) },
+			})
 		);
-		expect(
-			(await server.inject({ method: "PATCH", url: resource, headers, payload: { status: "voided" } }))
-				.statusCode
-		).toBe(409);
+		expect(response.status).toBe(204);
+	});
+
+	it.each(["drafting", "processing", "invalid"])("rejects client patch status %s", async status => {
+		const implementation = service();
+		const response = await build(implementation)(
+			request("PATCH", resource, { headers: key(), body: { status } })
+		);
+		expect(response.status).toBe(400);
+		expect(implementation.patchLedgerAccountSettlement).not.toHaveBeenCalled();
+	});
+
+	it.each(["2026-09-06 12:00:00Z", "2026-12-31T23:59:60Z", "2026-02-30T12:00:00Z", "nope"])(
+		"rejects effectiveAtUpperBound %s",
+		async effectiveAtUpperBound => {
+			const implementation = service();
+			const response = await build(implementation)(
+				request("POST", base, {
+					headers: key(),
+					body: { ...payload, status: "pending", effectiveAtUpperBound },
+				})
+			);
+			expect(response.status).toBe(400);
+			expect(implementation.createLedgerAccountSettlement).not.toHaveBeenCalled();
+		}
+	);
+
+	it("accepts an RFC 3339 effectiveAtUpperBound and strips unknown body fields", async () => {
+		const implementation = service();
+		const response = await build(implementation)(
+			request("POST", base, {
+				headers: key(),
+				body: {
+					...payload,
+					status: "pending",
+					effectiveAtUpperBound: "2026-09-06T12:00:00+02:00",
+					unknown: "dropped",
+				},
+			})
+		);
+		expect(response.status).toBe(201);
+		const [, , , body] = vi.mocked(implementation.createLedgerAccountSettlement).mock.calls[0];
+		expect(body).not.toHaveProperty("unknown");
+		expect(body.effectiveAtUpperBound).toBe("2026-09-06T12:00:00+02:00");
+	});
+
+	it("requires a client key on mutations", async () => {
+		const implementation = service();
+		const response = await build(implementation)(request("POST", base, { body: payload }));
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ type: "BAD_REQUEST" });
+		expect(implementation.createLedgerAccountSettlement).not.toHaveBeenCalled();
+	});
+
+	it("rejects readonly writes", async () => {
+		const implementation = service();
+		const response = await build(implementation)(
+			request("POST", base, {
+				token: tokenWith(["org_readonly"]),
+				headers: key(),
+				body: payload,
+			})
+		);
+		expect(response.status).toBe(403);
+		expect(implementation.createLedgerAccountSettlement).not.toHaveBeenCalled();
+	});
+
+	it("requires authentication", async () => {
+		const implementation = service();
+		const response = await build(implementation)(request("GET", base, { anonymous: true }));
+		expect(response.status).toBe(401);
+		expect(await response.json()).toMatchObject({ type: "UNAUTHORIZED", detail: "Invalid token" });
+		expect(implementation.listLedgerAccountSettlements).not.toHaveBeenCalled();
+	});
+
+	it.each(["PUT", "DELETE"] as const)("removes resource %s", async method => {
+		const response = await build(service())(
+			request(method, resource, { headers: key(), body: payload })
+		);
+		expect(response.status).toBe(404);
+	});
+
+	it("removes status POST", async () => {
+		const response = await build(service())(
+			request("POST", `${resource}/pending`, { headers: key() })
+		);
+		expect(response.status).toBe(404);
+	});
+
+	it("translates a service conflict", async () => {
+		const implementation = service();
+		vi
+			.mocked(implementation.patchLedgerAccountSettlement)
+			.mockReturnValue(Effect.fail(new ConflictError("Cannot change a posted Settlement")));
+		const response = await build(implementation)(
+			request("PATCH", resource, { headers: key(), body: { status: "voided" } })
+		);
+		expect(response.status).toBe(409);
+		expect(await response.json()).toMatchObject({
+			type: "CONFLICT",
+			detail: "Cannot change a posted Settlement",
+		});
+	});
+
+	describe("authorization", () => {
+		it.each(routes)(
+			"returns 403 on %s %s for a token without scope",
+			async (method, path, permission, body) => {
+				const implementation = service();
+				const response = await build(implementation)(
+					request(method, path, { token: tokenWith([]), body, headers: key() })
+				);
+				expect(response.status).toBe(403);
+				expect(await response.json()).toMatchObject({
+					type: "FORBIDDEN",
+					detail: `One of: ${permission}; permissions is required`,
+				});
+				for (const method of Object.values(implementation)) expect(method).not.toHaveBeenCalled();
+			}
+		);
+	});
+
+	describe("OpenAPI", () => {
+		const spec = OpenApi.fromApi(LedgerApi);
+		type Operation = {
+			operationId: string;
+			responses: object;
+			parameters?: Array<{ name: string; in: string; required: boolean }>;
+		};
+		const operations = (path: string) => spec.paths[path] as unknown as Record<string, Operation>;
+		const statuses = (path: string, method: string) =>
+			Object.keys(operations(path)[method].responses);
+		const collection = "/api/ledgers/{ledgerId}/settlements/";
+		const item = "/api/ledgers/{ledgerId}/settlements/{settlementId}";
+		const entries = `${item}/entries`;
+		const groupOperationIds = [
+			"listLedgerAccountSettlements",
+			"getLedgerAccountSettlement",
+			"createLedgerAccountSettlement",
+			"patchLedgerAccountSettlement",
+			"addLedgerAccountSettlementEntries",
+			"removeLedgerAccountSettlementEntries",
+			"listLedgerAccountSettlementEntries",
+		];
+		const groupOperations = () =>
+			Object.values(spec.paths)
+				.flatMap(path => Object.values(path ?? {}) as Operation[])
+				.filter(operation => groupOperationIds.includes(operation.operationId));
+
+		it("declares 429 on every Settlement operation", () => {
+			const found = groupOperations();
+			expect(found.map(operation => operation.operationId).sort()).toEqual(
+				[...groupOperationIds].sort()
+			);
+			for (const operation of found) expect(Object.keys(operation.responses)).toContain("429");
+		});
+
+		it("advertises operation-specific failures", () => {
+			expect(statuses(collection, "get")).toEqual(
+				expect.arrayContaining(["200", "400", "401", "403"])
+			);
+			expect(statuses(collection, "get")).not.toContain("404");
+			expect(statuses(collection, "get")).not.toContain("409");
+			expect(statuses(item, "get")).toEqual(expect.arrayContaining(["200", "404"]));
+			expect(statuses(item, "get")).not.toContain("409");
+			// The service fails with 404 when the settled Account is missing, so create declares it.
+			expect(statuses(collection, "post")).toEqual(expect.arrayContaining(["201", "409", "404"]));
+			expect(statuses(item, "patch")).toEqual(expect.arrayContaining(["200", "404", "409"]));
+			expect(statuses(entries, "patch")).toEqual(expect.arrayContaining(["204", "404", "409"]));
+			expect(statuses(entries, "delete")).toEqual(expect.arrayContaining(["204", "404", "409"]));
+			expect(statuses(entries, "get")).toEqual(expect.arrayContaining(["200", "404"]));
+			expect(statuses(entries, "get")).not.toContain("409");
+		});
+
+		it("names operations and requires the idempotency key on writes only", () => {
+			const idempotency = (path: string, method: string) =>
+				operations(path)[method].parameters?.find(entry => entry.name === "idempotency-key");
+			for (const [path, method] of [
+				[collection, "post"],
+				[item, "patch"],
+				[entries, "patch"],
+				[entries, "delete"],
+			] as const)
+				expect(idempotency(path, method)).toMatchObject({ in: "header", required: true });
+			expect(idempotency(collection, "get")).toBeUndefined();
+			expect(idempotency(entries, "get")).toBeUndefined();
+		});
+
+		it("documents the list offset and limit as optional", () => {
+			for (const [path] of [[collection], [entries]])
+				for (const name of ["offset", "limit"])
+					expect(operations(path).get.parameters?.find(entry => entry.name === name)).toMatchObject({
+						in: "query",
+						required: false,
+					});
+		});
+
+		it("keeps format date-time on the create request effectiveAtUpperBound", () => {
+			const body = (
+				operations(collection).post as unknown as {
+					requestBody: { content: Record<string, { schema: unknown }> };
+				}
+			).requestBody.content["application/json"].schema;
+			const request = spec.components.schemas.LedgerAccountSettlementRequest as unknown as {
+				properties: Record<string, { format?: string }>;
+			};
+			expect(request.properties.effectiveAtUpperBound.format).toBe("date-time");
+			expect(JSON.stringify(body)).toContain("LedgerAccountSettlementRequest");
+		});
+
+		it("locks the Settlement body schemas", () => {
+			const { schemas } = spec.components;
+			expect({
+				LedgerAccountSettlementRequest: schemas.LedgerAccountSettlementRequest,
+				LedgerAccountSettlementResponse: schemas.LedgerAccountSettlementResponse,
+				LedgerAccountSettlementResponse_1: schemas.LedgerAccountSettlementResponse_1,
+			}).toMatchSnapshot();
+		});
+
+		it("documents the create defaults as optional properties", () => {
+			const request = spec.components.schemas.LedgerAccountSettlementRequest as unknown as {
+				properties: Record<string, { default?: unknown }>;
+				required: string[];
+			};
+			expect(request.properties.status.default).toBe("pending");
+			expect(request.properties.allowEitherDirection.default).toBe(false);
+			expect(request.required).toEqual(["settledAccountId", "contraAccountId"]);
+		});
 	});
 });

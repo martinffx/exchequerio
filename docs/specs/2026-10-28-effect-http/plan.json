@@ -1,0 +1,668 @@
+{
+	"feature": "effect-http",
+	"spec": "docs/specs/2026-10-28-effect-http/design.md",
+	"goal": "Serve every API route with Effect HttpApi on @effect/platform-node, validate with Effect Schema, render typed problem errors and generate OpenAPI from the API definition, then remove Fastify and TypeBox, changing behaviour only in the listed ways.",
+	"preserved_behavior": [
+		"All 50 /api routes keep method, path, operationId, permissions, success status, Location/Retry-After headers and body, including per-route oddities (200 creates, 200 empty deletes/links, settlement Location from the raw ledgerId, ignored statement path IDs, raw strings into the balance-monitor service)",
+		"Problem body {type,status,title,detail,instance,traceId,retryable?}; IdempotencyPending stays 409 with Retry-After: 1; errors with status >= 500 are logged with their cause and the cause is never exposed",
+		"401 'Invalid token' for a missing/invalid JWT or a non-canonical org_ sub; 403 'One of: <perms>; permissions is required'; permissions from scope[0] only, all required; settlement PATCH to voided also needs ledger:account:settlement:delete; an authenticated invalid request gets 400 before 403",
+		"Query integer coercion, body defaults, unknown body field stripping (Asset rejects any invalid body: 'Invalid Asset creation request' on create, 'Invalid Asset replacement request' on replace), numeric amount and non-string metadata 400s, undeclared response field stripping",
+		"GET /health returns 200 {} without auth; the server listens on ::, port 3000; in-flight requests drain on shutdown with connection: close",
+		"Services, repositories, entity logic, DB schema, worker and monitor-jobs are unchanged"
+	],
+	"phases": [
+		{
+			"id": "P1",
+			"name": "Shell and Organizations (green at the end)",
+			"tasks": [
+				{
+					"id": "T1",
+					"name": "Problem errors encode to today's problem body as Schema error classes",
+					"depends_on": [],
+					"inputs": [
+						"design.md Components 1, US-3 and spike risk 1",
+						"Listed change 8 (strict body typing: AJV body coercion is dropped, so {name:123}, description:null and 'false' for a boolean get 400) must be added to design.md before implementation starts; this plan assumes it",
+						"apps/api/src/lib/errors.ts (HttpError, 8 base classes, InvalidId, globalErrorHandler, TypeBox *Problem exports)",
+						"IdempotencyPending retryAfterSeconds at apps/api/src/lib/IdempotencyService.ts:52-57",
+						"Existing mapping tests at apps/api/src/ServerRoutes.test.ts:59-99",
+						"Local setup: pnpm install; copy apps/api/.env.example to apps/api/.env and generate BALANCE_MONITOR_ENCRYPTION_KEY (uncommitted)"
+					],
+					"description": "Make HttpError a Schema error class and build each of the 8 base classes with its own class identifier (HttpError.extend<...>(\"BadRequestError\")), otherwise one base class's schema matches every HttpError and errors are sent with the wrong status. Encode with HttpApiSchema.encodeToWithHeaders to {type,status,title,detail,instance:'/instance/<uuidv7>',traceId:<uuidv7>,retryable?} annotated with httpApiStatus, plus an optional retry-after header derived from retryAfterSeconds. Keep the (message, options) constructor and the type/statusCode/title members; keep retryAfterSeconds and cause off the encoded shape; InvalidId stays a BadRequest subclass. Keep toProblemDetail, globalErrorHandler and the TypeBox *Problem exports for the legacy Fastify path until T16. Use new names for the Effect error schemas. If the constructor cannot be kept, apply the mechanical fallback across the domain *Errors.ts files and record that it was needed.",
+					"files": {
+						"reuse": [
+							"apps/api/src/domains/organizations/OrganizationErrors.ts",
+							"apps/api/src/domains/ledgers/LedgerErrors.ts"
+						],
+						"create": [],
+						"modify": ["apps/api/src/lib/errors.ts", "apps/api/src/ServerRoutes.test.ts"],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"Encoding contract (asserted through ServerRoutes.test.ts and the Routes suites, not a standalone errors.test.ts): each of the 8 classes encodes to the body with no _tag and uuidv7 instance/traceId",
+							"retryable appears only when set; ServiceUnavailable is retryable by default",
+							"retryAfterSeconds yields the retry-after header and is not in the body; cause is never encoded",
+							"A union of the [BadRequest, NotFound] schemas encodes an OrganizationNotFound as 404",
+							"Domain subclasses (OrganizationNotFound, InvalidId) stay instanceof HttpError with their status"
+						],
+						"acceptance": [
+							"The full existing suite passes unchanged",
+							"pnpm run check passes"
+						]
+					}
+				},
+				{
+					"id": "T2",
+					"name": "Organizations are served by HttpApi behind JWT auth",
+					"depends_on": ["T1"],
+					"inputs": [
+						"design.md Components 2-7, Test seams, US-4",
+						"apps/api/src/domains/organizations/OrganizationRoutes.ts, OrganizationSchema.ts, OrganizationRoutes.test.ts",
+						"apps/api/src/auth.ts (OrgToken, RolePermissions, signJWT, registerAuth)",
+						"makeServerRuntimeLayer in apps/api/src/runtime.ts",
+						"Effect examples in apps/api/node_modules/effect/ai-docs/src/51_http-server/ (10_basics.ts, 20_testing.ts)",
+						"HttpApi.prefix and .middleware only apply to groups already added"
+					],
+					"description": "Convert OrganizationSchema.ts to Effect Schema (same exported names, type X = typeof X.Type aliases). Create OrganizationApi.ts: HttpApiGroup with today's operationIds (OpenApi.Identifier), tag, 201+Location, 204 and today's error sets. Create src/api.ts with the fixed structure HttpApi.make('ledger').add(OrganizationApi).prefix('/api').middleware(Authentication); groups are only ever added inside .add(...). In auth.ts add CurrentToken, Authentication (HttpApiMiddleware.Service, security bearer, provides CurrentToken, fast-jwt createVerifier, rejects an empty credential, logged 401 'Invalid token', non-canonical sub also 401) and requirePermissions (ForbiddenError with today's message; all listed permissions required). The JWT secret is injected by the server layer; auth.ts must not import runtime.ts (import cycle). Keep registerAuth and the Fastify augmentation until T16. Rewrite OrganizationRoutes.ts as HttpApiBuilder.group (requirePermissions, no token use, parseId, service, toResponse); do not re-export it from organizations/index.ts, server.ts imports handler layers directly. In server.ts add appLayer (API, handler layers, Authentication, HttpServer.layerServices), makeServerLayer(config, overrides) = appLayer provided with makeServerRuntimeLayer, and makeTestWebHandler(stubs) wrapping HttpRouter.toWebHandler with services not stubbed filled by stubs that die if called; unregister Organizations from the legacy buildServer. Port OrganizationRoutes.test.ts to the web handler with real signJWT tokens and stubbed services; permission-spy assertions become behavioural 403 tests.",
+					"files": {
+						"reuse": [
+							"apps/api/src/runtime.ts",
+							"apps/api/src/domains/organizations/OrganizationService.ts",
+							"apps/api/src/lib/utils.ts"
+						],
+						"create": [
+							"apps/api/src/api.ts",
+							"apps/api/src/domains/organizations/OrganizationApi.ts"
+						],
+						"modify": [
+							"apps/api/src/auth.ts",
+							"apps/api/src/server.ts",
+							"apps/api/src/domains/organizations/OrganizationSchema.ts",
+							"apps/api/src/domains/organizations/OrganizationRoutes.ts",
+							"apps/api/src/domains/organizations/OrganizationRoutes.test.ts",
+							"apps/api/src/domains/organizations/index.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [
+						{
+							"name": "LedgerApi",
+							"requirement": "US-1 and US-5: one API definition drives routing and OpenAPI",
+							"consumers": ["the 9 route groups", "OpenAPI generation at /docs/json", "route-test OpenAPI assertions"]
+						},
+						{
+							"name": "CurrentToken and Authentication",
+							"requirement": "US-4: JWT authentication providing the Organization token",
+							"consumers": ["every endpoint (Authentication)", "the 8 token-scoped groups (CurrentToken)"]
+						},
+						{
+							"name": "requirePermissions",
+							"requirement": "US-4: all-permissions-required check with today's 403 message",
+							"consumers": ["all 50 handlers"]
+						},
+						{
+							"name": "appLayer and makeServerLayer",
+							"requirement": "US-1: single composition of the HTTP app and service wiring",
+							"consumers": ["index.ts entrypoint", "the drain test", "transaction.bench.ts", "category-balances.bench.ts"]
+						},
+						{
+							"name": "makeTestWebHandler",
+							"requirement": "US-2: socketless route-test seam",
+							"consumers": ["the 9 route test files", "ServerRoutes.test.ts"]
+						}
+					],
+					"validation": {
+						"tests": [
+							"OrganizationRoutes.test.ts: 201 + Location, 204 with empty body, 404 problem, no description key when absent",
+							"Auth: missing header, bad signature and non-org_ sub each return 401 'Invalid token'; an unauthenticated invalid body returns 401",
+							"Auth: a scope: [] token gets the exact 403 detail on every Organization route; an org_admin token gets 403 on organization:*",
+							"OpenAPI: fromApi(LedgerApi) has the 5 Organization operationIds, the tag, the per-route status sets and the /api/organizations/ key"
+						],
+						"acceptance": [
+							"Legacy Fastify route tests still pass",
+							"pnpm run check passes",
+							"auth.ts does not import runtime.ts"
+						]
+					}
+				},
+				{
+					"id": "T3",
+					"name": "Invalid requests, edge failures, health and docs render as problems",
+					"depends_on": ["T2"],
+					"inputs": [
+						"design.md Components 2 and 7, listed changes 2 and 4-8, spike risk 2",
+						"Current OpenAPI info, servers and tags at apps/api/src/server.ts:111-140",
+						"HttpApiSchemaError kinds: Params, Headers, Query, Payload (request) and Body, ResponseHeaders (response)",
+						"Declared errors are encoded inside the handler, so the global middleware never sees them"
+					],
+					"description": "In api.ts add the schema-error transform (layerSchemaErrorTransform): request kinds (including malformed JSON, which arrives as a Payload error) become a BadRequestError problem; response kinds are re-thrown unchanged; add OpenAPI info, servers and tags. In server.ts add a global router middleware: a problem defect (for example a BadRequestError thrown by parseAmount) renders as that problem; a response-kind schema-error defect, an undeclared failure (log its original cause) and any other defect render as a logged 500 INTERNAL_SERVER_ERROR problem; an unknown route renders as a NOT_FOUND problem. Add an ErrorReporter layer that logs declared HttpError with status >= 500 together with its cause. Add GET /health, HttpApiSwagger at /docs, OpenApi.fromApi at /docs/json and HttpMiddleware.logger. Use Organization stubs as the test vehicle; do not add test-only endpoints.",
+					"files": {
+						"reuse": ["apps/api/src/lib/errors.ts"],
+						"create": [],
+						"modify": [
+							"apps/api/src/api.ts",
+							"apps/api/src/server.ts",
+							"apps/api/src/ServerRoutes.test.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"Validation: unknown body field stripped; limit=500 gets a 400 with type BAD_REQUEST; offset=5 coerced to an integer; {name:123} gets 400; an authenticated invalid body gets 400 not 403",
+							"Malformed JSON gets a 400 BAD_REQUEST problem; an unsupported content type gets 415 (status only)",
+							"A problem defect renders as its status; an unknown defect gets a sanitised 500 and is logged; a declared ServiceUnavailableError is logged with its cause",
+							"A stub whose response violates the success schema gets a 500 problem; an unknown route gets a 404 NOT_FOUND problem",
+							"/health returns 200 {} without auth; /docs returns 200 HTML; /docs/json contains info, servers, tags and a bearer scheme"
+						],
+						"acceptance": [
+							"pnpm run check passes",
+							"The full API suite passes"
+						]
+					}
+				},
+				{
+					"id": "T4",
+					"name": "Entrypoint serves the app and drains on shutdown",
+					"depends_on": ["T3"],
+					"inputs": [
+						"design.md Components 8, US-1, US-6 and spike risk 3",
+						"apps/api/src/index.ts and apps/api/src/shutdown.ts",
+						"Drain test at apps/api/src/ServerRoutes.test.ts:148-209",
+						"NodeRuntime.runMain owns process signals, so the in-process test closes the server scope instead of sending signals"
+					],
+					"description": "Add @effect/platform-node at exactly 4.0.0-rc.112. index.ts runs NodeRuntime.runMain(Layer.launch(HttpRouter.serve(...))) over NodeHttpServer.layer(createServer, { port: 3000, host: '::' }) built from makeServerLayer. Verify that the NodeHttpServer finalizer drains in-flight requests before the service layers are released; add a connection: close middleware and a server.close finalizer only if the spike shows they are needed. Delete shutdown.ts and port the drain test to a real socket on port 0. From this task the Effect server serves only the groups ported so far, so the branch is not shippable until P2 ends.",
+					"files": {
+						"reuse": ["apps/api/src/server.ts"],
+						"create": [],
+						"modify": [
+							"apps/api/package.json",
+							"pnpm-lock.yaml",
+							"apps/api/src/index.ts",
+							"apps/api/src/server.ts",
+							"apps/api/src/ServerRoutes.test.ts"
+						],
+						"delete": ["apps/api/src/shutdown.ts"]
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"Drain: start the server on port 0 and begin a slow request; when the server scope closes the request completes with connection: close before the stubbed services' finalizer runs"
+						],
+						"acceptance": [
+							"pnpm run dev:api starts on ::, port 3000 and /health responds",
+							"Manual SIGTERM and SIGINT both exit cleanly",
+							"pnpm run check and the full API suite pass, ending P1"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P2",
+			"name": "Remaining groups (red window; check and test green at the end)",
+			"tasks": [
+				{
+					"id": "T5",
+					"name": "Shared lib schemas are Effect Schema",
+					"depends_on": ["T4"],
+					"inputs": [
+						"design.md Schema coupling and API Design request contracts",
+						"apps/api/src/lib/schema.ts, ListQuery.ts, IdempotencySchema.ts, AssetSchema.ts, amounts.ts",
+						"Runtime importers: normalizeAssetCode (AssetService.ts, Asset.ts); parseAmount/assertInt64/INT64_MAX (entities, balance-monitor service and job)",
+						"Rule: Type.Optional becomes Schema.optional, never optionalKey, because toResponse() emits keys whose value is undefined"
+					],
+					"description": "Convert in place, keeping exported names and type aliases. MetadataSchema is a record of strings; PaginationQuery uses Schema.Finite with defaults so NaN and Infinity get 400; ListQuery has bounded integers (offset 0-10000, limit 1-100) with defaults; IdempotencyHeaders keeps minLength 1, maxLength 255; AssetSelectorSchema becomes a union of two structs, each with the other key optional and Schema.Never; AmountSchema and PositiveAmountSchema keep their patterns and max lengths. Keep normalizeAssetCode, parseAmount, assertInt64 and INT64_* unchanged. This task opens the red window: Fastify route files that import these schemas stop type-checking until their group task lands.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"apps/api/src/lib/schema.ts",
+							"apps/api/src/lib/ListQuery.ts",
+							"apps/api/src/lib/IdempotencySchema.ts",
+							"apps/api/src/lib/AssetSchema.ts",
+							"apps/api/src/lib/amounts.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"Existing entity, service and repository tests that import normalizeAssetCode, parseAmount, assertInt64 and INT64_MAX pass unchanged"
+						],
+						"acceptance": [
+							"No @sinclair/typebox import remains in the five lib files",
+							"Type errors are confined to not-yet-ported Fastify route files"
+						]
+					}
+				},
+				{
+					"id": "T6",
+					"name": "Ledger routes are served by HttpApi",
+					"depends_on": ["T5"],
+					"inputs": [
+						"Group pattern in this phase: schema, Api group, handlers, test port; shared edits in src/api.ts, src/server.ts and the domain index.ts",
+						"apps/api/src/domains/ledgers/LedgerRoutes.ts, LedgerSchema.ts, LedgerRoutes.test.ts (13 tests, inline OpenAPI at :272-297)",
+						"Permissions ledger:read|write|delete; operationIds listLedgers, getLedger, createLedger, updateLedger, deleteLedger"
+					],
+					"description": "Convert LedgerSchema.ts (keep exported names such as LedgerIdSchema, used by Account, Category, Transaction and Settlement schemas). Create LedgerApi.ts with the 5 routes: list 200, get 200 +404, create 201 + Location /api/ledgers/{id} +404, update 200 +404, delete 204 +404, 409. Rewrite handlers: requirePermissions, CurrentToken, parseId where today, service, toResponse. Add the group inside .add(...) in api.ts, merge its layer in appLayer, unregister from the legacy buildServer, drop the *Routes re-export from the domain index.ts. Keep the trailing slash on '/' paths. Port the route tests to makeTestWebHandler; add the no-token 401 test, one 400 BAD_REQUEST test and an it.each over all routes with a scope: [] token asserting the exact 403 detail.",
+					"files": {
+						"reuse": ["apps/api/src/domains/ledgers/LedgerService.ts", "apps/api/src/lib/utils.ts"],
+						"create": ["apps/api/src/domains/ledgers/LedgerApi.ts"],
+						"modify": [
+							"apps/api/src/domains/ledgers/LedgerSchema.ts",
+							"apps/api/src/domains/ledgers/LedgerRoutes.ts",
+							"apps/api/src/domains/ledgers/LedgerRoutes.test.ts",
+							"apps/api/src/domains/ledgers/index.ts",
+							"apps/api/src/api.ts",
+							"apps/api/src/server.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"LedgerRoutes.test.ts existing 13 cases pass with only listed-change adjustments",
+							"OpenAPI: /api/ledgers/ is present and no 429 is declared anywhere (positive assertion paired with the negative one)",
+							"401 without token; 400 BAD_REQUEST type; per-route 403 detail via it.each"
+						],
+						"acceptance": [
+							"No fastify or typebox import in the Ledger route and schema files",
+							"/api/ledgers routes are served by the Effect app and not registered on the legacy server"
+						]
+					}
+				},
+				{
+					"id": "T7",
+					"name": "Asset routes are served by HttpApi",
+					"depends_on": ["T5"],
+					"inputs": [
+						"apps/api/src/domains/assets/AssetRoutes.ts (preValidation Value.Check at :93 and :132), AssetSchema.ts, AssetRoutes.test.ts (7 tests; permission order :112-119; OpenAPI :120)",
+						"Permissions asset:read|write|delete; operationIds listAssets, getAsset, createAsset, updateAsset, deleteAsset",
+						"Schema-error transform in src/api.ts from T3"
+					],
+					"description": "Convert AssetSchema.ts (additionalProperties false becomes onExcessProperty 'error' on the create and update payloads; ListQuery fields spread). Create AssetApi.ts: list 200; get 200 +404, 409; create 201 + Location /api/assets/{id} +404, 409; update 200 +404, 409; delete 204 +404, 409 (getAsset declares 409 as today). Extend the schema-error transform in api.ts to branch on group and endpoint (assets/create, assets/update) so an invalid create payload returns BadRequest with detail 'Invalid Asset creation request' and an invalid replace payload 'Invalid Asset replacement request'. Rewrite handlers and register as in the group pattern. Port the tests.",
+					"files": {
+						"reuse": ["apps/api/src/domains/assets/AssetService.ts"],
+						"create": ["apps/api/src/domains/assets/AssetApi.ts"],
+						"modify": [
+							"apps/api/src/domains/assets/AssetSchema.ts",
+							"apps/api/src/domains/assets/AssetRoutes.ts",
+							"apps/api/src/domains/assets/AssetRoutes.test.ts",
+							"apps/api/src/domains/assets/index.ts",
+							"apps/api/src/api.ts",
+							"apps/api/src/server.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"AssetRoutes.test.ts existing 7 cases pass",
+							"An unknown field and an invalid value on create and update both return the exact Asset detail",
+							"OpenAPI: POST /api/assets/ declares 409 and mentions minorUnitExponent",
+							"401 without token; 400 BAD_REQUEST type on a query error; per-route 403 detail via it.each"
+						],
+						"acceptance": [
+							"No fastify or typebox import in the Asset route and schema files"
+						]
+					}
+				},
+				{
+					"id": "T8",
+					"name": "Account routes are served by HttpApi",
+					"depends_on": ["T6"],
+					"inputs": [
+						"apps/api/src/domains/ledgers/accounts/AccountRoutes.ts, AccountSchema.ts (Intersect with AssetSelectorSchema at :20-33), AccountRoutes.test.ts (11 tests)",
+						"AccountSchema exports used by Category, Balance monitor and Settlement schemas (AccountIdSchema, AccountItemParameters, AccountBalanceResponse)",
+						"Permissions ledger:account:read|write|delete; operationIds *LedgerAccount(s)"
+					],
+					"description": "Convert AccountSchema.ts: the Intersect with the asset selector becomes a union of structs; Integer min/max preserved; metadata uses MetadataSchema; keep all exported names consumed by sibling schemas. Create AccountApi.ts: list 200 +404; get 200 +404; create 201 + Location /api/ledgers/{lgr}/accounts/{id} +404, 409; update 200 +404, 409; delete 204 +404, 409. Rewrite handlers and register as in the group pattern. Update the comment-only TypeBox mentions at LedgerAccount.ts:127 and :169. Port the tests.",
+					"files": {
+						"reuse": ["apps/api/src/domains/ledgers/accounts/AccountService.ts"],
+						"create": ["apps/api/src/domains/ledgers/accounts/AccountApi.ts"],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/AccountSchema.ts",
+							"apps/api/src/domains/ledgers/accounts/AccountRoutes.ts",
+							"apps/api/src/domains/ledgers/accounts/AccountRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/index.ts",
+							"apps/api/src/domains/ledgers/accounts/LedgerAccount.ts",
+							"apps/api/src/api.ts",
+							"apps/api/src/server.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"AccountRoutes.test.ts existing 11 cases pass",
+							"OpenAPI: 201, 204 and 409 present for the right operations and no 429 anywhere",
+							"401 without token; 400 BAD_REQUEST type; per-route 403 detail via it.each"
+						],
+						"acceptance": [
+							"No fastify or typebox import in the Account route and schema files"
+						]
+					}
+				},
+				{
+					"id": "T9",
+					"name": "Transaction routes are served by HttpApi",
+					"depends_on": ["T6"],
+					"inputs": [
+						"apps/api/src/domains/ledgers/transactions/LedgerTransactionRoutes.ts (requireStringAmounts at :30-45), LedgerTransactionSchema.ts (Omit at :94, AssetSelector spread, :129 re-export), LedgerTransactionRoutes.test.ts (15 tests; permission order :122-134; OpenAPI :550-581; IdempotencyPending test :532-548)",
+						"IdempotencyHeaders from lib/IdempotencySchema.ts (T5)",
+						"Permissions ledger:transaction:read|write|delete"
+					],
+					"description": "Convert LedgerTransactionSchema.ts (Omit becomes a struct without the field; entries 2-200 items; AssetSelector union; keep the AmountSchema re-export). Create LedgerTransactionApi.ts: list 200 +404; get 200 +404; create 201 + Location /api/ledgers/{lgr}/transactions/{id} +404, 409; update 200 +404, 409; POST /:transactionId/post 200 +404, 409 with no body; DELETE 204 +404, 409. idempotency-key header is required on create, update, post and void. A numeric amount gets 400 through Schema.String instead of requireStringAmounts. No 429 is declared. Rewrite handlers and register as in the group pattern. Update comment-only TypeBox mentions at LedgerTransaction.ts:102 and :150 and LedgerTransactionEntry.ts:90. Port the tests.",
+					"files": {
+						"reuse": ["apps/api/src/domains/ledgers/transactions/LedgerTransactionService.ts", "apps/api/src/lib/IdempotencyService.ts"],
+						"create": ["apps/api/src/domains/ledgers/transactions/LedgerTransactionApi.ts"],
+						"modify": [
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionSchema.ts",
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRoutes.ts",
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRoutes.test.ts",
+							"apps/api/src/domains/ledgers/transactions/index.ts",
+							"apps/api/src/domains/ledgers/transactions/LedgerTransaction.ts",
+							"apps/api/src/domains/ledgers/transactions/LedgerTransactionEntry.ts",
+							"apps/api/src/api.ts",
+							"apps/api/src/server.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"LedgerTransactionRoutes.test.ts existing 15 cases pass, including IdempotencyPending returning 409 with Retry-After: 1",
+							"A numeric amount gets 400; a missing idempotency-key gets 400",
+							"OpenAPI response sets and no 429 (positive assertions paired with negative ones)",
+							"401 without token; 400 BAD_REQUEST type; per-route 403 detail via it.each"
+						],
+						"acceptance": [
+							"No fastify or typebox import in the Transaction route and schema files"
+						]
+					}
+				},
+				{
+					"id": "T10",
+					"name": "Settlement routes are served by HttpApi",
+					"depends_on": ["T8"],
+					"inputs": [
+						"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRoutes.ts (voided permission :210-214, Location :168-175, entries list :405), LedgerAccountSettlementSchema.ts, LedgerAccountSettlementRoutes.test.ts (17 tests, real DB layer today), index.ts (export * from the schema)",
+						"Service takes entries: string[] (LedgerAccountSettlementService.ts:240,259)",
+						"Permissions ledger:account:settlement:read|write|delete"
+					],
+					"description": "Convert LedgerAccountSettlementSchema.ts: defaults status 'pending' and allowEitherDirection false via withDecodingDefault; entries uniqueItems with 1-500 items; Null unions; $id annotations; keep the export * barrel working. Create LedgerAccountSettlementApi.ts for 7 routes, 429 declared on every route as today: list 200 (no 404); get 200 +404; create 201 + Location built from the raw ledgerId param +409 (no 404); PATCH /:settlementId 200 +404, 409; PATCH and DELETE /:settlementId/entries 204 +404, 409 (DELETE takes a body); GET /:settlementId/entries 200 +404. Idempotency header on the writes. Keep two sequential requirePermissions calls so a voided PATCH from org_user gets the delete-permission message. Spread payload entries into a mutable array in the handler rather than changing the service. Port the tests using stubbed services instead of the real database layer.",
+					"files": {
+						"reuse": ["apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementService.ts", "apps/api/src/lib/IdempotencyService.ts"],
+						"create": ["apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementApi.ts"],
+						"modify": [
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementSchema.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRoutes.ts",
+							"apps/api/src/domains/ledgers/settlements/LedgerAccountSettlementRoutes.test.ts",
+							"apps/api/src/domains/ledgers/settlements/index.ts",
+							"apps/api/src/api.ts",
+							"apps/api/src/server.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"LedgerAccountSettlementRoutes.test.ts existing 17 cases pass",
+							"Defaults applied on create; Location uses the raw ledgerId param",
+							"An org_user PATCH to voided returns 403 'One of: ledger:account:settlement:delete; ...'",
+							"401 without token; 400 BAD_REQUEST type; per-route 403 detail via it.each"
+						],
+						"acceptance": [
+							"No fastify or typebox import in the Settlement route and schema files",
+							"export * from LedgerAccountSettlementSchema still exposes the same names"
+						]
+					}
+				},
+				{
+					"id": "T11",
+					"name": "Category API contract and OpenAPI snapshot",
+					"depends_on": ["T8"],
+					"inputs": [
+						"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes.ts (route schemas, Composite params, validateMetadata :42-52), LedgerAccountCategorySchema.ts (CloneType, $id, FastifyRequest aliases :102-131), __snapshots__/LedgerAccountCategoryRoutes.test.ts.snap",
+						"OpenAPI snapshot test at LedgerAccountCategoryRoutes.test.ts:193-214 covering all 10 operations",
+						"Permissions ledger:account:category:read|write|delete (single values, not arrays)"
+					],
+					"description": "Convert LedgerAccountCategorySchema.ts (Composite params become struct spreads; $id annotations kept; FastifyRequest aliases deleted; non-string metadata values rejected by Schema.String). Create LedgerAccountCategoryApi.ts with the 10 routes and today's operationIds: GET /:categoryId/balances (+409), list (PaginationQuery), get, POST create (200, no Location, +409), PUT, DELETE (HttpApiSchema.Empty(200)), PATCH/DELETE /:categoryId/accounts/:accountId and /:categoryId/categories/:parentCategoryId link/unlink (Empty(200), +409). 429 declared on every route. Static segments must resolve before the :categoryId param. Port only the OpenAPI snapshot test here, asserting on OpenApi.fromApi(LedgerApi) with no handlers needed; regenerate the snapshot only for structural differences and review it against the US-5 equivalence rule.",
+					"files": {
+						"reuse": ["apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryService.ts"],
+						"create": ["apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryApi.ts"],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategorySchema.ts",
+							"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/categories/__snapshots__/LedgerAccountCategoryRoutes.test.ts.snap",
+							"apps/api/src/api.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"Ported OpenAPI snapshot covers all 10 operations: same paths, methods, operationIds, tags, params, response-status sets (429 on all, 409 where declared) and the 200-without-Location creates"
+						],
+						"acceptance": [
+							"Snapshot diff reviewed and limited to structural differences",
+							"No FastifyRequest type remains in LedgerAccountCategorySchema.ts"
+						]
+					}
+				},
+				{
+					"id": "T12",
+					"name": "Category handlers and behaviour tests",
+					"depends_on": ["T11"],
+					"inputs": [
+						"Category handlers in LedgerAccountCategoryRoutes.ts and its 49-test file (behaviour tests, besides the snapshot)",
+						"LedgerAccountCategoryApi.ts from T11"
+					],
+					"description": "Rewrite LedgerAccountCategoryRoutes.ts as HttpApiBuilder.group (requirePermissions, CurrentToken, parseId where today, service, toResponse). Register in appLayer, unregister from the legacy buildServer, drop the *Routes re-export from the domain index.ts. Port the remaining route tests to makeTestWebHandler with real signJWT tokens and stubbed services; the two buildServer + signJWT cases (super_admin, org_readonly) use the same seam. Add body === '' assertions to the delete, link and unlink tests (200 with an empty body, not '{}').",
+					"files": {
+						"reuse": ["apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryApi.ts"],
+						"create": [],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes.ts",
+							"apps/api/src/domains/ledgers/accounts/categories/LedgerAccountCategoryRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/categories/index.ts",
+							"apps/api/src/server.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"LedgerAccountCategoryRoutes.test.ts existing behaviour cases pass with only listed-change adjustments",
+							"Delete, link and unlink return 200 with body === ''",
+							"Non-string metadata values get 400; a numeric metadata value is rejected",
+							"GET /api/ledgers/{id}/accounts/categories reaches the category list, not getLedgerAccount",
+							"401 without token; 400 BAD_REQUEST type; per-route 403 detail via it.each"
+						],
+						"acceptance": [
+							"No fastify or typebox import in the Category route and schema files"
+						]
+					}
+				},
+				{
+					"id": "T13",
+					"name": "Statement routes are served by HttpApi",
+					"depends_on": ["T5"],
+					"inputs": [
+						"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.ts, LedgerAccountStatementSchema.ts ($id, FastifyRequest types :79-84), LedgerAccountStatementRoutes.test.ts (9 tests; permissions :78-85), __snapshots__, index.ts (value re-export at :16)",
+						"LedgerAccountStatementService.ts error type unknown at :19 and :28; get calls TypeID.fromString inside Effect.sync so a bad ID is a defect",
+						"Permissions ledger:account:statement:read|write|delete"
+					],
+					"description": "Convert LedgerAccountStatementSchema.ts and drop its FastifyRequest types. Create LedgerAccountStatementApi.ts: GET /:statementId 200 +404 (path declares ledgerId and accountId as plain strings that are ignored; params schema validates statementId only), POST / 200 with no Location and ledgerId/accountId from the body, +409; 429 declared on both. Narrow the service's unknown error type to its real problem union (type-only change; no logic change); a bad statement ID stays a 500 defect. Rewrite handlers and register as in the group pattern. Port the tests and the snapshot.",
+					"files": {
+						"reuse": [],
+						"create": ["apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementApi.ts"],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementSchema.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/__snapshots__/LedgerAccountStatementRoutes.test.ts.snap",
+							"apps/api/src/domains/ledgers/accounts/statements/LedgerAccountStatementService.ts",
+							"apps/api/src/domains/ledgers/accounts/statements/index.ts",
+							"apps/api/src/api.ts",
+							"apps/api/src/server.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"LedgerAccountStatementRoutes.test.ts existing 9 cases and the OpenAPI snapshot pass",
+							"Path ledgerId/accountId values are ignored; create takes them from the body",
+							"A bad statement ID returns a sanitised 500",
+							"401 without token; 400 BAD_REQUEST type; per-route 403 detail via it.each"
+						],
+						"acceptance": [
+							"No unknown error type remains on the statement service methods",
+							"No fastify or typebox import in the Statement route and schema files"
+						]
+					}
+				},
+				{
+					"id": "T14",
+					"name": "Balance monitor routes are served by HttpApi",
+					"depends_on": ["T8"],
+					"inputs": [
+						"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes.ts (requireStringAmounts :28-43; raw params), LedgerAccountBalanceMonitorSchema.ts (Intersect :8, writeOnly signingSecret :55/:71, uri format, minItems), LedgerAccountBalanceMonitorRoutes.test.ts (17 tests; permissions :215-226; empty-body check :367-368), __snapshots__",
+						"Permissions ledger:account:balance_monitor:read|write|delete"
+					],
+					"description": "Convert LedgerAccountBalanceMonitorSchema.ts: Intersect for the ID params becomes a struct spread; writeOnly on signingSecret, uri format and minItems preserved in the OpenAPI output; the list query keeps PaginationQuery. Create LedgerAccountBalanceMonitorApi.ts for 5 routes with 429 declared on all: list 200 (no 404); get 200 +404; create 200 +404, 409; update 200 +404, 409; delete HttpApiSchema.Empty(200) +404, 409. Path ledgerId/accountId stay raw strings passed to the service inside {organizationId: orgId.toString(), ledgerId, accountId}. A numeric amount gets 400 through Schema.String. Rewrite handlers and register as in the group pattern. Port the tests and the response-body snapshots.",
+					"files": {
+						"reuse": ["apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService.ts"],
+						"create": ["apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorApi.ts"],
+						"modify": [
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorSchema.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorRoutes.test.ts",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/__snapshots__/LedgerAccountBalanceMonitorRoutes.test.ts.snap",
+							"apps/api/src/domains/ledgers/accounts/balance-monitors/index.ts",
+							"apps/api/src/api.ts",
+							"apps/api/src/server.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"LedgerAccountBalanceMonitorRoutes.test.ts existing 17 cases and snapshots pass; delete returns 200 with body ''",
+							"A numeric amount gets 400; signingSecret stays writeOnly and the callback URL keeps the uri format in OpenAPI",
+							"401 without token; 400 BAD_REQUEST type; per-route 403 detail via it.each"
+						],
+						"acceptance": [
+							"No fastify or typebox import in the Balance monitor route and schema files",
+							"pnpm run check and the full API suite pass; the legacy buildServer registers no routes (end of P2)"
+						]
+					}
+				}
+			]
+		},
+		{
+			"id": "P3",
+			"name": "Remove Fastify (green)",
+			"tasks": [
+				{
+					"id": "T15",
+					"name": "Benches run on the Effect server",
+					"depends_on": ["T9", "T12"],
+					"inputs": [
+						"apps/api/test/bench/transaction.bench.ts (buildServer at :471, listen on 3333 at 0.0.0.0)",
+						"apps/api/test/bench/category-balances.bench.ts (buildServer at :116, listen on port 0)",
+						"makeServerLayer and NodeHttpServer.layer from T2 and T4"
+					],
+					"description": "Replace buildServer + listen in both benches with makeServerLayer served over NodeHttpServer.layer inside a scope (port 0 for category-balances, 3333 for transaction), disposed at teardown. Drop the FastifyInstance type import. Keep autocannon, signJWT and the fetch probe.",
+					"files": {
+						"reuse": ["apps/api/src/server.ts"],
+						"create": [],
+						"modify": [
+							"apps/api/test/bench/transaction.bench.ts",
+							"apps/api/test/bench/category-balances.bench.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"Each bench file runs once to completion through the package bench script"
+						],
+						"acceptance": [
+							"Both bench files type-check under pnpm run check",
+							"Neither bench imports fastify or buildServer"
+						]
+					}
+				},
+				{
+					"id": "T16",
+					"name": "Fastify, its plugins and TypeBox are deleted",
+					"depends_on": ["T7", "T10", "T13", "T14", "T15"],
+					"inputs": [
+						"design.md US-1 and Dependencies",
+						"apps/api/package.json dependencies",
+						"Dockerfile installs with --frozen-lockfile"
+					],
+					"description": "Delete the legacy buildServer, registerAuth and the Fastify type augmentation in auth.ts, globalErrorHandler, toProblemDetail (if unused), the TypeBox *Problem and *ErrorResponse exports in errors.ts, and ServerRuntime in runtime.ts (route tests no longer use it). Remove fastify, all @fastify/* packages, pino-pretty and @sinclair/typebox from apps/api/package.json and update pnpm-lock.yaml. Remove any leftover TypeBox mentions in comments under apps/api/src.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"apps/api/package.json",
+							"pnpm-lock.yaml",
+							"apps/api/src/server.ts",
+							"apps/api/src/auth.ts",
+							"apps/api/src/lib/errors.ts",
+							"apps/api/src/runtime.ts"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [
+							"pnpm --filter=@exchequerio/api test passes in full"
+						],
+						"acceptance": [
+							"rg -i 'fastify|typebox' apps/api/src apps/api/test apps/api/package.json returns nothing",
+							"pnpm run check passes",
+							"pnpm install --frozen-lockfile succeeds"
+						]
+					}
+				},
+				{
+					"id": "T17",
+					"name": "Living docs describe Effect HttpApi and Effect Schema",
+					"depends_on": ["T16"],
+					"inputs": [
+						"docs/standards/api.md (lines 3, 12, 22, 24, 75)",
+						"README.md:163",
+						"apps/api/docs/product/assets.md:91",
+						"Specs under docs/specs are a log of decisions and stay untouched"
+					],
+					"description": "Replace the Fastify and TypeBox references with Effect HttpApi and Effect Schema in the three living docs, keeping the standards' layering rules unchanged. Do not edit anything under docs/specs, and do not edit the skill listings in CLAUDE.md or AGENTS.md.",
+					"files": {
+						"reuse": [],
+						"create": [],
+						"modify": [
+							"docs/standards/api.md",
+							"README.md",
+							"apps/api/docs/product/assets.md"
+						],
+						"delete": []
+					},
+					"new_abstractions": [],
+					"validation": {
+						"tests": [],
+						"acceptance": [
+							"rg -i 'fastify|typebox' docs/standards README.md apps/api/docs returns nothing",
+							"No file under docs/specs is modified by this task"
+						]
+					}
+				}
+			]
+		}
+	]
+}

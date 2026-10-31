@@ -1,27 +1,37 @@
 # Ledger API
 
-The Ledger API lives in `apps/api`. It uses Fastify, TypeBox, Effect, Drizzle, and PostgreSQL. Confirm
+The Ledger API lives in `apps/api`. It uses Effect (HttpApi and Schema), Drizzle, and PostgreSQL. Confirm
 versions and available commands in `apps/api/package.json` before using framework APIs.
 
 ## Layer ownership
 
 Dependencies flow from Routes to Services to Repositories and Entities to PostgreSQL.
 
-| Concern                                                                      | Owner                  |
-| ---------------------------------------------------------------------------- | ---------------------- |
-| HTTP shape, validation, status, headers, authentication, and OpenAPI         | Routes and TypeBox     |
-| Use cases, time, idempotency, retries, and dependencies                      | Services               |
-| SQL, missing rows, transactions, optimistic concurrency, and database errors | Repositories           |
-| Representation conversion, domain invariants, and state transitions          | Entities               |
-| Row shape, relationships, and storage constraints                            | Drizzle and PostgreSQL |
+| Concern                                                                      | Owner                    |
+| ---------------------------------------------------------------------------- | ------------------------ |
+| HTTP shape, validation, status, headers, authentication, and OpenAPI         | Routes and Effect Schema |
+| Use cases, time, idempotency, retries, and dependencies                      | Services                 |
+| SQL, missing rows, transactions, optimistic concurrency, and database errors | Repositories             |
+| Representation conversion, domain invariants, and state transitions          | Entities                 |
+| Row shape, relationships, and storage constraints                            | Drizzle and PostgreSQL   |
+
+Each domain declares its HTTP contract as one `<X>Api.ts` `HttpApiGroup`, implements handlers in
+`<X>Routes.ts` with `HttpApiBuilder.group`, and defines Effect Schema request and response schemas
+in `<X>Schema.ts` with `type X = typeof X.Type` aliases. The `Authentication` middleware
+authenticates requests, and handlers call `requirePermissions`. Problem errors are Schema error
+classes in `lib/errors.ts`, encoded for HttpApi in `lib/ApiContract.ts`. Register every handler with
+`runToCompletion` from `@/lib/utils`: a client abort or the drain cap never interrupts it, because
+services release idempotency claims and publish after commit, and an interrupted read would cancel
+its query through the shared pool. OpenAPI is generated from the API definition at `/docs/json`,
+with the UI at `/docs`.
 
 Keep response schemas and response types in the slice's `*Schema.ts` file. Put the transformation on
 the entity as `toResponse()` or a specifically named response method when a resource has more than
 one representation. Routes call that method; do not create a parallel route-level mapper.
 
-Treat TypeBox and Drizzle schemas as the canonical transport and row types. Derive types from them;
+Treat Effect Schema and Drizzle schemas as the canonical transport and row types. Derive types from them;
 do not add handwritten mirrors or intermediate option types that merely copy their fields. Entity
-`fromRequest` methods receive TypeBox-valid data and enforce only additional domain invariants.
+`fromRequest` methods receive Schema-valid data and enforce only additional domain invariants.
 Entity `fromRow` methods convert real persistence representations, such as UUID strings, JSON,
 timestamps, and nullable fields, and enforce only invariants not guaranteed by Drizzle or
 PostgreSQL. Entity `toRow` and response methods own the inverse conversions. Resource IDs and their
@@ -72,7 +82,7 @@ problem. Existing code is evidence, not permission to copy ceremony.
 - Add a tagged error only when a caller handles it differently through HTTP mapping, retry, cleanup,
   or orchestration and no existing error represents that handling. A different message or cause does
   not justify a new error type.
-- Do not add decoders or defensive branches for states that TypeBox, Drizzle, PostgreSQL, or an
+- Do not add decoders or defensive branches for states that Effect Schema, Drizzle, PostgreSQL, or an
   existing domain contract already excludes. Each decoder branch must correspond to a value a real
   producer can supply.
 
@@ -93,7 +103,7 @@ Test application behavior at exactly three boundaries:
 - **Services:** business rules and orchestration, with repositories and external dependencies
   stubbed. Exercise entities and shared helpers through the service operations that use them.
 - **Routes:** validation, authentication, permissions, serialization, HTTP errors, and request
-  lifecycle behavior, with services stubbed.
+  lifecycle behavior, with services stubbed, driven through `useTestWebHandlers` from `@/lib/testing`.
 
 Use `*Repo.test.ts`, `*Service.test.ts`, and `*Routes.test.ts` suites. Fixtures may construct domain
 objects directly; assertions must exercise the owning boundary. Do not create standalone entity,
@@ -107,10 +117,9 @@ queue machinery or introduce repository wrappers solely to test it.
 
 ## Validation
 
-Start PostgreSQL before targeted integration tests when it is not already running.
+Docker must be running: API tests start their own PostgreSQL and Valkey containers.
 
 ```bash
-pnpm run docker:up
 pnpm --filter=@exchequerio/api test
 pnpm --filter=@exchequerio/api build
 pnpm --filter=@exchequerio/api types

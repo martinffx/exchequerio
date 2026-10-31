@@ -1,6 +1,6 @@
 import { makeLedgerAccountBalanceMonitorJobStore } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorJob";
 import { ledgerAccountBalanceMonitorPublisherLayer } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorService";
-import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import { Context, Effect, Layer } from "effect";
 import type { Config } from "@/config";
 import { type Database, makeDatabaseLive, makeValkeyLive, type Valkey, ValkeyTag } from "@/db";
 import { assetServiceLayer, assetRepoLayer, type AssetService } from "@/domains/assets";
@@ -45,24 +45,14 @@ type ServerRuntimeServices =
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
-interface ServerRuntimeLayerOverrides {
-	readonly database?: Layer.Layer<Database, never, never>;
-	readonly idempotency?: Layer.Layer<IdempotencyService, never, never>;
-}
-
-const makeServerRuntimeLayer = (
-	config: Config,
-	overrides: ServerRuntimeLayerOverrides = {}
-): ServerRuntimeLayer => {
+const makeServerRuntimeLayer = (config: Config): ServerRuntimeLayer => {
 	const valkey = makeValkeyLive(config.valkeyUrl);
-	const idempotency =
-		overrides.idempotency ??
-		Layer.unwrap(ValkeyTag.pipe(Effect.map(valkey => makeIdempotencyService(valkey.client)))).pipe(
-			Layer.provide(valkey)
-		);
+	const idempotency = Layer.unwrap(
+		ValkeyTag.pipe(Effect.map(valkey => makeIdempotencyService(valkey.client)))
+	).pipe(Layer.provide(valkey));
 	const infrastructure = Layer.mergeAll(
 		Layer.succeed(ServerConfigTag, config),
-		overrides.database ?? makeDatabaseLive(config.databaseUrl),
+		makeDatabaseLive(config.databaseUrl),
 		valkey,
 		idempotency,
 		ledgerAccountBalanceMonitorPublisherLayer.pipe(
@@ -91,22 +81,4 @@ const makeServerRuntimeLayer = (
 	).pipe(Layer.provideMerge(infrastructure));
 };
 
-class ServerRuntime<R, ER> {
-	private readonly runtime: ManagedRuntime.ManagedRuntime<R, ER>;
-	private disposal: Promise<void> | undefined;
-
-	constructor(layer: Layer.Layer<R, ER, never>) {
-		this.runtime = ManagedRuntime.make(layer);
-	}
-
-	runPromise<A, E>(effect: Effect.Effect<A, E, R>): Promise<A> {
-		return this.runtime.runPromise(effect);
-	}
-
-	dispose(): Promise<void> {
-		return (this.disposal ??= this.runtime.dispose());
-	}
-}
-
-export type { ServerRuntimeLayer, ServerRuntimeLayerOverrides, ServerRuntimeServices };
-export { makeServerRuntimeLayer, ServerConfigTag, ServerRuntime };
+export { makeServerRuntimeLayer, ServerConfigTag };

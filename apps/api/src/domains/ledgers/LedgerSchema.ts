@@ -1,42 +1,36 @@
-import { type Static, Type } from "@sinclair/typebox";
+import { Schema } from "effect";
 import { ListQuery } from "@/lib/ListQuery";
-import { MetadataSchema } from "@/lib/schema";
+import { MetadataSchema, OmittedWhenUndefined } from "@/lib/schema";
 
 /** Canonical Ledger TypeID used by Ledger-scoped routes. */
-const LedgerIdSchema = Type.String({ pattern: "^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$" });
-const LedgerIdParameters = Type.Object({ ledgerId: LedgerIdSchema });
+const LedgerIdSchema = Schema.String.check(Schema.isPattern(/^lgr_[0-7][0-9a-hjkmnp-tv-z]{25}$/));
+const LedgerIdParameters = Schema.Struct({ ledgerId: LedgerIdSchema });
 /** Shared pagination for Ledger collections. */
 const LedgerListQuery = ListQuery;
-const LedgerCreateRequest = Type.Object(
-	{
-		name: Type.String(),
-		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(MetadataSchema),
-	},
-	{ additionalProperties: false }
-);
-const LedgerUpdateRequest = Type.Object(
-	{
-		name: Type.String(),
-		description: Type.Optional(Type.String()),
-		metadata: Type.Optional(MetadataSchema),
-	},
-	{ additionalProperties: false }
-);
-const LedgerResponse = Type.Object({
+const LedgerCreateRequest = Schema.Struct({
+	name: Schema.String,
+	description: Schema.optionalKey(Schema.String),
+	metadata: Schema.optionalKey(MetadataSchema),
+});
+const LedgerUpdateRequest = Schema.Struct({
+	name: Schema.String,
+	description: Schema.optionalKey(Schema.String),
+	metadata: Schema.optionalKey(MetadataSchema),
+});
+const LedgerResponse = Schema.Struct({
 	id: LedgerIdSchema,
-	name: Type.String(),
-	description: Type.Optional(Type.String()),
-	metadata: Type.Optional(MetadataSchema),
-	created: Type.String({ format: "date-time" }),
-	updated: Type.String({ format: "date-time" }),
+	name: Schema.String,
+	description: OmittedWhenUndefined(Schema.String),
+	metadata: OmittedWhenUndefined(MetadataSchema),
+	created: Schema.String.annotate({ format: "date-time" }),
+	updated: Schema.String.annotate({ format: "date-time" }),
 });
 
-type LedgerIdParameters = Static<typeof LedgerIdParameters>;
-type LedgerListQuery = Static<typeof LedgerListQuery>;
-type LedgerCreateRequest = Static<typeof LedgerCreateRequest>;
-type LedgerUpdateRequest = Static<typeof LedgerUpdateRequest>;
-type LedgerResponse = Static<typeof LedgerResponse>;
+type LedgerIdParameters = typeof LedgerIdParameters.Type;
+type LedgerListQuery = typeof LedgerListQuery.Type;
+type LedgerCreateRequest = typeof LedgerCreateRequest.Type;
+type LedgerUpdateRequest = typeof LedgerUpdateRequest.Type;
+type LedgerResponse = typeof LedgerResponse.Type;
 
 export {
 	LedgerCreateRequest,

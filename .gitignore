@@ -154,3 +154,10 @@ apps/*/build/
 apps/*/dist/
 apps/*/.react-router/
 apps/*/.docusaurus/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*

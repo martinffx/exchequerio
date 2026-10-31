@@ -1,17 +1,17 @@
-import { Type } from "@sinclair/typebox";
+import { Schema } from "effect";
 import { BadRequestError, ConflictError } from "./errors";
 
 const INT64_MIN = -9223372036854775808n;
 const INT64_MAX = 9223372036854775807n;
 const amountPattern = "^(0|-?[1-9][0-9]*)$";
-const AmountSchema = Type.String({
-	pattern: amountPattern,
-	maxLength: 20,
-	description: "Signed 64-bit integer minor units, encoded as a decimal string.",
-});
-const PositiveAmountSchema = Type.String({
-	pattern: "^[1-9][0-9]*$",
-	maxLength: 19,
+const AmountSchema = Schema.String.check(
+	Schema.isPattern(new RegExp(amountPattern)),
+	Schema.isMaxLength(20)
+).annotate({ description: "Signed 64-bit integer minor units, encoded as a decimal string." });
+const PositiveAmountSchema = Schema.String.check(
+	Schema.isPattern(/^[1-9][0-9]*$/),
+	Schema.isMaxLength(19)
+).annotate({
 	description:
 		"Positive integer minor units, at most 9223372036854775807, encoded as a decimal string.",
 });

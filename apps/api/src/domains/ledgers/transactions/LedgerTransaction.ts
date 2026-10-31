@@ -99,7 +99,7 @@ class LedgerTransaction {
 	 * @param id - Generated Transaction identifier.
 	 * @param organizationId - Organization that owns the Transaction.
 	 * @param ledgerId - Ledger that contains the Transaction.
-	 * @param request - TypeBox-validated creation request.
+	 * @param request - schema-validated creation request.
 	 * @param created - Creation time; defaults to the current UTC time and may be supplied by tests.
 	 * @returns An Effect containing the balanced Transaction or a validation failure.
 	 */
@@ -147,7 +147,7 @@ class LedgerTransaction {
 	/**
 	 * Replaces the mutable fields and Entries of a pending Transaction.
 	 *
-	 * @param request - TypeBox-validated update request.
+	 * @param request - schema-validated update request.
 	 * @param updated - Update time; defaults to the current UTC time and may be supplied by tests.
 	 * @returns An Effect containing the replacement or a lifecycle or balance failure.
 	 */

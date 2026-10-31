@@ -5,7 +5,6 @@ import { transactionServiceLayer } from "./LedgerTransactionService";
 
 const transactionLayer = transactionServiceLayer.pipe(Layer.provide(ledgerTransactionRepoLayer));
 
-export { TransactionRoutes } from "./LedgerTransactionRoutes";
 export type {
 	TransactionCreateError,
 	TransactionGetError,
