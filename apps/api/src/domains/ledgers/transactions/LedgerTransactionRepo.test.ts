@@ -6,7 +6,7 @@ import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Config } from "@/config";
-import { type Database, DatabaseTag, makeDatabaseLive } from "@/db";
+import { type EffectDrizzleDatabase, DatabaseTag, makeDatabaseLive } from "@/db";
 import { AccountNotFound, LedgerAccountAssetMismatch } from "@/domains/ledgers/accounts";
 import {
 	newLedgerAccountID,
@@ -104,27 +104,30 @@ describe("LedgerTransactionRepoLive", () => {
 	const organizationIds: string[] = [];
 
 	let repository: LedgerTransactionRepo;
-	let database: Database["db"];
+	let database: EffectDrizzleDatabase;
 
 	beforeAll(async () => {
 		repository = await runtime.runPromise(LedgerTransactionRepoTag);
-		database = (await runtime.runPromise(DatabaseTag)).db;
+		database = (await runtime.runPromise(DatabaseTag)).effectDb;
 	});
 
 	const createLedger = async () => {
 		const organizationId = newOrgID();
 		const ledgerId = newLedgerID();
-		const db = database;
 		organizationIds.push(organizationId.toUUID());
-		await db.insert(OrganizationsTable).values({
-			id: organizationId.toUUID(),
-			name: `Organization ${organizationId.toUUID()}`,
-		});
-		await db.insert(LedgersTable).values({
-			id: ledgerId.toUUID(),
-			organizationId: organizationId.toUUID(),
-			name: `Ledger ${ledgerId.toUUID()}`,
-		});
+		await runtime.runPromise(
+			database.insert(OrganizationsTable).values({
+				id: organizationId.toUUID(),
+				name: `Organization ${organizationId.toUUID()}`,
+			})
+		);
+		await runtime.runPromise(
+			database.insert(LedgersTable).values({
+				id: ledgerId.toUUID(),
+				organizationId: organizationId.toUUID(),
+				name: `Ledger ${ledgerId.toUUID()}`,
+			})
+		);
 		return { organizationId, ledgerId };
 	};
 
@@ -135,34 +138,37 @@ describe("LedgerTransactionRepoLive", () => {
 		assetCode = "EUR"
 	) => {
 		const id = newLedgerAccountID();
-		const db = database;
-		const [asset] = await db
-			.insert(AssetsTable)
-			.values({
-				id: newOrgID().toUUID(),
-				organizationId: organizationId.toUUID(),
-				code: assetCode,
-				name: assetCode,
-				minorUnitExponent: 2,
-			})
-			.onConflictDoUpdate({
-				target: [AssetsTable.organizationId, AssetsTable.code],
-				set: { name: assetCode },
-			})
-			.returning();
+		const [asset] = await runtime.runPromise(
+			database
+				.insert(AssetsTable)
+				.values({
+					id: newOrgID().toUUID(),
+					organizationId: organizationId.toUUID(),
+					code: assetCode,
+					name: assetCode,
+					minorUnitExponent: 2,
+				})
+				.onConflictDoUpdate({
+					target: [AssetsTable.organizationId, AssetsTable.code],
+					set: { name: assetCode },
+				})
+				.returning()
+		);
 		accountAssets.set(id.toString(), {
 			assetId: TypeID.fromUUID("ast", asset!.id).toString(),
 			assetCode: asset!.code,
 			minorUnitExponent: asset!.minorUnitExponent,
 		});
-		await db.insert(LedgerAccountsTable).values({
-			id: id.toUUID(),
-			organizationId: organizationId.toUUID(),
-			ledgerId: ledgerId.toUUID(),
-			name: `Account ${id.toUUID()}`,
-			normalBalance,
-			assetId: asset!.id,
-		});
+		await runtime.runPromise(
+			database.insert(LedgerAccountsTable).values({
+				id: id.toUUID(),
+				organizationId: organizationId.toUUID(),
+				ledgerId: ledgerId.toUUID(),
+				name: `Account ${id.toUUID()}`,
+				normalBalance,
+				assetId: asset!.id,
+			})
+		);
 		return id;
 	};
 
@@ -171,44 +177,60 @@ describe("LedgerTransactionRepoLive", () => {
 		ledgerId: LedgerID,
 		accountIds: readonly AccountId[]
 	) => {
-		const db = database;
-		const rows = await db
-			.select()
-			.from(LedgerAccountsTable)
-			.where(
-				and(
-					eq(LedgerAccountsTable.organizationId, organizationId.toUUID()),
-					eq(LedgerAccountsTable.ledgerId, ledgerId.toUUID()),
-					inArray(
-						LedgerAccountsTable.id,
-						accountIds.map(accountId => accountId.toUUID())
+		const rows = await runtime.runPromise(
+			database
+				.select()
+				.from(LedgerAccountsTable)
+				.where(
+					and(
+						eq(LedgerAccountsTable.organizationId, organizationId.toUUID()),
+						eq(LedgerAccountsTable.ledgerId, ledgerId.toUUID()),
+						inArray(
+							LedgerAccountsTable.id,
+							accountIds.map(accountId => accountId.toUUID())
+						)
 					)
 				)
-			);
+		);
 		return new Map(rows.map(account => [TypeID.fromUUID("lat", account.id).toString(), account]));
 	};
 
 	afterAll(async () => {
 		if (organizationIds.length > 0) {
-			const db = database;
-			await db
-				.delete(LedgerAccountBalanceMonitorsTable)
-				.where(inArray(LedgerAccountBalanceMonitorsTable.organizationId, organizationIds));
-			await db
-				.delete(LedgerTransactionEntriesTable)
-				.where(inArray(LedgerTransactionEntriesTable.organizationId, organizationIds));
-			await db
-				.delete(LedgerTransactionsTable)
-				.where(inArray(LedgerTransactionsTable.organizationId, organizationIds));
-			await db
-				.delete(LedgerAccountSettlementsTable)
-				.where(inArray(LedgerAccountSettlementsTable.organizationId, organizationIds));
-			await db
-				.delete(LedgerAccountsTable)
-				.where(inArray(LedgerAccountsTable.organizationId, organizationIds));
-			await db.delete(LedgersTable).where(inArray(LedgersTable.organizationId, organizationIds));
-			await db.delete(AssetsTable).where(inArray(AssetsTable.organizationId, organizationIds));
-			await db.delete(OrganizationsTable).where(inArray(OrganizationsTable.id, organizationIds));
+			await runtime.runPromise(
+				database
+					.delete(LedgerAccountBalanceMonitorsTable)
+					.where(inArray(LedgerAccountBalanceMonitorsTable.organizationId, organizationIds))
+			);
+			await runtime.runPromise(
+				database
+					.delete(LedgerTransactionEntriesTable)
+					.where(inArray(LedgerTransactionEntriesTable.organizationId, organizationIds))
+			);
+			await runtime.runPromise(
+				database
+					.delete(LedgerTransactionsTable)
+					.where(inArray(LedgerTransactionsTable.organizationId, organizationIds))
+			);
+			await runtime.runPromise(
+				database
+					.delete(LedgerAccountSettlementsTable)
+					.where(inArray(LedgerAccountSettlementsTable.organizationId, organizationIds))
+			);
+			await runtime.runPromise(
+				database
+					.delete(LedgerAccountsTable)
+					.where(inArray(LedgerAccountsTable.organizationId, organizationIds))
+			);
+			await runtime.runPromise(
+				database.delete(LedgersTable).where(inArray(LedgersTable.organizationId, organizationIds))
+			);
+			await runtime.runPromise(
+				database.delete(AssetsTable).where(inArray(AssetsTable.organizationId, organizationIds))
+			);
+			await runtime.runPromise(
+				database.delete(OrganizationsTable).where(inArray(OrganizationsTable.id, organizationIds))
+			);
 		}
 		await runtime.dispose();
 	});
@@ -426,13 +448,13 @@ describe("LedgerTransactionRepoLive", () => {
 		const debit = await createAccount(organizationId, ledgerId, "debit");
 		const credit = await createAccount(organizationId, ledgerId, "credit");
 		const transactionId = newLedgerTransactionID();
-		const db = database;
 		const suffix = crypto.randomUUID().replaceAll("-", "");
 		const functionName = `fail_account_update_${suffix}`;
 		const triggerName = `fail_account_update_${suffix}`;
 
-		await db.execute(
-			sql.raw(`
+		await runtime.runPromise(
+			database.execute(
+				sql.raw(`
 			CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
 			BEGIN
 				IF NEW.id = '${credit.toUUID()}' THEN
@@ -445,6 +467,7 @@ describe("LedgerTransactionRepoLive", () => {
 			BEFORE UPDATE ON ledger_accounts
 			FOR EACH ROW EXECUTE FUNCTION ${functionName}();
 		`)
+			)
 		);
 
 		try {
@@ -464,21 +487,27 @@ describe("LedgerTransactionRepoLive", () => {
 			);
 			expect(error).toBeInstanceOf(TransactionPersistenceFailure);
 		} finally {
-			await db.execute(sql.raw(`DROP TRIGGER ${triggerName} ON ledger_accounts`));
-			await db.execute(sql.raw(`DROP FUNCTION ${functionName}()`));
+			await runtime.runPromise(
+				database.execute(sql.raw(`DROP TRIGGER ${triggerName} ON ledger_accounts`))
+			);
+			await runtime.runPromise(database.execute(sql.raw(`DROP FUNCTION ${functionName}()`)));
 		}
 
 		expect(
-			await db
-				.select()
-				.from(LedgerTransactionsTable)
-				.where(eq(LedgerTransactionsTable.id, transactionId.toUUID()))
+			await runtime.runPromise(
+				database
+					.select()
+					.from(LedgerTransactionsTable)
+					.where(eq(LedgerTransactionsTable.id, transactionId.toUUID()))
+			)
 		).toHaveLength(0);
 		expect(
-			await db
-				.select()
-				.from(LedgerTransactionEntriesTable)
-				.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toUUID()))
+			await runtime.runPromise(
+				database
+					.select()
+					.from(LedgerTransactionEntriesTable)
+					.where(eq(LedgerTransactionEntriesTable.transactionId, transactionId.toUUID()))
+			)
 		).toHaveLength(0);
 		for (const account of (await accounts(organizationId, ledgerId, [debit, credit])).values()) {
 			expect(account).toMatchObject({ pendingAmount: 0n, lockVersion: 1 });
@@ -670,7 +699,8 @@ describe("LedgerTransactionRepoLive", () => {
 				webhookUrl: "https://example.com/original",
 				webhookSigningSecret: "original-ciphertext",
 			};
-			if (monitored) await database.insert(LedgerAccountBalanceMonitorsTable).values(monitor);
+			if (monitored)
+				await runtime.runPromise(database.insert(LedgerAccountBalanceMonitorsTable).values(monitor));
 			const entries = (amount: number | string) =>
 				request("pending", [
 					{ accountId: debit, direction: "debit", amount: String(amount) },
@@ -812,16 +842,18 @@ describe("LedgerTransactionRepoLive", () => {
 			async target => {
 				const f = await fixture();
 				const settlementId = newLedgerAccountSettlementID();
-				await database.insert(LedgerAccountSettlementsTable).values({
-					id: settlementId.toUUID(),
-					organizationId: f.organizationId.toUUID(),
-					ledgerId: f.ledgerId.toUUID(),
-					settledAccountId: f.debit.toUUID(),
-					contraAccountId: f.credit.toUUID(),
-					assetId: f.assetId.toUUID(),
-					status: "processing",
-					targetStatus: "pending",
-				});
+				await runtime.runPromise(
+					database.insert(LedgerAccountSettlementsTable).values({
+						id: settlementId.toUUID(),
+						organizationId: f.organizationId.toUUID(),
+						ledgerId: f.ledgerId.toUUID(),
+						settledAccountId: f.debit.toUUID(),
+						contraAccountId: f.credit.toUUID(),
+						assetId: f.assetId.toUUID(),
+						status: "processing",
+						targetStatus: "pending",
+					})
+				);
 				const ordinary = Effect.runSync(
 					LedgerTransaction.fromCreateRequest(newLedgerTransactionID(), f.organizationId, f.ledgerId, {
 						status: "pending",
@@ -832,10 +864,12 @@ describe("LedgerTransactionRepoLive", () => {
 				await runtime.runPromise(
 					repository.createSettlementTransaction(generated).pipe(Effect.map(capture))
 				);
-				await database
-					.update(LedgerAccountSettlementsTable)
-					.set({ targetStatus: target })
-					.where(eq(LedgerAccountSettlementsTable.id, settlementId.toUUID()));
+				await runtime.runPromise(
+					database
+						.update(LedgerAccountSettlementsTable)
+						.set({ targetStatus: target })
+						.where(eq(LedgerAccountSettlementsTable.id, settlementId.toUUID()))
+				);
 				await runtime.runPromise(
 					target === "posted"
 						? repository
@@ -921,26 +955,29 @@ describe("LedgerTransactionRepoLive", () => {
 			const original = await f.create("posted");
 			await expect(f.create("posted", 100, original.id)).rejects.toMatchObject({ statusCode: 500 });
 			expect(f.events()).toHaveLength(1);
-			const [account] = await database
-				.select()
-				.from(LedgerAccountsTable)
-				.where(eq(LedgerAccountsTable.id, f.debit.toUUID()));
+			const [account] = await runtime.runPromise(
+				database.select().from(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, f.debit.toUUID()))
+			);
 			expect(account!.postedAmount).toBe(100n);
 		});
 		it("keeps captured configuration after a monitor is edited and deleted", async () => {
 			const f = await fixture();
 			await f.create("posted");
-			await database
-				.update(LedgerAccountBalanceMonitorsTable)
-				.set({
-					webhookUrl: "https://example.com/new",
-					webhookSigningSecret: "new-ciphertext",
-					lockVersion: 2,
-				})
-				.where(eq(LedgerAccountBalanceMonitorsTable.id, f.monitor.id));
-			await database
-				.delete(LedgerAccountBalanceMonitorsTable)
-				.where(eq(LedgerAccountBalanceMonitorsTable.id, f.monitor.id));
+			await runtime.runPromise(
+				database
+					.update(LedgerAccountBalanceMonitorsTable)
+					.set({
+						webhookUrl: "https://example.com/new",
+						webhookSigningSecret: "new-ciphertext",
+						lockVersion: 2,
+					})
+					.where(eq(LedgerAccountBalanceMonitorsTable.id, f.monitor.id))
+			);
+			await runtime.runPromise(
+				database
+					.delete(LedgerAccountBalanceMonitorsTable)
+					.where(eq(LedgerAccountBalanceMonitorsTable.id, f.monitor.id))
+			);
 			expect(f.events()[0]).toMatchObject({
 				monitorVersion: 1,
 				webhookUrl: f.monitor.webhookUrl,
@@ -950,10 +987,12 @@ describe("LedgerTransactionRepoLive", () => {
 		it("captures exact large amounts and retains Asset details after renaming", async () => {
 			const f = await fixture();
 			await f.create("posted", "9007199254740993");
-			await database
-				.update(AssetsTable)
-				.set({ code: "RENAMED" })
-				.where(eq(AssetsTable.id, f.assetId.toUUID()));
+			await runtime.runPromise(
+				database
+					.update(AssetsTable)
+					.set({ code: "RENAMED" })
+					.where(eq(AssetsTable.id, f.assetId.toUUID()))
+			);
 			expect(f.events()[0]).toMatchObject({
 				assetId: f.assetId.toString(),
 				assetCode: "EUR",
@@ -970,10 +1009,9 @@ describe("LedgerTransactionRepoLive", () => {
 			await f.create("posted", "9223372036854775807");
 			await expect(f.create("posted", "1")).rejects.toMatchObject({ statusCode: 409 });
 			expect(f.events()).toHaveLength(1);
-			const [account] = await database
-				.select()
-				.from(LedgerAccountsTable)
-				.where(eq(LedgerAccountsTable.id, f.debit.toUUID()));
+			const [account] = await runtime.runPromise(
+				database.select().from(LedgerAccountsTable).where(eq(LedgerAccountsTable.id, f.debit.toUUID()))
+			);
 			expect(account!.postedAmount).toBe(9223372036854775807n);
 		});
 	});

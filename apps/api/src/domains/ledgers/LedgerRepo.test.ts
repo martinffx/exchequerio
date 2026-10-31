@@ -89,9 +89,11 @@ describe("LedgerRepoLive", () => {
 					}
 					await runtime.runPromise(repository.deleteLedger(organizationId, ledger.id));
 				}
-				await database.db
-					.delete(AssetsTable)
-					.where(eq(AssetsTable.organizationId, organizationId.toUUID()));
+				await runtime.runPromise(
+					database.effectDb
+						.delete(AssetsTable)
+						.where(eq(AssetsTable.organizationId, organizationId.toUUID()))
+				);
 				await runtime.runPromise(organizationRepository.deleteOrganization(organizationId));
 			}
 		} finally {
@@ -176,20 +178,24 @@ describe("LedgerRepoLive", () => {
 	it("returns a typed decoding failure for an invalid timestamp", async () => {
 		const organizationId = await createOrganization();
 		const record = await runtime.runPromise(repository.createLedger(ledgerWrite(organizationId)));
-		await database.db
-			.update(LedgersTable)
-			.set({ created: sql`'infinity'::timestamptz` })
-			.where(eq(LedgersTable.id, record.id.toUUID()));
+		await runtime.runPromise(
+			database.effectDb
+				.update(LedgersTable)
+				.set({ created: sql`'infinity'::timestamptz` })
+				.where(eq(LedgersTable.id, record.id.toUUID()))
+		);
 		try {
 			const error = await runtime.runPromise(
 				Effect.flip(repository.getLedger(organizationId, record.id))
 			);
 			expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);
 		} finally {
-			await database.db
-				.update(LedgersTable)
-				.set({ created: new Date() })
-				.where(eq(LedgersTable.id, record.id.toUUID()));
+			await runtime.runPromise(
+				database.effectDb
+					.update(LedgersTable)
+					.set({ created: new Date() })
+					.where(eq(LedgersTable.id, record.id.toUUID()))
+			);
 		}
 	});
 
@@ -307,13 +313,15 @@ describe("LedgerRepoLive", () => {
 		const organizationId = await createOrganization();
 		const created = await runtime.runPromise(repository.createLedger(ledgerWrite(organizationId)));
 		const asset = { assetId: new TypeID("ast").toString(), assetCode: "USD", minorUnitExponent: 2 };
-		await database.db.insert(AssetsTable).values({
-			id: TypeID.fromString(asset.assetId).toUUID(),
-			organizationId: organizationId.toUUID(),
-			code: asset.assetCode,
-			name: "US Dollar",
-			minorUnitExponent: asset.minorUnitExponent,
-		});
+		await runtime.runPromise(
+			database.effectDb.insert(AssetsTable).values({
+				id: TypeID.fromString(asset.assetId).toUUID(),
+				organizationId: organizationId.toUUID(),
+				code: asset.assetCode,
+				name: "US Dollar",
+				minorUnitExponent: asset.minorUnitExponent,
+			})
+		);
 		await runtime.runPromise(
 			accountRepository.createAccount(
 				LedgerAccount.fromCreateRequest(
@@ -345,17 +353,19 @@ describe("LedgerRepoLive", () => {
 	])("returns a typed decoding failure for $label", async testCase => {
 		const organizationId = await createOrganization();
 		const id = newLedgerID();
-		const db = database.db;
+		const db = database.effectDb;
 		const row = ledgerWrite(organizationId).toCreateRow();
-		await db
-			.insert(LedgersTable)
-			.values({ ...row, id: id.toUUID(), metadata: testCase.metadata ?? row.metadata });
+		await runtime.runPromise(
+			db
+				.insert(LedgersTable)
+				.values({ ...row, id: id.toUUID(), metadata: testCase.metadata ?? row.metadata })
+		);
 
 		try {
 			const error = await runtime.runPromise(Effect.flip(repository.getLedger(organizationId, id)));
 			expect(error).toBeInstanceOf(LedgerPersistenceDecodingFailure);
 		} finally {
-			await db.delete(LedgersTable).where(eq(LedgersTable.id, id.toUUID()));
+			await runtime.runPromise(db.delete(LedgersTable).where(eq(LedgersTable.id, id.toUUID())));
 		}
 	});
 });

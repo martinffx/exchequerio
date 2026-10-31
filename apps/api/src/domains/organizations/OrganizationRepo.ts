@@ -1,7 +1,12 @@
 import { encodeUuid } from "@/lib/utils";
 import { asc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
-import { DatabaseTag, type DrizzleDatabase, isPostgresUnavailable, postgresErrorCode } from "@/db";
+import {
+	DatabaseTag,
+	type EffectDrizzleDatabase,
+	isPostgresUnavailable,
+	postgresErrorCode,
+} from "@/db";
 import type { OrgID } from "@/lib/ids";
 import { OrganizationsTable } from "../../db/schema";
 import { Organization } from "./Organization";
@@ -91,7 +96,7 @@ class OrganizationRepoLive implements OrganizationRepo {
 	 *
 	 * @param db - Database used for all Organization reads and writes.
 	 */
-	constructor(private readonly db: DrizzleDatabase) {}
+	constructor(private readonly db: EffectDrizzleDatabase) {}
 
 	/**
 	 * Lists Organizations in ascending identifier order.
@@ -102,19 +107,17 @@ class OrganizationRepoLive implements OrganizationRepo {
 	listOrganizations(
 		query: OrganizationListQuery
 	): Effect.Effect<Organization[], OrganizationInfrastructureError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db
-					.select()
-					.from(OrganizationsTable)
-					.orderBy(asc(OrganizationsTable.id))
-					.limit(query.limit)
-					.offset(query.offset),
-			catch: mapInfrastructureError,
-		}).pipe(
-			Effect.flatMap(rows => Effect.all(rows.map(row => Organization.fromRow(row)))),
-			Effect.map(organizations => organizations.flatMap(organization => Option.toArray(organization)))
-		);
+		return this.db
+			.select()
+			.from(OrganizationsTable)
+			.orderBy(asc(OrganizationsTable.id))
+			.limit(query.limit)
+			.offset(query.offset)
+			.pipe(
+				Effect.mapError(mapInfrastructureError),
+				Effect.flatMap(rows => Effect.all(rows.map(row => Organization.fromRow(row)))),
+				Effect.map(organizations => organizations.flatMap(organization => Option.toArray(organization)))
+			);
 	}
 
 	/**
@@ -126,15 +129,15 @@ class OrganizationRepoLive implements OrganizationRepo {
 	getOrganization(
 		id: OrgID
 	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db
-					.select()
-					.from(OrganizationsTable)
-					.where(eq(OrganizationsTable.id, encodeUuid(id)))
-					.limit(1),
-			catch: mapInfrastructureError,
-		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
+		return this.db
+			.select()
+			.from(OrganizationsTable)
+			.where(eq(OrganizationsTable.id, encodeUuid(id)))
+			.limit(1)
+			.pipe(
+				Effect.mapError(mapInfrastructureError),
+				Effect.flatMap(rows => Organization.fromRow(rows[0]))
+			);
 	}
 
 	/**
@@ -146,19 +149,21 @@ class OrganizationRepoLive implements OrganizationRepo {
 	createOrganization(
 		record: Organization
 	): Effect.Effect<Organization, OrganizationInfrastructureError> {
-		return Effect.tryPromise({
-			try: () => this.db.insert(OrganizationsTable).values(record.toCreateRow()).returning(),
-			catch: mapInfrastructureError,
-		}).pipe(
-			Effect.flatMap(rows => Organization.fromRow(rows[0])),
-			Effect.flatMap(
-				Option.match({
-					onNone: () =>
-						Effect.fail(new OrganizationPersistenceFailure(new Error("INSERT returned no row"))),
-					onSome: Effect.succeed,
-				})
-			)
-		);
+		return this.db
+			.insert(OrganizationsTable)
+			.values(record.toCreateRow())
+			.returning()
+			.pipe(
+				Effect.mapError(mapInfrastructureError),
+				Effect.flatMap(rows => Organization.fromRow(rows[0])),
+				Effect.flatMap(
+					Option.match({
+						onNone: () =>
+							Effect.fail(new OrganizationPersistenceFailure(new Error("INSERT returned no row"))),
+						onSome: Effect.succeed,
+					})
+				)
+			);
 	}
 
 	/**
@@ -170,15 +175,15 @@ class OrganizationRepoLive implements OrganizationRepo {
 	updateOrganization(
 		record: Organization
 	): Effect.Effect<Option.Option<Organization>, OrganizationInfrastructureError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db
-					.update(OrganizationsTable)
-					.set(record.toUpdateRow())
-					.where(eq(OrganizationsTable.id, encodeUuid(record.id)))
-					.returning(),
-			catch: mapInfrastructureError,
-		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
+		return this.db
+			.update(OrganizationsTable)
+			.set(record.toUpdateRow())
+			.where(eq(OrganizationsTable.id, encodeUuid(record.id)))
+			.returning()
+			.pipe(
+				Effect.mapError(mapInfrastructureError),
+				Effect.flatMap(rows => Organization.fromRow(rows[0]))
+			);
 	}
 
 	/**
@@ -190,20 +195,20 @@ class OrganizationRepoLive implements OrganizationRepo {
 	deleteOrganization(
 		id: OrgID
 	): Effect.Effect<Option.Option<Organization>, OrganizationDeleteRepositoryError> {
-		return Effect.tryPromise({
-			try: () =>
-				this.db
-					.delete(OrganizationsTable)
-					.where(eq(OrganizationsTable.id, encodeUuid(id)))
-					.returning(),
-			catch: mapDeleteError,
-		}).pipe(Effect.flatMap(rows => Organization.fromRow(rows[0])));
+		return this.db
+			.delete(OrganizationsTable)
+			.where(eq(OrganizationsTable.id, encodeUuid(id)))
+			.returning()
+			.pipe(
+				Effect.mapError(mapDeleteError),
+				Effect.flatMap(rows => Organization.fromRow(rows[0]))
+			);
 	}
 }
 
 const organizationRepoLayer = Layer.effect(
 	OrganizationRepoTag,
-	DatabaseTag.pipe(Effect.map(database => new OrganizationRepoLive(database.db)))
+	DatabaseTag.pipe(Effect.map(database => new OrganizationRepoLive(database.effectDb)))
 );
 
 export type { OrganizationDeleteRepositoryError, OrganizationListQuery };
