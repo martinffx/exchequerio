@@ -59,10 +59,12 @@ class OrganizationService {
 		offset,
 		limit,
 	}: ListOrganizationsOptions): Effect.Effect<Organization[], OrganizationListError> {
-		return this.repository.listOrganizations({
-			offset,
-			limit,
-		});
+		return Effect.suspend(() =>
+			this.repository.listOrganizations({
+				offset,
+				limit,
+			})
+		).pipe(Effect.withSpan("OrganizationService.listOrganizations"));
 	}
 
 	/**
@@ -72,7 +74,13 @@ class OrganizationService {
 	 * @returns An Effect containing the Organization.
 	 */
 	getOrganization(orgId: OrgID): Effect.Effect<Organization, OrganizationGetError> {
-		return this.repository.getOrganization(orgId).pipe(Effect.flatMap(requireFound()));
+		return Effect.suspend(() =>
+			this.repository.getOrganization(orgId).pipe(Effect.flatMap(requireFound()))
+		).pipe(
+			Effect.withSpan("OrganizationService.getOrganization", {
+				attributes: { "organization.id": String(orgId) },
+			})
+		);
 	}
 
 	/**
@@ -84,12 +92,14 @@ class OrganizationService {
 	createOrganization(
 		rq: OrganizationCreateRequest
 	): Effect.Effect<Organization, OrganizationCreateError> {
-		return this.idGenerator.generate().pipe(
-			Effect.flatMap(id => {
-				const organization = Organization.fromRequest(id, rq);
-				return this.repository.createOrganization(organization);
-			})
-		);
+		return Effect.suspend(() =>
+			this.idGenerator.generate().pipe(
+				Effect.flatMap(id => {
+					const organization = Organization.fromRequest(id, rq);
+					return this.repository.createOrganization(organization);
+				})
+			)
+		).pipe(Effect.withSpan("OrganizationService.createOrganization"));
 	}
 
 	/**
@@ -103,8 +113,14 @@ class OrganizationService {
 		orgId: OrgID,
 		rq: OrganizationUpdateRequest
 	): Effect.Effect<Organization, OrganizationUpdateError> {
-		const organization = Organization.fromRequest(orgId, rq);
-		return this.repository.updateOrganization(organization).pipe(Effect.flatMap(requireFound()));
+		return Effect.suspend(() => {
+			const organization = Organization.fromRequest(orgId, rq);
+			return this.repository.updateOrganization(organization).pipe(Effect.flatMap(requireFound()));
+		}).pipe(
+			Effect.withSpan("OrganizationService.updateOrganization", {
+				attributes: { "organization.id": String(orgId) },
+			})
+		);
 	}
 
 	/**
@@ -114,7 +130,13 @@ class OrganizationService {
 	 * @returns An Effect containing the deleted Organization.
 	 */
 	deleteOrganization(orgId: OrgID): Effect.Effect<Organization, OrganizationDeleteError> {
-		return this.repository.deleteOrganization(orgId).pipe(Effect.flatMap(requireFound()));
+		return Effect.suspend(() =>
+			this.repository.deleteOrganization(orgId).pipe(Effect.flatMap(requireFound()))
+		).pipe(
+			Effect.withSpan("OrganizationService.deleteOrganization", {
+				attributes: { "organization.id": String(orgId) },
+			})
+		);
 	}
 }
 

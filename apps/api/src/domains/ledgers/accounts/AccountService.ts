@@ -70,9 +70,15 @@ class AccountService {
 		ledgerId: LedgerID,
 		query: AccountListQuery
 	): Effect.Effect<LedgerAccount[], AccountListError> {
-		return this.ledgerService
-			.getLedger(organizationId, ledgerId)
-			.pipe(Effect.andThen(this.repo.listAccounts(organizationId, ledgerId, query)));
+		return Effect.suspend(() =>
+			this.ledgerService
+				.getLedger(organizationId, ledgerId)
+				.pipe(Effect.andThen(this.repo.listAccounts(organizationId, ledgerId, query)))
+		).pipe(
+			Effect.withSpan("AccountService.listAccounts", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	/**
@@ -88,9 +94,13 @@ class AccountService {
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Effect.Effect<LedgerAccount, AccountGetError> {
-		return this.repo
-			.getAccount(organizationId, ledgerId, accountId)
-			.pipe(Effect.flatMap(requireFound()));
+		return Effect.suspend(() =>
+			this.repo.getAccount(organizationId, ledgerId, accountId).pipe(Effect.flatMap(requireFound()))
+		).pipe(
+			Effect.withSpan("AccountService.getAccount", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 
 	/**
@@ -108,34 +118,40 @@ class AccountService {
 		ledgerId: LedgerID,
 		request: AccountCreateRequest
 	): Effect.Effect<LedgerAccount, AccountCreateError> {
-		return this.ledgerService.getLedger(organizationId, ledgerId).pipe(
-			Effect.andThen(
-				request.assetId === undefined
-					? Effect.succeed<AssetID | string>(request.assetCode)
-					: parseId<"ast", AssetID>("ast", request.assetId)
-			),
-			Effect.flatMap(reference => this.assetService.getAsset(organizationId, reference)),
-			Effect.map(asset =>
-				LedgerAccount.fromCreateRequest(
-					new TypeID("lat") as LedgerAccountID,
-					organizationId,
-					ledgerId,
-					request,
-					asset.toSummary()
-				)
-			),
-			Effect.flatMap(account =>
-				this.repo.createAccount(account).pipe(
-					Effect.mapError(error =>
-						error instanceof AccountRepositoryUnavailable
-							? new ServiceUnavailableError(error.message, {
-									cause: error,
-									retryable: false,
-								})
-							: error
+		return Effect.suspend(() =>
+			this.ledgerService.getLedger(organizationId, ledgerId).pipe(
+				Effect.andThen(
+					request.assetId === undefined
+						? Effect.succeed<AssetID | string>(request.assetCode)
+						: parseId<"ast", AssetID>("ast", request.assetId)
+				),
+				Effect.flatMap(reference => this.assetService.getAsset(organizationId, reference)),
+				Effect.map(asset =>
+					LedgerAccount.fromCreateRequest(
+						new TypeID("lat") as LedgerAccountID,
+						organizationId,
+						ledgerId,
+						request,
+						asset.toSummary()
+					)
+				),
+				Effect.flatMap(account =>
+					this.repo.createAccount(account).pipe(
+						Effect.mapError(error =>
+							error instanceof AccountRepositoryUnavailable
+								? new ServiceUnavailableError(error.message, {
+										cause: error,
+										retryable: false,
+									})
+								: error
+						)
 					)
 				)
 			)
+		).pipe(
+			Effect.withSpan("AccountService.createAccount", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
 		);
 	}
 
@@ -154,8 +170,14 @@ class AccountService {
 		accountId: LedgerAccountID,
 		request: AccountUpdateRequest
 	): Effect.Effect<LedgerAccount, AccountUpdateError> {
-		return this.getAccount(organizationId, ledgerId, accountId).pipe(
-			Effect.flatMap(current => this.repo.updateAccount(current.fromUpdateRequest(request)))
+		return Effect.suspend(() =>
+			this.getAccount(organizationId, ledgerId, accountId).pipe(
+				Effect.flatMap(current => this.repo.updateAccount(current.fromUpdateRequest(request)))
+			)
+		).pipe(
+			Effect.withSpan("AccountService.updateAccount", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
 		);
 	}
 
@@ -172,9 +194,13 @@ class AccountService {
 		ledgerId: LedgerID,
 		accountId: LedgerAccountID
 	): Effect.Effect<LedgerAccount, AccountDeleteError> {
-		return this.repo
-			.deleteAccount(organizationId, ledgerId, accountId)
-			.pipe(Effect.flatMap(requireFound()));
+		return Effect.suspend(() =>
+			this.repo.deleteAccount(organizationId, ledgerId, accountId).pipe(Effect.flatMap(requireFound()))
+		).pipe(
+			Effect.withSpan("AccountService.deleteAccount", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 }
 

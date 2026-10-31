@@ -164,7 +164,9 @@ class LedgerAccountSettlementRepoLive {
 		ledgerId: LedgerID,
 		id: LedgerAccountSettlementID
 	): Effect.Effect<LedgerAccountSettlementEntity, SettlementReadError> {
-		return unlessConflict(this.read(this.db, organizationId, ledgerId, id));
+		return unlessConflict(this.read(this.db, organizationId, ledgerId, id)).pipe(
+			Effect.withSpan("LedgerAccountSettlementRepo.getSettlement")
+		);
 	}
 	/**
 	 * Lists scoped Settlements with accounting in descending creation and ID order.
@@ -215,7 +217,8 @@ class LedgerAccountSettlementRepoLive {
 			),
 			Effect.mapError(mapError),
 			unlessConflict,
-			unlessMissing
+			unlessMissing,
+			Effect.withSpan("LedgerAccountSettlementRepo.listSettlements")
 		);
 	}
 	/**
@@ -312,7 +315,8 @@ class LedgerAccountSettlementRepoLive {
 	buildTransaction(org: OrgID, ledger: LedgerID, id: LedgerAccountSettlementID, now: DateTime) {
 		return this.getSettlement(org, ledger, id).pipe(
 			Effect.flatMap(settlement => this.accounting(this.db, settlement, now)),
-			Effect.mapError(mapError)
+			Effect.mapError(mapError),
+			Effect.withSpan("LedgerAccountSettlementRepo.buildTransaction")
 		);
 	}
 	/**
@@ -429,7 +433,10 @@ class LedgerAccountSettlementRepoLive {
 					return target ? yield* this.prepare(db, entity, target, now) : entity;
 				})
 			)
-			.pipe(Effect.mapError(mapError));
+			.pipe(
+				Effect.mapError(mapError),
+				Effect.withSpan("LedgerAccountSettlementRepo.createSettlement")
+			);
 	}
 	/**
 	 * Applies edits and prepares the requested transition under a Settlement row lock.
@@ -485,7 +492,10 @@ class LedgerAccountSettlementRepoLive {
 					return patch.status ? yield* this.prepare(db, edited, patch.status, now) : edited;
 				})
 			)
-			.pipe(Effect.mapError(mapError));
+			.pipe(
+				Effect.mapError(mapError),
+				Effect.withSpan("LedgerAccountSettlementRepo.prepareSettlement")
+			);
 	}
 	/**
 	 * Commits a prepared target after its accounting reaches the same status.
@@ -535,7 +545,10 @@ class LedgerAccountSettlementRepoLive {
 					});
 				})
 			)
-			.pipe(Effect.mapError(mapError));
+			.pipe(
+				Effect.mapError(mapError),
+				Effect.withSpan("LedgerAccountSettlementRepo.finalizeSettlement")
+			);
 	}
 	/**
 	 * Changes manual draft membership in one database transaction.
@@ -590,7 +603,7 @@ class LedgerAccountSettlementRepoLive {
 						);
 				})
 			)
-			.pipe(Effect.mapError(mapError));
+			.pipe(Effect.mapError(mapError), Effect.withSpan("LedgerAccountSettlementRepo.changeEntries"));
 	}
 	/**
 	 * Lists a scoped Settlement’s sources in descending creation and ID order.
@@ -630,7 +643,11 @@ class LedgerAccountSettlementRepoLive {
 					}))
 				)
 			);
-		}).pipe(Effect.mapError(mapError), unlessConflict);
+		}).pipe(
+			Effect.mapError(mapError),
+			unlessConflict,
+			Effect.withSpan("LedgerAccountSettlementRepo.listEntries")
+		);
 	}
 }
 /** Public Settlement persistence operations, excluding connection-level helpers. */

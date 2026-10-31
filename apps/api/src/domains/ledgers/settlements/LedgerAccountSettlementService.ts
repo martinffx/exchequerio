@@ -56,7 +56,11 @@ class LedgerAccountSettlementService {
 	 * @returns The repository Effect containing the requested page.
 	 */
 	listLedgerAccountSettlements(org: OrgID, ledger: LedgerID, offset: number, limit: number) {
-		return this.repository.listSettlements(org, ledger, offset, limit);
+		return Effect.suspend(() => this.repository.listSettlements(org, ledger, offset, limit)).pipe(
+			Effect.withSpan("LedgerAccountSettlementService.listLedgerAccountSettlements", {
+				attributes: { "organization.id": String(org), "ledger.id": String(ledger) },
+			})
+		);
 	}
 	/**
 	 * Loads a scoped Settlement.
@@ -67,7 +71,11 @@ class LedgerAccountSettlementService {
 	 * @returns The repository Effect containing the Settlement or a failure.
 	 */
 	getLedgerAccountSettlement(org: OrgID, ledger: LedgerID, id: LedgerAccountSettlementID) {
-		return this.repository.getSettlement(org, ledger, id);
+		return Effect.suspend(() => this.repository.getSettlement(org, ledger, id)).pipe(
+			Effect.withSpan("LedgerAccountSettlementService.getLedgerAccountSettlement", {
+				attributes: { "organization.id": String(org), "ledger.id": String(ledger) },
+			})
+		);
 	}
 	/**
 	 * Decodes an idempotency result ID and reloads its scoped Settlement.
@@ -137,7 +145,11 @@ class LedgerAccountSettlementService {
 			);
 			yield* this.idempotency.complete(org, action, key, settlement.id.toString());
 			return yield* this.resume(settlement, request.status ?? "pending");
-		});
+		}).pipe(
+			Effect.withSpan("LedgerAccountSettlementService.createLedgerAccountSettlement", {
+				attributes: { "organization.id": String(org), "ledger.id": String(ledger) },
+			})
+		);
 	}
 	/**
 	 * Claims an edit action and resumes its requested lifecycle target.
@@ -174,7 +186,11 @@ class LedgerAccountSettlementService {
 				);
 			yield* this.idempotency.complete(org, action, key, settlement.id.toString());
 			return yield* this.resume(settlement, patch.status);
-		});
+		}).pipe(
+			Effect.withSpan("LedgerAccountSettlementService.patchLedgerAccountSettlement", {
+				attributes: { "organization.id": String(org), "ledger.id": String(ledger) },
+			})
+		);
 	}
 	/**
 	 * Resumes accounting only when processing matches this action’s expected target.
@@ -239,7 +255,11 @@ class LedgerAccountSettlementService {
 		key: string,
 		entries: string[]
 	) {
-		return this.changeEntries(org, ledger, id, key, entries, true);
+		return Effect.suspend(() => this.changeEntries(org, ledger, id, key, entries, true)).pipe(
+			Effect.withSpan("LedgerAccountSettlementService.addLedgerAccountSettlementEntries", {
+				attributes: { "organization.id": String(org), "ledger.id": String(ledger) },
+			})
+		);
 	}
 	/**
 	 * Removes source membership through an idempotent draft action.
@@ -258,7 +278,11 @@ class LedgerAccountSettlementService {
 		key: string,
 		entries: string[]
 	) {
-		return this.changeEntries(org, ledger, id, key, entries, false);
+		return Effect.suspend(() => this.changeEntries(org, ledger, id, key, entries, false)).pipe(
+			Effect.withSpan("LedgerAccountSettlementService.removeLedgerAccountSettlementEntries", {
+				attributes: { "organization.id": String(org), "ledger.id": String(ledger) },
+			})
+		);
 	}
 	/**
 	 * Claims a membership action and records its Settlement ID after the edit.
@@ -315,7 +339,11 @@ class LedgerAccountSettlementService {
 		offset: number,
 		limit: number
 	) {
-		return this.repository.listEntries(org, ledger, id, offset, limit);
+		return Effect.suspend(() => this.repository.listEntries(org, ledger, id, offset, limit)).pipe(
+			Effect.withSpan("LedgerAccountSettlementService.listLedgerAccountSettlementEntries", {
+				attributes: { "organization.id": String(org), "ledger.id": String(ledger) },
+			})
+		);
 	}
 }
 /** Effect service key for Settlement orchestration. */

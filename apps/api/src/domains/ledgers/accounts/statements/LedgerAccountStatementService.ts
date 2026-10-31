@@ -19,7 +19,10 @@ class LedgerAccountStatementService {
 		orgId: OrgID
 	): Effect.Effect<LedgerAccountStatement, StatementError> {
 		return Effect.sync(() => TypeID.fromString<"lst">(id) as LedgerAccountStatementID).pipe(
-			Effect.flatMap(statementId => this.repository.getStatement(statementId, orgId))
+			Effect.flatMap(statementId => this.repository.getStatement(statementId, orgId)),
+			Effect.withSpan("LedgerAccountStatementService.getLedgerAccountStatement", {
+				attributes: { "organization.id": String(orgId) },
+			})
 		);
 	}
 
@@ -27,13 +30,14 @@ class LedgerAccountStatementService {
 		request: LedgerAccountStatementRequest,
 		orgId: OrgID
 	): Effect.Effect<LedgerAccountStatement, StatementError> {
-		return this.repository
-			.getAccountAsset(orgId, request.accountId, request.ledgerId)
-			.pipe(
-				Effect.flatMap(asset =>
-					this.repository.createStatement(LedgerAccountStatement.fromRequest(request, asset), orgId)
-				)
-			);
+		return this.repository.getAccountAsset(orgId, request.accountId, request.ledgerId).pipe(
+			Effect.flatMap(asset =>
+				this.repository.createStatement(LedgerAccountStatement.fromRequest(request, asset), orgId)
+			),
+			Effect.withSpan("LedgerAccountStatementService.createLedgerAccountStatement", {
+				attributes: { "organization.id": String(orgId) },
+			})
+		);
 	}
 }
 

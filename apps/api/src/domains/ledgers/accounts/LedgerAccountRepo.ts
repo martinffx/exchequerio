@@ -170,7 +170,8 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 					Effect.all(rows.map(row => LedgerAccount.fromRow(row.account, row.asset)))
 				),
 				Effect.map(accounts => accounts.flatMap(account => Option.toArray(account))),
-				Effect.mapError(mapAccountInfrastructureError)
+				Effect.mapError(mapAccountInfrastructureError),
+				Effect.withSpan("LedgerAccountRepo.listAccounts")
 			);
 	}
 
@@ -218,7 +219,8 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 						? Effect.succeed(Option.none())
 						: LedgerAccount.fromRow(rows[0].account, rows[0].asset)
 				),
-				Effect.mapError(mapAccountInfrastructureError)
+				Effect.mapError(mapAccountInfrastructureError),
+				Effect.withSpan("LedgerAccountRepo.getAccount")
 			);
 	}
 
@@ -231,15 +233,17 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 	createAccount(
 		record: LedgerAccount
 	): Effect.Effect<LedgerAccount, LedgerAccountCreateRepositoryError> {
-		return this.db
-			.insert(LedgerAccountsTable)
-			.values(record.toRow())
-			.returning()
-			.pipe(
-				Effect.flatMap(rows => this.hydrate(rows[0])),
-				Effect.flatMap(requireCreatedAccount),
-				Effect.mapError(cause => mapAccountCreateError(cause, record.name))
-			);
+		return Effect.suspend(() =>
+			this.db
+				.insert(LedgerAccountsTable)
+				.values(record.toRow())
+				.returning()
+				.pipe(
+					Effect.flatMap(rows => this.hydrate(rows[0])),
+					Effect.flatMap(requireCreatedAccount),
+					Effect.mapError(cause => mapAccountCreateError(cause, record.name))
+				)
+		).pipe(Effect.withSpan("LedgerAccountRepo.createAccount"));
 	}
 
 	/**
@@ -254,32 +258,34 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 	updateAccount(
 		record: LedgerAccount
 	): Effect.Effect<LedgerAccount, LedgerAccountUpdateRepositoryError> {
-		const row = record.toRow();
-		return this.db
-			.update(LedgerAccountsTable)
-			.set({
-				name: row.name,
-				// oxlint-disable-next-line unicorn/no-null -- Drizzle requires null to clear a SQL column.
-				description: row.description ?? null,
-				// oxlint-disable-next-line unicorn/no-null -- Drizzle requires null to clear a SQL column.
-				metadata: row.metadata ?? null,
-				updated: row.updated,
-				lockVersion: record.lockVersion + 1,
-			})
-			.where(
-				and(
-					eq(LedgerAccountsTable.organizationId, encodeUuid(record.organizationId)),
-					eq(LedgerAccountsTable.ledgerId, encodeUuid(record.ledgerId)),
-					eq(LedgerAccountsTable.id, encodeUuid(record.id)),
-					eq(LedgerAccountsTable.lockVersion, record.lockVersion)
+		return Effect.suspend(() => {
+			const row = record.toRow();
+			return this.db
+				.update(LedgerAccountsTable)
+				.set({
+					name: row.name,
+					// oxlint-disable-next-line unicorn/no-null -- Drizzle requires null to clear a SQL column.
+					description: row.description ?? null,
+					// oxlint-disable-next-line unicorn/no-null -- Drizzle requires null to clear a SQL column.
+					metadata: row.metadata ?? null,
+					updated: row.updated,
+					lockVersion: record.lockVersion + 1,
+				})
+				.where(
+					and(
+						eq(LedgerAccountsTable.organizationId, encodeUuid(record.organizationId)),
+						eq(LedgerAccountsTable.ledgerId, encodeUuid(record.ledgerId)),
+						eq(LedgerAccountsTable.id, encodeUuid(record.id)),
+						eq(LedgerAccountsTable.lockVersion, record.lockVersion)
+					)
 				)
-			)
-			.returning()
-			.pipe(
-				Effect.flatMap(rows => this.hydrate(rows[0])),
-				Effect.flatMap(requireUpdatedAccount),
-				Effect.mapError(cause => mapAccountUpdateError(cause, record.name))
-			);
+				.returning()
+				.pipe(
+					Effect.flatMap(rows => this.hydrate(rows[0])),
+					Effect.flatMap(requireUpdatedAccount),
+					Effect.mapError(cause => mapAccountUpdateError(cause, record.name))
+				);
+		}).pipe(Effect.withSpan("LedgerAccountRepo.updateAccount"));
 	}
 
 	/**
@@ -313,7 +319,8 @@ class LedgerAccountRepoLive implements LedgerAccountRepo {
 							.pipe(Effect.flatMap(rows => LedgerAccount.fromRow(rows[0], account))),
 				})
 			),
-			Effect.mapError(mapAccountDeleteError)
+			Effect.mapError(mapAccountDeleteError),
+			Effect.withSpan("LedgerAccountRepo.deleteAccount")
 		);
 	}
 }

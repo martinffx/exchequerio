@@ -6,7 +6,7 @@ import { AssetRepoTag, assetRepoLayer, type AssetRepo } from "@/domains/assets/A
 import type { AssetSummary } from "@/lib/AssetSchema";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Tracer } from "effect";
 import { DateTime } from "luxon";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Config } from "@/config";
@@ -366,6 +366,28 @@ describe("Settlement repository processing", () => {
 			runtime.runPromise(repo.getSettlement(owner.organizationId, other.ledgerId, entity.id))
 		).rejects.toThrow("not found");
 	});
+	it("records exactly one getSettlement span", async () => {
+		const owner = await runtime.runPromise(context());
+		const entity = await runtime.runPromise(draft(owner));
+		const spans: Tracer.NativeSpan[] = [];
+		const tracer = Tracer.make({
+			span: options => {
+				const span = new Tracer.NativeSpan(options);
+				spans.push(span);
+				return span;
+			},
+		});
+		await runtime.runPromise(
+			repo
+				.getSettlement(owner.organizationId, owner.ledgerId, entity.id)
+				.pipe(Effect.withTracer(tracer))
+		);
+		const names = spans
+			.map(({ name }) => name)
+			.filter(name => name.startsWith("LedgerAccountSettlementRepo."));
+		expect(names).toEqual(["LedgerAccountSettlementRepo.getSettlement"]);
+	});
+
 	it("freezes sources, creates accounting once, and finalizes separately", async () => {
 		const owner = await runtime.runPromise(context()),
 			entry = await runtime.runPromise(source(owner));
