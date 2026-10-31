@@ -58,7 +58,7 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
 - The limiter uses its own Redis client with `enableOfflineQueue: false` and `commandTimeout: 250`, so a Valkey outage costs a request at most about 250 ms. It must not reuse the `ValkeyTag` client, which never reconnects (`retryStrategy: () => undefined`).
 - Route tests run without Valkey: the shared route-test harness provides the memory limiter store. The API test run starts Postgres and Valkey Testcontainers; only the Valkey integration test uses Valkey.
 - `.oxlintrc.json` types every `src/**` file as a `boundaries` element with explicit `allow` rules. Each new `src/lib` module needs an element and rules, an entry in the `boundaries/external` HTTP allow list if it imports `effect/unstable/http` or `httpapi` (`RateLimit.ts` does), and importing modules (`api-composition`, `server`, `runtime`) need an `allow` entry for it.
-- `problemResponse` is private to `server.ts` and `server` imports lib modules, so `LoadShedding.ts` must not import from `server.ts`. If `shedLoad` needs it, export or move it.
+- `problemResponse` now lives in `LoadShedding.ts` (moved out of `server.ts`) so `LoadShedding.ts` does not import from `server.ts`; `server.ts` imports it from there. It is a general edge renderer, so a later change may move it to `ApiContract.ts`.
 - The job store keeps its current Redis options, and the raw ioredis error stays as the `RedisError.cause`; Effect's NOSCRIPT recovery depends on it.
 
 ## Context
@@ -117,7 +117,7 @@ One job: answer "is this process over its limits right now?" and reject early wh
 - `sample(histogramMeanNs, resolutionMs, memoryUsage): boolean` is a pure function with constant thresholds:
   - event-loop delay is the histogram mean minus the timer resolution, with the histogram reset after every sample; a NaN mean (the loop was blocked for the whole interval) counts as overloaded;
   - heap used > 500 MB; RSS > 1 GB.
-- `startSampler` is a scoped effect: it enables `monitorEventLoopDelay`, forks a 1 s `Schedule.spaced` sampler that writes the latest verdict to a `Ref`, and disables the histogram on scope close.
+- `startSampler` is a scoped effect: it enables `monitorEventLoopDelay`, forks a sampler that sleeps 1 s (the histogram is empty and its mean NaN until then) and then repeats on `Schedule.spaced("1 second")`, writing the latest verdict to a `Ref` that starts false, and disables the histogram on scope close. A thrown sample is logged and leaves the verdict unchanged.
 - `shedLoad(verdict)(httpEffect)`: when the verdict says overloaded, returns `problemResponse(new ServiceUnavailableError("Service under pressure", { retryable: true, retryAfterSeconds: 50 }))` without running `httpEffect`.
 - **Wiring** in `src/server.ts`: the `EdgeMiddleware` construction effect reads `ServerConfigTag`. In `test` / `test-*` the verdict is always false; otherwise it comes from `startSampler`. The chain becomes `failServerSpan(correlate(logger(connectionClose(bodyLimit(edgeErrors(shedLoad(verdict)(httpEffect)))))))`. Shed requests are logged with their 503, and shedding runs before the API middleware, so a shed request never reaches Valkey. There is no per-request service lookup, because that would leak a `GlobalRequires` requirement into `serve` and `toWebHandler`.
 - `/health` is shed too, matching the old behaviour. If it is ever used as a liveness probe, an overloaded pod would be restarted.
@@ -141,7 +141,7 @@ Only the `RateLimiter` store and the load-shedding sampler. The middleware funct
    - a table test of `sample` at each threshold boundary, including NaN;
    - `shedLoad` with a fixed verdict (true → 503 + `retry-after: 50` and the handler is not run; false → passthrough).
    The real sampler loop is not tested.
-4. One integration test against the Valkey Testcontainer that the API test run starts goes through the real runtime layer and proves the Redis store wiring: the `exchequer:ratelimit:<org_id>` key and its `…:refill` key exist with a positive TTL, and, with a dead Valkey address, a request fails open within about 250 ms. It does not repeat the 429 and header cases from seam 2.
+4. One integration test against the Valkey Testcontainer that the API test run starts goes through the real runtime layer and proves the Redis store wiring: the `exchequer:ratelimit:<org_id>` key and its `…:refill` key exist with a positive TTL. With a dead Valkey address the full runtime cannot be built (the balance-monitor job store calls Valkey while building), so that case builds the runtime's exported `makeRateLimiterLayer` and asserts a fast `RateLimitStoreError`; the pass-through itself is covered by seam 2. It does not repeat the 429 and header cases from seam 2.
 5. The benches run the real runtime under the limiter, so `.env.test` carries a very high `RATE_LIMIT_MAX`, and they assert that no response is a 429, so they cannot silently measure the limiter. They do not assert `non2xx === 0`: the write benches already return retryable 409s under contention.
 6. There is no route-level 429 test: `testServicesLayer` always reads `new Config()`, so a low limit would need a new harness parameter. Seam 2 covers the behaviour at module level, and route suites only assert the declared 429 in OpenAPI.
 
