@@ -63,11 +63,11 @@
 						"apps/api/src/lib/errors.ts: TooManyRequestsError and TooManyRequestsApiError encode the 429 body and retry-after header",
 						"effect/unstable/persistence RateLimiter: consume fails with RateLimiterError whose reason is RateLimitExceeded or RateLimitStoreError; layerStoreMemory"
 					],
-					"description": "Create RateLimit, an HttpApiMiddleware.Service that requires CurrentToken and declares TooManyRequestsApiError, and makeRateLimitLayer({ limit, window }) that builds its layer from RateLimiter. For each request consume one token keyed by the token's organizationId with the fixed-window algorithm and onExceeded fail. On success run the handler and set x-ratelimit-limit, x-ratelimit-remaining and x-ratelimit-reset (durations rounded up to whole seconds) on the response. Branch on error.reason._tag: RateLimitExceeded fails with TooManyRequestsError (retryable, retryAfterSeconds rounded up, at least 1); RateLimitStoreError runs the handler unchanged and logs only when fail-open starts and when it recovers. Do not wire it into the server in this task so the existing suites and typecheck stay green. Add a lib-ratelimit element for src/lib/RateLimit.ts to .oxlintrc.json, allowed to import auth, lib-contract and lib-errors.",
+					"description": "Create RateLimit, an HttpApiMiddleware.Service that requires CurrentToken and declares TooManyRequestsApiError, and makeRateLimitLayer({ limit, window }) that builds its layer from RateLimiter. For each request consume one token keyed by the token's organizationId with the token-bucket algorithm and onExceeded fail. On success run the handler and set x-ratelimit-limit, x-ratelimit-remaining and x-ratelimit-reset (durations rounded up to whole seconds) on the response. Branch on error.reason._tag: RateLimitExceeded fails with TooManyRequestsError (retryable, retryAfterSeconds rounded up, at least 1); RateLimitStoreError runs the handler unchanged and logs only when fail-open starts and when it recovers. T2 and T3 land in one commit, so the middleware is wired by T3. Raise the default RATE_LIMIT_MAX to 500 and RATE_LIMIT_WINDOW_SECONDS to 1 in Config and its tests, because under a token-bucket the burst equals the limit. Add a lib-ratelimit element for src/lib/RateLimit.ts to .oxlintrc.json, allowed to import auth, lib-contract and lib-errors, and add the lib-ratelimit boundaries/external HTTP allow-list entry (it imports effect/unstable/http and httpapi) next to its element and rule.",
 					"files": {
 						"reuse": ["apps/api/src/auth.ts", "apps/api/src/lib/errors.ts", "apps/api/src/lib/ApiContract.ts"],
 						"create": ["apps/api/src/lib/RateLimit.ts", "apps/api/src/lib/RateLimit.test.ts"],
-						"modify": [".oxlintrc.json"],
+						"modify": [".oxlintrc.json", "apps/api/src/config.ts", "apps/api/src/config.test.ts"],
 						"delete": []
 					},
 					"new_abstractions": [
@@ -79,16 +79,16 @@
 					],
 					"validation": {
 						"tests": [
-							"With limit 2 and a window of about 200 ms, the third request from one Organization gets 429 TOO_MANY_REQUESTS with retryable true and retry-after of at least 1",
+							"With limit 2 and a window of about 10 s, the third request from one Organization gets 429 TOO_MANY_REQUESTS with retryable true and retry-after of at least 1",
 							"A second Organization still gets 200 while the first is limited",
-							"The first Organization succeeds again after waiting out its refill time",
+							"With limit 2 and a window of about 200 ms, the first Organization succeeds again after waiting out its refill time (the only short-window test)",
 							"200 responses carry x-ratelimit-limit, x-ratelimit-remaining and x-ratelimit-reset",
-							"A store that always fails with RateLimitStoreError gives 200 without rate-limit headers and logs one warning per outage",
-							"A request without a token gets 401 and does not consume a token"
+							"A store whose token-bucket operation always fails with RateLimitStoreError gives 200 without rate-limit headers and logs one warning per outage",
+							"A request without a token gets 401 and does not consume a token",
+							"Config with neither variable set uses 500 and 1"
 						],
 						"acceptance": [
 							"The middleware branches on reason._tag, not on the outer error",
-							"Nothing in server.ts, api.ts or runtime.ts changes",
 							"Boundaries lint passes",
 							"pnpm run check passes"
 						]
@@ -104,7 +104,7 @@
 						"apps/api/src/server.ts: appLayer provides makeAuthenticationLayer from ServerConfigTag; testServicesLayer builds the route-test services",
 						"apps/api/src/runtime.ts: ServerRuntimeServices and the infrastructure layer; ServerRuntimeLayer is declared with a fixed output type"
 					],
-					"description": "In api.ts add .middleware(RateLimit) before .middleware(Authentication) so the limiter runs after auth and before request decoding, and update the ordering comment. In server.ts provide makeRateLimitLayer from ServerConfigTag (limit rateLimitMax, window rateLimitWindowSeconds seconds) in appLayer, and add RateLimiter.layer over layerStoreMemory to testServicesLayer, which is defined in apps/api/src/lib/testing.ts (not server.ts) and is the shared route-test harness. In runtime.ts add RateLimiter.layer over layerStoreRedis with prefix exchequer:ratelimit: over makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 }) to the infrastructure layer and add RateLimiter to ServerRuntimeServices. Update the explicit OpenAPI status-set assertions that now include 429 (expected in the Organization, Ledger, Transaction and Account route tests; the Asset test and any snapshot only if they fail), changing nothing else in them. The 'advertises operation-specific failures without 429' assertion in LedgerTransactionRoutes.test.ts may need rewording because every commonErrors group now declares 429. Allow lib-ratelimit in the api-composition and server boundaries rules in .oxlintrc.json (and lib-queues in runtime only if lint requires it).",
+					"description": "In api.ts add .middleware(RateLimit) before .middleware(Authentication) so the limiter runs after auth and before request decoding, and update the ordering comment. In server.ts provide makeRateLimitLayer from ServerConfigTag (limit rateLimitMax, window rateLimitWindowSeconds seconds) in appLayer, and add RateLimiter.layer over layerStoreMemory to testServicesLayer, which is defined in apps/api/src/lib/testing.ts (not server.ts) and is the shared route-test harness. In runtime.ts add RateLimiter.layer over layerStoreRedis with prefix exchequer:ratelimit: over makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 }) to the infrastructure layer and add RateLimiter to ServerRuntimeServices. Update the explicit OpenAPI status-set assertions that now include 429 (expected in the Organization, Ledger, Transaction and Account route tests; the Asset test and any snapshot only if they fail), changing nothing else in them. The 'advertises operation-specific failures without 429' assertion in LedgerTransactionRoutes.test.ts may need rewording because every commonErrors group now declares 429. Set a very high RATE_LIMIT_MAX in apps/api/.env.test (moved here from T4), because from this task on the route suites and the benches run under the limiter. Allow lib-ratelimit in the api-composition and server boundaries rules in .oxlintrc.json (and lib-queues in runtime only if lint requires it).",
 					"files": {
 						"reuse": ["apps/api/src/lib/RateLimit.ts", "apps/api/src/lib/queues.ts"],
 						"create": [],
@@ -113,6 +113,7 @@
 							"apps/api/src/server.ts",
 							"apps/api/src/runtime.ts",
 							"apps/api/src/lib/testing.ts",
+							"apps/api/.env.test",
 							".oxlintrc.json",
 							"apps/api/src/domains/organizations/OrganizationRoutes.test.ts",
 							"apps/api/src/domains/ledgers/LedgerRoutes.test.ts",
@@ -149,13 +150,12 @@
 						"apps/api/src/lib/IdempotencyService.test.ts: the existing pattern for tests that talk to real Valkey",
 						"apps/api/test/bench/transaction.bench.ts and category-balances.bench.ts: one Organization, 100 connections, 30 s, asserting only that some responses are 2xx"
 					],
-					"description": "Add an integration test that, against Valkey from docker:up, drives requests through the Redis-backed limiter, checks the exchequer:ratelimit:<org_id> key exists, and checks a request past the limit gets 429. Document RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_SECONDS in .env.example, set a very high RATE_LIMIT_MAX in .env.test, and make both benches assert that no response is non-2xx so a limiter that dominates the run fails the bench.",
+					"description": "Add an integration test that builds the real runtime layer (makeServerRuntimeLayer) against the Valkey Testcontainer the API test run starts, consumes through the RateLimiter service it provides, and checks that exchequer:ratelimit:<org_id> and exchequer:ratelimit:<org_id>:refill exist with a positive TTL, then that with the Valkey address pointing at a closed port a request fails open within about 250 ms plus slack. Do not repeat the 429 and header cases from T2. Document RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_SECONDS in .env.example with defaults 500 and 1, and make both benches assert that no response is a 429, so a limiter that dominates the run fails the bench. Leave the existing tolerance for retryable 409s alone. If building the full runtime needs Postgres, reuse the Postgres Testcontainer from test.setup.ts.",
 					"files": {
 						"reuse": ["apps/api/src/lib/IdempotencyService.test.ts"],
 						"create": ["apps/api/src/lib/RateLimit.valkey.test.ts"],
 						"modify": [
 							"apps/api/.env.example",
-							"apps/api/.env.test",
 							"apps/api/test/bench/transaction.bench.ts",
 							"apps/api/test/bench/category-balances.bench.ts"
 						],
@@ -164,12 +164,13 @@
 					"new_abstractions": [],
 					"validation": {
 						"tests": [
-							"The Valkey test passes against docker:up Valkey and cleans up its key",
+							"The Valkey test passes against the Testcontainer Valkey and deletes both keys",
+							"The fail-open case completes within the bound against a closed port",
 							"pnpm --filter=@exchequerio/api bench:check lists the benches without error"
 						],
 						"acceptance": [
 							"The new env vars appear in .env.example with their defaults",
-							"The benches fail if any response is non-2xx"
+							"The benches fail if any response is a 429"
 						]
 					}
 				}
