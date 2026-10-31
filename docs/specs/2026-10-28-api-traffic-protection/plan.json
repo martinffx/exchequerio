@@ -63,11 +63,11 @@
 						"apps/api/src/lib/errors.ts: TooManyRequestsError and TooManyRequestsApiError encode the 429 body and retry-after header",
 						"effect/unstable/persistence RateLimiter: consume fails with RateLimiterError whose reason is RateLimitExceeded or RateLimitStoreError; layerStoreMemory"
 					],
-					"description": "Create RateLimit, an HttpApiMiddleware.Service that requires CurrentToken and declares TooManyRequestsApiError, and makeRateLimitLayer({ limit, window }) that builds its layer from RateLimiter. For each request consume one token keyed by the token's organizationId with the fixed-window algorithm and onExceeded fail. On success run the handler and set x-ratelimit-limit, x-ratelimit-remaining and x-ratelimit-reset (durations rounded up to whole seconds) on the response. Branch on error.reason._tag: RateLimitExceeded fails with TooManyRequestsError (retryable, retryAfterSeconds rounded up, at least 1); RateLimitStoreError runs the handler unchanged and logs only when fail-open starts and when it recovers. Do not wire it into the server in this task so the existing suites and typecheck stay green.",
+					"description": "Create RateLimit, an HttpApiMiddleware.Service that requires CurrentToken and declares TooManyRequestsApiError, and makeRateLimitLayer({ limit, window }) that builds its layer from RateLimiter. For each request consume one token keyed by the token's organizationId with the fixed-window algorithm and onExceeded fail. On success run the handler and set x-ratelimit-limit, x-ratelimit-remaining and x-ratelimit-reset (durations rounded up to whole seconds) on the response. Branch on error.reason._tag: RateLimitExceeded fails with TooManyRequestsError (retryable, retryAfterSeconds rounded up, at least 1); RateLimitStoreError runs the handler unchanged and logs only when fail-open starts and when it recovers. Do not wire it into the server in this task so the existing suites and typecheck stay green. Add a lib-ratelimit element for src/lib/RateLimit.ts to .oxlintrc.json, allowed to import auth, lib-contract and lib-errors.",
 					"files": {
 						"reuse": ["apps/api/src/auth.ts", "apps/api/src/lib/errors.ts", "apps/api/src/lib/ApiContract.ts"],
 						"create": ["apps/api/src/lib/RateLimit.ts", "apps/api/src/lib/RateLimit.test.ts"],
-						"modify": [],
+						"modify": [".oxlintrc.json"],
 						"delete": []
 					},
 					"new_abstractions": [
@@ -89,6 +89,7 @@
 						"acceptance": [
 							"The middleware branches on reason._tag, not on the outer error",
 							"Nothing in server.ts, api.ts or runtime.ts changes",
+							"Boundaries lint passes",
 							"pnpm run check passes"
 						]
 					}
@@ -103,7 +104,7 @@
 						"apps/api/src/server.ts: appLayer provides makeAuthenticationLayer from ServerConfigTag; testServicesLayer builds the route-test services",
 						"apps/api/src/runtime.ts: ServerRuntimeServices and the infrastructure layer; ServerRuntimeLayer is declared with a fixed output type"
 					],
-					"description": "In api.ts add .middleware(RateLimit) before .middleware(Authentication) so the limiter runs after auth and before request decoding, and update the ordering comment. In server.ts provide makeRateLimitLayer from ServerConfigTag (limit rateLimitMax, window rateLimitWindowSeconds seconds) in appLayer, and add RateLimiter.layer over layerStoreMemory to testServicesLayer. In runtime.ts add RateLimiter.layer over layerStoreRedis with prefix exchequer:ratelimit: over makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 }) to the infrastructure layer and add RateLimiter to ServerRuntimeServices. Update the explicit OpenAPI status-set assertions that now include 429 (expected in the Organization, Ledger, Transaction and Account route tests; the Asset test and any snapshot only if they fail), changing nothing else in them.",
+					"description": "In api.ts add .middleware(RateLimit) before .middleware(Authentication) so the limiter runs after auth and before request decoding, and update the ordering comment. In server.ts provide makeRateLimitLayer from ServerConfigTag (limit rateLimitMax, window rateLimitWindowSeconds seconds) in appLayer, and add RateLimiter.layer over layerStoreMemory to testServicesLayer. In runtime.ts add RateLimiter.layer over layerStoreRedis with prefix exchequer:ratelimit: over makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 }) to the infrastructure layer and add RateLimiter to ServerRuntimeServices. Update the explicit OpenAPI status-set assertions that now include 429 (expected in the Organization, Ledger, Transaction and Account route tests; the Asset test and any snapshot only if they fail), changing nothing else in them. Allow lib-ratelimit in the api-composition and server boundaries rules in .oxlintrc.json (and lib-queues in runtime only if lint requires it).",
 					"files": {
 						"reuse": ["apps/api/src/lib/RateLimit.ts", "apps/api/src/lib/queues.ts"],
 						"create": [],
@@ -111,6 +112,7 @@
 							"apps/api/src/api.ts",
 							"apps/api/src/server.ts",
 							"apps/api/src/runtime.ts",
+							".oxlintrc.json",
 							"apps/api/src/domains/organizations/OrganizationRoutes.test.ts",
 							"apps/api/src/domains/ledgers/LedgerRoutes.test.ts",
 							"apps/api/src/domains/ledgers/transactions/LedgerTransactionRoutes.test.ts",
@@ -129,6 +131,7 @@
 						"acceptance": [
 							"Typecheck passes with RateLimiter in ServerRuntimeServices",
 							"The throttled groups (settlements, balance monitors, statements, categories) have no OpenAPI changes",
+							"Boundaries lint passes",
 							"pnpm run check passes"
 						]
 					}
@@ -180,11 +183,11 @@
 						"design.md: Load shedding section and US-5",
 						"Old @fastify/under-pressure thresholds: event-loop delay 1000 ms, heap 500 MB, RSS 1 GB; delay is the histogram mean minus the timer resolution, NaN means blocked"
 					],
-					"description": "Create LoadShedding.ts with the threshold constants and a pure sample(histogramMeanNs, resolutionMs, memoryUsage) that returns whether the process is overloaded: delay (mean minus resolution) above 1000 ms, NaN delay, heap used above 500 MB, or RSS above 1 GB. Do not include an event-loop-utilisation check.",
+					"description": "Create LoadShedding.ts with the threshold constants and a pure sample(histogramMeanNs, resolutionMs, memoryUsage) that returns whether the process is overloaded: delay (mean minus resolution) above 1000 ms, NaN delay, heap used above 500 MB, or RSS above 1 GB. Do not include an event-loop-utilisation check. Add a lib-loadshedding element for src/lib/LoadShedding.ts to .oxlintrc.json, allowing only what it imports.",
 					"files": {
 						"reuse": [],
 						"create": ["apps/api/src/lib/LoadShedding.ts", "apps/api/src/lib/LoadShedding.test.ts"],
-						"modify": [],
+						"modify": [".oxlintrc.json"],
 						"delete": []
 					},
 					"new_abstractions": [
@@ -200,7 +203,7 @@
 							"A NaN histogram mean is overloaded",
 							"Resolution is subtracted from the mean before comparing"
 						],
-						"acceptance": ["sample is pure and has no I/O", "pnpm run check passes"]
+						"acceptance": ["sample is pure and has no I/O", "Boundaries lint passes", "pnpm run check passes"]
 					}
 				},
 				{
@@ -212,11 +215,11 @@
 						"apps/api/src/server.ts: EdgeMiddleware is HttpRouter.middleware(Effect.succeed(...), { global: true }) with the chain logger(connectionClose(bodyLimit(edgeErrors(httpEffect)))); problemResponse renders an HttpError with retry-after",
 						"apps/api/src/lib/errors.ts: ServiceUnavailableError"
 					],
-					"description": "Add shedLoad(verdict)(httpEffect), which returns problemResponse(new ServiceUnavailableError('Service under pressure', { retryable: true, retryAfterSeconds: 50 })) without running the handler when the verdict says overloaded, and a scoped startSampler that enables monitorEventLoopDelay, forks a 1 s Schedule.spaced sampler writing the latest sample result to a Ref, and disables the histogram on scope close. Change EdgeMiddleware's construction effect to read ServerConfigTag: in test or test-* environments the verdict is always not overloaded, otherwise it comes from startSampler. Insert shedLoad inside edgeErrors so the chain is logger(connectionClose(bodyLimit(edgeErrors(shedLoad(verdict)(httpEffect))))). Do not add a per-request service lookup. Export or move problemResponse only if LoadShedding.ts needs it.",
+					"description": "Add shedLoad(verdict)(httpEffect), which returns problemResponse(new ServiceUnavailableError('Service under pressure', { retryable: true, retryAfterSeconds: 50 })) without running the handler when the verdict says overloaded, and a scoped startSampler that enables monitorEventLoopDelay, forks a 1 s Schedule.spaced sampler writing the latest sample result to a Ref, and disables the histogram on scope close. Change EdgeMiddleware's construction effect to read ServerConfigTag: in test or test-* environments the verdict is always not overloaded, otherwise it comes from startSampler. Insert shedLoad inside edgeErrors so the chain is logger(connectionClose(bodyLimit(edgeErrors(shedLoad(verdict)(httpEffect))))). Do not add a per-request service lookup. Export or move problemResponse only if LoadShedding.ts needs it. Allow lib-loadshedding (and lib-errors if needed) in the server boundaries rule in .oxlintrc.json.",
 					"files": {
 						"reuse": ["apps/api/src/lib/errors.ts", "apps/api/src/server.ts"],
 						"create": [],
-						"modify": ["apps/api/src/lib/LoadShedding.ts", "apps/api/src/lib/LoadShedding.test.ts", "apps/api/src/server.ts"],
+						"modify": ["apps/api/src/lib/LoadShedding.ts", "apps/api/src/lib/LoadShedding.test.ts", "apps/api/src/server.ts", ".oxlintrc.json"],
 						"delete": []
 					},
 					"new_abstractions": [
@@ -235,6 +238,7 @@
 						"acceptance": [
 							"serve and toWebHandler requirements do not gain a GlobalRequires entry",
 							"The sampler is not started when environment is test or test-*",
+							"Boundaries lint passes",
 							"pnpm run check passes"
 						]
 					}
