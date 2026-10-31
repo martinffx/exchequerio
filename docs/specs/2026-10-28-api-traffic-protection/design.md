@@ -50,7 +50,7 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
 
 ## Constraints
 
-- Based on `feat/effect-http`. The design reuses `Authentication` / `CurrentToken`, `TooManyRequestsApiError`, and the `LedgerApi` middleware chain unchanged.
+- Based on `main`, which already has the Effect HTTP server and the OpenTelemetry instrumentation. The design reuses `Authentication` / `CurrentToken`, `TooManyRequestsApiError`, and the `LedgerApi` middleware chain unchanged.
 - Valkey keys are prefixed `exchequer:ratelimit:` (cf. `exchequer:idempotency:`).
 - The limiter uses its own Redis client with `enableOfflineQueue: false` and `commandTimeout: 250`, so a Valkey outage costs a request at most about 250 ms. It must not reuse the `ValkeyTag` client, which never reconnects (`retryStrategy: () => undefined`).
 - Route tests must keep running without Valkey; the test harness only starts a Postgres testcontainer.
@@ -62,7 +62,7 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
 - `src/auth.ts`: `Authentication` is an `HttpApiMiddleware.Service` with bearer security that `provides: CurrentToken` (an `OrgToken`). `token.organizationId` is the tenant identity.
 - `src/lib/errors.ts`: `TooManyRequestsError` and `TooManyRequestsApiError` already encode the 429 problem body and a `retry-after` header derived from `retryAfterSeconds`.
 - `src/lib/ApiContract.ts`: settlements, balance monitors, statements and categories already declare `TooManyRequestsApiError`; the other groups use `commonErrors`. Identical error schemas are de-duplicated.
-- `src/server.ts`: `EdgeMiddleware` is the single global router middleware with an explicit order `logger(connectionClose(bodyLimit(edgeErrors(httpEffect))))`. `problemResponse` renders an `HttpError` with `retry-after`. `appLayer` provides `makeAuthenticationLayer` from `ServerConfigTag`. `testServicesLayer` builds the route-test service set with die-if-called defaults.
+- `src/server.ts`: `EdgeMiddleware` is the single global router middleware with an explicit order `failServerSpan(correlate(logger(connectionClose(bodyLimit(edgeErrors(httpEffect))))))`. `problemResponse` renders an `HttpError` with `retry-after`. `appLayer` provides `makeAuthenticationLayer` from `ServerConfigTag`. `testServicesLayer` builds the route-test service set with die-if-called defaults.
 - `src/runtime.ts` builds the Valkey client (`makeValkeyLive`), idempotency, and the balance-monitor job store. `src/lib/queues.ts` builds an Effect `Redis.Redis` over ioredis inline.
 - The effect-http migration deleted `@fastify/under-pressure` and `@fastify/rate-limit`, and its design left load shedding to infrastructure. This spec reverses that for load shedding, at the user's request.
 - Effect 4.0.0-rc.112 ships `effect/unstable/persistence` `RateLimiter` with `consume` (`algorithm: "fixed-window"`, `onExceeded: "fail"`), `layerStoreRedis({ prefix })`, and `layerStoreMemory`.
@@ -113,7 +113,7 @@ One job: answer "is this process over its limits right now?" and reject early wh
   - heap used > 500 MB; RSS > 1 GB.
 - `startSampler` is a scoped effect: it enables `monitorEventLoopDelay`, forks a 1 s `Schedule.spaced` sampler that writes the latest verdict to a `Ref`, and disables the histogram on scope close.
 - `shedLoad(verdict)(httpEffect)`: when the verdict says overloaded, returns `problemResponse(new ServiceUnavailableError("Service under pressure", { retryable: true, retryAfterSeconds: 50 }))` without running `httpEffect`.
-- **Wiring** in `src/server.ts`: the `EdgeMiddleware` construction effect reads `ServerConfigTag`. In `test` / `test-*` the verdict is always false; otherwise it comes from `startSampler`. The chain becomes `logger(connectionClose(bodyLimit(edgeErrors(shedLoad(verdict)(httpEffect)))))`. Shed requests are logged with their 503, and shedding runs before the API middleware, so a shed request never reaches Valkey. There is no per-request service lookup, because that would leak a `GlobalRequires` requirement into `serve` and `toWebHandler`.
+- **Wiring** in `src/server.ts`: the `EdgeMiddleware` construction effect reads `ServerConfigTag`. In `test` / `test-*` the verdict is always false; otherwise it comes from `startSampler`. The chain becomes `failServerSpan(correlate(logger(connectionClose(bodyLimit(edgeErrors(shedLoad(verdict)(httpEffect)))))))`. Shed requests are logged with their 503, and shedding runs before the API middleware, so a shed request never reaches Valkey. There is no per-request service lookup, because that would leak a `GlobalRequires` requirement into `serve` and `toWebHandler`.
 - `/health` is shed too, matching the old behaviour. If it is ever used as a liveness probe, an overloaded pod would be restarted.
 
 ### Config (`src/config.ts`)
