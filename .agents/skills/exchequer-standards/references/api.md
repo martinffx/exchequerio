@@ -128,4 +128,4 @@ pnpm --filter=@exchequerio/api types
 ```
 
 Read the owning routes, schemas, services, and tests for current resource behavior, and the
-[entity relationship diagram](../../apps/api/docs/product/erd.md) for persistence work.
+[entity relationship diagram](../../../../apps/api/docs/product/erd.md) for persistence work.
