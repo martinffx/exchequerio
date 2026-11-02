@@ -44,7 +44,11 @@ class LedgerAccountStatementService {
 		accountId: LedgerAccountID,
 		id: LedgerAccountStatementID
 	): Effect.Effect<LedgerAccountStatement, StatementReadError> {
-		return this.repository.getStatement(organizationId, ledgerId, accountId, id);
+		return this.repository.getStatement(organizationId, ledgerId, accountId, id).pipe(
+			Effect.withSpan("LedgerAccountStatementService.getLedgerAccountStatement", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 	listLedgerAccountStatements(
 		organizationId: OrgID,
@@ -52,7 +56,11 @@ class LedgerAccountStatementService {
 		accountId: LedgerAccountID,
 		query: StatementListQuery
 	): Effect.Effect<LedgerAccountStatement[], StatementReadError> {
-		return this.repository.listStatements(organizationId, ledgerId, accountId, query);
+		return this.repository.listStatements(organizationId, ledgerId, accountId, query).pipe(
+			Effect.withSpan("LedgerAccountStatementService.listLedgerAccountStatements", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 	getLedgerAccountStatementEntries(
 		organizationId: OrgID,
@@ -61,7 +69,11 @@ class LedgerAccountStatementService {
 		id: LedgerAccountStatementID,
 		query: StatementListQuery
 	): Effect.Effect<StatementEntry[], StatementReadError> {
-		return this.repository.getEntries(organizationId, ledgerId, accountId, id, query);
+		return this.repository.getEntries(organizationId, ledgerId, accountId, id, query).pipe(
+			Effect.withSpan("LedgerAccountStatementService.getLedgerAccountStatementEntries", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 	updateLedgerAccountStatement(
 		organizationId: OrgID,
@@ -70,7 +82,11 @@ class LedgerAccountStatementService {
 		id: LedgerAccountStatementID,
 		request: StatementUpdateRequest
 	): Effect.Effect<LedgerAccountStatement, StatementUpdateError> {
-		return this.repository.updateAnnotations(organizationId, ledgerId, accountId, id, request);
+		return this.repository.updateAnnotations(organizationId, ledgerId, accountId, id, request).pipe(
+			Effect.withSpan("LedgerAccountStatementService.updateLedgerAccountStatement", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 	createLedgerAccountStatement(
 		organizationId: OrgID,
@@ -109,7 +125,11 @@ class LedgerAccountStatementService {
 				);
 			yield* this.idempotency.complete(organizationId, action, key, result.id.toString());
 			return result;
-		});
+		}).pipe(
+			Effect.withSpan("LedgerAccountStatementService.createLedgerAccountStatement", {
+				attributes: { "organization.id": String(organizationId), "ledger.id": String(ledgerId) },
+			})
+		);
 	}
 }
 const LedgerAccountStatementServiceTag = Context.Service<LedgerAccountStatementService>(

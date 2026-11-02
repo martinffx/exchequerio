@@ -1,7 +1,8 @@
 # Documentation Site
 
 Public documentation lives in `apps/docs` and is built with Docusaurus. Engineering standards stay
-under root `docs/standards`; do not publish them by placing them in the Docusaurus content tree.
+in the `exchequer-standards` skill under `.agents/skills`; do not publish them by placing them in
+the Docusaurus content tree.
 
 ## Content
 

@@ -1,6 +1,6 @@
 import dns from "node:dns";
 import https from "node:https";
-import { Effect, Option, Layer, Logger, ManagedRuntime } from "effect";
+import { Effect, Option, Layer, Logger, ManagedRuntime, Tracer } from "effect";
 import { DateTime } from "luxon";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import {
@@ -545,6 +545,41 @@ describe("Monitor processing", () => {
 			vi.useRealTimers();
 		});
 
+		describe("webhook tracing", () => {
+			const payload = { eventId: "event:monitor" };
+
+			it("records a webhook.deliver client span without URL and never propagates trace headers", async () => {
+				const { request } = transport(204);
+				const { spans, tracer } = capture();
+				await Effect.runPromise(
+					sendWebhook("https://example.com/hook", signingSecret, payload).pipe(
+						Effect.withSpan("parent"),
+						Effect.withTracer(tracer)
+					)
+				);
+				const headers = (request.mock.calls[0]?.[1] as https.RequestOptions).headers ?? {};
+				expect(headers).not.toHaveProperty("traceparent");
+				expect(headers).not.toHaveProperty("b3");
+				const span = spans.find(({ name }) => name === "webhook.deliver");
+				expect(span?.kind).toBe("client");
+				expect(Object.fromEntries(span?.attributes ?? [])).toEqual({
+					"http.request.method": "POST",
+					"http.response.status_code": 204,
+				});
+			});
+
+			it("records the status code of a rejected delivery", async () => {
+				transport(503);
+				const { spans, tracer } = capture();
+				await Effect.runPromise(
+					Effect.flip(sendWebhook("https://example.com/hook", signingSecret, payload)).pipe(
+						Effect.withTracer(tracer)
+					)
+				);
+				expect(spans[0]?.attributes.get("http.response.status_code")).toBe(503);
+			});
+		});
+
 		describe("webhook destination validation", () => {
 			it.each([
 				"http://example.com",
@@ -951,6 +986,18 @@ const enqueueJobs = (jobs: readonly LedgerAccountBalanceMonitorJobPayload[]) =>
 	Effect.gen(function* () {
 		yield* (yield* LedgerAccountBalanceMonitorPublisher)(jobs);
 	}).pipe(Effect.provide(ledgerAccountBalanceMonitorPublisherLayer));
+
+function capture() {
+	const spans: Tracer.NativeSpan[] = [];
+	const tracer = Tracer.make({
+		span: options => {
+			const span = new Tracer.NativeSpan(options);
+			spans.push(span);
+			return span;
+		},
+	});
+	return { spans, tracer };
+}
 
 function transport(
 	status?: number,

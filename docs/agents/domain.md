@@ -12,8 +12,7 @@
 
 1. Read root `CONTEXT.md` when it exists.
 2. Read ADRs in `docs/adr/` that are relevant to the work.
-3. Read the [engineering standards](../standards/README.md) for implementation work. Read the
-   [documentation addendum](../standards/documentation.md) when editing domain documentation.
+3. Follow the `exchequer-standards` skill for implementation and documentation work.
 4. Proceed silently when these documents do not yet exist.
 
 ## Ownership

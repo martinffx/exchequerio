@@ -3,6 +3,8 @@ import type Redis from "ioredis";
 
 import { ConflictError, ServiceUnavailableError } from "@/lib/errors";
 import type { OrgID } from "@/lib/ids";
+import { recordIdempotencyClaim } from "@/lib/metrics";
+import { withValkeySpan } from "@/lib/queues";
 
 /** Lifetime of an action claim and its stored result, in seconds. */
 const TTL_SECONDS = 15 * 60;
@@ -182,6 +184,10 @@ class IdempotencyServiceRedis implements IdempotencyService {
 							? this.awaitResultId(key).pipe(Effect.map(Option.some))
 							: Effect.succeed(Option.fromUndefinedOr(resultId)),
 				})
+			),
+			Effect.tap(claim => recordIdempotencyClaim(Option.isSome(claim) ? "replay" : "new")),
+			Effect.tapError(error =>
+				recordIdempotencyClaim(error instanceof IdempotencyPending ? "pending" : "unavailable")
 			)
 		);
 	}
@@ -193,10 +199,13 @@ class IdempotencyServiceRedis implements IdempotencyService {
 	 * @returns An Effect containing acquisition state, or an unavailable failure.
 	 */
 	private acquire(key: string): Effect.Effect<IdempotencyClaim, IdempotencyUnavailable> {
-		return Effect.tryPromise({
-			try: async () => parseClaim(await this.client.eval(CLAIM_SCRIPT, 1, key, PENDING, TTL_SECONDS)),
-			catch: cause => new IdempotencyUnavailable(cause),
-		});
+		return withValkeySpan(
+			"EVAL",
+			Effect.tryPromise({
+				try: async () => parseClaim(await this.client.eval(CLAIM_SCRIPT, 1, key, PENDING, TTL_SECONDS)),
+				catch: cause => new IdempotencyUnavailable(cause),
+			})
+		);
 	}
 
 	/**
@@ -206,10 +215,13 @@ class IdempotencyServiceRedis implements IdempotencyService {
 	 * @returns An Effect containing the result ID or pending state, or an unavailable failure.
 	 */
 	private getResultId(key: string): Effect.Effect<string | undefined, IdempotencyUnavailable> {
-		return Effect.tryPromise({
-			try: async () => parseStoredResultId(await this.client.get(key)),
-			catch: cause => new IdempotencyUnavailable(cause),
-		});
+		return withValkeySpan(
+			"GET",
+			Effect.tryPromise({
+				try: async () => parseStoredResultId(await this.client.get(key)),
+				catch: cause => new IdempotencyUnavailable(cause),
+			})
+		);
 	}
 
 	/**
@@ -248,13 +260,16 @@ class IdempotencyServiceRedis implements IdempotencyService {
 		resultId: string
 	): Effect.Effect<void, IdempotencyUnavailable> {
 		const key = redisKey(organizationId, action, clientKey);
-		return Effect.tryPromise({
-			try: async () => {
-				const completed = await this.client.eval(COMPLETE_SCRIPT, 1, key, PENDING, resultId);
-				if (completed !== "OK") throw new Error("Valkey no longer contains the pending claim");
-			},
-			catch: cause => new IdempotencyUnavailable(cause),
-		});
+		return withValkeySpan(
+			"EVAL",
+			Effect.tryPromise({
+				try: async () => {
+					const completed = await this.client.eval(COMPLETE_SCRIPT, 1, key, PENDING, resultId);
+					if (completed !== "OK") throw new Error("Valkey no longer contains the pending claim");
+				},
+				catch: cause => new IdempotencyUnavailable(cause),
+			})
+		);
 	}
 
 	/**
@@ -271,10 +286,13 @@ class IdempotencyServiceRedis implements IdempotencyService {
 		clientKey: string
 	): Effect.Effect<void, IdempotencyUnavailable> {
 		const key = redisKey(organizationId, action, clientKey);
-		return Effect.tryPromise({
-			try: () => this.client.eval(RELEASE_SCRIPT, 1, key, PENDING),
-			catch: cause => new IdempotencyUnavailable(cause),
-		}).pipe(Effect.asVoid);
+		return withValkeySpan(
+			"EVAL",
+			Effect.tryPromise({
+				try: () => this.client.eval(RELEASE_SCRIPT, 1, key, PENDING),
+				catch: cause => new IdempotencyUnavailable(cause),
+			})
+		).pipe(Effect.asVoid);
 	}
 }
 

@@ -125,7 +125,8 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 				Effect.flatMap(rows => requireStatement(rows, id)),
 				Effect.catchTag("EffectDrizzleQueryError", cause =>
 					Effect.fail(mapStatementInfrastructureError(cause))
-				)
+				),
+				Effect.withSpan("LedgerAccountStatementRepo.getStatement")
 			);
 	}
 	listStatements(
@@ -159,7 +160,8 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		}).pipe(
 			Effect.catchTag("EffectDrizzleQueryError", cause =>
 				Effect.fail(mapStatementInfrastructureError(cause))
-			)
+			),
+			Effect.withSpan("LedgerAccountStatementRepo.listStatements")
 		);
 	}
 	getEntries(
@@ -183,7 +185,8 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		}).pipe(
 			Effect.catchTag("EffectDrizzleQueryError", cause =>
 				Effect.fail(mapStatementInfrastructureError(cause))
-			)
+			),
+			Effect.withSpan("LedgerAccountStatementRepo.getEntries")
 		);
 	}
 	createStatement(
@@ -297,7 +300,8 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 			.pipe(
 				Effect.catchTag(["EffectDrizzleQueryError", "SqlError"], cause =>
 					Effect.fail(mapStatementInfrastructureError(cause))
-				)
+				),
+				Effect.withSpan("LedgerAccountStatementRepo.createStatement")
 			);
 	}
 	updateAnnotations(
@@ -335,7 +339,8 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		}).pipe(
 			Effect.catchTag("EffectDrizzleQueryError", cause =>
 				Effect.fail(mapStatementInfrastructureError(cause))
-			)
+			),
+			Effect.withSpan("LedgerAccountStatementRepo.updateAnnotations")
 		);
 	}
 	deleteStatement(
@@ -354,7 +359,8 @@ class LedgerAccountStatementRepoLive implements LedgerAccountStatementRepo {
 		}).pipe(
 			Effect.catchTag("EffectDrizzleQueryError", cause =>
 				Effect.fail(mapStatementInfrastructureError(cause))
-			)
+			),
+			Effect.withSpan("LedgerAccountStatementRepo.deleteStatement")
 		);
 	}
 }
