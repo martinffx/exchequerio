@@ -71,15 +71,16 @@ pnpm run bench
 
 Transaction creation throughput and latency across different contention levels:
 
-| Scenario | Accounts | Req/sec | p50 | p97.5 | p99 | Errors |
-|----------|----------|---------|-----|-------|-----|--------|
-| **High Contention** | 2 | 183.50 | 456ms | 1453ms | 1537ms | 0 |
-| **Medium Contention** | 20 | 383.84 | 106ms | 1303ms | 1442ms | 0 |
-| **Low Contention** | 200 | 538.64 | 79ms | 1191ms | 1475ms | 0 |
-| **Hot Account (2/2002)** | 2,002 | 249.54 | 162ms | 1392ms | 1486ms | 0 |
-| **Hot Account (20/2020)** | 2,020 | 384.27 | 106ms | 1310ms | 1448ms | 0 |
+| Scenario                  | Accounts | Req/sec | p50   | p97.5  | p99    | Errors |
+| ------------------------- | -------- | ------- | ----- | ------ | ------ | ------ |
+| **High Contention**       | 2        | 183.50  | 456ms | 1453ms | 1537ms | 0      |
+| **Medium Contention**     | 20       | 383.84  | 106ms | 1303ms | 1442ms | 0      |
+| **Low Contention**        | 200      | 538.64  | 79ms  | 1191ms | 1475ms | 0      |
+| **Hot Account (2/2002)**  | 2,002    | 249.54  | 162ms | 1392ms | 1486ms | 0      |
+| **Hot Account (20/2020)** | 2,020    | 384.27  | 106ms | 1310ms | 1448ms | 0      |
 
 **Key Insights:**
+
 - **Throughput degradation** (high vs low contention): 52.25%
 - **P97.5 latency increase** (high vs low contention): 10.92%
 - Bounded mutation retry: at most 3 total attempts for retryable concurrency conflicts
@@ -87,6 +88,7 @@ Transaction creation throughput and latency across different contention levels:
 - Hot account patterns demonstrate realistic production workloads
 
 **Test Configuration:**
+
 - Duration: 10 seconds per scenario
 - Connections: 10 concurrent
 - Pipelining: 1 request per connection
@@ -155,20 +157,17 @@ pnpm run ci
 # Equivalent to: build + format check + lint + types + benchmark collection + test
 ```
 
-| App | Description | Stack |
-|-----|-------------|-------|
-| `apps/api` | Ledger API | Effect HttpApi, Drizzle, PostgreSQL |
-| `apps/web` | Dashboard | React Router v7, Tailwind |
-| `apps/docs` | Documentation | Docusaurus |
+| App         | Description   | Stack                               |
+| ----------- | ------------- | ----------------------------------- |
+| `apps/api`  | Ledger API    | Effect HttpApi, Drizzle, PostgreSQL |
+| `apps/web`  | Dashboard     | React Router v7, Tailwind           |
+| `apps/docs` | Documentation | Docusaurus                          |
 
 ## Documentation
 
 - [Getting Started](AGENTS.md) — Full development guide
-- [Engineering Standards](docs/standards/README.md) — Shared standards and app addenda
+- [Engineering Standards](.agents/skills/exchequer-standards/SKILL.md) — Shared standards and app addenda
 - [Balance Monitors](apps/api/docs/product/balance-monitors.md) — Best-effort alerts, webhook delivery, and worker operations
-- [Ledger API Standards](docs/standards/api.md) — Backend architecture and development
-- [Customer Portal Standards](docs/standards/web.md) — Frontend architecture and development
-- [Documentation Standards](docs/standards/documentation.md) — Public content guidance
 
 ## Contributing
 
