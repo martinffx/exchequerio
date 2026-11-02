@@ -12,6 +12,7 @@ import { LedgersApi } from "@/domains/ledgers/LedgerApi";
 import { OrganizationApi } from "@/domains/organizations/OrganizationApi";
 import { BadRequestApiError } from "@/lib/ApiContract";
 import { BadRequestError } from "@/lib/errors";
+import { RateLimit } from "@/lib/RateLimit";
 
 /** Turns request decode failures into the BAD_REQUEST problem; see `SchemaErrorTransformLayer`. */
 class SchemaErrorTransform extends HttpApiMiddleware.Service<SchemaErrorTransform>()(
@@ -56,8 +57,8 @@ const SchemaErrorTransformLayer = HttpApiMiddleware.layerSchemaErrorTransform(
 );
 
 // Groups are only added inside `.add(...)`: `.prefix` and `.middleware` apply to the groups already added.
-// SchemaErrorTransform is added last so it wraps Authentication and every handler: auth runs first,
-// then request decoding.
+// The first middleware added is innermost: RateLimit sits inside Authentication and SchemaErrorTransform
+// is added last so it wraps both and every handler, so auth runs first, then rate limiting, then request decoding.
 class LedgerApi extends HttpApi.make("ledger")
 	.add(
 		OrganizationApi,
@@ -71,6 +72,7 @@ class LedgerApi extends HttpApi.make("ledger")
 		BalanceMonitorsApi
 	)
 	.prefix("/api")
+	.middleware(RateLimit)
 	.middleware(Authentication)
 	.middleware(SchemaErrorTransform)
 	.annotateMerge(

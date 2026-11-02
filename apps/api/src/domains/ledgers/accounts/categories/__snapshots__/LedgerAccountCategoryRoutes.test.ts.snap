@@ -372,8 +372,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -873,8 +872,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -1367,8 +1365,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -1811,8 +1808,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -2315,8 +2311,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -2819,8 +2814,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -3274,8 +3268,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -3778,8 +3771,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -4282,8 +4274,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },
@@ -4793,8 +4784,7 @@ exports[`LedgerAccountCategoryApi > documents all generated Category OpenAPI ope
           "retry-after": {
             "required": false,
             "schema": {
-              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-              "type": "string",
+              "type": "integer",
             },
           },
         },

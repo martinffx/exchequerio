@@ -354,6 +354,7 @@ async function runBenchmark(
 	});
 
 	expect(result["2xx"]).toBeGreaterThan(0);
+	expect(result.statusCodeStats?.["429"]?.count ?? 0).toBe(0);
 	return {
 		scenario: scenario.name,
 		accountCount: scenario.accountCount,

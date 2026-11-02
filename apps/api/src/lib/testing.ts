@@ -1,5 +1,6 @@
 import { Effect, Layer, type Context } from "effect";
 import { HttpRouter } from "effect/unstable/http";
+import { RateLimiter } from "effect/unstable/persistence";
 import { afterEach } from "vitest";
 import { signJWT } from "@/auth";
 import { Config } from "@/config";
@@ -73,6 +74,7 @@ const testServicesLayer = (stubs: TestStubs = {}, extra: Layer.Layer<never> = La
 		serviceLayer(LedgerAccountCategoryServiceTag, stubs.category),
 		serviceLayer(LedgerAccountStatementServiceTag, stubs.statement),
 		serviceLayer(LedgerAccountBalanceMonitorServiceTag, stubs.balanceMonitor),
+		Layer.provide(RateLimiter.layer, RateLimiter.layerStoreMemory),
 		extra
 	);
 

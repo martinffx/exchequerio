@@ -1,7 +1,7 @@
 import { Effect, Fiber, Layer } from "effect";
 import { Redis } from "effect/unstable/persistence";
 import { RedisJobStore } from "effect-mq/redis";
-import { Redis as IoRedis } from "ioredis";
+import { Redis as IoRedis, type RedisOptions } from "ioredis";
 
 /**
  * Traces a Valkey command as a client span only under an existing parent span.
@@ -20,8 +20,9 @@ export const withValkeySpan = <A, E, R>(
 		});
 	});
 
-export const makeJobStore = (valkeyUrl: string, options: RedisJobStore.RedisJobStoreOptions) => {
-	const redisLayer = Layer.effect(
+/** Builds the Effect Redis layer over ioredis; `overrides` are merged over the default options. */
+export const makeRedisLayer = (valkeyUrl: string, overrides: RedisOptions = {}) =>
+	Layer.effect(
 		Redis.Redis,
 		Effect.gen(function* () {
 			const client = yield* Effect.acquireRelease(
@@ -30,6 +31,7 @@ export const makeJobStore = (valkeyUrl: string, options: RedisJobStore.RedisJobS
 						maxRetriesPerRequest: 1,
 						connectTimeout: 5000,
 						commandTimeout: 5000,
+						...overrides,
 					});
 					// Commands surface typed failures; avoid ioredis logging connection credentials.
 					connection.on("error", () => undefined);
@@ -68,5 +70,5 @@ export const makeJobStore = (valkeyUrl: string, options: RedisJobStore.RedisJobS
 		})
 	);
 
-	return RedisJobStore.layer(options).pipe(Layer.provide(redisLayer));
-};
+export const makeJobStore = (valkeyUrl: string, options: RedisJobStore.RedisJobStoreOptions) =>
+	RedisJobStore.layer(options).pipe(Layer.provide(makeRedisLayer(valkeyUrl)));

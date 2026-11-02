@@ -494,7 +494,9 @@
 				"type": "lib-metrics",
 				"pattern": "src/lib/metrics.ts",
 				"mode": "full"
-			}
+			},
+			{ "type": "lib-ratelimit", "pattern": "src/lib/RateLimit.ts", "mode": "full" },
+			{ "type": "lib-loadshedding", "pattern": "src/lib/LoadShedding.ts", "mode": "full" }
 		],
 		"boundaries/include": ["src/**/*", "test/bench/**/*"]
 	},
@@ -1111,7 +1113,8 @@
 							"ledger-api",
 							"organization-api",
 							"lib-contract",
-							"lib-errors"
+							"lib-errors",
+							"lib-ratelimit"
 						]
 					},
 					{
@@ -1134,7 +1137,8 @@
 							"transaction-composition",
 							"organization-composition",
 							"category-composition",
-							"idempotency-capability"
+							"idempotency-capability",
+							"lib-queues"
 						]
 					},
 					{
@@ -1162,12 +1166,23 @@
 							"ledger-routes",
 							"settlement-routes",
 							"transaction-routes",
-							"organization-routes"
+							"organization-routes",
+							"lib-ratelimit",
+							"lib-loadshedding",
+							"lib-contract"
 						]
 					},
 					{
 						"from": ["entrypoint"],
-						"allow": ["config", "runtime", "server", "telemetry", "monitor-capability", "monitor-service", "lib-util"]
+						"allow": [
+							"config",
+							"runtime",
+							"server",
+							"telemetry",
+							"monitor-capability",
+							"monitor-service",
+							"lib-util"
+						]
 					},
 					{
 						"from": ["shared-ids"],
@@ -1196,7 +1211,9 @@
 					{
 						"from": ["lib-metrics"],
 						"disallow": ["*"]
-					}
+					},
+					{ "from": ["lib-ratelimit"], "allow": ["auth", "lib-contract", "lib-errors"] },
+					{ "from": ["lib-loadshedding"], "allow": ["lib-contract", "lib-errors"] }
 				]
 			}
 		],
@@ -1207,10 +1224,8 @@
 				"default": "allow",
 				"rules": [
 					{
-						"from": [
-							"*"
-						],
-						"message": "HTTP transport framework imports are restricted to *-api, *-routes, api-composition, auth, server, entrypoint, telemetry, lib-contract, test-support, tests and bench elements",
+						"from": ["*"],
+						"message": "HTTP transport framework imports are restricted to *-api, *-routes, api-composition, auth, server, entrypoint, telemetry, lib-contract, lib-ratelimit, lib-loadshedding, test-support, tests and bench elements",
 						"disallow": [
 							[
 								"effect",
@@ -1254,7 +1269,9 @@
 							"server",
 							"entrypoint",
 							"telemetry",
-							"lib-contract"
+							"lib-contract",
+							"lib-ratelimit",
+							"lib-loadshedding"
 						],
 						"allow": [
 							[

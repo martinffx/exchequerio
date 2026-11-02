@@ -264,6 +264,7 @@ it("measures Transaction writes with 100 Category reads/sec over 10,000 Accounts
 		expect(result["2xx"]).toBeGreaterThan(0);
 		expect(result.errors).toBe(0);
 		expect(result.timeouts).toBe(0);
+		expect(result.statusCodeStats?.["429"]?.count ?? 0).toBe(0);
 	}
 	expect(reads.non2xx).toBe(0);
 }, 180_000);
