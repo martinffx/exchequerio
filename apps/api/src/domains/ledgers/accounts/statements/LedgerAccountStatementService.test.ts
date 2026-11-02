@@ -1,151 +1,233 @@
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Option } from "effect";
 import { TypeID } from "typeid-js";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { NotFoundError } from "@/lib/errors";
-import type { LedgerAccountID, LedgerAccountStatementID, LedgerID, OrgID } from "@/lib/ids";
-
-import { LedgerAccountStatement } from "./LedgerAccountStatement";
+import { encodeUuid } from "@/lib/utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-	type LedgerAccountStatementRepo,
-	LedgerAccountStatementRepoTag,
-} from "./LedgerAccountStatementRepo";
+	BadRequestError,
+	ConflictError,
+	NotFoundError,
+	ServiceUnavailableError,
+} from "@/lib/errors";
+import type { OrgID, LedgerID, LedgerAccountID, LedgerAccountStatementID } from "@/lib/ids";
+import type { IdempotencyService } from "@/lib/IdempotencyService";
 import {
-	type LedgerAccountStatementService,
-	LedgerAccountStatementServiceTag,
-	ledgerAccountStatementServiceLayer,
-} from "./LedgerAccountStatementService";
+	calculateStatementBalances,
+	LedgerAccountStatement,
+	type StatementRecord,
+} from "./LedgerAccountStatement";
+import type { LedgerAccountStatementRepo } from "./LedgerAccountStatementRepo";
+import { LedgerAccountStatementService } from "./LedgerAccountStatementService";
+import {
+	StatementPersistenceDecodingFailure,
+	StatementPersistenceFailure,
+	StatementRepositoryUnavailable,
+} from "./StatementErrors";
 
-const asset = { assetId: new TypeID("ast").toString(), assetCode: "AAPL", minorUnitExponent: 6 };
 const orgId = new TypeID("org") as OrgID;
-const statementId = new TypeID("lst") as LedgerAccountStatementID;
 const ledgerId = new TypeID("lgr") as LedgerID;
 const accountId = new TypeID("lat") as LedgerAccountID;
-const stored = new LedgerAccountStatement({
-	asset,
-	id: statementId,
-	ledgerId,
-	accountId,
-	statementDate: new Date("2025-01-01T00:00:00.000Z"),
-	openingBalance: 0n,
-	closingBalance: 0n,
-	totalCredits: 0n,
-	totalDebits: 0n,
-	transactionCount: 0,
-	created: new Date("2025-01-01T00:00:00.000Z"),
-	updated: new Date("2025-01-01T00:00:00.000Z"),
-});
-
-const repository = vi.mocked<LedgerAccountStatementRepo>({
-	getAccountAsset: vi.fn(() => Effect.succeed(asset)),
-	getStatement: vi.fn(() => Effect.succeed(stored)),
-	createStatement: vi.fn(statement => Effect.succeed(statement)),
-});
-const runtime = ManagedRuntime.make(
-	ledgerAccountStatementServiceLayer.pipe(
-		Layer.provide(Layer.succeed(LedgerAccountStatementRepoTag, repository))
-	)
+const statementId = new TypeID("lst") as LedgerAccountStatementID;
+const assetId = new TypeID("ast");
+const request = {
+	startDatetime: "2026-01-01T00:00:00.000Z",
+	endDatetime: "2026-02-01T00:00:00.000Z",
+};
+const balances = Effect.runSync(
+	calculateStatementBalances("debit", {
+		postedCredits: 0n,
+		postedDebits: 0n,
+		unpostedCredits: 0n,
+		unpostedDebits: 0n,
+	})
 );
-let service: LedgerAccountStatementService;
-beforeAll(async () => {
-	service = await runtime.runPromise(LedgerAccountStatementServiceTag);
+const storedRow: StatementRecord = {
+	id: encodeUuid(statementId),
+	organizationId: encodeUuid(orgId),
+	ledgerId: encodeUuid(ledgerId),
+	accountId: encodeUuid(accountId),
+	startDatetime: new Date(request.startDatetime),
+	endDatetime: new Date(request.endDatetime),
+	ledgerAccountVersion: 3,
+	snapshot: {
+		normalBalance: "debit",
+		assetId: encodeUuid(assetId),
+		assetCode: "EUR",
+		minorUnitExponent: 2,
+		startingBalances: balances,
+		endingBalances: balances,
+	},
+	description: "January",
+	metadata: {},
+	lockVersion: 1,
+	created: new Date(request.endDatetime),
+	updated: new Date(request.endDatetime),
+};
+const stored = Effect.runSync(LedgerAccountStatement.fromRow(storedRow));
+const repository = vi.mocked<LedgerAccountStatementRepo>({
+	getStatement: vi.fn(() => Effect.succeed(stored)),
+	createStatement: vi.fn(() => Effect.succeed(stored)),
+	listStatements: vi.fn(() => Effect.succeed([stored])),
+	getEntries: vi.fn(() => Effect.succeed([])),
+	updateAnnotations: vi.fn(() => Effect.succeed(stored)),
+	deleteStatement: vi.fn(() => Effect.void),
 });
-beforeEach(() => {
-	vi.resetAllMocks();
+const idempotency = vi.mocked<IdempotencyService>({
+	claim: vi.fn(() => Effect.succeed(Option.none())),
+	complete: vi.fn(() => Effect.void),
+	release: vi.fn(() => Effect.void),
 });
-afterAll(() => runtime.dispose());
+const service = new LedgerAccountStatementService(repository, idempotency);
+beforeEach(() => vi.clearAllMocks());
 
-describe("LedgerAccountStatementService", () => {
-	it("parses the Statement ID and delegates get exactly once", async () => {
-		const result = await runtime.runPromise(
-			service.getLedgerAccountStatement(statementId.toString(), orgId)
+describe("Statement orchestration", () => {
+	it("claims a new action, generates an ID, creates once, and records its result", async () => {
+		const result = await Effect.runPromise(
+			service.createLedgerAccountStatement(orgId, ledgerId, accountId, "create-1", request)
 		);
-
 		expect(result).toBe(stored);
-		expect(repository.getStatement).toHaveBeenCalledOnce();
-		expect(repository.getStatement).toHaveBeenCalledWith(statementId, orgId);
-	});
-
-	it("builds the placeholder Statement from body identifiers and start time", async () => {
-		let received: LedgerAccountStatement | undefined;
-		repository.createStatement.mockImplementation(statement => {
-			received = statement;
-			return Effect.succeed(statement);
-		});
-		const bodyLedgerId = new TypeID("lgr");
-		const bodyAccountId = new TypeID("lat");
-		const startDatetime = "2025-02-01T00:00:00.000Z";
-
-		const result = await runtime.runPromise(
-			service.createLedgerAccountStatement(
-				{
-					ledgerId: bodyLedgerId.toString(),
-					accountId: bodyAccountId.toString(),
-					description: "ignored",
-					startDatetime,
-					endDatetime: "2025-03-01T00:00:00.000Z",
-				},
-				orgId
-			)
+		expect(idempotency.claim).toHaveBeenCalledWith(orgId, "statements.create", "create-1");
+		expect(repository.createStatement).toHaveBeenCalledWith(
+			orgId,
+			ledgerId,
+			accountId,
+			expect.any(TypeID),
+			request,
+			{ startDatetime: new Date(request.startDatetime), endDatetime: new Date(request.endDatetime) }
 		);
-
-		expect(result).toBe(received);
-		expect(received).toMatchObject({
-			ledgerId: bodyLedgerId,
-			accountId: bodyAccountId,
-			statementDate: new Date(startDatetime),
-			openingBalance: 0n,
-			closingBalance: 0n,
-			totalCredits: 0n,
-			totalDebits: 0n,
-			transactionCount: 0,
-			metadata: undefined,
-		});
+		expect(repository.createStatement.mock.calls[0]?.[3].getType()).toBe("lst");
+		expect(idempotency.complete).toHaveBeenCalledWith(
+			orgId,
+			"statements.create",
+			"create-1",
+			stored.id.toString()
+		);
 	});
-
-	it("does not create a Statement when its scoped Account cannot be found", async () => {
-		repository.getAccountAsset.mockReturnValue(Effect.fail(new NotFoundError("Account not found")));
-		const failure = await runtime.runPromise(
+	it("replays the scoped saved resource without generating another snapshot", async () => {
+		idempotency.claim.mockReturnValueOnce(
+			Effect.succeed(Option.fromUndefinedOr(stored.id.toString()))
+		);
+		expect(
+			await Effect.runPromise(
+				service.createLedgerAccountStatement(orgId, ledgerId, accountId, "replay", request)
+			)
+		).toBe(stored);
+		expect(repository.getStatement).toHaveBeenCalledWith(orgId, ledgerId, accountId, statementId);
+		expect(repository.createStatement).not.toHaveBeenCalled();
+		expect(idempotency.complete).not.toHaveBeenCalled();
+	});
+	it("validates the period before claiming", async () => {
+		const error = await Effect.runPromise(
 			Effect.flip(
-				service.createLedgerAccountStatement(
-					{
-						ledgerId: ledgerId.toString(),
-						accountId: accountId.toString(),
-						startDatetime: "2025-01-01T00:00:00.000Z",
-						endDatetime: "2025-02-01T00:00:00.000Z",
-					},
-					orgId
-				)
+				service.createLedgerAccountStatement(orgId, ledgerId, accountId, "invalid", {
+					...request,
+					endDatetime: request.startDatetime,
+				})
 			)
 		);
-		expect(failure).toBeInstanceOf(NotFoundError);
+		expect(error).toBeInstanceOf(BadRequestError);
+		expect(idempotency.claim).not.toHaveBeenCalled();
 		expect(repository.createStatement).not.toHaveBeenCalled();
 	});
-
-	it("preserves the repository failure", async () => {
-		const error = new NotFoundError("Statement not found");
-		repository.getStatement.mockReturnValue(Effect.fail(error));
-		repository.createStatement.mockReturnValue(Effect.fail(error));
-
+	it.each([
+		new BadRequestError("too large"),
+		new NotFoundError("missing account"),
+		new ConflictError("int64 overflow"),
+	])("releases a known rejected creation", async error => {
+		repository.createStatement.mockReturnValueOnce(Effect.fail(error));
 		expect(
-			await runtime.runPromise(
-				Effect.flip(service.getLedgerAccountStatement(statementId.toString(), orgId))
-			)
-		).toBe(error);
-		expect(
-			await runtime.runPromise(
+			await Effect.runPromise(
 				Effect.flip(
-					service.createLedgerAccountStatement(
-						{
-							ledgerId: ledgerId.toString(),
-							accountId: accountId.toString(),
-							startDatetime: "2025-01-01T00:00:00.000Z",
-							endDatetime: "2025-02-01T00:00:00.000Z",
-						},
-						orgId
-					)
+					service.createLedgerAccountStatement(orgId, ledgerId, accountId, "rejected", request)
 				)
 			)
 		).toBe(error);
+		expect(idempotency.release).toHaveBeenCalledWith(orgId, "statements.create", "rejected");
+		expect(idempotency.complete).not.toHaveBeenCalled();
+	});
+	it.each([
+		["decoding failure", new StatementPersistenceDecodingFailure(new Error("corrupt row"))],
+		["persistence failure", new StatementPersistenceFailure(new Error("query failed"))],
+		["repository unavailable", new StatementRepositoryUnavailable(new Error("connection lost"))],
+	])("retains a claim when the persistence outcome is uncertain: %s", async (_name, failure) => {
+		repository.createStatement.mockReturnValueOnce(Effect.fail(failure));
+		expect(
+			await Effect.runPromise(
+				Effect.flip(
+					service.createLedgerAccountStatement(orgId, ledgerId, accountId, "uncertain", request)
+				)
+			)
+		).toBe(failure);
+		expect(idempotency.release).not.toHaveBeenCalled();
+	});
+	it("returns the original error when releasing the claim fails", async () => {
+		const error = new BadRequestError("too large");
+		repository.createStatement.mockReturnValueOnce(Effect.fail(error));
+		idempotency.release.mockReturnValueOnce(
+			Effect.fail(new ServiceUnavailableError("claim store unavailable"))
+		);
+		expect(
+			await Effect.runPromise(
+				Effect.flip(
+					service.createLedgerAccountStatement(orgId, ledgerId, accountId, "release-fails", request)
+				)
+			)
+		).toBe(error);
+		expect(idempotency.release).toHaveBeenCalledWith(orgId, "statements.create", "release-fails");
+	});
+	it("replays the annotated Statement after the Statement was annotated", async () => {
+		const annotated = Effect.runSync(
+			LedgerAccountStatement.fromRow({
+				...storedRow,
+				metadata: { reviewed: "yes" },
+				lockVersion: 2,
+			})
+		);
+		repository.getStatement.mockReturnValueOnce(Effect.succeed(annotated));
+		idempotency.claim.mockReturnValueOnce(
+			Effect.succeed(Option.fromUndefinedOr(stored.id.toString()))
+		);
+		const replay = await Effect.runPromise(
+			service.createLedgerAccountStatement(orgId, ledgerId, accountId, "annotated", request)
+		);
+		expect(replay).toBe(annotated);
+		expect(replay.toResponse()).toMatchObject({ lockVersion: 2, metadata: { reviewed: "yes" } });
+		expect(repository.createStatement).not.toHaveBeenCalled();
+	});
+	it("retains the saved result when completing the claim fails", async () => {
+		const failure = new ServiceUnavailableError("claim store unavailable");
+		idempotency.complete.mockReturnValueOnce(Effect.fail(failure));
+		expect(
+			await Effect.runPromise(
+				Effect.flip(
+					service.createLedgerAccountStatement(orgId, ledgerId, accountId, "completed-db", request)
+				)
+			)
+		).toBe(failure);
+		expect(repository.createStatement).toHaveBeenCalledOnce();
+		expect(idempotency.release).not.toHaveBeenCalled();
+	});
+	it("preserves scope and OCC input across read and annotation operations", async () => {
+		const page = { offset: 2, limit: 3 };
+		const update = { lockVersion: 4, metadata: { reviewed: "yes" } };
+		await Effect.runPromise(
+			service.getLedgerAccountStatement(orgId, ledgerId, accountId, statementId)
+		);
+		await Effect.runPromise(service.listLedgerAccountStatements(orgId, ledgerId, accountId, page));
+		await Effect.runPromise(
+			service.getLedgerAccountStatementEntries(orgId, ledgerId, accountId, statementId, page)
+		);
+		await Effect.runPromise(
+			service.updateLedgerAccountStatement(orgId, ledgerId, accountId, statementId, update)
+		);
+		expect(repository.getStatement).toHaveBeenCalledWith(orgId, ledgerId, accountId, statementId);
+		expect(repository.listStatements).toHaveBeenCalledWith(orgId, ledgerId, accountId, page);
+		expect(repository.getEntries).toHaveBeenCalledWith(orgId, ledgerId, accountId, statementId, page);
+		expect(repository.updateAnnotations).toHaveBeenCalledWith(
+			orgId,
+			ledgerId,
+			accountId,
+			statementId,
+			update
+		);
 	});
 });

@@ -1,6 +1,6 @@
 # Exchequer Ledger API entity relationships
 
-This diagram shows the ownership and accounting columns used by Ledger Transactions. See
+This diagram shows the ownership and accounting columns used by Ledger Transactions and Statements. See
 [`schema.ts`](../../src/db/schema.ts) for the complete database schema.
 
 ```mermaid
@@ -112,6 +112,23 @@ erDiagram
 
     ORGANIZATION ||--o{ ASSET : defines
     ASSET ||--o{ LEDGER_ACCOUNT : measures
+    LEDGER_ACCOUNT_STATEMENT {
+        uuid id PK
+        uuid organization_id FK
+        uuid ledger_id FK
+        uuid account_id FK
+        timestamptz start_datetime
+        timestamptz end_datetime
+        integer ledger_account_version
+        jsonb snapshot
+        text description
+        jsonb metadata
+        integer lock_version
+        timestamptz created
+        timestamptz updated
+    }
+
+    LEDGER_ACCOUNT ||--o{ LEDGER_ACCOUNT_STATEMENT : captures
     ORGANIZATION ||--o{ LEDGER : owns
     LEDGER ||--o{ LEDGER_ACCOUNT : contains
     LEDGER ||--o{ LEDGER_TRANSACTION : records
@@ -165,3 +182,21 @@ and before/after balances in its transaction. Services publish self-contained jo
 There are no monitor revision or outbox tables. Deletion removes the monitor immediately; captured
 jobs retain their configuration and can finish after deletion.
 See [Balance monitors](./balance-monitors.md) for the API, delivery, and operational contracts.
+
+## Statement invariants
+
+- A Statement's composite foreign key `(organization_id, ledger_id, account_id)` references its
+  Account and requires matching Organization and Ledger ownership.
+- `start_datetime < end_datetime`; the period includes its start and excludes its end.
+- `snapshot` stores the captured Normal Balance, Asset summary, opening and closing Balance views,
+  and copied period Entries with their Transaction context. It has no foreign keys to source Entries.
+- `ledger_account_version` records the Account version at capture. `lock_version` starts at `1` and
+  protects replacement of the mutable description and metadata. Repository interfaces preserve the
+  accounting snapshot; no database trigger prevents direct SQL changes.
+- Generation reads one repeatable-read database view without locking posting. Earlier history is
+  aggregated for balances, and period Entries are copied. Saved reads use the snapshot without
+  joining live Transactions.
+- Account lists use `(organization_id, ledger_id, account_id, created DESC, id DESC)`.
+
+See [Ledger Account Statements](./statements.md) for generation limits, balance semantics, and API
+operations.

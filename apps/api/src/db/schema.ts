@@ -1,4 +1,6 @@
 import type { AlertCondition } from "@/domains/ledgers/accounts/balance-monitors/LedgerAccountBalanceMonitorSchema";
+import type { StatementSnapshot } from "@/domains/ledgers/accounts/statements/LedgerAccountStatementSchema";
+import type { Metadata } from "@/lib/schema";
 import { type BuildQueryResult, defineRelations, sql } from "drizzle-orm";
 import {
 	jsonb,
@@ -415,24 +417,46 @@ type MonitorConfiguration = Pick<
 	"description" | "alertCondition" | "webhookUrl" | "webhookSigningSecret" | "metadata"
 >;
 // Account Statements: Periodic balance snapshots and statements
-const LedgerAccountStatementsTable = pgTable("ledger_account_statements", {
-	id: uuid("id").primaryKey(),
-	ledgerId: uuid("ledger_id")
-		.notNull()
-		.references(() => LedgersTable.id),
-	accountId: uuid("account_id")
-		.notNull()
-		.references(() => LedgerAccountsTable.id),
-	statementDate: timestamp("statement_date", { withTimezone: true }).notNull(),
-	openingBalance: bigint("opening_balance", { mode: "bigint" }).notNull().default(0n),
-	closingBalance: bigint("closing_balance", { mode: "bigint" }).notNull().default(0n),
-	totalCredits: bigint("total_credits", { mode: "bigint" }).notNull().default(0n),
-	totalDebits: bigint("total_debits", { mode: "bigint" }).notNull().default(0n),
-	transactionCount: integer("transaction_count").notNull().default(0),
-	metadata: text("metadata"),
-	created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
-	updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
-});
+const LedgerAccountStatementsTable = pgTable(
+	"ledger_account_statements",
+	{
+		id: uuid("id").primaryKey(),
+		organizationId: uuid("organization_id").notNull(),
+		ledgerId: uuid("ledger_id").notNull(),
+		accountId: uuid("account_id").notNull(),
+		startDatetime: timestamp("start_datetime", { withTimezone: true }).notNull(),
+		endDatetime: timestamp("end_datetime", { withTimezone: true }).notNull(),
+		ledgerAccountVersion: integer("ledger_account_version").notNull(),
+		snapshot: jsonb("snapshot").$type<StatementSnapshot>().notNull(),
+		description: text("description"),
+		metadata: jsonb("metadata").$type<Metadata>(),
+		lockVersion: integer("lock_version").notNull().default(1),
+		created: timestamp("created", { withTimezone: true }).defaultNow().notNull(),
+		updated: timestamp("updated", { withTimezone: true }).defaultNow().notNull(),
+	},
+	table => [
+		foreignKey({
+			name: "ledger_account_statements_organization_ledger_account_fk",
+			columns: [table.organizationId, table.ledgerId, table.accountId],
+			foreignColumns: [
+				LedgerAccountsTable.organizationId,
+				LedgerAccountsTable.ledgerId,
+				LedgerAccountsTable.id,
+			],
+		}),
+		check(
+			"ledger_account_statements_period_valid",
+			sql`${table.startDatetime} < ${table.endDatetime}`
+		),
+		index("idx_ledger_account_statements_account_created").on(
+			table.organizationId,
+			table.ledgerId,
+			table.accountId,
+			table.created.desc(),
+			table.id.desc()
+		),
+	]
+);
 type LedgerAccountStatementRow = typeof LedgerAccountStatementsTable.$inferSelect;
 type LedgerAccountStatementInsertRow = Required<typeof LedgerAccountStatementsTable.$inferInsert>;
 

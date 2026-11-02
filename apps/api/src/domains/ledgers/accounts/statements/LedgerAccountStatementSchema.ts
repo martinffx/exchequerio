@@ -1,79 +1,108 @@
 import { Schema } from "effect";
-
-import { LedgerIdSchema } from "@/domains/ledgers/LedgerSchema";
-import { AccountIdSchema, NormalBalanceSchema } from "@/domains/ledgers/accounts/AccountSchema";
 import { AssetSummarySchema } from "@/lib/AssetSchema";
-import { MetadataSchema, OmittedWhenUndefined } from "@/lib/schema";
+import { AmountSchema, PositiveAmountSchema } from "@/lib/amounts";
+import { ListQuery } from "@/lib/ListQuery";
+import { DateTimeString, MetadataSchema, OmittedWhenUndefined } from "@/lib/schema";
+import { LedgerIdSchema } from "../../LedgerSchema";
+import { EntryIdSchema, TransactionIdSchema } from "../../transactions/LedgerTransactionSchema";
+import { AccountIdSchema, NormalBalanceSchema } from "../AccountSchema";
 
-const LedgerId = LedgerIdSchema.annotate({ description: "The ledger's ID" });
-const LedgerAccountId = AccountIdSchema.annotate({ description: "The ledger account's ID" });
-const LedgerAccountStatementId = Schema.String.annotate({
-	description: "The ledger account statement ID",
-}).check(Schema.isPattern(/^lst_[0-7][0-9a-hjkmnp-tv-z]{25}$/));
+const MAX_STATEMENT_ENTRIES = 10_000;
+const MAX_STATEMENT_BYTES = 16 * 1024 * 1024;
 
-/** The statement route validates the statement identifier only; the enclosing path IDs are ignored. */
+const Balances = Schema.Array(
+	Schema.Struct({
+		balanceType: Schema.Literals(["pending", "posted", "availableBalance"]),
+		credits: AmountSchema,
+		debits: AmountSchema,
+		amount: AmountSchema,
+	})
+).check(Schema.isLengthBetween(3, 3));
+const Timestamp = DateTimeString;
+const StatementId = Schema.String.check(Schema.isPattern(/^lst_[0-7][0-9a-hjkmnp-tv-z]{25}$/));
+const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
+const annotations = {
+	description: OmittedWhenUndefined(Schema.String),
+	metadata: OmittedWhenUndefined(MetadataSchema),
+};
+const requestAnnotations = {
+	description: Schema.optionalKey(Schema.String),
+	metadata: Schema.optionalKey(MetadataSchema),
+};
+const period = { startDatetime: Timestamp, endDatetime: Timestamp };
+
+const StatementCollectionParameters = Schema.Struct({
+	ledgerId: LedgerIdSchema,
+	accountId: AccountIdSchema,
+});
 const LedgerAccountStatementIdParameters = Schema.Struct({
-	statementId: LedgerAccountStatementId,
+	...StatementCollectionParameters.fields,
+	statementId: StatementId,
 });
-
-/** Collection path IDs are declared as plain strings and ignored; the body carries the real ones. */
-const LedgerAccountStatementCollectionParameters = Schema.Struct({
-	ledgerId: Schema.String,
-	accountId: Schema.String,
-});
-
-const description = Schema.String.annotate({
-	description: "An optional free-form description for internal use.",
-});
-const startDatetime = Schema.String.annotate({
-	description:
-		"The inclusive lower bound of the ledger entries to be included in the ledger account statement.",
-});
-const endDatetime = Schema.String.annotate({
-	description:
-		"The exclusive upper bound of the ledger entries to be included in the ledger account statement.",
-});
-
-const LedgerAccountStatementResponse = Schema.Struct({
-	id: LedgerAccountStatementId,
-	ledgerId: LedgerId,
-	accountId: LedgerAccountId,
-	description: OmittedWhenUndefined(description),
-	startDatetime,
-	endDatetime,
-	ledgerAccountVersion: Schema.Finite.annotate({
-		description: "Version of the ledger account at the time of statement generation.",
-	}),
-	normalBalance: NormalBalanceSchema,
+const StatementListQuery = ListQuery;
+const LedgerAccountStatementRequest = Schema.Struct({ ...period, ...requestAnnotations });
+const StatementUpdateRequest = Schema.Struct({ lockVersion: Version, ...requestAnnotations });
+const StatementEntry = Schema.Struct({
+	id: EntryIdSchema,
+	accountId: AccountIdSchema,
+	direction: NormalBalanceSchema,
+	amount: PositiveAmountSchema,
 	...AssetSummarySchema.fields,
 	metadata: OmittedWhenUndefined(MetadataSchema),
-	created: Schema.String.annotate({
-		description: "Timestamp of when the ledger account category was created.",
+	created: Timestamp,
+	transaction: Schema.Struct({
+		id: TransactionIdSchema,
+		lockVersion: Version,
+		status: Schema.Literals(["pending", "posted"]),
+		effectiveAt: Timestamp,
+		...annotations,
 	}),
-	updated: Schema.String.annotate({
-		description: "Timestamp of when the ledger account category was last updated.",
-	}),
-}).annotate({
-	identifier: "LedgerAccountStatementResponse",
-	description:
-		"A ledger account statement is an object that provides the starting and ending balances for a specific time period. Once created, it can be used to retrieve the ledger entries and ledger transaction versions that correspond to that time period and lock version of the ledger account.",
 });
+const StatementSnapshot = Schema.Struct({
+	normalBalance: NormalBalanceSchema,
+	...AssetSummarySchema.fields,
+	startingBalances: Balances,
+	endingBalances: Balances,
+	entries: Schema.Array(StatementEntry).check(Schema.isMaxLength(MAX_STATEMENT_ENTRIES)),
+});
+const LedgerAccountStatementResponse = Schema.Struct({
+	id: StatementId,
+	ledgerId: LedgerIdSchema,
+	accountId: AccountIdSchema,
+	...period,
+	ledgerAccountVersion: Version,
+	normalBalance: NormalBalanceSchema,
+	...AssetSummarySchema.fields,
+	startingBalances: Balances,
+	endingBalances: Balances,
+	...annotations,
+	lockVersion: Version,
+	created: Timestamp,
+	updated: Timestamp,
+}).annotate({ identifier: "LedgerAccountStatementResponse" });
+const StatementEntriesResponse = Schema.Array(StatementEntry);
+const StatementListResponse = Schema.Array(LedgerAccountStatementResponse);
 
-const LedgerAccountStatementRequest = Schema.Struct({
-	ledgerId: LedgerId,
-	accountId: LedgerAccountId,
-	description: Schema.optionalKey(description),
-	startDatetime,
-	endDatetime,
-}).annotate({ identifier: "LedgerAccountStatementRequest" });
-
+type StatementCollectionParameters = typeof StatementCollectionParameters.Type;
 type LedgerAccountStatementIdParameters = typeof LedgerAccountStatementIdParameters.Type;
+type StatementListQuery = typeof StatementListQuery.Type;
 type LedgerAccountStatementRequest = typeof LedgerAccountStatementRequest.Type;
+type StatementUpdateRequest = typeof StatementUpdateRequest.Type;
+type StatementEntry = typeof StatementEntry.Type;
+type StatementSnapshot = typeof StatementSnapshot.Type;
 type LedgerAccountStatementResponse = typeof LedgerAccountStatementResponse.Type;
 
 export {
-	LedgerAccountStatementCollectionParameters,
+	MAX_STATEMENT_ENTRIES,
+	MAX_STATEMENT_BYTES,
+	StatementCollectionParameters,
 	LedgerAccountStatementIdParameters,
+	StatementListQuery,
 	LedgerAccountStatementRequest,
+	StatementUpdateRequest,
+	StatementEntry,
+	StatementEntriesResponse,
+	StatementSnapshot,
 	LedgerAccountStatementResponse,
+	StatementListResponse,
 };
