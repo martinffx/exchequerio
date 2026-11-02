@@ -39,7 +39,7 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
   - Given Org A has waited long enough for tokens to refill, when it retries, then it succeeds.
 - **US-2 (should):** As an API client, I want `x-ratelimit-limit`, `x-ratelimit-remaining`, and `x-ratelimit-reset` (whole seconds until the bucket is full again) on successful (2xx) responses, so I can pace my requests.
 - **US-3 (must):** As an operator, I don't want a Valkey outage to reject or stall API traffic.
-  - Given the limiter store fails, when a request arrives, then the request proceeds without rate-limit headers, delayed by at most about 250 ms.
+  - Given the limiter store fails, when a request arrives, then the request proceeds without rate-limit headers, delayed by at most about 1 s.
   - Fail-open is logged once when it starts and once when it recovers, not per request.
 - **US-4 (must):** As an operator, I want unauthenticated requests rejected before they consume tokens.
   - Given a request without a valid token, then `Authentication` returns 401 and no token is consumed.
@@ -55,10 +55,10 @@ Per-Organization rate limiting backed by Valkey, plus in-process load shedding, 
 
 - Based on `main`, which already has the Effect HTTP server and the OpenTelemetry instrumentation. The design reuses `Authentication` / `CurrentToken`, `TooManyRequestsApiError`, and the `LedgerApi` middleware chain unchanged.
 - Valkey keys are prefixed `exchequer:ratelimit:` (cf. `exchequer:idempotency:`).
-- The limiter uses its own Redis client with `enableOfflineQueue: false` and `commandTimeout: 250`, so a Valkey outage costs a request at most about 250 ms. It must not reuse the `ValkeyTag` client, which never reconnects (`retryStrategy: () => undefined`).
+- The limiter uses its own Redis client with `enableOfflineQueue: false`, `commandTimeout: 1000`, `socketTimeout: 2000` and `autoResendUnfulfilledCommands: false`, so a Valkey outage costs a request at most about 1 s. A refused or closed connection fails at once (no offline queue); a peer that stops answering without a reset has its socket destroyed after 2 s instead of queuing timed-out commands until the kernel gives up, and stale checks are not replayed after a reconnect. `commandTimeout` sits at the load-shedding delay threshold because it is a timer: an event loop stalled longer than it rejects the command even when Valkey answered. It must not reuse the `ValkeyTag` client, which never reconnects (`retryStrategy: () => undefined`).
 - Route tests run without Valkey: the shared route-test harness provides the memory limiter store. The API test run starts Postgres and Valkey Testcontainers; only the Valkey integration test uses Valkey.
 - `.oxlintrc.json` types every `src/**` file as a `boundaries` element with explicit `allow` rules. Each new `src/lib` module needs an element and rules, an entry in the `boundaries/external` HTTP allow list if it imports `effect/unstable/http` or `httpapi` (`RateLimit.ts` does), and importing modules (`api-composition`, `server`, `runtime`) need an `allow` entry for it.
-- `problemResponse` now lives in `LoadShedding.ts` (moved out of `server.ts`) so `LoadShedding.ts` does not import from `server.ts`; `server.ts` imports it from there. It is a general edge renderer, so a later change may move it to `ApiContract.ts`.
+- `problemResponse` now lives in `ApiContract.ts` (moved out of `server.ts`), next to the other HTTP encoding of `HttpError`, so `LoadShedding.ts` does not import from `server.ts`; `server.ts` and `LoadShedding.ts` import it from there.
 - The job store keeps its current Redis options, and the raw ioredis error stays as the `RedisError.cause`; Effect's NOSCRIPT recovery depends on it.
 
 ## Context
@@ -107,7 +107,7 @@ One job: consume one token per authenticated request for the caller's Organizati
 - **Semantics.** Each Organization has a bucket that starts full at `limit` tokens and gains one token every `window/limit`, up to `limit`. A request is accepted if the bucket holds a token; a rejected request consumes nothing. An Organization can burst up to `limit`, then is held to `limit/window` per second, and recovers gradually instead of waiting for a full reset. The burst equals `limit`, so the window sets the burst size. `x-ratelimit-remaining` is the tokens left, `x-ratelimit-reset` is the time until the bucket is full, and `retry-after` is the time until the next token.
 - `src/api.ts`: `.prefix("/api").middleware(RateLimit).middleware(Authentication).middleware(SchemaErrorTransform)`. `RateLimit` is added before `Authentication`, so it runs inside auth (with `CurrentToken` in scope) and before request decoding. The ordering comment is updated.
 - `src/server.ts` `appLayer`: provide the rate-limit layer from `ServerConfigTag` (`limit: rateLimitMax`, `window: Duration.seconds(rateLimitWindowSeconds)`), mirroring the Authentication wiring.
-- `src/runtime.ts`: add `RateLimiter.layer` ← `RateLimiter.layerStoreRedis({ prefix: "exchequer:ratelimit:" })` ← `makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 })` to the infrastructure layer, and add `RateLimiter` to `ServerRuntimeServices`. The limiter and the job store hold separate connections, which is intended.
+- `src/runtime.ts`: add `RateLimiter.layer` ← `RateLimiter.layerStoreRedis({ prefix: "exchequer:ratelimit:" })` ← `makeRedisLayer(config.valkeyUrl, { enableOfflineQueue: false, commandTimeout: 1000, socketTimeout: 2000, autoResendUnfulfilledCommands: false })` to the infrastructure layer, and add `RateLimiter` to `ServerRuntimeServices`. The limiter and the job store hold separate connections, which is intended.
 - `testServicesLayer` in `src/lib/testing.ts`: add `RateLimiter.layer` ← `layerStoreMemory`. Route tests use `.env.test`, whose very high `RATE_LIMIT_MAX` never trips existing suites or benches.
 
 ### Load shedding (`src/lib/LoadShedding.ts`)
@@ -141,7 +141,7 @@ Only the `RateLimiter` store and the load-shedding sampler. The middleware funct
    - a table test of `sample` at each threshold boundary, including NaN;
    - `shedLoad` with a fixed verdict (true → 503 + `retry-after: 50` and the handler is not run; false → passthrough).
    The real sampler loop is not tested.
-4. One integration test against the Valkey Testcontainer that the API test run starts goes through the real runtime layer and proves the Redis store wiring: the `exchequer:ratelimit:<org_id>` key and its `…:refill` key exist with a positive TTL. With a dead Valkey address the full runtime cannot be built (the balance-monitor job store calls Valkey while building), so that case builds the runtime's exported `makeRateLimiterLayer` and asserts a fast `RateLimitStoreError`; the pass-through itself is covered by seam 2. It does not repeat the 429 and header cases from seam 2.
+4. One integration test against the Valkey Testcontainer that the API test run starts goes through the real runtime layer and proves the Redis store wiring: the `exchequer:ratelimit:<org_id>` key and its `…:refill` key exist with a positive TTL. With a dead Valkey address the full runtime cannot be built (the balance-monitor job store calls Valkey while building), so that case builds the runtime's exported `makeRateLimiterLayer` and asserts a fast `RateLimitStoreError`; the pass-through itself is covered by seam 2. A second case points the same layer at a loopback server that completes ioredis's handshake and then never replies (a black-holed peer), and asserts that each request fails within about `commandTimeout` and that the socket is destroyed after `socketTimeout`. It does not repeat the 429 and header cases from seam 2.
 5. The benches run the real runtime under the limiter, so `.env.test` carries a very high `RATE_LIMIT_MAX`, and they assert that no response is a 429, so they cannot silently measure the limiter. They do not assert `non2xx === 0`: the write benches already return retryable 409s under contention.
 6. There is no route-level 429 test: `testServicesLayer` always reads `new Config()`, so a low limit would need a new harness parameter. Seam 2 covers the behaviour at module level, and route suites only assert the declared 429 in OpenAPI.
 
@@ -169,6 +169,7 @@ Only the `RateLimiter` store and the load-shedding sampler. The middleware funct
 - **Limitations:**
   - A full bucket allows a burst of `limit` before the steady `limit/window` rate applies.
   - Fail-open lets traffic through during a Valkey outage.
+  - An event-loop stall longer than the limiter's `commandTimeout` (1 s, the shedding delay threshold) can reject a limiter command even though Valkey answered, so limiting fails open for that request.
   - `RateLimiter` is in `effect/unstable`, so its API may change between rc releases.
   - Rate limiting runs before request decoding, so invalid requests consume tokens.
   - The pressure verdict can be up to 1 s stale; RSS rarely shrinks, so an RSS breach stays shed until restart or heap release.
