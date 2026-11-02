@@ -1,3 +1,4 @@
+import { type AddressInfo, createServer, type Socket } from "node:net";
 import { Effect, ManagedRuntime } from "effect";
 import { RateLimiter } from "effect/unstable/persistence";
 import Redis from "ioredis";
@@ -19,6 +20,12 @@ const consumeOnce = (organizationId: string) =>
 			onExceeded: "fail",
 		});
 	});
+
+/** Splits pipelined RESP array commands into their arguments; enough for ioredis's handshake. */
+const respCommands = (text: string): ReadonlyArray<ReadonlyArray<string>> =>
+	[...text.matchAll(/\*\d+\r\n((?:\$\d+\r\n[^\r]*\r\n)+)/g)].map(command =>
+		[...(command[1] ?? "").matchAll(/\$\d+\r\n([^\r]*)\r\n/g)].map(argument => argument[1] ?? "")
+	);
 
 describe("rate limiter against Valkey", () => {
 	it("stores the token bucket and its refill key with a TTL in the server runtime", async () => {
@@ -57,6 +64,62 @@ describe("rate limiter against Valkey", () => {
 			expect(elapsed).toBeLessThan(250 + 250);
 		} finally {
 			await runtime.dispose();
+		}
+	}, 15_000);
+
+	// A peer that vanishes without a reset leaves the socket "ready", so timed-out commands would
+	// stay queued until the kernel gives up. socketTimeout must destroy it, and each request must
+	// still be bounded by commandTimeout in the meantime.
+	it("bounds each request and recycles the socket when Valkey stops answering", async () => {
+		let answeredHandshake!: () => void;
+		let socketClosed!: () => void;
+		const handshakeAnswered = new Promise<void>(resolve => (answeredHandshake = resolve));
+		const closed = new Promise<void>(resolve => (socketClosed = resolve));
+		const sockets = new Set<Socket>();
+		// Answers ioredis's handshake (HELLO, CLIENT SETINFO, the INFO ready check), then goes silent
+		// like a black-holed peer. Going silent earlier would stop the client ever becoming ready.
+		const server = createServer(socket => {
+			sockets.add(socket);
+			let silent = false;
+			socket.on("data", chunk => {
+				for (const [name] of respCommands(String(chunk))) {
+					if (silent) continue;
+					const command = name?.toLowerCase();
+					if (command === "hello") socket.write("-ERR unknown command 'hello'\r\n");
+					else if (command === "info") {
+						const info = "loading:0\r\n";
+						socket.write(`$${info.length}\r\n${info}\r\n`);
+						silent = true;
+						answeredHandshake();
+					} else socket.write("+OK\r\n");
+				}
+			});
+			socket.on("close", () => socketClosed());
+			socket.on("error", () => undefined);
+		});
+		await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+		const { port } = server.address() as AddressInfo;
+		const runtime = ManagedRuntime.make(makeRateLimiterLayer(`redis://127.0.0.1:${port}`));
+		try {
+			await runtime.runPromise(Effect.void);
+			await handshakeAnswered;
+			await new Promise(resolve => setTimeout(resolve, 100));
+
+			const started = performance.now();
+			const error = await runtime.runPromise(Effect.flip(consumeOnce(newOrgID().toString())));
+			expect(error.reason._tag).toBe("RateLimitStoreError");
+			expect(performance.now() - started).toBeLessThan(1000 + 500);
+
+			await Promise.race([
+				closed,
+				new Promise((_, reject) =>
+					setTimeout(() => reject(new Error("socket was not recycled")), 2000 + 1500)
+				),
+			]);
+		} finally {
+			await runtime.dispose();
+			for (const socket of sockets) socket.destroy();
+			await new Promise(resolve => server.close(resolve));
 		}
 	}, 15_000);
 });

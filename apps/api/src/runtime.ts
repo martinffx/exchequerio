@@ -48,11 +48,27 @@ type ServerRuntimeServices =
 
 type ServerRuntimeLayer = Layer.Layer<ServerRuntimeServices, never, never>;
 
-/** A separate fail-fast connection: a slow or unavailable Valkey must not queue or stall requests. */
+/**
+ * A separate fail-fast connection: a slow or unavailable Valkey must not queue or stall requests.
+ * - `enableOfflineQueue: false` fails requests at once while the client is disconnected.
+ * - `commandTimeout: 1000` bounds each request, and sits at the load-shedding delay threshold so a
+ *   stalled event loop (the timer fires even when Valkey replied) cannot turn limiting off before
+ *   shedding takes over.
+ * - `socketTimeout: 2000` destroys a socket that stops answering without a reset; otherwise timed-out
+ *   commands stay queued on the open socket until the kernel gives up (about 15 minutes).
+ * - `autoResendUnfulfilledCommands: false` stops stale checks being replayed after a reconnect.
+ */
 const makeRateLimiterLayer = (valkeyUrl: string) =>
 	RateLimiter.layer.pipe(
 		Layer.provide(RateLimiter.layerStoreRedis({ prefix: "exchequer:ratelimit:" })),
-		Layer.provide(makeRedisLayer(valkeyUrl, { enableOfflineQueue: false, commandTimeout: 250 }))
+		Layer.provide(
+			makeRedisLayer(valkeyUrl, {
+				enableOfflineQueue: false,
+				commandTimeout: 1000,
+				socketTimeout: 2000,
+				autoResendUnfulfilledCommands: false,
+			})
+		)
 	);
 
 const makeServerRuntimeLayer = (config: Config): ServerRuntimeLayer => {
