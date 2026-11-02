@@ -1,21 +1,13 @@
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { Effect, Ref, Schedule } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
-import { type HttpError, retryAfterHeaders, ServiceUnavailableError } from "@/lib/errors";
+import { problemResponse } from "@/lib/ApiContract";
+import { ServiceUnavailableError } from "@/lib/errors";
 
 const MAX_EVENT_LOOP_DELAY_MS = 1000;
 const MAX_HEAP_USED_BYTES = 500 * 1024 * 1024;
 const MAX_RSS_BYTES = 1024 * 1024 * 1024;
 const RESOLUTION_MS = 10;
-
-/** Renders an HttpError as an RFC 9457 problem response, with retry-after when the error carries one. */
-export const problemResponse = (error: HttpError) =>
-	HttpServerResponse.jsonUnsafe(error.toProblemDetail(), {
-		status: error.statusCode,
-		headers: Object.fromEntries(
-			Object.entries(retryAfterHeaders(error)).map(([name, seconds]) => [name, String(seconds)])
-		),
-	});
 
 /** Pure: true when the process is overloaded. The histogram mean is in nanoseconds. */
 export const sample = (

@@ -1168,7 +1168,8 @@
 							"transaction-routes",
 							"organization-routes",
 							"lib-ratelimit",
-							"lib-loadshedding"
+							"lib-loadshedding",
+							"lib-contract"
 						]
 					},
 					{
@@ -1212,7 +1213,7 @@
 						"disallow": ["*"]
 					},
 					{ "from": ["lib-ratelimit"], "allow": ["auth", "lib-contract", "lib-errors"] },
-					{ "from": ["lib-loadshedding"], "allow": ["lib-errors"] }
+					{ "from": ["lib-loadshedding"], "allow": ["lib-contract", "lib-errors"] }
 				]
 			}
 		],
