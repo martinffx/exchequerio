@@ -257,7 +257,7 @@ describe("OrganizationRoutes", () => {
 				Object.keys(
 					(spec.paths[path] as unknown as Record<string, { responses: object }>)[method].responses
 				).sort();
-			const common = ["400", "401", "403", "500", "503"];
+			const common = ["400", "401", "403", "429", "500", "503"];
 			const expected = (...codes: string[]) => [...codes, ...common].sort();
 
 			expect(statuses("/api/organizations/", "get")).toEqual(expected("200"));

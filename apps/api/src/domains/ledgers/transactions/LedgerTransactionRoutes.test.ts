@@ -603,7 +603,7 @@ describe("TransactionRoutes", () => {
 					groupOperationIds.has(String((operation as { operationId?: unknown }).operationId))
 				);
 
-		it("advertises operation-specific failures without 429", () => {
+		it("advertises operation-specific failures alongside 429", () => {
 			expect(groupOperations()).toHaveLength(groupOperationIds.size);
 			expect(statuses(`${base}/`, "get")).toEqual(expect.arrayContaining(["200", "404"]));
 			expect(statuses(`${base}/`, "post")).toEqual(
@@ -620,7 +620,7 @@ describe("TransactionRoutes", () => {
 			);
 			expect(statuses(`${base}/`, "get")).not.toContain("409");
 			expect(statuses(`${base}/{transactionId}`, "get")).not.toContain("409");
-			expect(JSON.stringify(groupOperations())).not.toContain('"429"');
+			expect(JSON.stringify(groupOperations())).toContain('"429"');
 		});
 
 		it("keeps format date-time on the create request effectiveAt", () => {

@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { HttpServerResponse } from "effect/unstable/http";
 import { HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import {
 	BadRequestError,
@@ -131,7 +132,10 @@ const commonErrors = [
 	ServiceUnavailableApiError,
 ] as const;
 
-/** Common errors plus 429, for groups whose every route is rate limited. */
+/**
+ * Common errors plus an explicit per-route 429. The `RateLimit` middleware declares 429 on every
+ * operation, so every group advertises it; these groups also state it on each route.
+ */
 const throttledErrors = [
 	BadRequestApiError,
 	UnauthorizedApiError,
@@ -140,6 +144,15 @@ const throttledErrors = [
 	InternalServerApiError,
 	ServiceUnavailableApiError,
 ] as const;
+
+/** Renders an HttpError as an RFC 9457 problem response, with retry-after when the error carries one. */
+const problemResponse = (error: HttpError) =>
+	HttpServerResponse.jsonUnsafe(error.toProblemDetail(), {
+		status: error.statusCode,
+		headers: Object.fromEntries(
+			Object.entries(retryAfterHeaders(error)).map(([name, seconds]) => [name, String(seconds)])
+		),
+	});
 
 const operation = (identifier: string, summary: string, description?: string) =>
 	OpenApi.annotations(
@@ -159,6 +172,7 @@ export {
 	InternalServerApiError,
 	NotFoundApiError,
 	operation,
+	problemResponse,
 	ServiceUnavailableApiError,
 	throttledErrors,
 	TooManyRequestsApiError,

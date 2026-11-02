@@ -451,8 +451,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > OpenAPI > preserves the existing Op
             "retry-after": {
               "required": false,
               "schema": {
-                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-                "type": "string",
+                "type": "integer",
               },
             },
           },
@@ -1169,8 +1168,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > OpenAPI > preserves the existing Op
             "retry-after": {
               "required": false,
               "schema": {
-                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-                "type": "string",
+                "type": "integer",
               },
             },
           },
@@ -1672,8 +1670,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > OpenAPI > preserves the existing Op
             "retry-after": {
               "required": false,
               "schema": {
-                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-                "type": "string",
+                "type": "integer",
               },
             },
           },
@@ -2239,8 +2236,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > OpenAPI > preserves the existing Op
             "retry-after": {
               "required": false,
               "schema": {
-                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-                "type": "string",
+                "type": "integer",
               },
             },
           },
@@ -2965,8 +2961,7 @@ exports[`LedgerAccountBalanceMonitorRoutes > OpenAPI > preserves the existing Op
             "retry-after": {
               "required": false,
               "schema": {
-                "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
-                "type": "string",
+                "type": "integer",
               },
             },
           },

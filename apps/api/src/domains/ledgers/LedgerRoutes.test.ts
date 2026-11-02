@@ -249,7 +249,7 @@ describe("LedgerRoutes", () => {
 					ids.includes(String((operation as { operationId?: unknown }).operationId))
 				);
 
-		it("advertises only operation-specific failures", () => {
+		it("advertises operation-specific failures alongside 429", () => {
 			const statuses = (path: string, method: "get" | "post" | "put" | "delete") =>
 				Object.keys(
 					(spec.paths[path] as unknown as Record<string, { responses: object }>)[method].responses
@@ -268,7 +268,7 @@ describe("LedgerRoutes", () => {
 				"deleteLedger"
 			);
 			expect(own).toHaveLength(5);
-			expect(JSON.stringify(own)).not.toContain('"429"');
+			expect(JSON.stringify(own)).toContain('"429"');
 		});
 
 		it("documents the list offset and limit as optional", () => {
