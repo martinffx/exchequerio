@@ -1302,17 +1302,11 @@
 			}
 		},
 		{
-			"files": ["apps/web/**/*", "apps/docs/**/*"],
+			"files": ["apps/docs/**/*"],
 			"rules": {
 				"boundaries/no-unknown-files": "off",
 				"boundaries/no-unknown": "off",
 				"boundaries/external": "off"
-			}
-		},
-		{
-			"files": ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
-			"env": {
-				"browser": true
 			}
 		}
 	]
