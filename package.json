@@ -12,7 +12,6 @@
 		"docker:logs:api": "docker-compose --profile api logs -f api",
 		"dev": "pnpm run docker:up && turbo dev dev:worker",
 		"dev:api": "pnpm run docker:up && turbo dev dev:worker --filter=@exchequerio/api",
-		"dev:web": "turbo dev --filter=@exchequerio/web",
 		"dev:docs": "turbo dev --filter=@exchequerio/docs",
 		"build": "turbo build",
 		"test": "turbo test",

@@ -1,6 +1,6 @@
 ---
 name: exchequer-standards
-description: "Exchequer engineering standards: architecture, layer boundaries, coding, testing and tooling conventions, plus app addenda for the Ledger API, customer portal and documentation site. Load before any development or documentation work in this repo."
+description: "Exchequer engineering standards: architecture, layer boundaries, coding, testing and tooling conventions, plus app addenda for the Ledger API and documentation site. Load before any development or documentation work in this repo."
 user-invocable: false
 ---
 
@@ -14,7 +14,6 @@ affected app:
 
 - Ledger API (`apps/api`): `references/api.md`. When persistence is involved, also read the
   [entity relationship diagram](../../../apps/api/docs/product/erd.md).
-- Customer portal (`apps/web`): `references/web.md`.
 - Documentation site (`apps/docs`): `references/documentation.md`.
 
 Read only the relevant addendum. `CONTEXT.md` defines domain language and business invariants.
@@ -23,11 +22,13 @@ authoritative for installed tools and current behavior.
 
 ## Architecture
 
-Exchequer is a pnpm monorepo with three applications:
+Exchequer is a pnpm monorepo with two applications:
 
 - `apps/api` provides the Ledger API.
-- `apps/web` provides the customer portal.
 - `apps/docs` provides the public documentation site.
+
+The repository holds only the core ledger. Pricing, invoicing, billing and statements are built
+in a separate system on top of the ledger's API.
 
 Keep changes inside the owning application unless code has a current consumer elsewhere. Do not add
 a shared abstraction for a possible future use.
@@ -65,9 +66,6 @@ they do not perform I/O. Code that owns I/O also owns its operational failure tr
   synchronous or Effect-based decoding as defined by the API addendum and type-only transport or
   row contracts. They must not perform I/O. Repositories own SQL, transactions, and database error
   translation.
-- Web work follows React Router framework conventions. Keep route composition in
-  `apps/web/app/routes`, reusable UI in `apps/web/app/components`, and shared helpers in
-  `apps/web/app/lib`.
 - Public documentation uses Docusaurus under `apps/docs`.
 
 API import boundaries are linted from `.oxlintrc.json`. New API source files must be classified

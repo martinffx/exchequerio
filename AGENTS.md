@@ -2,6 +2,8 @@
 
 Exchequer is an operational double-entry subledger for organizations with treasury operations. Use [CONTEXT.md](./CONTEXT.md) as the canonical source for domain language and business invariants.
 
+This repository holds only the core ledger and its documentation. Pricing, invoicing, billing, statements and identity providers belong in separate systems built on top of the ledger, which only needs valid JWTs.
+
 ## Before making changes
 
 Read only the documents relevant to the work:
@@ -16,7 +18,6 @@ Read only the documents relevant to the work:
 | Scope              | Source       | Required references                                   |
 | ------------------ | ------------ | ----------------------------------------------------- |
 | Ledger API         | `apps/api/`  | [ERD](./apps/api/docs/product/erd.md)                 |
-| Customer portal    | `apps/web/`  | —                                                     |
 | Documentation site | `apps/docs/` | [CONTEXT.md](./CONTEXT.md) for all Ledger terminology |
 
 ## Agent workflow
@@ -56,7 +57,6 @@ pnpm install
 
 pnpm run dev              # PostgreSQL and all apps
 pnpm run dev:api          # PostgreSQL and API
-pnpm run dev:web          # Web only
 pnpm run dev:docs         # Documentation site only
 
 pnpm run build            # Build all buildable apps

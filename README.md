@@ -37,7 +37,6 @@ pnpm run dev
 
 # Start specific app
 pnpm run dev:api      # API and balance-monitor worker
-pnpm run dev:web      # Web only
 pnpm run dev:docs     # Docs only
 ```
 
@@ -114,7 +113,6 @@ pnpm run types          # Type check all apps with TypeScript 7
 pnpm run build
 
 # Build specific app
-pnpm --filter=@exchequerio/web build
 pnpm --filter=@exchequerio/docs build
 ```
 
@@ -160,7 +158,6 @@ pnpm run ci
 | App         | Description   | Stack                               |
 | ----------- | ------------- | ----------------------------------- |
 | `apps/api`  | Ledger API    | Effect HttpApi, Drizzle, PostgreSQL |
-| `apps/web`  | Dashboard     | React Router v7, Tailwind           |
 | `apps/docs` | Documentation | Docusaurus                          |
 
 ## Documentation
